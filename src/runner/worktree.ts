@@ -25,3 +25,13 @@ export async function getChangedFiles(worktree: string): Promise<string[]> {
 export async function getAddedLines(worktree: string): Promise<string> {
   return $`git diff HEAD`.cwd(worktree).text();
 }
+
+export async function resolveRef(ref: string): Promise<string> {
+  return (await $`git rev-parse ${ref}`.cwd(process.cwd()).text()).trim();
+}
+
+export async function overlayPromptFiles(worktree: string, resolvedCommit: string, files: string[]): Promise<void> {
+  for (const file of files) {
+    await $`git checkout ${resolvedCommit} -- ${file}`.cwd(worktree);
+  }
+}

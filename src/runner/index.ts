@@ -1,6 +1,6 @@
 import path from 'path';
 import type { Commands, Experiment, ExperimentResult, Measurement, MeasurementOutcome, Task } from '../types.ts';
-import { createWorktree, getAddedLines, getChangedFiles, removeWorktree } from './worktree.ts';
+import { createWorktree, getAddedLines, getChangedFiles, overlayPromptFiles, removeWorktree, resolveRef } from './worktree.ts';
 import { runHarness } from './harness.ts';
 import { measureCommand } from './measurements/command.ts';
 import { measureFileCreated } from './measurements/fileCreated.ts';
@@ -16,9 +16,12 @@ export async function runExperiment(
   commands: Commands,
 ): Promise<ExperimentResult> {
   const startedAt = Date.now();
+  const resolvedPromptsCommit = await resolveRef(experiment.promptsCommit);
   const worktree = await createWorktree(experimentId, experiment.commitHash);
 
   try {
+    await overlayPromptFiles(worktree, resolvedPromptsCommit, commands.promptFiles);
+
     if (commands.beforeRun) {
       const cmd = commands.beforeRun.replace('{approachName}', experiment.approachName);
       await $`sh -c ${cmd}`.cwd(worktree);
@@ -54,6 +57,7 @@ export async function runExperiment(
       task: experiment.task,
       variables: {
         commitHash: experiment.commitHash,
+        promptsCommit: resolvedPromptsCommit,
         approachName: experiment.approachName,
         modelName: experiment.modelName,
         harnessName: experiment.harnessName,

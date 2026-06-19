@@ -20,6 +20,7 @@ export type Experiment = {
   description: string;
   task: string;
   commitHash: string;
+  promptsCommit: string;  // commit hash, branch name, or 'HEAD'
   approachName: string;
   modelName: string;
   harnessName: HarnessName;
@@ -27,6 +28,7 @@ export type Experiment = {
 
 export type Commands = {
   testRunner: string;
+  promptFiles: string[];  // files/dirs to overlay from promptsCommit, e.g. ['CLAUDE.md', '.claude/']
   beforeRun?: string;
 };
 
@@ -51,6 +53,7 @@ export type ExperimentResult = {
   task: string;
   variables: {
     commitHash: string;
+    promptsCommit: string;  // resolved to actual hash, never a branch name or HEAD
     approachName: string;
     modelName: string;
     harnessName: HarnessName;
