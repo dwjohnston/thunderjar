@@ -22,6 +22,10 @@ export async function runExperiment(
   try {
     await overlayPromptFiles(worktree, resolvedPromptsCommit, commands.promptFiles);
 
+    if (commands.setup) {
+      await $`sh -c ${commands.setup}`.cwd(worktree);
+    }
+
     if (commands.beforeRun) {
       const cmd = commands.beforeRun.replace('{approachName}', experiment.approachName);
       await $`sh -c ${cmd}`.cwd(worktree);

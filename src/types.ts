@@ -29,6 +29,7 @@ export type Experiment = {
 export type Commands = {
   testRunner: string;
   promptFiles: string[];  // files/dirs to overlay from promptsCommit, e.g. ['CLAUDE.md', '.claude/']
+  setup?: string;         // run once in worktree after checkout, e.g. 'bun install'
   beforeRun?: string;
 };
 
