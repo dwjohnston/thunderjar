@@ -31,6 +31,7 @@ export type Commands = {
   promptFiles: string[];  // files/dirs to overlay from promptsCommit, e.g. ['CLAUDE.md', '.claude/']
   setup?: string;         // run once in worktree after checkout, e.g. 'bun install'
   beforeRun?: string;
+  harnesses: Partial<Record<HarnessName, string>>;  // command templates, supports {prompt} and {modelName}
 };
 
 export type BenchConfig = {

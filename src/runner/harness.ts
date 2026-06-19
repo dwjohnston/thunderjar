@@ -1,27 +1,17 @@
 import { $ } from 'bun';
-import type { HarnessName } from '../types.ts';
-
-type HarnessConfig = {
-  command: (prompt: string, modelName: string) => string[];
-};
-
-const harnesses: Record<HarnessName, HarnessConfig> = {
-  'claude-code': {
-    command: (prompt, modelName) => ['claude', '-p', prompt, '--model', modelName],
-  },
-  'opencode': {
-    command: (prompt, modelName) => ['opencode', 'run', '--prompt', prompt, '--model', modelName],
-  },
-};
+import type { Commands, HarnessName } from '../types.ts';
 
 export async function runHarness(
   harnessName: HarnessName,
   prompt: string,
   modelName: string,
   cwd: string,
+  commands: Commands,
 ): Promise<void> {
-  const harness = harnesses[harnessName];
-  const cmd = harness.command(prompt, modelName);
-  const [bin, ...args] = cmd;
-  await $`${bin} ${args}`.cwd(cwd);
+  const template = commands.harnesses[harnessName];
+  if (!template) {
+    throw new Error(`No harness command configured for '${harnessName}'. Add it to commands.harnesses in bench.config.ts.`);
+  }
+  const cmd = template.replace('{modelName}', modelName);
+  await $`sh -c ${cmd}`.env({ ...process.env, THUNDERJAR_PROMPT: prompt }).cwd(cwd);
 }

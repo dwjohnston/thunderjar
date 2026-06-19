@@ -31,7 +31,7 @@ export async function runExperiment(
       await $`sh -c ${cmd}`.cwd(worktree);
     }
 
-    await runHarness(experiment.harnessName, task.prompt, experiment.modelName, worktree);
+    await runHarness(experiment.harnessName, task.prompt, experiment.modelName, worktree, commands);
 
     const changedFiles = await getChangedFiles(worktree);
     const addedLines = await getAddedLines(worktree);
