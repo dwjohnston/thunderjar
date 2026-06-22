@@ -7,6 +7,7 @@ export default defineConfig({
         onWorktreeCreate: 'git config commit.gpgsign false',
         harnesses: {
             'claude-code': 'claude -p "$THUNDERJAR_PROMPT" --model {model} --allowedTools "Write,Edit,Read,Bash" --append-system-prompt "You are running in headless (non-interactive) mode."',
+            'opencode': 'opencode run "$THUNDERJAR_PROMPT" --model {model} --dangerously-skip-permissions',
         },
     },
 
@@ -35,6 +36,16 @@ export default defineConfig({
                 models: ['claude-haiku-4-5-20251001'],
                 harnesses: ['claude-code'],
                 prompts: ['snerk', 'glurk'],
+            },
+        },
+        'snerk-various-models': {
+            description: 'Compare snerk and glurk prompt approaches on a simple task',
+            taskId: 'add-function',
+            commitHash: 'HEAD',
+            variables: {
+                models: ['opencode/deepseek-v4-flash-free', 'opencode/north-mini-code-free', 'opencode/claude-haiku-4-5', 'opencode/big-pickle'],
+                harnesses: ['opencode'],
+                prompts: ['snerk'],
             },
         },
     },
