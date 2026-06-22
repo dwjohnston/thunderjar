@@ -8,5 +8,7 @@ thunderjar
 │       └── Real — create worktrees only (harness execution not yet implemented)
 └── List experiment results
     └── [experiment names from config]
-        └── (not yet implemented)
+        └── [runs listed by datetime, short ISO to the minute e.g. 2026-06-22 10:00, newest first]
+            └── [permutations listed by prompt--model--harness]
+                └── (not yet implemented)
 ```
