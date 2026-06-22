@@ -32,6 +32,16 @@ async function gitRoot(cwd: string): Promise<string> {
   return result.stdout.toString().trim();
 }
 
+async function commitUnstagedChanges(worktreePath: string, extraFlags?: string) {
+  const status = (await Bun.$`git -C ${worktreePath} status --porcelain`.quiet()).stdout.toString().trim();
+  if (status.length > 0) {
+    await Bun.$`git -C ${worktreePath} add -A`.quiet();
+    const msg = 'Thunderjar committed these changes before cleaning up the worktree';
+    const flagsArr = extraFlags ? extraFlags.trim().split(/\s+/) : [];
+    await Bun.$`git -C ${worktreePath} commit ${flagsArr} -m ${msg}`.quiet();
+  }
+}
+
 export async function runExperiment(config: ThunderjarConfig, experimentId: string, cwd: string) {
   const experiment = config.experiments[experimentId];
   if (!experiment) throw new Error(`Experiment '${experimentId}' not found`);
@@ -125,6 +135,7 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
         measurements: [],
       }, null, 2));
     } finally {
+      await commitUnstagedChanges(perm.worktreePath, config.commands.worktreeCleanupCommitFlags);
       await Bun.$`git -C ${repoRoot} worktree remove --force ${perm.worktreePath}`.quiet().nothrow();
     }
   }));
@@ -191,6 +202,7 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
     };
 
     await Bun.write(path.join(runDir, `${permLabel}.json`), JSON.stringify(resultJson, null, 2));
+    await commitUnstagedChanges(perm.worktreePath);
     await Bun.$`git -C ${repoRoot} worktree remove ${perm.worktreePath}`.quiet();
 
     console.log(`✓  (${durationSeconds}s)`);
