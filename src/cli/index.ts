@@ -90,12 +90,41 @@ async function main() {
       .filter(f => f.endsWith('.json'))
       .sort();
 
-    const permutation = await select({
+    const permFile = await select({
       message: 'Select permutation:',
       choices: permFiles.map(f => ({ name: f.replace(/\.json$/, ''), value: f })),
     });
 
-    console.log(`\n${permutation}: not yet implemented`);
+    const resultJson = JSON.parse(await Bun.file(path.join(runDir, permFile)).text());
+    const branch: string | undefined = resultJson.branch;
+
+    if (!branch) {
+      console.log('\nNo branch recorded for this run.');
+      return;
+    }
+
+    const action2 = await select({
+      message: `Branch: ${branch}`,
+      choices: [
+        { name: 'Checkout', value: 'checkout' },
+        { name: 'Cancel', value: 'cancel' },
+      ],
+    });
+
+    if (action2 === 'checkout') {
+      const repoRoot = (await Bun.$`git -C ${process.cwd()} rev-parse --show-toplevel`.quiet()).stdout.toString().trim();
+
+      const status = (await Bun.$`git -C ${repoRoot} status --porcelain`.quiet()).stdout.toString().trim();
+      if (status.length > 0) {
+        console.error('\nCannot checkout: working tree has uncommitted or untracked changes.');
+        return;
+      }
+
+      const result = await Bun.$`git -C ${repoRoot} checkout ${branch}`.nothrow();
+      if (result.exitCode !== 0) {
+        console.error(`\nFailed to checkout branch: ${result.stderr.toString().trim()}`);
+      }
+    }
   }
 }
 
