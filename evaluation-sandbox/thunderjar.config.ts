@@ -8,6 +8,7 @@ export default defineConfig({
         harnesses: {
             'claude-code': 'claude -p "$THUNDERJAR_PROMPT" --model {model} --allowedTools "Write,Edit,Read,Bash" --append-system-prompt "You are running in headless (non-interactive) mode."',
             'opencode': 'opencode run "$THUNDERJAR_PROMPT" --model {model} --dangerously-skip-permissions',
+            'cursor': 'agent -p --force "$THUNDERJAR_PROMPT" --model {model}',
         },
     },
 
@@ -38,13 +39,23 @@ export default defineConfig({
                 prompts: ['snerk', 'glurk'],
             },
         },
-        'snerk-various-models': {
-            description: 'Compare snerk and glurk prompt approaches on a simple task',
+        'snerk-various-opencode': {
+            description: 'Run snerk with various opencode models',
             taskId: 'add-function',
             commitHash: 'HEAD',
             variables: {
                 models: ['opencode/deepseek-v4-flash-free', 'opencode/north-mini-code-free', 'opencode/claude-haiku-4-5', 'opencode/big-pickle'],
                 harnesses: ['opencode'],
+                prompts: ['snerk'],
+            },
+        },
+        'snerk-various-cursor': {
+            description: 'Run snerk with various cursor models',
+            taskId: 'add-function',
+            commitHash: 'HEAD',
+            variables: {
+                models: ['composer-2.5', 'kimi-k2.5'],
+                harnesses: ['cursor'],
                 prompts: ['snerk'],
             },
         },
