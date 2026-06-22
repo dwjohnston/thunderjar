@@ -9,6 +9,7 @@ interface RunPermutation {
   prompt: string;
   commitHash: string;
   worktreePath: string;
+  branchName: string;
 }
 
 function generatePermutations(experimentId: string, experiment: Experiment, timestamp: string): RunPermutation[] {
@@ -18,7 +19,8 @@ function generatePermutations(experimentId: string, experiment: Experiment, time
       for (const prompt of experiment.variables.prompts) {
         const runId = `${experimentId}--${prompt}--${model}--${harness}`;
         const worktreePath = path.join(os.tmpdir(), 'thunderjar', `${runId}--${timestamp}`);
-        permutations.push({ experimentId, model, harness, prompt, commitHash: experiment.commitHash, worktreePath });
+        const branchName = `thunderjar/${runId}--${timestamp}`;
+        permutations.push({ experimentId, model, harness, prompt, commitHash: experiment.commitHash, worktreePath, branchName });
       }
     }
   }
@@ -45,7 +47,7 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
     process.stdout.write(`  ${label}\n    → ${perm.worktreePath} ... `);
 
     await Bun.$`mkdir -p ${path.dirname(perm.worktreePath)}`.quiet();
-    const result = await Bun.$`git -C ${repoRoot} worktree add ${perm.worktreePath} ${perm.commitHash}`.quiet().nothrow();
+    const result = await Bun.$`git -C ${repoRoot} worktree add -b ${perm.branchName} ${perm.worktreePath} ${perm.commitHash}`.quiet().nothrow();
 
     if (result.exitCode === 0) {
       console.log('✓');
@@ -83,7 +85,7 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
 
     process.stdout.write(`  ${permLabel} ... `);
 
-    const worktreeResult = await Bun.$`git -C ${repoRoot} worktree add ${perm.worktreePath} ${perm.commitHash}`.quiet().nothrow();
+    const worktreeResult = await Bun.$`git -C ${repoRoot} worktree add -b ${perm.branchName} ${perm.worktreePath} ${perm.commitHash}`.quiet().nothrow();
     if (worktreeResult.exitCode !== 0) {
       console.log('✗ (worktree failed)');
       console.error(`    ${worktreeResult.stderr.toString().trim()}\n`);
@@ -104,6 +106,7 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
       runAt,
       durationSeconds,
       taskId: experiment.taskId,
+      branch: perm.branchName,
       variables: {
         commitHash: perm.commitHash,
         model: perm.model,
