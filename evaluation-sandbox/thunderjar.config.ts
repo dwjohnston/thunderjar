@@ -3,6 +3,7 @@ import { defineConfig } from '../src/defineConfig.ts';
 export default defineConfig({
     commands: {
         testRunner: 'bun test',
+        harnessWorkingDirectory: 'evaluation-sandbox',
         harnesses: {
             'claude-code': 'claude -p "$THUNDERJAR_PROMPT" --model {model} --allowedTools "Write,Edit,Read,Bash" --append-system-prompt "You are running in headless (non-interactive) mode."',
         },

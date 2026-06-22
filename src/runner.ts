@@ -115,7 +115,10 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
       }
 
       const harnessCmd = harnessTemplate.replace('{model}', perm.model);
-      const harnessResult = await Bun.$`sh -c ${harnessCmd}`.cwd(perm.worktreePath).env({ ...process.env, THUNDERJAR_PROMPT: task.prompt }).nothrow();
+      const harnessWorkingDir = config.commands.harnessWorkingDirectory
+        ? path.join(perm.worktreePath, config.commands.harnessWorkingDirectory)
+        : perm.worktreePath;
+      const harnessResult = await Bun.$`sh -c ${harnessCmd}`.cwd(harnessWorkingDir).env({ ...process.env, THUNDERJAR_PROMPT: task.prompt }).nothrow();
 
       ends[i] = Date.now();
       states[i] = harnessResult.exitCode === 0 ? 'complete' : 'failed';

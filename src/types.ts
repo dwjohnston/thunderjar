@@ -33,6 +33,7 @@ export interface Commands {
   testRunner?: string;
   setup?: string;
   harnesses: Record<string, string>;
+  harnessWorkingDirectory?: string;
   worktreeCleanupCommitFlags?: string;
 }
 
