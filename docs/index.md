@@ -13,15 +13,19 @@ A tool for measuring coding agent behaviour reproducibly. The behaviour of a cod
 
 ## Config File
 
-Lives in the repo under test as `bench/bench.config.ts`.
+Lives in the repo under test as `thunderjar.config.ts`.
 
 ```typescript
-import { defineConfig } from 'coding-agent-bench';
+import { defineConfig } from '../thunderjar/src/defineConfig.ts';
 
 export default defineConfig({
   commands: {
-    beforeRun: 'bun scripts/generate-agent-files.ts {approachName}',
     testRunner: 'bun test',
+    setup: 'bun install',   // runs in worktree after checkout; optional
+    harnesses: {
+      'claude-code': 'claude -p "$THUNDERJAR_PROMPT" --model {model} --append-system-prompt "..."',
+      'opencode':    'opencode ...',
+    },
   },
 
   tasks: {
@@ -39,33 +43,35 @@ export default defineConfig({
     },
   },
 
+  prompts: {
+    skills: { apply: 'cp prompts/skills.md CLAUDE.md' },
+    minimal: { apply: 'cp prompts/minimal.md CLAUDE.md' },
+  },
+
   experiments: {
-    e1: {
-      description: 'skills, sonnet',
-      task: 'add-normalise-node',
+    'model-comparison': {
+      description: 'Compare sonnet vs opus on the normalise task with skills prompt',
+      taskId: 'add-normalise-node',
       commitHash: 'a1b2c3d',
-      approachName: 'skills',
-      modelName: 'claude-sonnet-4-6',
-      harnessName: 'claude-code',
-    },
-    e2: {
-      description: 'skills, opus',
-      task: 'add-normalise-node',
-      commitHash: 'a1b2c3d',
-      approachName: 'skills',
-      modelName: 'claude-opus-4-8',
-      harnessName: 'claude-code',
+      variables: {
+        models: ['claude-sonnet-4-6', 'claude-opus-4-8'],
+        harnesses: ['claude-code'],
+        prompts: ['skills'],
+      },
     },
   },
 });
 ```
 
+An experiment with `models: [A, B]`, `harnesses: [X]`, `prompts: [P, Q]` produces 2 × 1 × 2 = 4 runs.
+
 ### Key design decisions
 
 - `tasks` and `experiments` are objects keyed by id — uniqueness is guaranteed by the key.
-- `commands.beforeRun` is top-level because it is a property of the repo, not the experiment. `{approachName}` is substituted at run time. If omitted, P comes from the commit as-is.
+- `prompts` is a top-level section of named, reusable configurations. Each prompt's `apply` command installs prompt files into the worktree before a run.
+- `commands.harnesses` is a map from harness name to the shell command used to invoke it. `{model}` is substituted at run time.
 - `commands.testRunner` is used by `correctness-test` measurements to execute the template file.
-- Experiments varying one variable at a time tell a clear story: e1 vs e2 isolates model, e1 vs e3 isolates approach, e1 vs e4 isolates harness.
+- Experiments vary one or more variables at a time via arrays; each permutation becomes a run. To isolate a single variable, keep the other arrays to one element.
 
 ---
 
@@ -137,11 +143,11 @@ Supported harnesses (initial scope): `claude-code`, `opencode`.
 
 ```
 ──────────────────────────────────────────
- e1 — skills, sonnet
+ model-comparison — skills/sonnet
 ──────────────────────────────────────────
  Task      add-normalise-node
  Commit    a1b2c3d
- Approach  skills
+ Prompt    skills
  Model     claude-sonnet-4-6
  Harness   claude-code
  Duration  4m 32s
@@ -161,69 +167,70 @@ Supported harnesses (initial scope): `claude-code`, `opencode`.
 
 ### Compare view
 
-`thunderjar compare e1 e2 e3`
+`thunderjar compare --experiment model-comparison`
 
 ```
-                         e1              e2              e3
-                    skills/sonnet   skills/opus   subagents/sonnet
+                         run 1               run 2
+                    skills/sonnet       skills/opus
 ────────────────────────────────────────────────────────────────────
-bun typecheck            ✓               ✓               ✗
-bun test                 ✓               ✓               —
-fileCreated normalise    ✓               ✓               —
-fileCreated *.test.ts    ✓               ✓               —
-grep: no 'as any'        ✗               ✓               —
-correctness-test         —               ✓               —
+bun typecheck            ✓               ✓
+bun test                 ✓               ✓
+fileCreated normalise    ✓               ✓
+fileCreated *.test.ts    ✓               ✓
+grep: no 'as any'        ✗               ✓
+correctness-test         —               ✓
 ────────────────────────────────────────────────────────────────────
-Duration              4m 32s          6m 14s          2m 08s
-Result                FAIL            PASS            FAIL
+Duration              4m 32s          6m 14s
+Result                FAIL            PASS
 ```
 
-The compare view reads from stored results, so experiments from different sessions can be compared without re-running. `run` with multiple experiments automatically shows the compare view at the end.
+The compare view reads from stored results, so experiments from different sessions can be compared without re-running. `run` automatically shows the compare view at the end.
 
 ### Stored result (JSON)
 
-Saved to `bench/results/<experimentId>-<timestamp>.json`:
+Saved to `bench/results/<experimentId>--<prompt>--<model>--<harness>-<timestamp>.json`:
 
 ```json
 {
-  "experimentId": "e1",
+  "experimentId": "model-comparison",
+  "runId": "model-comparison--skills--claude-sonnet-4-6--claude-code",
   "runAt": "2026-06-19T10:23:00Z",
   "durationSeconds": 272,
-  "task": "add-normalise-node",
+  "taskId": "add-normalise-node",
   "variables": {
     "commitHash": "a1b2c3d",
-    "approachName": "skills",
-    "modelName": "claude-sonnet-4-6",
-    "harnessName": "claude-code"
+    "model": "claude-sonnet-4-6",
+    "harness": "claude-code",
+    "prompt": "skills"
   },
-  "result": "FAIL",
   "measurements": [
-    { "type": "command", "run": "bun typecheck", "result": "PASS" },
-    { "type": "command", "run": "bun test", "result": "PASS" },
-    { "type": "fileCreated", "path": "src/nodes/compute/normalise.ts", "result": "PASS" },
-    { "type": "fileCreated", "path": "src/nodes/compute/normalise.test.ts", "result": "PASS" },
-    { "type": "grep", "glob": "src/**/*.ts", "pattern": "as any", "result": "FAIL",
+    { "measurement": { "type": "command", "run": "bun typecheck" }, "result": "PASS" },
+    { "measurement": { "type": "command", "run": "bun test" }, "result": "PASS" },
+    { "measurement": { "type": "fileCreated", "path": "src/nodes/compute/normalise.ts" }, "result": "PASS" },
+    { "measurement": { "type": "fileCreated", "path": "src/nodes/compute/normalise.test.ts" }, "result": "PASS" },
+    { "measurement": { "type": "grep", "glob": "src/**/*.ts", "pattern": "as any" }, "result": "FAIL",
       "detail": "2 occurrences: normalise.ts:14, normalise.ts:38" },
-    { "type": "correctness-test", "result": "SKIPPED" }
+    { "measurement": { "type": "correctness-test" }, "result": "SKIPPED" }
   ]
 }
 ```
+
+`bench/results/` should be gitignored.
 
 ---
 
 ## CLI
 
-**`run`** — executes the harness, stores the result, then automatically renders the compare view if multiple experiments were run.
+**`run`** — executes the harness for all variable permutations in an experiment, stores results, then renders the compare view.
 ```
-thunderjar run e1
-thunderjar run e1 e2 e3                      # sequential; compare view shown at end
-thunderjar run --task add-normalise-node     # all experiments for a task
+thunderjar run <experimentId>
+thunderjar run --task <taskId>     # all experiments for a task
 ```
 
 **`compare`** — re-renders the compare view from stored results without re-executing.
 ```
-thunderjar compare e1 e2 e3
-thunderjar compare --task add-normalise-node
+thunderjar compare --experiment <experimentId>
+thunderjar compare --task <taskId>
 ```
 
 **`list`** — shows what is configured and what results are stored.
@@ -233,8 +240,6 @@ thunderjar list results
 ```
 
 **`clean`** — removes stale worktrees left behind by crashed runs.
-
-`run` with multiple experiments runs sequentially by default. Parallel execution is a later optimisation.
 
 ---
 

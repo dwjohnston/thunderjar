@@ -126,16 +126,13 @@ See `docs/terminology.md` for the full glossary. Key concepts:
 
 ```
 src/
-  cli/           # CLI entry point and commands (run, compare, list, clean)
-  runner/        # Worktree management, harness execution, measurement evaluators
-  report/        # Terminal output and result storage
-  types.ts       # All shared types
-  defineConfig.ts  # Config helper (re-exported for consumer use)
+  # not yet implemented
 
 evaluation-sandbox/  # Self-contained sandbox for testing the framework itself
   thunderjar.config.ts
   prompts/
-  output/        # gitignored; agent output lands here during sandbox runs
+  output/        
+    #agent output lands here during sandbox runs
 ```
 
 ## Running the CLI
