@@ -44,7 +44,7 @@ async function main() {
       message: 'Run mode:',
       choices: [
         { name: 'Fake — generate placeholder PASS results', value: 'fake' },
-        { name: 'Real — (not yet implemented)', value: 'real' },
+        { name: 'Real', value: 'real' },
       ],
     });
 

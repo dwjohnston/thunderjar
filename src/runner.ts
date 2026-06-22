@@ -36,28 +36,101 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
   const experiment = config.experiments[experimentId];
   if (!experiment) throw new Error(`Experiment '${experimentId}' not found`);
 
+  const task = config.tasks[experiment.taskId];
+  if (!task) throw new Error(`Task '${experiment.taskId}' not found`);
+
   const repoRoot = await gitRoot(cwd);
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const now = new Date();
+  const timestamp = now.toISOString().replace(/[:.]/g, '-');
   const permutations = generatePermutations(experimentId, experiment, timestamp);
+  const runDir = path.join(cwd, 'bench', 'results', `${experimentId}--${timestamp}`);
 
-  console.log(`\nCreating ${permutations.length} worktree(s) for '${experimentId}':\n`);
+  await Bun.$`mkdir -p ${runDir}`.quiet();
 
-  for (const perm of permutations) {
-    const label = `${perm.experimentId}--${perm.prompt}--${perm.model}--${perm.harness}`;
-    process.stdout.write(`  ${label}\n    → ${perm.worktreePath} ... `);
+  type PermState = 'running' | 'complete' | 'failed';
+  const states: PermState[] = permutations.map(() => 'running');
+  const starts = permutations.map(() => Date.now());
+  const ends: (number | undefined)[] = permutations.map(() => undefined);
+  const maxLabelLen = Math.max(...permutations.map(p => `${p.prompt} / ${p.model} / ${p.harness}`.length));
 
+  const formatElapsed = (ms: number) => {
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  const renderLine = (i: number) => {
+    const perm = permutations[i]!;
+    const state = states[i]!;
+    const label = `${perm.prompt} / ${perm.model} / ${perm.harness}`.padEnd(maxLabelLen);
+    const elapsed = formatElapsed((ends[i] ?? Date.now()) - starts[i]!);
+    const icon = state === 'running' ? '●' : state === 'complete' ? '✓' : '✗';
+    const suffix = state !== 'running' ? `  ${state}` : '';
+    return `  ${icon} ${label}    ${elapsed}${suffix}`;
+  };
+
+  console.log(`\nRunning '${experimentId}' — ${permutations.length} permutation(s)\n`);
+  for (let i = 0; i < permutations.length; i++) process.stdout.write(renderLine(i) + '\n');
+
+  const redraw = () => {
+    process.stdout.write(`\x1B[${permutations.length}A`);
+    for (let i = 0; i < permutations.length; i++) process.stdout.write(`\x1B[2K${renderLine(i)}\n`);
+  };
+
+  const timer = setInterval(redraw, 1000);
+
+  await Promise.all(permutations.map(async (perm, i) => {
     await Bun.$`mkdir -p ${path.dirname(perm.worktreePath)}`.quiet();
-    const result = await Bun.$`git -C ${repoRoot} worktree add -b ${perm.branchName} ${perm.worktreePath} ${perm.commitHash}`.quiet().nothrow();
-
-    if (result.exitCode === 0) {
-      console.log('✓');
-      await Bun.$`git -C ${repoRoot} worktree remove ${perm.worktreePath}`.quiet();
-    } else {
-      console.log('✗');
-      console.error(`    ${result.stderr.toString().trim()}\n`);
+    const worktreeResult = await Bun.$`git -C ${repoRoot} worktree add -b ${perm.branchName} ${perm.worktreePath} ${perm.commitHash}`.quiet().nothrow();
+    if (worktreeResult.exitCode !== 0) {
+      ends[i] = Date.now();
+      states[i] = 'failed';
+      return;
     }
-  }
 
+    try {
+      if (config.commands.setup) {
+        await Bun.$`sh -c ${config.commands.setup}`.cwd(perm.worktreePath).quiet().nothrow();
+      }
+
+      const promptConfig = config.prompts[perm.prompt];
+      if (promptConfig) {
+        await Bun.$`sh -c ${promptConfig.apply}`.cwd(perm.worktreePath).quiet().nothrow();
+      }
+
+      const harnessTemplate = config.commands.harnesses[perm.harness];
+      if (!harnessTemplate) {
+        ends[i] = Date.now();
+        states[i] = 'failed';
+        return;
+      }
+
+      const harnessCmd = harnessTemplate.replace('{model}', perm.model);
+      const harnessResult = await Bun.$`sh -c ${harnessCmd}`.cwd(perm.worktreePath).env({ ...process.env, THUNDERJAR_PROMPT: task.prompt }).nothrow();
+
+      ends[i] = Date.now();
+      states[i] = harnessResult.exitCode === 0 ? 'complete' : 'failed';
+
+      const permLabel = `${perm.prompt}--${perm.model}--${perm.harness}`;
+      const runAt = new Date().toISOString();
+      const durationSeconds = Math.floor((ends[i]! - starts[i]!) / 1000);
+
+      await Bun.write(path.join(runDir, `${permLabel}.json`), JSON.stringify({
+        experimentId: perm.experimentId,
+        runId: `${perm.experimentId}--${permLabel}`,
+        runAt,
+        durationSeconds,
+        taskId: experiment.taskId,
+        branch: perm.branchName,
+        variables: { commitHash: perm.commitHash, model: perm.model, harness: perm.harness, prompt: perm.prompt },
+        measurements: [],
+      }, null, 2));
+    } finally {
+      await Bun.$`git -C ${repoRoot} worktree remove --force ${perm.worktreePath}`.quiet().nothrow();
+    }
+  }));
+
+  clearInterval(timer);
+  redraw();
   console.log();
 }
 

@@ -4,7 +4,7 @@ export default defineConfig({
     commands: {
         testRunner: 'bun test',
         harnesses: {
-            'claude-code': 'claude -p "$THUNDERJAR_PROMPT" --model {model} --append-system-prompt "You are running in headless (non-interactive) mode."',
+            'claude-code': 'claude -p "$THUNDERJAR_PROMPT" --model {model} --allowedTools "Write,Edit,Read,Bash" --append-system-prompt "You are running in headless (non-interactive) mode."',
         },
     },
 
