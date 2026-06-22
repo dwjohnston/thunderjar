@@ -109,3 +109,43 @@ bun --hot ./index.ts
 ```
 
 For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+
+## What is Thunderjar
+
+Thunderjar is a benchmarking framework for measuring how well AI coding agents perform on software engineering tasks. It runs an agent against a codebase, then evaluates the result against a set of defined measurements.
+
+See `docs/terminology.md` for the full glossary. Key concepts:
+
+- **Task** — a starting commit + a prompt. Defines what the agent is asked to do and from what state.
+- **Prompt** — a named, reusable configuration that installs prompt files into the worktree via a shell command (e.g. `cp prompts/skills.md CLAUDE.md`). Referenced by ID.
+- **Experiment** — a named comparison: one task × arrays of variable values (models, harnesses, prompts). Produces one run per permutation.
+- **Run** — a single execution under one specific combination of variable values. Uses a git worktree so runs are isolated.
+- **Measurements** — assertions evaluated after a run (file created, grep present/absent, command exit code, correctness test). Defined on the task; the result of a run is the set of measurement outcomes.
+
+## Project structure
+
+```
+src/
+  cli/           # CLI entry point and commands (run, compare, list, clean)
+  runner/        # Worktree management, harness execution, measurement evaluators
+  report/        # Terminal output and result storage
+  types.ts       # All shared types
+  defineConfig.ts  # Config helper (re-exported for consumer use)
+
+evaluation-sandbox/  # Self-contained sandbox for testing the framework itself
+  thunderjar.config.ts
+  prompts/
+  output/        # gitignored; agent output lands here during sandbox runs
+```
+
+## Running the CLI
+
+From a directory containing a `thunderjar.config.ts`:
+
+```sh
+bun <path-to-thunderjar>/src/cli/index.ts run <experimentId>
+bun <path-to-thunderjar>/src/cli/index.ts compare --experiment <experimentId>
+bun <path-to-thunderjar>/src/cli/index.ts list
+```
+
+Results are stored in `bench/results/` as JSON, one file per run.
