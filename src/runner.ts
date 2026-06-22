@@ -98,6 +98,10 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
     }
 
     try {
+      if (config.commands.onWorktreeCreate) {
+        await Bun.$`sh -c ${config.commands.onWorktreeCreate}`.cwd(perm.worktreePath).quiet().nothrow();
+      }
+
       if (config.commands.setup) {
         await Bun.$`sh -c ${config.commands.setup}`.cwd(perm.worktreePath).quiet().nothrow();
       }
@@ -178,6 +182,10 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
       console.log('✗ (worktree failed)');
       console.error(`    ${worktreeResult.stderr.toString().trim()}\n`);
       continue;
+    }
+
+    if (config.commands.onWorktreeCreate) {
+      await Bun.$`sh -c ${config.commands.onWorktreeCreate}`.cwd(perm.worktreePath).quiet().nothrow();
     }
 
     const commitMessage = `${runAt} ${perm.prompt}`;

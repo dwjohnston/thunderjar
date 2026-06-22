@@ -32,6 +32,7 @@ export interface Experiment {
 export interface Commands {
   testRunner?: string;
   setup?: string;
+  onWorktreeCreate?: string;
   harnesses: Record<string, string>;
   harnessWorkingDirectory?: string;
   worktreeCleanupCommitFlags?: string;

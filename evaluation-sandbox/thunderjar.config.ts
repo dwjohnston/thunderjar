@@ -4,6 +4,7 @@ export default defineConfig({
     commands: {
         testRunner: 'bun test',
         harnessWorkingDirectory: 'evaluation-sandbox',
+        onWorktreeCreate: 'git config commit.gpgsign false',
         harnesses: {
             'claude-code': 'claude -p "$THUNDERJAR_PROMPT" --model {model} --allowedTools "Write,Edit,Read,Bash" --append-system-prompt "You are running in headless (non-interactive) mode."',
         },
@@ -12,7 +13,7 @@ export default defineConfig({
     tasks: {
         'add-function': {
             description: 'Write a TypeScript add function in the output folder',
-            prompt: 'Write a TypeScript function called `add` that takes two numbers and returns their sum. Put it in the output folder.',
+            prompt: 'Write a TypeScript function called `add` that takes two numbers and returns their sum. Put it in the output folder. Commit the changes.',
             measurements: [
                 { type: 'fileCreated', glob: 'output/**' },
                 { type: 'grep', glob: 'output/**', pattern: 'snerk', expect: 'present', scope: 'worktree' },
