@@ -30,7 +30,7 @@ export default defineConfig({
             taskId: 'add-function',
             commitHash: 'HEAD',
             variables: {
-                models: ['claude-sonnet-4-6'],
+                models: ['claude-haiku-4-5-20251001'],
                 harnesses: ['claude-code'],
                 prompts: ['snerk', 'glurk'],
             },
