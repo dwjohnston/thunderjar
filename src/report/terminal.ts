@@ -24,7 +24,7 @@ export function renderRun(result: ExperimentResult): void {
   console.log('\n' + DIVIDER);
   console.log(` ${result.runId}`);
   console.log(DIVIDER);
-  console.log(` Task     ${result.taskId}`);
+  console.log(` Task     ${v.taskId}`);
   console.log(` Commit   ${v.commitHash}`);
   console.log(` Prompt   ${v.prompt}`);
   console.log(` Model    ${v.model}`);

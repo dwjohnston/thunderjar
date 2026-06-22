@@ -50,7 +50,7 @@ export async function run(args: string[]): Promise<void> {
         process.exit(1);
       }
 
-      const result = await runExperiment(id, experiment, task, prompt, variables, config.commands);
+      const result = await runExperiment(id, task, prompt, variables, config.commands);
       renderRun(result);
       await saveResult(result);
       results.push(result);

@@ -52,6 +52,7 @@ export type MeasurementOutcome = {
 };
 
 export type RunVariables = {
+  taskId: string;
   commitHash: string;
   prompt: string;
   model: string;
@@ -63,7 +64,6 @@ export type ExperimentResult = {
   runId: string;
   runAt: string;
   durationSeconds: number;
-  taskId: string;
   variables: RunVariables;
   measurements: MeasurementOutcome[];
 };

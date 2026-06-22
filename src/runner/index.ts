@@ -18,7 +18,13 @@ export function permutations(experimentId: string, experiment: Experiment): RunV
   for (const model of experiment.variables.models) {
     for (const harness of experiment.variables.harnesses) {
       for (const prompt of experiment.variables.prompts) {
-        result.push({ commitHash: experiment.commitHash, model, harness, prompt });
+        result.push({
+          taskId: experiment.taskId,
+          commitHash: experiment.commitHash,
+          model,
+          harness,
+          prompt,
+        });
       }
     }
   }
@@ -27,7 +33,6 @@ export function permutations(experimentId: string, experiment: Experiment): RunV
 
 export async function runExperiment(
   experimentId: string,
-  experiment: Experiment,
   task: Task,
   prompt: Prompt,
   variables: RunVariables,
@@ -35,7 +40,7 @@ export async function runExperiment(
 ): Promise<ExperimentResult> {
   const runId = makeRunId(experimentId, variables);
   const startedAt = Date.now();
-  const worktree = await createWorktree(runId, experiment.commitHash);
+  const worktree = await createWorktree(runId, variables.commitHash);
 
   try {
     await $`sh -c ${prompt.apply}`.cwd(worktree);
@@ -75,7 +80,6 @@ export async function runExperiment(
       runId,
       runAt: new Date().toISOString(),
       durationSeconds: Math.round((Date.now() - startedAt) / 1000),
-      taskId: experiment.taskId,
       variables,
       measurements: outcomes,
     };
