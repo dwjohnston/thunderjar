@@ -1,7 +1,5 @@
 # Todos
 
-## Write tests
-
 ### e96345f
 - [ ] Test: results output structure — assert folder name format, file-per-permutation naming, JSON shape
 - [ ] Test: worktree creation — assert worktrees are created at the expected paths for a given experiment
@@ -15,6 +13,5 @@
 ### fd78736
 - [ ] Test: worktreeCleanupCommitFlags — assert extra flags are passed to git commit during worktree cleanup
 
-## Review
-
+### 36fc934
 - [ ] Revisit worktree cleanup placement — currently removed immediately after the run; confirm this is the right point in the lifecycle once real harness execution is wired up
