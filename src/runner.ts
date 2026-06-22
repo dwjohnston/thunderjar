@@ -51,6 +51,7 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
 
     if (result.exitCode === 0) {
       console.log('✓');
+      await Bun.$`git -C ${repoRoot} worktree remove ${perm.worktreePath}`.quiet();
     } else {
       console.log('✗');
       console.error(`    ${result.stderr.toString().trim()}\n`);
@@ -117,6 +118,7 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
     };
 
     await Bun.write(path.join(runDir, `${permLabel}.json`), JSON.stringify(resultJson, null, 2));
+    await Bun.$`git -C ${repoRoot} worktree remove ${perm.worktreePath}`.quiet();
 
     console.log(`✓  (${durationSeconds}s)`);
   }
