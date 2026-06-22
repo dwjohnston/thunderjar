@@ -1,10 +1,10 @@
 import { $ } from 'bun';
-import type { Commands, HarnessName } from '../types.ts';
+import type { Commands } from '../types.ts';
 
 export async function runHarness(
-  harnessName: HarnessName,
+  harnessName: string,
   prompt: string,
-  modelName: string,
+  model: string,
   cwd: string,
   commands: Commands,
 ): Promise<void> {
@@ -12,6 +12,6 @@ export async function runHarness(
   if (!template) {
     throw new Error(`No harness command configured for '${harnessName}'. Add it to commands.harnesses in bench.config.ts.`);
   }
-  const cmd = template.replace('{modelName}', modelName);
+  const cmd = template.replace('{model}', model);
   await $`sh -c ${cmd}`.env({ ...process.env, THUNDERJAR_PROMPT: prompt }).cwd(cwd);
 }

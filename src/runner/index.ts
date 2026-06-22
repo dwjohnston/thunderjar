@@ -1,6 +1,6 @@
 import path from 'path';
-import type { Commands, Experiment, ExperimentResult, Measurement, MeasurementOutcome, Task } from '../types.ts';
-import { createWorktree, getAddedLines, getChangedFiles, overlayPromptFiles, removeWorktree, resolveRef } from './worktree.ts';
+import type { Commands, Experiment, ExperimentResult, Measurement, MeasurementOutcome, Prompt, RunVariables, Task } from '../types.ts';
+import { createWorktree, getAddedLines, getChangedFiles, removeWorktree } from './worktree.ts';
 import { runHarness } from './harness.ts';
 import { measureCommand } from './measurements/command.ts';
 import { measureFileCreated } from './measurements/fileCreated.ts';
@@ -9,29 +9,47 @@ import { measureGrep } from './measurements/grep.ts';
 import { measureCorrectnessTest } from './measurements/correctnessTest.ts';
 import { $ } from 'bun';
 
+export function makeRunId(experimentId: string, variables: RunVariables): string {
+  return `${experimentId}--${variables.prompt}--${variables.model}--${variables.harness}`;
+}
+
+export function permutations(experimentId: string, experiment: Experiment): RunVariables[] {
+  const result: RunVariables[] = [];
+  for (const model of experiment.variables.models) {
+    for (const harness of experiment.variables.harnesses) {
+      for (const prompt of experiment.variables.prompts) {
+        result.push({ commitHash: experiment.commitHash, model, harness, prompt });
+      }
+    }
+  }
+  return result;
+}
+
 export async function runExperiment(
   experimentId: string,
   experiment: Experiment,
   task: Task,
+  prompt: Prompt,
+  variables: RunVariables,
   commands: Commands,
 ): Promise<ExperimentResult> {
+  const runId = makeRunId(experimentId, variables);
   const startedAt = Date.now();
-  const resolvedPromptsCommit = await resolveRef(experiment.promptsCommit);
-  const worktree = await createWorktree(experimentId, experiment.commitHash);
+  const worktree = await createWorktree(runId, experiment.commitHash);
 
   try {
-    await overlayPromptFiles(worktree, resolvedPromptsCommit, commands.promptFiles);
+    await $`sh -c ${prompt.apply}`.cwd(worktree);
 
     if (commands.setup) {
       await $`sh -c ${commands.setup}`.cwd(worktree);
     }
 
     if (commands.beforeRun) {
-      const cmd = commands.beforeRun.replace('{approachName}', experiment.approachName);
+      const cmd = commands.beforeRun.replace('{prompt}', variables.prompt);
       await $`sh -c ${cmd}`.cwd(worktree);
     }
 
-    await runHarness(experiment.harnessName, task.prompt, experiment.modelName, worktree, commands);
+    await runHarness(variables.harness, task.prompt, variables.model, worktree, commands);
 
     const changedFiles = await getChangedFiles(worktree);
     const addedLines = await getAddedLines(worktree);
@@ -52,25 +70,17 @@ export async function runExperiment(
       if (outcome.result === 'FAIL') shortCircuited = true;
     }
 
-    const passed = outcomes.every(o => o.result === 'PASS');
-
     return {
       experimentId,
+      runId,
       runAt: new Date().toISOString(),
       durationSeconds: Math.round((Date.now() - startedAt) / 1000),
-      task: experiment.task,
-      variables: {
-        commitHash: experiment.commitHash,
-        promptsCommit: resolvedPromptsCommit,
-        approachName: experiment.approachName,
-        modelName: experiment.modelName,
-        harnessName: experiment.harnessName,
-      },
-      result: passed ? 'PASS' : 'FAIL',
+      taskId: experiment.taskId,
+      variables,
       measurements: outcomes,
     };
   } finally {
-    await removeWorktree(experimentId);
+    await removeWorktree(runId);
   }
 }
 

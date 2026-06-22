@@ -10,9 +10,14 @@ export async function list(args: string[]): Promise<void> {
     for (const [id, task] of Object.entries(config.tasks)) {
       console.log(`  ${id} — ${task.description}`);
     }
+    console.log('\nPrompts:');
+    for (const [id, prompt] of Object.entries(config.prompts)) {
+      console.log(`  ${id} — ${prompt.apply}`);
+    }
     console.log('\nExperiments:');
     for (const [id, exp] of Object.entries(config.experiments)) {
-      console.log(`  ${id} — ${exp.description} (task: ${exp.task}, model: ${exp.modelName}, harness: ${exp.harnessName})`);
+      const { models, harnesses, prompts } = exp.variables;
+      console.log(`  ${id} — ${exp.description} (task: ${exp.taskId}, models: ${models.join(',')}, harnesses: ${harnesses.join(',')}, prompts: ${prompts.join(',')})`);
     }
     console.log();
     return;
@@ -26,7 +31,8 @@ export async function list(args: string[]): Promise<void> {
     }
     console.log('\nStored results:');
     for (const r of results) {
-      console.log(`  ${r.experimentId} — ${r.result} — ${r.runAt}`);
+      const passed = r.measurements.filter(m => m.result === 'PASS').length;
+      console.log(`  ${r.runId} — ${passed}/${r.measurements.length} — ${r.runAt}`);
     }
     console.log();
     return;

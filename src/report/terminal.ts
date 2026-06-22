@@ -17,19 +17,19 @@ function label(m: MeasurementOutcome['measurement']): string {
 }
 
 export function renderRun(result: ExperimentResult): void {
-  const config = result.variables;
-  const failIndex = result.measurements.findIndex(m => m.result === 'FAIL');
+  const v = result.variables;
+  const passed = result.measurements.filter(m => m.result === 'PASS').length;
   const total = result.measurements.length;
 
   console.log('\n' + DIVIDER);
-  console.log(` ${result.experimentId} — ${config.approachName}/${config.modelName}`);
+  console.log(` ${result.runId}`);
   console.log(DIVIDER);
-  console.log(` Task      ${result.task}`);
-  console.log(` Commit    ${config.commitHash}`);
-  console.log(` Approach  ${config.approachName}`);
-  console.log(` Model     ${config.modelName}`);
-  console.log(` Harness   ${config.harnessName}`);
-  console.log(` Duration  ${formatDuration(result.durationSeconds)}`);
+  console.log(` Task     ${result.taskId}`);
+  console.log(` Commit   ${v.commitHash}`);
+  console.log(` Prompt   ${v.prompt}`);
+  console.log(` Model    ${v.model}`);
+  console.log(` Harness  ${v.harness}`);
+  console.log(` Duration ${formatDuration(result.durationSeconds)}`);
   console.log(DIVIDER);
 
   for (const outcome of result.measurements) {
@@ -41,11 +41,7 @@ export function renderRun(result: ExperimentResult): void {
   }
 
   console.log(DIVIDER);
-  if (result.result === 'PASS') {
-    console.log(` PASSED`);
-  } else {
-    console.log(` FAILED — measurement ${failIndex + 1} of ${total}`);
-  }
+  console.log(` ${passed}/${total} measurements passed`);
   console.log();
 }
 

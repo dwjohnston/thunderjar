@@ -26,9 +26,9 @@ export function renderCompare(results: ExperimentResult[]): void {
   const divider = '─'.repeat(labelWidth + colWidth * results.length);
 
   const header1 = ' '.repeat(labelWidth) +
-    results.map(r => r.experimentId.padEnd(colWidth)).join('');
+    results.map(r => r.variables.prompt.padEnd(colWidth)).join('');
   const header2 = ' '.repeat(labelWidth) +
-    results.map(r => `${r.variables.approachName}/${r.variables.modelName.split('-').slice(-2).join('-')}`.slice(0, colWidth - 1).padEnd(colWidth)).join('');
+    results.map(r => r.variables.model.split('-').slice(-2).join('-').slice(0, colWidth - 1).padEnd(colWidth)).join('');
 
   console.log('\n' + divider);
   console.log(header1);
@@ -48,8 +48,11 @@ export function renderCompare(results: ExperimentResult[]): void {
   const durationRow = results.map(r => formatDuration(r.durationSeconds).padEnd(colWidth)).join('');
   console.log('Duration'.padEnd(labelWidth) + durationRow);
 
-  const resultRow = results.map(r => r.result.padEnd(colWidth)).join('');
-  console.log('Result'.padEnd(labelWidth) + resultRow);
+  const passRow = results.map(r => {
+    const passed = r.measurements.filter(m => m.result === 'PASS').length;
+    return `${passed}/${r.measurements.length}`.padEnd(colWidth);
+  }).join('');
+  console.log('Passed'.padEnd(labelWidth) + passRow);
 
   console.log(divider + '\n');
 }

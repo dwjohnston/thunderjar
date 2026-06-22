@@ -1,5 +1,5 @@
 import { loadConfig } from '../../config.ts';
-import { runExperiment } from '../../runner/index.ts';
+import { runExperiment, permutations } from '../../runner/index.ts';
 import { renderRun } from '../../report/terminal.ts';
 import { renderCompare } from '../../report/compare.ts';
 import { saveResult } from '../../report/store.ts';
@@ -18,7 +18,7 @@ export async function run(args: string[]): Promise<void> {
       process.exit(1);
     }
     experimentIds = Object.entries(config.experiments)
-      .filter(([, exp]) => exp.task === taskId)
+      .filter(([, exp]) => exp.taskId === taskId)
       .map(([id]) => id);
   } else {
     experimentIds = args;
@@ -37,16 +37,24 @@ export async function run(args: string[]): Promise<void> {
       console.error(`Unknown experiment: ${id}`);
       process.exit(1);
     }
-    const task = config.tasks[experiment.task];
+    const task = config.tasks[experiment.taskId];
     if (!task) {
-      console.error(`Unknown task: ${experiment.task}`);
+      console.error(`Unknown task: ${experiment.taskId}`);
       process.exit(1);
     }
 
-    const result = await runExperiment(id, experiment, task, config.commands);
-    renderRun(result);
-    await saveResult(result);
-    results.push(result);
+    for (const variables of permutations(id, experiment)) {
+      const prompt = config.prompts[variables.prompt];
+      if (!prompt) {
+        console.error(`Unknown prompt: ${variables.prompt}`);
+        process.exit(1);
+      }
+
+      const result = await runExperiment(id, experiment, task, prompt, variables, config.commands);
+      renderRun(result);
+      await saveResult(result);
+      results.push(result);
+    }
   }
 
   if (results.length > 1) {

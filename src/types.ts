@@ -14,29 +14,32 @@ export type Task = {
   measurements: Measurement[];
 };
 
-export type HarnessName = 'claude-code' | 'opencode';
+export type Prompt = {
+  apply: string;  // shell command run in the worktree root to install prompt files
+};
 
 export type Experiment = {
   description: string;
-  task: string;
+  taskId: string;
   commitHash: string;
-  promptsCommit: string;  // commit hash, branch name, or 'HEAD'
-  approachName: string;
-  modelName: string;
-  harnessName: HarnessName;
+  variables: {
+    models: string[];
+    harnesses: string[];
+    prompts: string[];
+  };
 };
 
 export type Commands = {
   testRunner: string;
-  promptFiles: string[];  // files/dirs to overlay from promptsCommit, e.g. ['CLAUDE.md', '.claude/']
-  setup?: string;         // run once in worktree after checkout, e.g. 'bun install'
-  beforeRun?: string;
-  harnesses: Partial<Record<HarnessName, string>>;  // command templates, supports {prompt} and {modelName}
+  setup?: string;
+  beforeRun?: string;    // supports {prompt} template variable
+  harnesses: Record<string, string>;  // command templates; supports {prompt} and {model}
 };
 
 export type BenchConfig = {
   commands: Commands;
   tasks: Record<string, Task>;
+  prompts: Record<string, Prompt>;
   experiments: Record<string, Experiment>;
 };
 
@@ -48,18 +51,19 @@ export type MeasurementOutcome = {
   detail?: string;
 };
 
+export type RunVariables = {
+  commitHash: string;
+  prompt: string;
+  model: string;
+  harness: string;
+};
+
 export type ExperimentResult = {
   experimentId: string;
+  runId: string;
   runAt: string;
   durationSeconds: number;
-  task: string;
-  variables: {
-    commitHash: string;
-    promptsCommit: string;  // resolved to actual hash, never a branch name or HEAD
-    approachName: string;
-    modelName: string;
-    harnessName: HarnessName;
-  };
-  result: 'PASS' | 'FAIL';
+  taskId: string;
+  variables: RunVariables;
   measurements: MeasurementOutcome[];
 };

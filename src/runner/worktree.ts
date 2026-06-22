@@ -1,18 +1,17 @@
 import { $ } from 'bun';
-import path from 'path';
 
-export function worktreePath(experimentId: string): string {
-  return `/tmp/thunderjar-${experimentId}`;
+export function worktreePath(runId: string): string {
+  return `/tmp/thunderjar-${runId}`;
 }
 
-export async function createWorktree(experimentId: string, commitHash: string): Promise<string> {
-  const wt = worktreePath(experimentId);
+export async function createWorktree(runId: string, commitHash: string): Promise<string> {
+  const wt = worktreePath(runId);
   await $`git worktree add ${wt} ${commitHash}`.cwd(process.cwd());
   return wt;
 }
 
-export async function removeWorktree(experimentId: string): Promise<void> {
-  const wt = worktreePath(experimentId);
+export async function removeWorktree(runId: string): Promise<void> {
+  const wt = worktreePath(runId);
   await $`git worktree remove --force ${wt}`.cwd(process.cwd());
 }
 
@@ -24,14 +23,4 @@ export async function getChangedFiles(worktree: string): Promise<string[]> {
 
 export async function getAddedLines(worktree: string): Promise<string> {
   return $`git diff HEAD`.cwd(worktree).text();
-}
-
-export async function resolveRef(ref: string): Promise<string> {
-  return (await $`git rev-parse ${ref}`.cwd(process.cwd()).text()).trim();
-}
-
-export async function overlayPromptFiles(worktree: string, resolvedCommit: string, files: string[]): Promise<void> {
-  for (const file of files) {
-    await $`git checkout ${resolvedCommit} -- ${file}`.cwd(worktree);
-  }
 }
