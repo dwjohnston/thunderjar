@@ -1,0 +1,33 @@
+{
+  "experimentId": "snerk-vs-glurk",
+  "runId": "snerk-vs-glurk--glurk--claude-sonnet-4-6--claude-code",
+  "runAt": "2026-06-22T08:18:18.305Z",
+  "durationSeconds": 18,
+  "taskId": "add-function",
+  "variables": {
+    "commitHash": "HEAD",
+    "model": "claude-sonnet-4-6",
+    "harness": "claude-code",
+    "prompt": "glurk"
+  },
+  "measurements": [
+    {
+      "measurement": {
+        "type": "fileCreated",
+        "glob": "output/**"
+      },
+      "result": "FAIL",
+      "detail": "no changed files matched output/**"
+    },
+    {
+      "measurement": {
+        "type": "grep",
+        "glob": "output/**",
+        "pattern": "snerk",
+        "expect": "present",
+        "scope": "worktree"
+      },
+      "result": "SKIPPED"
+    }
+  ]
+}
