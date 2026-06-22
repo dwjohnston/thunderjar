@@ -90,6 +90,9 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
       continue;
     }
 
+    const commitMessage = `${runAt} ${perm.prompt}`;
+    await Bun.$`git -C ${perm.worktreePath} commit --allow-empty -m ${commitMessage}`.quiet();
+
     const measurementResults = task.measurements.map((m: Measurement) => ({
       measurement: m,
       result: 'PASS' as const,
