@@ -15,9 +15,9 @@ export default defineConfig({
     tasks: {
         'add-function': {
             description: 'Write a TypeScript add function in the output folder',
-            prompt: 'Write a TypeScript function called `add` that takes two numbers and returns their sum. Put it in the output folder. Commit the changes.',
+            prompt: 'Write a TypeScript function called `add` that takes two numbers and returns their sum. Save the file as add.ts. Put it in the output folder. Commit the changes.',
             measurements: [
-                { type: 'fileCreated', glob: 'output/**' },
+                { type: 'fileCreated', glob: 'output/add.ts' },
                 { type: 'grep', glob: 'output/**', pattern: 'snerk', expect: 'present', scope: 'worktree' },
             ],
         },
