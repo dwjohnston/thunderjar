@@ -118,7 +118,9 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
         return;
       }
 
-      const harnessCmd = harnessTemplate.replace('{model}', perm.model);
+      const harnessCmd = harnessTemplate
+        .replace('{model}', perm.model)
+        .replace('{worktreePath}', perm.worktreePath);
       const harnessWorkingDir = config.commands.harnessWorkingDirectory
         ? path.join(perm.worktreePath, config.commands.harnessWorkingDirectory)
         : perm.worktreePath;

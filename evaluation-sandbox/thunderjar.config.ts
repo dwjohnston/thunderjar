@@ -7,7 +7,7 @@ export default defineConfig({
         onWorktreeCreate: 'git config commit.gpgsign false',
         harnesses: {
             'claude-code': 'claude -p "$THUNDERJAR_PROMPT" --model {model} --allowedTools "Write,Edit,Read,Bash" --append-system-prompt "You are running in headless (non-interactive) mode."',
-            'opencode': 'opencode run "$THUNDERJAR_PROMPT" --model {model} --dangerously-skip-permissions',
+            'opencode': 'XDG_DATA_HOME={worktreePath}/.opencode opencode run "$THUNDERJAR_PROMPT" --model {model} --dangerously-skip-permissions',
             'cursor': 'agent -p --force "$THUNDERJAR_PROMPT" --model {model}',
         },
     },
