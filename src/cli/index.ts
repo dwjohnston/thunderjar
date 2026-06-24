@@ -3,21 +3,32 @@
 import { select } from '@inquirer/prompts';
 import path from 'node:path';
 import { readdir } from 'node:fs/promises';
+import { parseArgs } from 'node:util';
 import type { ThunderjarConfig } from '../types.ts';
 import { runExperiment, fakeRunExperiment } from '../runner.ts';
 
-async function loadConfig(): Promise<ThunderjarConfig> {
-  const configPath = path.resolve(process.cwd(), 'thunderjar.config.ts');
+async function loadConfig(configPath: string): Promise<ThunderjarConfig> {
   const mod = await import(configPath);
   return mod.default as ThunderjarConfig;
 }
 
 async function main() {
+  const { values } = parseArgs({
+    options: { config: { type: 'string', short: 'c' } },
+    strict: false,
+  });
+
+  const configPath = values.config
+    ? path.resolve(process.cwd(), values.config)
+    : path.resolve(process.cwd(), 'thunderjar.config.ts');
+
+  const projectRoot = path.dirname(configPath);
+
   let config: ThunderjarConfig;
   try {
-    config = await loadConfig();
+    config = await loadConfig(configPath);
   } catch {
-    console.error('No thunderjar.config.ts found in current directory.');
+    console.error(`No config found at: ${configPath}`);
     process.exit(1);
   }
 
@@ -49,12 +60,12 @@ async function main() {
     });
 
     if (mode === 'fake') {
-      await fakeRunExperiment(config, experimentId, process.cwd());
+      await fakeRunExperiment(config, experimentId, projectRoot);
     } else {
-      await runExperiment(config, experimentId, process.cwd());
+      await runExperiment(config, experimentId, projectRoot);
     }
   } else {
-    const resultsDir = path.join(process.cwd(), 'bench', 'results');
+    const resultsDir = path.join(projectRoot, 'bench', 'results');
     let entries: string[] = [];
     try {
       entries = await readdir(resultsDir);
@@ -112,7 +123,7 @@ async function main() {
     });
 
     if (action2 === 'checkout') {
-      const repoRoot = (await Bun.$`git -C ${process.cwd()} rev-parse --show-toplevel`.quiet()).stdout.toString().trim();
+      const repoRoot = (await Bun.$`git -C ${projectRoot} rev-parse --show-toplevel`.quiet()).stdout.toString().trim();
 
       const status = (await Bun.$`git -C ${repoRoot} status --porcelain`.quiet()).stdout.toString().trim();
       if (status.length > 0) {
