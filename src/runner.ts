@@ -1,6 +1,6 @@
 import path from 'node:path';
 import os from 'node:os';
-import type { ThunderjarConfig, Experiment, Measurement } from './types.ts';
+import type { ThunderjarConfig, Experiment, Measurement, NestedExperimentVariables } from './types.ts';
 
 interface RunPermutation {
   experimentId: string;
@@ -12,8 +12,37 @@ interface RunPermutation {
   branchName: string;
 }
 
+function isNestedExperimentVariables(
+  variables: Experiment['variables'],
+): variables is NestedExperimentVariables {
+  return 'promptSets' in variables;
+}
+
 function generatePermutations(experimentId: string, experiment: Experiment, timestamp: string): RunPermutation[] {
   const permutations: RunPermutation[] = [];
+
+  if (isNestedExperimentVariables(experiment.variables)) {
+    for (const [harness, models] of Object.entries(experiment.variables.harnesses)) {
+      for (const model of models) {
+        for (const prompt of experiment.variables.promptSets) {
+          const runId = `${experimentId}--${prompt}--${model}--${harness}`;
+          const worktreePath = path.join(os.tmpdir(), 'thunderjar', `${runId}--${timestamp}`);
+          const branchName = `thunderjar/${runId}--${timestamp}`;
+          permutations.push({
+            experimentId,
+            model,
+            harness,
+            prompt,
+            commitHash: experiment.commitHash,
+            worktreePath,
+            branchName,
+          });
+        }
+      }
+    }
+    return permutations;
+  }
+
   for (const model of experiment.variables.models) {
     for (const harness of experiment.variables.harnesses) {
       for (const prompt of experiment.variables.prompts) {
