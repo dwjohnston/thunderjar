@@ -13,5 +13,8 @@
 ### fd78736
 - [ ] Test: worktreeCleanupCommitFlags — assert extra flags are passed to git commit during worktree cleanup
 
+### 4c13fa3
+- [ ] Test: harness output capture — assert `output.stdout`, `output.stderr`, and `output.exitCode` are present in the result JSON and that harness stdout does not appear on the terminal
+
 ### 36fc934
 - [ ] Revisit worktree cleanup placement — currently removed immediately after the run; confirm this is the right point in the lifecycle once real harness execution is wired up
