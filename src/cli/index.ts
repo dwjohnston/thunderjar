@@ -18,7 +18,7 @@ async function main() {
     strict: false,
   });
 
-  const configPath = values.config
+  const configPath = typeof values.config === 'string'
     ? path.resolve(process.cwd(), values.config)
     : path.resolve(process.cwd(), 'thunderjar.config.ts');
 
@@ -45,7 +45,7 @@ async function main() {
   const experimentId = await select({
     message: action === 'run' ? 'Select experiment to run:' : 'Select experiment:',
     choices: experimentIds.map(id => ({
-      name: `${id} — ${config.experiments[id]!.description}`,
+      name: `${id} — ${config.experiments[id]?.description ?? ''}`,
       value: id,
     })),
   });

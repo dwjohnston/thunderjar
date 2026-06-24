@@ -105,6 +105,11 @@ function builderMeasurementToLegacy(measurement: BuilderMeasurement): Measuremen
     return { type: 'grep', ...grepConfig };
   }
 
+  if (measurerName === 'commandExitCode') {
+    const cmdConfig = config as { run: string; expectedExitCode?: number };
+    return { type: 'commandExitCode', run: cmdConfig.run, expectedExitCode: cmdConfig.expectedExitCode };
+  }
+
   return { type: 'measurer', measurerName, config };
 }
 

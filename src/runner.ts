@@ -1,6 +1,7 @@
 import path from 'node:path';
 import os from 'node:os';
-import type { ThunderjarConfig, Experiment, Measurement, NestedExperimentVariables } from './types.ts';
+import type { ThunderjarConfig, Experiment, NestedExperimentVariables, TaskMeasurement } from './types.ts';
+import { evaluateMeasurement, normalizeTaskMeasurements } from './measurements.ts';
 
 interface RunPermutation {
   experimentId: string;
@@ -98,10 +99,12 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
   };
 
   const renderLine = (i: number) => {
-    const perm = permutations[i]!;
-    const state = states[i]!;
+    const perm = permutations[i];
+    const state = states[i];
+    if (!perm || !state) return '';
     const label = `${perm.prompt} / ${perm.model} / ${perm.harness}`.padEnd(maxLabelLen);
-    const elapsed = formatElapsed((ends[i] ?? Date.now()) - starts[i]!);
+    const start = starts[i] ?? Date.now();
+    const elapsed = formatElapsed((ends[i] ?? Date.now()) - start);
     const icon = state === 'running' ? '●' : state === 'complete' ? '✓' : '✗';
     const suffix = state !== 'running' ? `  ${state}` : '';
     return `  ${icon} ${label}    ${elapsed}${suffix}`;
@@ -158,9 +161,30 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
       ends[i] = Date.now();
       states[i] = harnessResult.exitCode === 0 ? 'complete' : 'failed';
 
+      const measurementCtx = {
+        worktreePath: perm.worktreePath,
+        exitCode: harnessResult.exitCode,
+        stdout: harnessResult.stdout.toString(),
+        stderr: harnessResult.stderr.toString(),
+      };
+      const normalized = normalizeTaskMeasurements(task.measurements as TaskMeasurement[]);
+      const measurementResults = [];
+      for (const m of normalized) {
+        const result = await evaluateMeasurement({
+          measurement: m.measurement,
+          measurers: config.measurers,
+          ctx: measurementCtx,
+        });
+        measurementResults.push({
+          measurementId: m.measurementId,
+          measurement: m.measurement,
+          result,
+        });
+      }
+
       const permLabel = `${perm.prompt}--${perm.model}--${perm.harness}`;
       const runAt = new Date().toISOString();
-      const durationSeconds = Math.floor((ends[i]! - starts[i]!) / 1000);
+      const durationSeconds = Math.floor(((ends[i] ?? Date.now()) - (starts[i] ?? Date.now())) / 1000);
 
       await Bun.write(path.join(runDir, `${permLabel}.json`), JSON.stringify({
         experimentId: perm.experimentId,
@@ -175,7 +199,7 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
           stderr: harnessResult.stderr.toString(),
           exitCode: harnessResult.exitCode,
         },
-        measurements: [],
+        measurements: measurementResults,
       }, null, 2));
     } finally {
       await commitUnstagedChanges(perm.worktreePath, config.commands.worktreeCleanupCommitFlags);
@@ -227,9 +251,11 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
     const commitMessage = `${runAt} ${perm.prompt}`;
     await Bun.$`git -C ${perm.worktreePath} commit --allow-empty -m ${commitMessage}`.quiet();
 
-    const measurementResults = task.measurements.map((m: Measurement) => ({
-      measurement: m,
-      result: 'PASS' as const,
+    const normalized = normalizeTaskMeasurements(task.measurements as TaskMeasurement[]);
+    const measurementResults = normalized.map((m) => ({
+      measurementId: m.measurementId,
+      measurement: m.measurement,
+      result: { outcome: 'measured', data: { ok: true } },
     }));
 
     const resultJson = {

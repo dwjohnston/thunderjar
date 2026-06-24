@@ -1,5 +1,6 @@
 export type Measurement =
   | { type: 'command'; run: string; expectExitCode: number }
+  | { type: 'commandExitCode'; run: string; expectedExitCode?: number }
   | { type: 'fileCreated'; path: string }
   | { type: 'fileCreated'; glob: string }
   | { type: 'fileExists'; path: string }
@@ -7,10 +8,14 @@ export type Measurement =
   | { type: 'correctness-test'; templatePath: string }
   | { type: 'measurer'; measurerName: string; config: unknown }
 
+export type TaskMeasurement =
+  | Measurement
+  | { measurementId?: string; measurement: Measurement };
+
 export interface Task {
   description: string;
   prompt: string;
-  measurements: Measurement[];
+  measurements: TaskMeasurement[];
 }
 
 export interface Prompt {
