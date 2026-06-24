@@ -45,6 +45,10 @@ describe(ThunderJarConfig, () => {
 
     it("prevents referencing unregistered names in registerExperiment", () => {
         new ThunderJarConfig()
+            .registerMeasurer<{ glob: string }, boolean>({
+                measurerName: 'file-present',
+                evaluate: async (_config, _context) => ({ outcome: 'measured', data: true }),
+            })
             .registerHarness({
                 harnessName: 'claude-code',
                 models: ['claude-haiku-4-5-20251001'],
@@ -58,6 +62,9 @@ describe(ThunderJarConfig, () => {
                 taskName: 'add-function',
                 instruction: 'Write a TypeScript add function',
                 measurements: [
+                    { measurerName: 'file-present', config: { glob: 'output/add.ts' } },
+                    // @ts-expect-error — config does not match measurer's registered shape
+                    { measurerName: 'file-present', config: { path: 'output/add.ts' } },
                     // @ts-expect-error — 'nonexistent-measurer' has not been registered
                     { measurerName: 'nonexistent-measurer', config: {} },
                 ],
