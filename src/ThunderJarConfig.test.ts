@@ -16,7 +16,7 @@ describe(ThunderJarConfig, () => {
             .registerHarness({
                 harnessName: 'claude-code',
                 models: ['claude-haiku-4-5-20251001'],
-                cli: (ctx) => `claude -p "${ctx.promptText}" --model ${ctx.model}`,
+                cli: (ctx) => `claude -p "${ctx.taskInstruction}" --model ${ctx.model}`,
             })
             .registerPromptSet({
                 promptSetName: 'snerk',

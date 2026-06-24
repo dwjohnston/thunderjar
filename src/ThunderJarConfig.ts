@@ -5,7 +5,22 @@ export type MeasurementResult<T> =
   | { outcome: 'skipped' }
   | { outcome: 'erroredWhileMeasuring'; error: Error };
 
-type BuiltinMeasurers = 'fileCreated' | 'grep';
+type BuiltinMeasurerConfigs = {
+  fileCreated: { path: string } | { glob: string };
+  grep: {
+    glob: string;
+    pattern: string;
+    expect: 'absent' | 'present';
+    scope?: 'worktree' | 'changed-files' | 'added-lines';
+  };
+};
+
+type TaskMeasurement<TMeasurerRegistry extends Record<string, unknown>> = {
+  [K in keyof TMeasurerRegistry & string]: {
+    measurerName: K;
+    config: TMeasurerRegistry[K];
+  };
+}[keyof TMeasurerRegistry & string];
 
 type MeasurerEvaluateContext = {
   worktreePath: string;
@@ -16,7 +31,7 @@ type MeasurerEvaluateContext = {
 
 type HarnessCliContext = {
   model: string;
-  promptText: string;
+  taskInstruction: string;
   worktreePath: string;
 };
 
@@ -37,14 +52,14 @@ type ExperimentHarnesses<THarnesses extends Record<string, readonly string[]>> =
 };
 
 export class ThunderJarConfig<
-  TMeasurers extends string = BuiltinMeasurers,
+  TMeasurerConfigs extends Record<string, unknown> = BuiltinMeasurerConfigs,
   THarnesses extends Record<string, readonly string[]> = Record<never, never>,
   TPromptSets extends string = never,
   TTasks extends string = never,
 > {
   configure(
     _options: ConfigureOptions,
-  ): ThunderJarConfig<TMeasurers, THarnesses, TPromptSets, TTasks> {
+  ): ThunderJarConfig<TMeasurerConfigs, THarnesses, TPromptSets, TTasks> {
     return this;
   }
 
@@ -65,13 +80,13 @@ export class ThunderJarConfig<
       ) => Promise<MeasurementResult<TValue>>;
     },
   >(_options: TOptions): ThunderJarConfig<
-    TMeasurers | TOptions['measurerName'],
+    TMeasurerConfigs & Record<TOptions['measurerName'], TConfig>,
     THarnesses,
     TPromptSets,
     TTasks
   > {
     return this as ThunderJarConfig<
-      TMeasurers | TOptions['measurerName'],
+      TMeasurerConfigs & Record<TOptions['measurerName'], TConfig>,
       THarnesses,
       TPromptSets,
       TTasks
@@ -82,9 +97,9 @@ export class ThunderJarConfig<
     harnessName: TName;
     models: TModels;
     cli: (ctx: HarnessCliContext) => string;
-  }): ThunderJarConfig<TMeasurers, THarnesses & Record<TName, TModels>, TPromptSets, TTasks> {
+  }): ThunderJarConfig<TMeasurerConfigs, THarnesses & Record<TName, TModels>, TPromptSets, TTasks> {
     return this as ThunderJarConfig<
-      TMeasurers,
+      TMeasurerConfigs,
       THarnesses & Record<TName, TModels>,
       TPromptSets,
       TTasks
@@ -94,19 +109,16 @@ export class ThunderJarConfig<
   registerPromptSet<const TName extends string>(_options: {
     promptSetName: TName;
     cli: (ctx: PromptSetCliContext) => string;
-  }): ThunderJarConfig<TMeasurers, THarnesses, TPromptSets | TName, TTasks> {
-    return this as ThunderJarConfig<TMeasurers, THarnesses, TPromptSets | TName, TTasks>;
+  }): ThunderJarConfig<TMeasurerConfigs, THarnesses, TPromptSets | TName, TTasks> {
+    return this as ThunderJarConfig<TMeasurerConfigs, THarnesses, TPromptSets | TName, TTasks>;
   }
 
   registerTask<const TName extends string>(_options: {
     taskName: TName;
     instruction: string;
-    measurements: readonly {
-      measurerName: TMeasurers;
-      config: Record<string, unknown>;
-    }[];
-  }): ThunderJarConfig<TMeasurers, THarnesses, TPromptSets, TTasks | TName> {
-    return this as ThunderJarConfig<TMeasurers, THarnesses, TPromptSets, TTasks | TName>;
+    measurements: readonly TaskMeasurement<TMeasurerConfigs>[];
+  }): ThunderJarConfig<TMeasurerConfigs, THarnesses, TPromptSets, TTasks | TName> {
+    return this as ThunderJarConfig<TMeasurerConfigs, THarnesses, TPromptSets, TTasks | TName>;
   }
 
   registerExperiment(_options: {
@@ -117,7 +129,7 @@ export class ThunderJarConfig<
       harnesses: ExperimentHarnesses<THarnesses>;
       promptSets: readonly TPromptSets[];
     };
-  }): ThunderJarConfig<TMeasurers, THarnesses, TPromptSets, TTasks> {
+  }): ThunderJarConfig<TMeasurerConfigs, THarnesses, TPromptSets, TTasks> {
     return this;
   }
 

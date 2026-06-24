@@ -10,6 +10,8 @@ Tasks also declare **measurements** — the assertions evaluated after the agent
 
 A **task instruction** is the text sent to the agent defining what it should do. It lives on the task definition. Distinct from a prompt set, which configures the agent's environment rather than directing its work.
 
+When invoking a harness, the harness `cli` callback receives this as `ctx.taskInstruction` (along with `ctx.model` and `ctx.worktreePath`).
+
 ## Experiment
 
 An **experiment** is a configured comparison: it names a task and a set of **variables**, then runs the task once for every permutation of those variables.
