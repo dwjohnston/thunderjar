@@ -122,7 +122,7 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
       const harnessWorkingDir = config.commands.harnessWorkingDirectory
         ? path.join(perm.worktreePath, config.commands.harnessWorkingDirectory)
         : perm.worktreePath;
-      const harnessResult = await Bun.$`sh -c ${harnessCmd}`.cwd(harnessWorkingDir).env({ ...process.env, THUNDERJAR_PROMPT: task.prompt }).nothrow();
+      const harnessResult = await Bun.$`sh -c ${harnessCmd}`.cwd(harnessWorkingDir).env({ ...process.env, THUNDERJAR_PROMPT: task.prompt }).quiet().nothrow();
 
       ends[i] = Date.now();
       states[i] = harnessResult.exitCode === 0 ? 'complete' : 'failed';
@@ -139,6 +139,11 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
         taskId: experiment.taskId,
         branch: perm.branchName,
         variables: { commitHash: perm.commitHash, model: perm.model, harness: perm.harness, prompt: perm.prompt },
+        output: {
+          stdout: harnessResult.stdout.toString(),
+          stderr: harnessResult.stderr.toString(),
+          exitCode: harnessResult.exitCode,
+        },
         measurements: [],
       }, null, 2));
     } finally {
