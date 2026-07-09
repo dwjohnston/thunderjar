@@ -248,3 +248,15 @@ thunderjar list results
 - Token/duration capture from harness output (deferred)
 - Raw harness stdout/stderr storage alongside result JSON (deferred)
 - LLM judge as a measurement type (parked — introduces non-determinism into the measurement itself)
+
+---
+
+## Further Reading
+
+- [Terminology](terminology.html) — glossary of task, prompt, experiment, run, measurement, etc.
+- [CLI Workflow](cli-workflow.html) — the interactive CLI's menu structure
+- [Skill](skill.html) — the Claude Code skill definition for operating Thunderjar
+- [Operating Principles](operating_principles.html) — callbacks-over-static-values design rule
+- [Harness vs Models](harness-vs-models.html) — design decision on the `variables` shape
+- [Test Measure Proposal](test_measure_proposal.html) — proposal for a template-driven correctness measurer
+- [Paned Runner Display](paned-runner-display.html) — design for a full-screen TUI progress view
