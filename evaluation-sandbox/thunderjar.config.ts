@@ -50,6 +50,7 @@ export default new ThunderJarConfig()
             },
         ],
     })
+
     .registerExperiment({
         experimentName: 'snerk-vs-glurk',
         taskName: 'add-function',
