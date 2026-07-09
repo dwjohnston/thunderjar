@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "bun src/cli --config evaluation-sandbox/thunderjar.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest"
