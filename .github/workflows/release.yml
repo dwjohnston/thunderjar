@@ -1,0 +1,87 @@
+# 🤖
+# This file was created with AI
+#
+# Harness: Claude Code
+# Model: claude-sonnet-5
+# Supervising engineer: David Johnston
+#
+# Level of human supervision: None
+#
+#
+
+# Changesets release workflow.
+#
+# On every push to main:
+#   1. Run typecheck + tests (self-contained here; if a dedicated CI workflow
+#      also runs these, this is intentionally redundant but keeps this
+#      workflow safe to merge independently of it).
+#   2. Let changesets/action open/update a "Version Packages" PR when there
+#      are pending changeset files, or run the publish step once that PR has
+#      been merged (i.e. no pending changesets remain).
+#
+# thunderjar's package.json currently has "private": true (no npm publish
+# target has been decided yet, see docs/publishing.md), so the publish step
+# (scripts/release-publish.sh) intentionally no-ops until a maintainer
+# flips that flag. Until then this workflow only produces version-bump PRs
+# with changelogs, which is still useful on its own.
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  test:
+    name: Typecheck & test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test
+
+  release:
+    name: Release
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: bun run release:version
+          publish: bun run release:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

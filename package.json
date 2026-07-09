@@ -1,5 +1,6 @@
 {
   "name": "thunderjar",
+  "version": "0.0.0",
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -8,9 +9,14 @@
   },
   "scripts": {
     "start": "bun src/cli --config evaluation-sandbox/thunderjar.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "changeset": "changeset",
+    "release:version": "changeset version",
+    "release:publish": "bash scripts/release-publish.sh"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.7.0",
+    "@changesets/cli": "^2.31.0",
     "@types/bun": "latest"
   },
   "peerDependencies": {
