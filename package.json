@@ -2,6 +2,7 @@
   "name": "thunderjar",
   "module": "index.ts",
   "type": "module",
+  "license": "MIT",
   "private": true,
   "bin": {
     "thunderjar": "./src/cli/index.ts"
