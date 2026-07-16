@@ -1,3 +1,7 @@
+
+Docs: https://dwjohnston.github.io/thunderjar/
+
+
 # thunderjar
 
 To install dependencies:
