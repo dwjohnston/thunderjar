@@ -81,12 +81,16 @@ evaluation-sandbox/  # Self-contained sandbox for testing the framework itself
 
 ## Running the CLI
 
-From a directory containing a `thunderjar.config.ts`:
+Thunderjar runs under Bun or Node (>=20). From a directory containing a `thunderjar.config.ts`:
 
 ```sh
+# Bun
 bun <path-to-thunderjar>/src/cli/index.ts run <experimentId>
 bun <path-to-thunderjar>/src/cli/index.ts compare --experiment <experimentId>
 bun <path-to-thunderjar>/src/cli/index.ts list
+
+# Node — build once (npm run build in the thunderjar repo), then:
+node <path-to-thunderjar>/dist/cli.js run <experimentId>
 ```
 
 Results are stored in `bench/results/` as JSON, one file per run.

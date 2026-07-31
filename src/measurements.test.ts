@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import { evaluateMeasurement, normalizeTaskMeasurements } from './measurements.ts';
 
 describe('normalizeTaskMeasurements', () => {
@@ -9,7 +10,7 @@ describe('normalizeTaskMeasurements', () => {
       { measurement: { type: 'fileExists', path: 'c.txt' } },
     ]);
 
-    expect(normalized.map(m => m.measurementId)).toEqual(['measurement0', 'named', 'measurement2']);
+    assert.deepStrictEqual(normalized.map(m => m.measurementId), ['measurement0', 'named', 'measurement2']);
   });
 });
 
@@ -20,10 +21,10 @@ describe('evaluateMeasurement', () => {
       ctx: { worktreePath: process.cwd(), exitCode: 0, stdout: '', stderr: '' },
     });
 
-    expect(res.outcome).toBe('measured');
+    assert.strictEqual(res.outcome, 'measured');
     if (res.outcome === 'measured') {
-      expect((res.data as any).ok).toBe(true);
-      expect((res.data as any).expectedExitCode).toBe(0);
+      assert.strictEqual((res.data as any).ok, true);
+      assert.strictEqual((res.data as any).expectedExitCode, 0);
     }
   });
 
@@ -33,9 +34,9 @@ describe('evaluateMeasurement', () => {
       ctx: { worktreePath: process.cwd(), exitCode: 0, stdout: '', stderr: '' },
     });
 
-    expect(res.outcome).toBe('measured');
+    assert.strictEqual(res.outcome, 'measured');
     if (res.outcome === 'measured') {
-      expect((res.data as any).ok).toBe(false);
+      assert.strictEqual((res.data as any).ok, false);
     }
   });
 });

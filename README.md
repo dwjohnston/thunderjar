@@ -1,15 +1,20 @@
 # thunderjar
 
-To install dependencies:
+Thunderjar runs under [Bun](https://bun.com) or plain Node.js (>=20).
+
+## Bun
 
 ```bash
 bun install
+bun src/cli --config <path-to-thunderjar.config.ts>
 ```
 
-To run:
+## Node
 
 ```bash
-bun run index.ts
+bun install    # or npm install — bun.lock is the source of truth for versions
+npm run build  # bundles the CLI to dist/cli.js
+node dist/cli.js --config <path-to-thunderjar.config.ts>
 ```
 
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+See `CLAUDE.md` for the full project overview and terminology.

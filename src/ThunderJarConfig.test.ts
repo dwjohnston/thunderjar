@@ -1,7 +1,8 @@
-import { describe, expect, it } from "bun:test"
+import { describe, it } from "node:test"
+import assert from "node:assert/strict"
 import { ThunderJarConfig } from "./ThunderJarConfig"
 
-describe(ThunderJarConfig, () => {
+describe(ThunderJarConfig.name, () => {
     it("accepts registrations in the correct order", () => {
         const config = new ThunderJarConfig()
             .configure({
@@ -40,7 +41,7 @@ describe(ThunderJarConfig, () => {
             })
             .construct()
 
-        expect(config).toBeDefined()
+        assert.ok(config)
     })
 
     it("prevents referencing unregistered names in registerExperiment", () => {

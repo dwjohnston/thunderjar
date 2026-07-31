@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "scripts": {
     "run:1": "bun ../src/cli/index.ts run snerk-vs-glurk"
   }

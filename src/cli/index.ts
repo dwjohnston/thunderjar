@@ -1,15 +1,25 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import { select } from '@inquirer/prompts';
 import path from 'node:path';
-import { readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import type { ThunderjarConfig } from '../types.ts';
 import { runExperiment, fakeRunExperiment } from '../runner.ts';
+import { run } from '../shell.ts';
+
+if (!process.versions.bun) {
+  // Node has no native support for importing .ts config files; tsx's loader fills that gap. Bun handles TS natively.
+  const { register } = await import('tsx/esm/api');
+  register();
+}
 
 async function loadConfig(configPath: string): Promise<ThunderjarConfig> {
-  const mod = await import(configPath);
-  return mod.default as ThunderjarConfig;
+  const mod = (await import(configPath)) as { default?: unknown };
+  // When the config's nearest package.json has no "type": "module", tsx's loader compiles
+  // it to CJS, and Node's ESM/CJS interop then double-wraps the default export.
+  const unwrapped = mod.default as { default?: unknown } | undefined;
+  return (unwrapped?.default ?? unwrapped) as ThunderjarConfig;
 }
 
 async function main() {
@@ -106,7 +116,7 @@ async function main() {
       choices: permFiles.map(f => ({ name: f.replace(/\.json$/, ''), value: f })),
     });
 
-    const resultJson = JSON.parse(await Bun.file(path.join(runDir, permFile)).text());
+    const resultJson = JSON.parse(await readFile(path.join(runDir, permFile), 'utf8'));
     const branch: string | undefined = resultJson.branch;
 
     if (!branch) {
@@ -123,17 +133,17 @@ async function main() {
     });
 
     if (action2 === 'checkout') {
-      const repoRoot = (await Bun.$`git -C ${projectRoot} rev-parse --show-toplevel`.quiet()).stdout.toString().trim();
+      const repoRoot = (await run(['git', '-C', projectRoot, 'rev-parse', '--show-toplevel'])).stdout.trim();
 
-      const status = (await Bun.$`git -C ${repoRoot} status --porcelain`.quiet()).stdout.toString().trim();
+      const status = (await run(['git', '-C', repoRoot, 'status', '--porcelain'])).stdout.trim();
       if (status.length > 0) {
         console.error('\nCannot checkout: working tree has uncommitted or untracked changes.');
         return;
       }
 
-      const result = await Bun.$`git -C ${repoRoot} checkout ${branch}`.nothrow();
+      const result = await run(['git', '-C', repoRoot, 'checkout', branch], { nothrow: true });
       if (result.exitCode !== 0) {
-        console.error(`\nFailed to checkout branch: ${result.stderr.toString().trim()}`);
+        console.error(`\nFailed to checkout branch: ${result.stderr.trim()}`);
       }
     }
   }

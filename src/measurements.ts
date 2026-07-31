@@ -1,5 +1,8 @@
 import path from 'node:path';
+import { readFile, access } from 'node:fs/promises';
+import { glob } from 'tinyglobby';
 import type { Measurement, MeasurementResult, MeasurerEvaluateContext, RegisteredMeasurer, TaskMeasurement } from './types.ts';
+import { runShell } from './shell.ts';
 
 export type NormalizedTaskMeasurement = {
   measurementId: string;
@@ -21,26 +24,23 @@ export function normalizeTaskMeasurements(measurements: readonly TaskMeasurement
 
 async function fileExists(absPath: string): Promise<boolean> {
   try {
-    return await Bun.file(absPath).exists();
+    await access(absPath);
+    return true;
   } catch {
     return false;
   }
 }
 
-async function globAnyMatches(cwd: string, glob: string): Promise<boolean> {
-  const scanner = new Bun.Glob(glob).scan({ cwd });
-  for await (const entry of scanner) {
-    void entry;
-    return true;
-  }
-  return false;
+async function globAnyMatches(cwd: string, pattern: string): Promise<boolean> {
+  const matches = await glob(pattern, { cwd });
+  return matches.length > 0;
 }
 
-async function grepMatches(cwd: string, glob: string, re: RegExp): Promise<number> {
+async function grepMatches(cwd: string, pattern: string, re: RegExp): Promise<number> {
   let matches = 0;
-  for await (const rel of new Bun.Glob(glob).scan({ cwd })) {
+  for (const rel of await glob(pattern, { cwd })) {
     const abs = path.join(cwd, rel);
-    const text = await Bun.file(abs).text().catch(() => null);
+    const text = await readFile(abs, 'utf8').catch(() => null);
     if (text === null) continue;
     if (re.test(text)) matches++;
   }
@@ -98,10 +98,10 @@ export async function evaluateMeasurement(args: {
 
       case 'commandExitCode': {
         const expectedExitCode = measurement.expectedExitCode ?? 0;
-        const result = await Bun.$`sh -c ${measurement.run}`.cwd(ctx.worktreePath).quiet().nothrow();
+        const result = await runShell(measurement.run, { cwd: ctx.worktreePath, nothrow: true });
         const exitCode = result.exitCode;
-        const stdout = result.stdout.toString();
-        const stderr = result.stderr.toString();
+        const stdout = result.stdout;
+        const stderr = result.stderr;
         return {
           outcome: 'measured',
           data: {
@@ -117,10 +117,10 @@ export async function evaluateMeasurement(args: {
 
       case 'command': {
         const expectedExitCode = measurement.expectExitCode;
-        const result = await Bun.$`sh -c ${measurement.run}`.cwd(ctx.worktreePath).quiet().nothrow();
+        const result = await runShell(measurement.run, { cwd: ctx.worktreePath, nothrow: true });
         const exitCode = result.exitCode;
-        const stdout = result.stdout.toString();
-        const stderr = result.stderr.toString();
+        const stdout = result.stdout;
+        const stderr = result.stderr;
         return {
           outcome: 'measured',
           data: {

@@ -1,7 +1,9 @@
 import path from 'node:path';
 import os from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import type { ThunderjarConfig, Experiment, NestedExperimentVariables, TaskMeasurement } from './types.ts';
 import { evaluateMeasurement, normalizeTaskMeasurements } from './measurements.ts';
+import { run, runShell } from './shell.ts';
 
 interface RunPermutation {
   experimentId: string;
@@ -58,17 +60,17 @@ function generatePermutations(experimentId: string, experiment: Experiment, time
 }
 
 async function gitRoot(cwd: string): Promise<string> {
-  const result = await Bun.$`git -C ${cwd} rev-parse --show-toplevel`.quiet();
-  return result.stdout.toString().trim();
+  const result = await run(['git', '-C', cwd, 'rev-parse', '--show-toplevel']);
+  return result.stdout.trim();
 }
 
 async function commitUnstagedChanges(worktreePath: string, extraFlags?: string) {
-  const status = (await Bun.$`git -C ${worktreePath} status --porcelain`.quiet()).stdout.toString().trim();
+  const status = (await run(['git', '-C', worktreePath, 'status', '--porcelain'])).stdout.trim();
   if (status.length > 0) {
-    await Bun.$`git -C ${worktreePath} add -A`.quiet();
+    await run(['git', '-C', worktreePath, 'add', '-A']);
     const msg = 'Thunderjar committed these changes before cleaning up the worktree';
     const flagsArr = extraFlags ? extraFlags.trim().split(/\s+/) : [];
-    await Bun.$`git -C ${worktreePath} commit ${flagsArr} -m ${msg}`.quiet();
+    await run(['git', '-C', worktreePath, 'commit', ...flagsArr, '-m', msg]);
   }
 }
 
@@ -85,7 +87,7 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
   const permutations = generatePermutations(experimentId, experiment, timestamp);
   const runDir = path.join(cwd, 'bench', 'results', `${experimentId}--${timestamp}`);
 
-  await Bun.$`mkdir -p ${runDir}`.quiet();
+  await mkdir(runDir, { recursive: true });
 
   type PermState = 'running' | 'complete' | 'failed';
   const states: PermState[] = permutations.map(() => 'running');
@@ -121,8 +123,8 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
   const timer = setInterval(redraw, 1000);
 
   await Promise.all(permutations.map(async (perm, i) => {
-    await Bun.$`mkdir -p ${path.dirname(perm.worktreePath)}`.quiet();
-    const worktreeResult = await Bun.$`git -C ${repoRoot} worktree add -b ${perm.branchName} ${perm.worktreePath} ${perm.commitHash}`.quiet().nothrow();
+    await mkdir(path.dirname(perm.worktreePath), { recursive: true });
+    const worktreeResult = await run(['git', '-C', repoRoot, 'worktree', 'add', '-b', perm.branchName, perm.worktreePath, perm.commitHash], { nothrow: true });
     if (worktreeResult.exitCode !== 0) {
       ends[i] = Date.now();
       states[i] = 'failed';
@@ -131,16 +133,16 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
 
     try {
       if (config.commands.onWorktreeCreate) {
-        await Bun.$`sh -c ${config.commands.onWorktreeCreate}`.cwd(perm.worktreePath).quiet().nothrow();
+        await runShell(config.commands.onWorktreeCreate, { cwd: perm.worktreePath, nothrow: true });
       }
 
       if (config.commands.setup) {
-        await Bun.$`sh -c ${config.commands.setup}`.cwd(perm.worktreePath).quiet().nothrow();
+        await runShell(config.commands.setup, { cwd: perm.worktreePath, nothrow: true });
       }
 
       const promptConfig = config.prompts[perm.prompt];
       if (promptConfig) {
-        await Bun.$`sh -c ${promptConfig.apply}`.cwd(perm.worktreePath).quiet().nothrow();
+        await runShell(promptConfig.apply, { cwd: perm.worktreePath, nothrow: true });
       }
 
       const harnessTemplate = config.commands.harnesses[perm.harness];
@@ -156,7 +158,11 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
       const harnessWorkingDir = config.commands.harnessWorkingDirectory
         ? path.join(perm.worktreePath, config.commands.harnessWorkingDirectory)
         : perm.worktreePath;
-      const harnessResult = await Bun.$`sh -c ${harnessCmd}`.cwd(harnessWorkingDir).env({ ...process.env, THUNDERJAR_PROMPT: task.prompt }).quiet().nothrow();
+      const harnessResult = await runShell(harnessCmd, {
+        cwd: harnessWorkingDir,
+        env: { ...process.env, THUNDERJAR_PROMPT: task.prompt },
+        nothrow: true,
+      });
 
       ends[i] = Date.now();
       states[i] = harnessResult.exitCode === 0 ? 'complete' : 'failed';
@@ -164,8 +170,8 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
       const measurementCtx = {
         worktreePath: perm.worktreePath,
         exitCode: harnessResult.exitCode,
-        stdout: harnessResult.stdout.toString(),
-        stderr: harnessResult.stderr.toString(),
+        stdout: harnessResult.stdout,
+        stderr: harnessResult.stderr,
       };
       const normalized = normalizeTaskMeasurements(task.measurements as TaskMeasurement[]);
       const measurementResults = [];
@@ -186,7 +192,7 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
       const runAt = new Date().toISOString();
       const durationSeconds = Math.floor(((ends[i] ?? Date.now()) - (starts[i] ?? Date.now())) / 1000);
 
-      await Bun.write(path.join(runDir, `${permLabel}.json`), JSON.stringify({
+      await writeFile(path.join(runDir, `${permLabel}.json`), JSON.stringify({
         experimentId: perm.experimentId,
         runId: `${perm.experimentId}--${permLabel}`,
         runAt,
@@ -195,15 +201,15 @@ export async function runExperiment(config: ThunderjarConfig, experimentId: stri
         branch: perm.branchName,
         variables: { commitHash: perm.commitHash, model: perm.model, harness: perm.harness, prompt: perm.prompt },
         output: {
-          stdout: harnessResult.stdout.toString(),
-          stderr: harnessResult.stderr.toString(),
+          stdout: harnessResult.stdout,
+          stderr: harnessResult.stderr,
           exitCode: harnessResult.exitCode,
         },
         measurements: measurementResults,
       }, null, 2));
     } finally {
       await commitUnstagedChanges(perm.worktreePath, config.commands.worktreeCleanupCommitFlags);
-      await Bun.$`git -C ${repoRoot} worktree remove --force ${perm.worktreePath}`.quiet().nothrow();
+      await run(['git', '-C', repoRoot, 'worktree', 'remove', '--force', perm.worktreePath], { nothrow: true });
     }
   }));
 
@@ -225,7 +231,7 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
   const permutations = generatePermutations(experimentId, experiment, timestamp);
   const runDir = path.join(cwd, 'bench', 'results', `${experimentId}--${timestamp}`);
 
-  await Bun.$`mkdir -p ${runDir}`.quiet();
+  await mkdir(runDir, { recursive: true });
 
   console.log(`\nFake-running ${permutations.length} permutation(s) for '${experimentId}':\n`);
 
@@ -237,19 +243,19 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
 
     process.stdout.write(`  ${permLabel} ... `);
 
-    const worktreeResult = await Bun.$`git -C ${repoRoot} worktree add -b ${perm.branchName} ${perm.worktreePath} ${perm.commitHash}`.quiet().nothrow();
+    const worktreeResult = await run(['git', '-C', repoRoot, 'worktree', 'add', '-b', perm.branchName, perm.worktreePath, perm.commitHash], { nothrow: true });
     if (worktreeResult.exitCode !== 0) {
       console.log('✗ (worktree failed)');
-      console.error(`    ${worktreeResult.stderr.toString().trim()}\n`);
+      console.error(`    ${worktreeResult.stderr.trim()}\n`);
       continue;
     }
 
     if (config.commands.onWorktreeCreate) {
-      await Bun.$`sh -c ${config.commands.onWorktreeCreate}`.cwd(perm.worktreePath).quiet().nothrow();
+      await runShell(config.commands.onWorktreeCreate, { cwd: perm.worktreePath, nothrow: true });
     }
 
     const commitMessage = `${runAt} ${perm.prompt}`;
-    await Bun.$`git -C ${perm.worktreePath} commit --allow-empty -m ${commitMessage}`.quiet();
+    await run(['git', '-C', perm.worktreePath, 'commit', '--allow-empty', '-m', commitMessage]);
 
     const normalized = normalizeTaskMeasurements(task.measurements as TaskMeasurement[]);
     const measurementResults = normalized.map((m) => ({
@@ -274,9 +280,9 @@ export async function fakeRunExperiment(config: ThunderjarConfig, experimentId: 
       measurements: measurementResults,
     };
 
-    await Bun.write(path.join(runDir, `${permLabel}.json`), JSON.stringify(resultJson, null, 2));
+    await writeFile(path.join(runDir, `${permLabel}.json`), JSON.stringify(resultJson, null, 2));
     await commitUnstagedChanges(perm.worktreePath);
-    await Bun.$`git -C ${repoRoot} worktree remove ${perm.worktreePath}`.quiet();
+    await run(['git', '-C', repoRoot, 'worktree', 'remove', perm.worktreePath]);
 
     console.log(`✓  (${durationSeconds}s)`);
   }
