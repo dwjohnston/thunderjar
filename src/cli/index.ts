@@ -2,7 +2,6 @@
 
 import { select } from '@inquirer/prompts';
 import path from 'node:path';
-import { readdir } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import type { ThunderjarConfig } from '../types.ts';
 import { runExperiment, fakeRunExperiment } from '../runner.ts';
@@ -11,6 +10,18 @@ import { buildInitConfigSource, computeRelativeImportPath } from './initTemplate
 async function loadConfig(configPath: string): Promise<ThunderjarConfig> {
   const mod = await import(configPath);
   return mod.default as ThunderjarConfig;
+}
+
+// Directory listing via Bun.Glob rather than node:fs's readdir — matches the scanning
+// approach src/measurements.ts already uses for grep/fileCreated measurements.
+// onlyFiles: false is required here — Bun.Glob defaults to files-only and would otherwise
+// silently drop the run-result directories under bench/results/.
+async function listEntries(cwd: string, glob: string): Promise<string[]> {
+  const entries: string[] = [];
+  for await (const entry of new Bun.Glob(glob).scan({ cwd, onlyFiles: false })) {
+    entries.push(entry);
+  }
+  return entries;
 }
 
 async function runInit(cwd: string) {
@@ -90,7 +101,7 @@ async function main() {
     const resultsDir = path.join(projectRoot, 'bench', 'results');
     let entries: string[] = [];
     try {
-      entries = await readdir(resultsDir);
+      entries = await listEntries(resultsDir, '*');
     } catch {
       console.log('\nNo results directory found.');
       return;
@@ -119,9 +130,7 @@ async function main() {
     });
 
     const runDir = path.join(resultsDir, runFolder);
-    const permFiles = (await readdir(runDir))
-      .filter(f => f.endsWith('.json'))
-      .sort();
+    const permFiles = (await listEntries(runDir, '*.json')).sort();
 
     const permFile = await select({
       message: 'Select permutation:',

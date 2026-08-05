@@ -12,8 +12,6 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { realpath } from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import type { ThunderjarConfig } from '../types.ts';
 import { buildInitConfigSource, computeRelativeImportPath } from './initTemplate.ts';
@@ -32,11 +30,12 @@ describe('computeRelativeImportPath', () => {
 
 describe('buildInitConfigSource', () => {
   it('generates a config that constructs a runnable ThunderjarConfig', async () => {
-    const tmpDir = await realpath(os.tmpdir());
-    const importPath = computeRelativeImportPath(tmpDir, path.join(import.meta.dir, '..', 'ThunderJarConfig.ts'));
+    // Written next to this test file (rather than os.tmpdir()) so the computed import path
+    // is a plain, symlink-free relative path — no os.tmpdir()/realpath dance required.
+    const importPath = computeRelativeImportPath(import.meta.dir, path.join(import.meta.dir, '..', 'ThunderJarConfig.ts'));
     const source = buildInitConfigSource(importPath);
 
-    const tmpFile = path.join(tmpDir, `thunderjar-init-test-${Date.now()}.ts`);
+    const tmpFile = path.join(import.meta.dir, `.tmp-init-config-test-${Date.now()}.ts`);
     await Bun.write(tmpFile, source);
     try {
       const mod = await import(tmpFile);
