@@ -35,3 +35,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# stray temp files from a crashed test run (see src/cli/initTemplate.test.ts)
+.tmp-*.ts

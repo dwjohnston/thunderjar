@@ -2,21 +2,54 @@
 
 import { select } from '@inquirer/prompts';
 import path from 'node:path';
-import { readdir } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import type { ThunderjarConfig } from '../types.ts';
 import { runExperiment, fakeRunExperiment } from '../runner.ts';
+import { buildInitConfigSource, computeRelativeImportPath } from './initTemplate.ts';
 
 async function loadConfig(configPath: string): Promise<ThunderjarConfig> {
   const mod = await import(configPath);
   return mod.default as ThunderjarConfig;
 }
 
+// Directory listing via Bun.Glob rather than node:fs's readdir — matches the scanning
+// approach src/measurements.ts already uses for grep/fileCreated measurements.
+// onlyFiles: false is required here — Bun.Glob defaults to files-only and would otherwise
+// silently drop the run-result directories under bench/results/.
+async function listEntries(cwd: string, glob: string): Promise<string[]> {
+  const entries: string[] = [];
+  for await (const entry of new Bun.Glob(glob).scan({ cwd, onlyFiles: false })) {
+    entries.push(entry);
+  }
+  return entries;
+}
+
+async function runInit(cwd: string) {
+  const configPath = path.join(cwd, 'thunderjar.config.ts');
+
+  if (await Bun.file(configPath).exists()) {
+    console.error(`A config already exists at: ${configPath}`);
+    process.exit(1);
+  }
+
+  const thunderjarRoot = path.resolve(import.meta.dir, '..', '..');
+  const importPath = computeRelativeImportPath(cwd, path.join(thunderjarRoot, 'src', 'ThunderJarConfig.ts'));
+
+  await Bun.write(configPath, buildInitConfigSource(importPath));
+  console.log(`Wrote ${configPath}`);
+}
+
 async function main() {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     options: { config: { type: 'string', short: 'c' } },
     strict: false,
+    allowPositionals: true,
   });
+
+  if (positionals[0] === 'init') {
+    await runInit(process.cwd());
+    return;
+  }
 
   const configPath = typeof values.config === 'string'
     ? path.resolve(process.cwd(), values.config)
@@ -68,7 +101,7 @@ async function main() {
     const resultsDir = path.join(projectRoot, 'bench', 'results');
     let entries: string[] = [];
     try {
-      entries = await readdir(resultsDir);
+      entries = await listEntries(resultsDir, '*');
     } catch {
       console.log('\nNo results directory found.');
       return;
@@ -97,9 +130,7 @@ async function main() {
     });
 
     const runDir = path.join(resultsDir, runFolder);
-    const permFiles = (await readdir(runDir))
-      .filter(f => f.endsWith('.json'))
-      .sort();
+    const permFiles = (await listEntries(runDir, '*.json')).sort();
 
     const permFile = await select({
       message: 'Select permutation:',
