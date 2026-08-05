@@ -6,17 +6,39 @@ import { readdir } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import type { ThunderjarConfig } from '../types.ts';
 import { runExperiment, fakeRunExperiment } from '../runner.ts';
+import { buildInitConfigSource, computeRelativeImportPath } from './initTemplate.ts';
 
 async function loadConfig(configPath: string): Promise<ThunderjarConfig> {
   const mod = await import(configPath);
   return mod.default as ThunderjarConfig;
 }
 
+async function runInit(cwd: string) {
+  const configPath = path.join(cwd, 'thunderjar.config.ts');
+
+  if (await Bun.file(configPath).exists()) {
+    console.error(`A config already exists at: ${configPath}`);
+    process.exit(1);
+  }
+
+  const thunderjarRoot = path.resolve(import.meta.dir, '..', '..');
+  const importPath = computeRelativeImportPath(cwd, path.join(thunderjarRoot, 'src', 'ThunderJarConfig.ts'));
+
+  await Bun.write(configPath, buildInitConfigSource(importPath));
+  console.log(`Wrote ${configPath}`);
+}
+
 async function main() {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     options: { config: { type: 'string', short: 'c' } },
     strict: false,
+    allowPositionals: true,
   });
+
+  if (positionals[0] === 'init') {
+    await runInit(process.cwd());
+    return;
+  }
 
   const configPath = typeof values.config === 'string'
     ? path.resolve(process.cwd(), values.config)
