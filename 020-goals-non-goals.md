@@ -9,6 +9,12 @@ What's in scope vs. explicitly not.
   indefinitely for now; revisit once storage cost or volume actually becomes a
   problem. (Touches [080-docker-execution.md](080-docker-execution.md) and
   [090-restore-purge.md](090-restore-purge.md).)
+- **Extracting session logs/telemetry out of the container into a separate trace
+  store.** The OTel trace and session transcript aren't pulled out into their own
+  storage for v1 — if you want them, pull the postrun image and read them from its
+  filesystem instead. Most likely the first fast-follow after v1, not a long-term
+  non-goal. (See [085-experiment-results.md](085-experiment-results.md) and
+  [070-data-architecture.md](070-data-architecture.md).)
 
 ## To revisit
 

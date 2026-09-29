@@ -137,7 +137,8 @@ An **iteration** is one repeat of a container run for the same permutation, used
 
 | Term | Definition |
 |---|---|
-| **Run data store** | Where container run metadata is persisted: measurements, cost, tokens, duration, git history, final text block. Enables querying and trending over time. |
+| **Run data store** | Where container run metadata is persisted: date, the permutation's experiment parameters and parameter hash, measurements, cost, tokens, duration. Enables querying and trending over time. See [085-experiment-results.md](085-experiment-results.md). |
+| **Trace store** | Where a container run's OTel trace and session transcript would be persisted, separately from its image, so viewing them doesn't require a full image pull. Not populated in v1 — see [085-experiment-results.md](085-experiment-results.md) and [020-goals-non-goals.md](020-goals-non-goals.md). For now, pull the postrun image to get these. |
 | **Image store** | Registry (e.g., Docker Hub, ECR) where prerun and postrun images are stored, tagged as above, enabling restore and inspection later. |
 
 ## Open questions and notes, things not to forget

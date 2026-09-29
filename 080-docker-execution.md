@@ -31,15 +31,15 @@ flowchart TD
         L --> M["Measurement: task measurements<br/>applied to the container's output"]
         M --> N["docker commit the container<br/>into a postrun image"]
         N --> O["Tag as postrun image,<br/>push to image store"]
+        O --> P["Record run metadata (date, params,<br/>hash, measurements, cost)<br/>in run data store"]
     end
 
     J --> K
-    O --> P["Extract other artifacts (trace, transcript,<br/>run metadata) — separate page, TBD"]
 ```
 
-Everything from `P` onward — extracting the OTel trace, session transcript, and
-container-run metadata into the run data store — is covered in its own page rather than
-here.
+What gets written to the run data store at `P`, and what's deliberately *not* extracted
+in v1 (the OTel trace and session transcript — pull the postrun image for those instead),
+is covered in [085-experiment-results.md](085-experiment-results.md).
 
 ## Open questions
 
