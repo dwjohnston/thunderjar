@@ -1,8 +1,8 @@
 # Docker Tagging
 
-How prerun and postrun images are named. See [03-terminology.md](03-terminology.md) for
+How prerun and postrun images are named. See [030-terminology.md](030-terminology.md) for
 **prerun image**, **postrun image**, **parameter hash**, **matrix shape**, and
-**single-permutation experiment**; see [08-docker-execution.md](08-docker-execution.md)
+**single-permutation experiment**; see [080-docker-execution.md](080-docker-execution.md)
 for the run mechanics these tags get attached to.
 
 ## Tag formats
@@ -31,7 +31,7 @@ postrun-e01k4x9j2e8mqz3-h4f9a21c8-i00
   permutation.
 
 Single repository, prefix-discriminated (`prerun-` vs `postrun-`) rather than two
-repositories. _(Referenced by: [07-data-architecture.md](07-data-architecture.md).)_
+repositories. _(Referenced by: [070-data-architecture.md](070-data-architecture.md).)_
 No permutation index in the tag: the parameter hash already changes
 whenever any parameter changes — including model, even though model alone doesn't affect
 the image's filesystem — so a separate positional index would be redundant, and worse,

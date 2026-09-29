@@ -2,7 +2,7 @@
 
 Two audiences share the same engine: a developer iterating locally, and CI running
 on a schedule. Assumes the application is already set up (see
-[Setup and Configure](05-setup-and-configure.md)).
+[Setup and Configure](050-setup-and-configure.md)).
 
 ## Local workflows
 
@@ -43,7 +43,7 @@ questions later:
 
 This is why an experiment is captured as task + measurements against a stable
 identity, rather than thrown away after the session that produced it: the
-[experiment parameters](03-terminology.md#experiment-parameters) (model, prompt
+[experiment parameters](030-terminology.md#experiment-parameters) (model, prompt
 set, code state) are the axis you vary later, holding the rest fixed.
 
 ## CI workflows
@@ -66,7 +66,7 @@ experiment's measurement suddenly degrades — a real regression, not noise. Fro
 there, the loop hands off from CI back to a developer's machine:
 
 1. A developer picks the failing run and **restores** it locally — the exact code
-   state and prompt set that run used (see [Restore / Purge](09-restore-purge.md)).
+   state and prompt set that run used (see [Restore / Purge](090-restore-purge.md)).
 2. They reproduce locally and iterate on the prompt set — the same before/after
    loop as [guardrail authoring](#reusing-a-captured-experiment) above — until
    they isolate the offending prompt change.

@@ -78,7 +78,7 @@ swept into an experiment, how an experiment executes, and how execution gets mea
 
 The values that define what happens, and from what state. Holding all but one of
 these fixed across a comparison is what makes two container runs comparable — see
-[Experiment Parameters](06-experiment-parameters.md) for the hashing mechanics.
+[Experiment Parameters](060-experiment-parameters.md) for the hashing mechanics.
 
 | Term | Definition | Example |
 |---|---|---|
@@ -98,7 +98,7 @@ these fixed across a comparison is what makes two container runs comparable — 
 | **Permutation** | One specific combination of experiment parameter values within an experiment definition. | `snerk / haiku / claude-code` |
 | **Experiment execution** | One occasion of running an experiment definition: it fans out into one container run per permutation, repeated per iteration. | "this week's run of `snerk-vs-glurk`" |
 | **Pinned experiment** | An experiment definition whose code state and prompt set are fixed to exact, unchanging values, used to lock in a known case and track it statically over time. The only kind supported in the first pass. | |
-| **Floating experiment** *(deferred)* | An experiment definition that resolves a moving target (e.g. "latest on main") at execution time, to catch drift as the codebase or prompts evolve. Not in scope for the first pass — see [Open Questions](13-open-questions.md). | |
+| **Floating experiment** *(deferred)* | An experiment definition that resolves a moving target (e.g. "latest on main") at execution time, to catch drift as the codebase or prompts evolve. Not in scope for the first pass — see [Open Questions](130-open-questions.md). | |
 
 ## Execution
 
@@ -138,7 +138,7 @@ type MeasurementResult<T> =
   definition (harness, prompt set, measuring instrument, and possibly code state)
   was raised and dropped for this pass — revisit if the two meanings start to collide.
 - "Container run" assumes Docker specifically. If execution ever moves off
-  containers, this term will need revisiting (tracked in [Open Questions](13-open-questions.md)).
+  containers, this term will need revisiting (tracked in [Open Questions](130-open-questions.md)).
 - Measurements are copy-per-task rather than shared by reference, specifically to
   avoid a shared measurement change silently invalidating comparisons across every
   task that references it. Revisit if duplication becomes painful.

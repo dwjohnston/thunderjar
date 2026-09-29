@@ -2,7 +2,7 @@
 
 The Docker run mechanics and resulting artifacts. See
 [081-docker-tagging.md](081-docker-tagging.md) for how the resulting prerun/postrun
-images are named, and [03-terminology.md](03-terminology.md#container-run-lifecycle) for
+images are named, and [030-terminology.md](030-terminology.md#container-run-lifecycle) for
 the **prerun image** / **postrun image** / **container run** definitions this process
 implements.
 
@@ -48,4 +48,4 @@ here.
   e.g. OTel collector config or other instrumentation needed for telemetry. Where this
   fits in the Initial Setup sequence (part of the base image? its own step? applied to
   every prerun image regardless of permutation?) is unresolved. Revisit. (Also noted in
-  [02-goals-non-goals.md](02-goals-non-goals.md#to-revisit).)
+  [020-goals-non-goals.md](020-goals-non-goals.md#to-revisit).)

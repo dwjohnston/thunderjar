@@ -2,7 +2,7 @@
 
 Parameter hashing and identity, plus the detailed configuration reference for
 harnesses, prompt sets, tasks, and measuring instruments. Builds on the six
-[experiment parameters](03-terminology.md#experiment-parameters) already named
+[experiment parameters](030-terminology.md#experiment-parameters) already named
 in the glossary.
 
 ## Parameter hashing and identity
@@ -89,7 +89,7 @@ export default () => `cp prompts/snerk.md CLAUDE.md`;
 A task is a task instruction plus task measurements. The instruction lives
 under `experiment-parameters/taskInstructions/<name>/` and is hashed like any
 other experiment parameter. Measurements are declared alongside it but are
-**not** part of the parameter hash — per [terminology](03-terminology.md#experiments),
+**not** part of the parameter hash — per [terminology](030-terminology.md#experiments),
 they judge the outcome, they don't determine what runs.
 
 ## Measuring instruments & measurements
@@ -118,10 +118,10 @@ type MeasurementResult<T> =
   file paths/structure?).
 - Whether "task" is a first-class named folder (`tasks/<name>/`) bundling
   instruction + measurements, or whether the task instruction stands alone
-  and measurements attach separately — `03-terminology.md`'s example layout
+  and measurements attach separately — `030-terminology.md`'s example layout
   only shows `taskInstructions/`, no `tasks/`.
 - Exact shape of the harness's headless-invocation callback (`ctx` fields,
   return value) — sketched above, not settled.
 - Whether "artifact" should become the umbrella term for every hashed,
   reusable definition (harness, prompt set, measuring instrument, code state)
-  — flagged in `03-terminology.md`, unresolved.
+  — flagged in `030-terminology.md`, unresolved.
