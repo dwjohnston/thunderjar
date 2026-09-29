@@ -14,6 +14,7 @@ project glossary before diving into the rest.
 6. [Experiment Parameters](06-experiment-parameters.md) — Parameter hashing and identity (ensuring comparability), plus the bulk of the detailed configuration reference: harnesses, prompt sets, tasks, measuring instruments.
 7. [Data Architecture](07-data-architecture.md) — The two-tier metadata + artifact store design.
 8. [Docker Execution](08-docker-execution.md) — The Docker run mechanics and resulting artifacts.
+8.1. [Docker Tagging](081-docker-tagging.md) — The prerun/postrun image tag formats, and why.
 9. [Restore / Purge](09-restore-purge.md) — Lifecycle management: restoring archived containers, purging old ones.
 10. [CLI Reference](10-cli-reference.md) — The actual CLI commands.
 11. [CLI Report Visualization](11-cli-report-visualization.md) — Detailed page on the interactive CLI's report visualization.

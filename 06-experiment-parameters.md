@@ -1,7 +1,7 @@
 # Experiment Parameters
 
 Parameter hashing and identity, plus the detailed configuration reference for
-harnesses, prompt sets, tasks, and measuring instruments. Builds on the five
+harnesses, prompt sets, tasks, and measuring instruments. Builds on the six
 [experiment parameters](03-terminology.md#experiment-parameters) already named
 in the glossary.
 
@@ -12,14 +12,49 @@ in the glossary.
   fixtures — to a **content hash**. The same mechanism applies to measurements
   too, even though they aren't experiment parameters: hashing them catches
   silent drift when a named definition's content changes underneath it.
-- A permutation's **parameter hash** combines the content hashes of its five
-  resolved experiment parameters (code state, prompt set, harness, model, task
-  instruction). Two container runs are only directly comparable if their
-  parameter hashes match.
+- A permutation's **parameter hash** combines the content hashes of its six
+  resolved experiment parameters (base image, code state, prompt set, harness,
+  model, task instruction). Two container runs are only directly comparable if
+  their parameter hashes match.
 - Content hash is derived from content, not name — renaming a folder doesn't
   break comparability, but editing `index.ts` does. Any report comparing "the
   same" named parameter over time should treat a hash change as a break, not
   silently merge pre/post-edit runs together.
+
+## Base image
+
+The image a permutation's prerun image is built `FROM`, before code state is
+applied — base OS/runtime plus any extra services a task needs (a
+database, a message broker) that code state, prompt set, or harness don't
+provision themselves.
+
+```ts
+// experiment-parameters/baseImages/node20/index.ts
+export default {
+  dockerfile: "FROM node:20-bookworm",
+};
+```
+
+Most experiments just use one plain, minimal base image like the one above;
+this parameter only needs attention when a task genuinely depends on
+something the codebase itself doesn't set up.
+
+## Code state
+
+The codebase applied on top of the base image. Most commonly a pinned git
+commit, but the folder's `index.ts` can be any deterministic function that
+produces the same codebase every time — applying a patch, running a fixture
+generator, and so on aren't special cases.
+
+```ts
+// experiment-parameters/codeStates/baseline/index.ts
+export default {
+  commit: "a1b2c3", // the common case: check out a pinned commit
+};
+
+// experiment-parameters/codeStates/with-fixture/index.ts
+export default () => `git checkout a1b2c3 && ./scripts/seed-fixture-data.sh`;
+```
 
 ## Harness
 

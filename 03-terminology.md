@@ -15,16 +15,19 @@ An **experiment** consists of:
 
 Task measurements are not an experiment parameter: they judge the outcome of a container run after the fact, they don't inform what runs or how many permutations there are.
 
-The experiment parameters are: **code state**, **prompt set**, **agent harness**, **agent model**, and **task instruction**.
+The experiment parameters are: **base image**, **code state**, **prompt set**, **agent harness**, **agent model**, and **task instruction**.
 
 ### Experiment parameters
 
-Each of these five values is defined deterministically — if the content does not change, neither should its effect on the experiment run. Do not make API calls or other non-deterministic operations in parameter definitions.
+Each of these six values is defined deterministically — if the content does not change, neither should its effect on the experiment run. Do not make API calls or other non-deterministic operations in parameter definitions.
 
 A parameter is not just the plain value shown in the **Example** column below — that's shorthand. Each parameter is a named folder under `experiment-parameters/`, one subfolder per kind, containing at minimum an `index.ts` whose (deterministic) output is the actual value. A folder rather than a bare file, so a definition can bundle scripts, templates, or fixtures alongside it as needs grow, without changing the shape of the system:
 
 ```
 experiment-parameters/
+  baseImages/
+    node20/
+      index.ts
   codeStates/
     baseline/
       index.ts
@@ -46,7 +49,8 @@ experiment-parameters/
 
 | Term | Definition | Example |
 |---|---|---|
-| **Code state** | A pinned git commit (or working tree state), the codebase the container starts from. | `codeStates/baseline` → commit `a1b2c3` |
+| **Base image** | The image a permutation's prerun image is built `FROM`, before code state is applied — base OS/runtime plus any extra services a task needs (a database, a message broker) that code state, prompt set, or harness don't provision. Most experiments just use one plain, minimal base image. | `baseImages/node20` → `FROM node:20-bookworm` |
+| **Code state** | The codebase the container starts from, applied on top of the base image — most commonly a pinned git commit, but any deterministic function producing the same codebase every time works. | `codeStates/baseline` → commit `a1b2c3` |
 | **Prompt set** | The prompt files overlaid into the worktree (`CLAUDE.md`, skills, rules), expressed as a shell command or script. | `promptSets/snerk` → `cp prompts/snerk.md CLAUDE.md` |
 | **Agent harness** | An agent tool and how to invoke it headlessly, pinned to an exact version. Comparing two versions means comparing two harnesses. | `harnesses/claude-code` → pinned to version X |
 | **Agent model** | The root LLM used by the harness. Sub-agent models are recorded as outcomes, not controlled parameters. | `models/haiku` → `claude-haiku-4-5-20251001` |
@@ -54,31 +58,64 @@ experiment-parameters/
 
 ### Parameter hash
 
-The full content of each experiment parameter (code state, prompt set, harness, model, task instruction) produces a **parameter hash**. This hash tags the container and proves two runs are comparable — if any parameter content changes, the hash changes, so two runs are only directly comparable if they share the same hash.
+The full content of each experiment parameter (base image, code state, prompt set, harness, model, task instruction) produces a **parameter hash**. This hash tags the container and proves two runs are comparable — if any parameter content changes, the hash changes, so two runs are only directly comparable if they share the same hash.
 
 ### Permutation
 
-A **permutation** is one specific combination of experiment parameter values. An experiment with 1 harness × 2 prompt sets × 1 model produces 2 permutations.
+A **permutation** is one specific combination of experiment parameter values. An experiment with matrix shape `1/1/2/1/1/1` (2 prompt sets, everything else fixed) produces 2 permutations.
+
+### Matrix shape
+
+Shorthand for the size of an experiment's parameter matrix, written
+`<base images>/<code states>/<prompt sets>/<harnesses>/<models>/<task instructions>` —
+one count per experiment parameter, in the same order as the parameter table above. The
+product of the six counts is the number of permutations. E.g. `1/1/2/1/1/1` is 1 base
+image, 1 code state, 2 prompt sets, 1 harness, 1 model, 1 task instruction — 2
+permutations.
+
+A matrix shape of `1/1/1/1/1/1` — every axis fixed to a single value — is a
+**single-permutation experiment**: exactly one permutation, so repeated container runs
+come only from iteration, not from the matrix.
 
 ### Experiment execution
 
-An **experiment execution** is one occasion of running the experiment: it resolves the matrix and runs each permutation, potentially multiple times (for statistics).
+An **experiment execution** is one occasion of running the experiment: it resolves the matrix and runs each permutation, potentially multiple times (for statistics). Identified by a **run ID**, which scopes the postrun image tags produced during that execution.
 
 ## Container run lifecycle
 
-### Permutation tag
+### Prerun image
 
-Each permutation is tagged with a **permutation tag** — derived from the parameter hashes and the permutation index. Used to identify and track the container image.
+The starting-point image for a permutation: built `FROM` its base image, code state
+applied, prompt set overlaid, harness installed and pinned — everything from
+**Initial setup** below, before the harness is invoked. Tagged `prerun-<parameter hash>`.
+
+One permutation always maps to one prerun image, even for parameters (like model) that
+don't actually change the filesystem — simpler than special-casing which parameters
+affect the image. Content-addressed, so it's built once and reused as the starting point
+for every iteration of that permutation, and reused again if the same permutation (same
+parameter hash) runs again later, e.g. a pinned experiment's weekly rerun, rather than
+rebuilt from scratch. Pushed to the **image store** so any iteration or runner can pull
+it without rebuilding, and so the exact runtime environment stays reproducible.
+
+### Postrun image
+
+The end-state image for one container run: the final filesystem after the harness has
+run and been measured, captured with `docker commit`. Tagged
+`postrun-<run ID>-<parameter hash>-i<iteration index>` — the same parameter hash used in
+the prerun image's tag, so which prerun image a postrun image was built from is visible
+directly in its own tag, no separate lookup needed. Always new — never reused or shared
+across iterations or executions, unlike the prerun image.
 
 ### Container run
 
 A **container run** is the concrete execution of one permutation:
 
 1. **Initial setup:**
-   - Code state is checked out to the pinned commit
-   - Prompt set files are overlaid
-   - Harness is installed and pinned to its version
-   - Arbitrary other tooling is configured (databases, services, etc.)
+   - If a prerun image already exists for this permutation's parameter hash, pull and
+     reuse it.
+   - Otherwise, build one: starting `FROM` the permutation's base image, code state is
+     applied, prompt set files are overlaid, harness is installed and pinned to its
+     version — then tag and push it as the prerun image.
 
 2. **Execution:**
    - The harness is invoked headlessly with the task instruction and model
@@ -87,8 +124,8 @@ A **container run** is the concrete execution of one permutation:
    - Task measurements are applied to the container's output
 
 4. **Preservation:**
-   - The final container state is committed to a container image
-   - The image is tagged with the permutation tag
+   - The final container state is committed to a new image
+   - The image is tagged as the postrun image
    - The image is pushed to the **image store** (e.g., a Docker registry)
    - Container run metadata is stored in the **run data store**
 
@@ -101,7 +138,7 @@ An **iteration** is one repeat of a container run for the same permutation, used
 | Term | Definition |
 |---|---|
 | **Run data store** | Where container run metadata is persisted: measurements, cost, tokens, duration, git history, final text block. Enables querying and trending over time. |
-| **Image store** | Registry (e.g., Docker Hub, ECR) where preserved container images are stored. Tagged by permutation tag, enabling restore and inspection later. |
+| **Image store** | Registry (e.g., Docker Hub, ECR) where prerun and postrun images are stored, tagged as above, enabling restore and inspection later. |
 
 ## Open questions and notes, things not to forget
 
