@@ -56,6 +56,18 @@ experiment-parameters/
 | **Agent model** | The root LLM used by the harness. Sub-agent models are recorded as outcomes, not controlled parameters. | `models/haiku` → `claude-haiku-4-5-20251001` |
 | **Task instruction** | The initial prompt telling the agent what to do. Distinct from prompt set, which shapes the environment. | `taskInstructions/add-function` → "Write a TypeScript function called `add`…" |
 
+### Declaration
+
+A **declaration** is the file that determines an experiment parameter — the `index.ts`
+inside that parameter's folder, plus anything it bundles. "Base image" names the
+parameter; `baseImages/node20/index.ts` is its declaration.
+
+Every declaration exposes an `applyParameter()` function, which returns the Dockerfile
+fragment that contributes that parameter to the prerun image. Some declarations carry
+more: a harness declaration also says how to invoke the tool and how to read its token
+costs back afterwards. See
+[060-experiment-parameters.md](060-experiment-parameters.md#declarations-and-applyparameter).
+
 ### Parameter hash
 
 The full content of each experiment parameter (base image, code state, prompt set, harness, model, task instruction) produces a **parameter hash**. This hash tags the container and proves two runs are comparable — if any parameter content changes, the hash changes, so two runs are only directly comparable if they share the same hash.
@@ -79,7 +91,7 @@ come only from iteration, not from the matrix.
 
 ### Experiment execution
 
-An **experiment execution** is one occasion of running the experiment: it resolves the matrix and runs each permutation, potentially multiple times (for statistics). Identified by a **run ID**, which scopes the postrun image tags produced during that execution.
+An **experiment execution** is one occasion of running the experiment: it resolves the matrix and runs each permutation, potentially multiple times (for statistics). Identified by an **execution ID** — a ULID, which scopes the postrun image tags produced during that execution. _(Referenced by: [081-docker-tagging.md](081-docker-tagging.md).)_
 
 ## Container run lifecycle
 
@@ -87,7 +99,8 @@ An **experiment execution** is one occasion of running the experiment: it resolv
 
 The starting-point image for a permutation: built `FROM` its base image, code state
 applied, prompt set overlaid, harness installed and pinned — everything from
-**Initial setup** below, before the harness is invoked. Tagged `prerun-<parameter hash>`.
+**Initial setup** below, before the harness is invoked. Tagged `prerun-h<parameter hash>`
+— see [081-docker-tagging.md](081-docker-tagging.md) for the full tag scheme.
 
 One permutation always maps to one prerun image, even for parameters (like model) that
 don't actually change the filesystem — simpler than special-casing which parameters
@@ -100,11 +113,26 @@ it without rebuilding, and so the exact runtime environment stays reproducible.
 ### Postrun image
 
 The end-state image for one container run: the final filesystem after the harness has
-run and been measured, captured with `docker commit`. Tagged
-`postrun-<run ID>-<parameter hash>-i<iteration index>` — the same parameter hash used in
+run, captured with `docker commit` *before* any measurement is applied, so it holds the
+agent's end state and nothing else. Tagged
+`postrun-e<execution ID>-h<parameter hash>-i<iteration index>` — the same parameter hash used in
 the prerun image's tag, so which prerun image a postrun image was built from is visible
 directly in its own tag, no separate lookup needed. Always new — never reused or shared
 across iterations or executions, unlike the prerun image.
+
+### Measurement container
+
+A short-lived container started from a **postrun image** in order to apply that container
+run's measurements. In effect a continuation of the run container — same filesystem, same
+pinned runtime and installed dependencies — picked up again after the agent has finished.
+Files can be written into it (a rendered test file, a fixture) and arbitrary commands run
+against it, but it is **never committed**: it is discarded once its measures are recorded,
+so the postrun image stays exactly the agent's end state.
+
+Because it is reconstructed from the postrun image rather than being the original
+container, one can be started again at any point in the future. That is what makes
+backfilling new measurements onto historical runs possible without re-running the agent —
+see [085-experiment-results.md](085-experiment-results.md).
 
 ### Container run
 
@@ -120,14 +148,20 @@ A **container run** is the concrete execution of one permutation:
 2. **Execution:**
    - The harness is invoked headlessly with the task instruction and model
 
-3. **Measurement:**
-   - Task measurements are applied to the container's output
-
-4. **Preservation:**
+3. **Preservation:**
    - The final container state is committed to a new image
    - The image is tagged as the postrun image
    - The image is pushed to the **image store** (e.g., a Docker registry)
-   - Container run metadata is stored in the **run data store**
+
+4. **Measurement:**
+   - A **measurement container** is started from the postrun image
+   - The task's measurements are applied to it, then it is discarded
+
+5. **Recording:**
+   - Container run metadata and its measures are stored in the **run data store**
+
+Preservation precedes measurement deliberately — see
+[080-docker-execution.md](080-docker-execution.md#why-commit-happens-before-measurement).
 
 ### Iteration
 

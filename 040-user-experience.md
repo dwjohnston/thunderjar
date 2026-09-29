@@ -86,7 +86,7 @@ The CLI has two modes over the same underlying engine:
 ## Open questions
 
 - Whether interactive mode is a dedicated TUI (e.g. `thunderjar explore`) or a set
-  of composable single-shot commands (e.g. `thunderjar show <run-id>`).
+  of composable single-shot commands (e.g. `thunderjar show <execution-id>`).
 - What "promoting" a local run to canonical/CI status looks like, if that's a thing
   at all.
 - How floating experiments actually get designed, once pinned-only ships.
