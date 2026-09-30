@@ -13,6 +13,8 @@ project glossary before diving into the rest.
 3. [Terminology](030-terminology.md) — Glossary of project-specific terms, used consistently across all other spec pages.
 4. [User Experience](040-user-experience.md) — Local workflows and CI workflows.
 5. [Setup and Configure](050-setup-and-configure.md) — Getting the application running, plus a high-level configuration overview that references out to the detailed config pages below.
+5.1. [Configuration Folder Structure](051-configuration-folder-structure.md) — Where Thunderjar configuration lives in a user's project: parameter folders, tasks with their measurements, experiments, and generated types.
+5.1. [Configuration Folder Structure](051-configuration-folder-structure.md) — What Thunderjar looks like in a user's project: where declarations live, and what that layout implies.
 6. [Experiment Parameters](060-experiment-parameters.md) — Parameter hashing and identity (ensuring comparability), plus the bulk of the detailed configuration reference: harnesses, prompt sets, tasks, measuring instruments.
 7. [Data Architecture](070-data-architecture.md) — The run data store and image store.
 8. [Docker Execution](080-docker-execution.md) — The Docker run mechanics and resulting artifacts.

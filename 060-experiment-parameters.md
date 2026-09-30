@@ -14,7 +14,7 @@ in the glossary.
   silent drift when a named definition's content changes underneath it.
 - A permutation's **parameter hash** combines the content hashes of its six
   resolved experiment parameters (base image, code state, prompt set, harness,
-  model, task instruction). Two container runs are only directly comparable if
+  model, task). Two container runs are only directly comparable if
   their parameter hashes match.
 - Content hash is derived from content, not name — renaming a folder doesn't
   break comparability, but editing `index.ts` does. Any report comparing "the
@@ -63,7 +63,7 @@ the harness is invoked, and their `applyParameter` returns an empty string:
 | Prompt set | overlays prompt files | — |
 | Harness | installs the agent tool | invoked via `cli` |
 | Model | — | `ctx.model` |
-| Task instruction | — | `ctx.taskInstruction` |
+| Task | — | `ctx.taskPrompt` |
 
 This split is the same one the flowchart in
 [080-docker-execution.md](080-docker-execution.md#process) draws as its
@@ -153,7 +153,7 @@ export default declareHarness({
 
   // run: execute the agent, and write the result file
   cli: (ctx) =>
-    `claude -p "${ctx.taskInstruction}" --model ${ctx.model} ` +
+    `claude -p "${ctx.taskPrompt}" --model ${ctx.model} ` +
     `--allowedTools "Write,Edit,Read,Bash" --output-format json > ${ctx.resultPath}`,
 
   // interpret: turn that file's contents into normalised token costs
@@ -196,19 +196,24 @@ per-model breakdown of
 
 ## Task
 
-A task is a task instruction plus task measurements. The instruction lives
-under `experiment-parameters/taskInstructions/<name>/` and is hashed like any
-other experiment parameter. Measurements are declared alongside it but are
-**not** part of the parameter hash — per [terminology](030-terminology.md#experiments),
-they judge the outcome, they don't determine what runs.
+The initial prompt given to the harness — what the agent is asked to do. It lives
+at `experiment-parameters/tasks/<name>/index.ts` and is hashed like any other
+experiment parameter.
 
 ```ts
-// experiment-parameters/taskInstructions/add-prime/index.ts
-export default declareTaskInstruction({
-  instruction: "Write a TypeScript function that determines if a number is prime.",
+// experiment-parameters/tasks/add-prime/index.ts
+export default declareTask({
+  prompt: "Write a TypeScript function that determines if a number is prime.",
   applyParameter: () => ``,
 });
 ```
+
+Associated with each task are its **task measurements**, in a `measurements/`
+folder beside it. They live with the task because they're only meaningful for
+it, but that folder is **excluded from the task's content hash** — per
+[terminology](030-terminology.md#experiments), they judge the outcome, they
+don't determine what runs. See
+[051-configuration-folder-structure.md](051-configuration-folder-structure.md).
 
 ## Measuring instruments & measurements
 
@@ -299,10 +304,6 @@ than a boolean — a measurement, not a verdict. The glob matching nothing gives
 
 - Hash algorithm, and exactly what gets hashed (file contents only, or also
   file paths/structure?).
-- Whether "task" is a first-class named folder (`tasks/<name>/`) bundling
-  instruction + measurements, or whether the task instruction stands alone
-  and measurements attach separately — `030-terminology.md`'s example layout
-  only shows `taskInstructions/`, no `tasks/`.
 - Whether `applyParameter` should receive any context, or stay zero-argument as
   above.
 - Nothing stops a declaration returning a fragment that isn't reproducible

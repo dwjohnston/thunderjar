@@ -15,7 +15,7 @@ assertion (`as`), or a type annotation (`const harness: Harness = …`).
 export default declareHarness({
   version: "2.1.283",
   applyParameter: () => `RUN npm install -g @anthropic-ai/claude-code@2.1.283`,
-  cli: (ctx) => `claude -p "${ctx.taskInstruction}" > ${ctx.resultPath}`,
+  cli: (ctx) => `claude -p "${ctx.taskPrompt}" > ${ctx.resultPath}`,
   collectTokenCosts: (raw) => { /* … */ },
 });
 ```
@@ -52,4 +52,34 @@ One function per kind:
 | Prompt set | `declarePromptSet` |
 | Harness | `declareHarness` |
 | Model | `declareModel` |
-| Task instruction | `declareTaskInstruction` |
+| Task | `declareTask` |
+| Measurement | `declareMeasurement` |
+| Experiment | `declareExperiment` |
+
+Measurement and experiment aren't experiment parameters — a measurement is associated
+with a task, and an experiment is a matrix *over* parameters, not one of them — but
+their files are Thunderjar configuration all the same, so the same rule applies.
+
+## Generated files go in `_generated/`, and are git-ignored
+
+Anything Thunderjar generates — such as the parameter-name types described in
+[051-configuration-folder-structure.md](051-configuration-folder-structure.md#typed-names)
+— is written to a `_generated/` folder, never edited by hand, and never committed.
+
+```
+thunderjar/
+└── _generated/
+    └── parameter-names.d.ts
+```
+
+```gitignore
+# .gitignore
+thunderjar/_generated/
+```
+
+- **Underscore, not a dot.** A dot-folder is hidden from most file listings and editors;
+  generated types are something a user should be able to find and read when a name
+  doesn't type-check. The underscore still marks the folder as not-yours.
+- **Git-ignored**, because it is derived entirely from the folder structure. Committing it
+  invites a stale copy that disagrees with the folders it was generated from.
+

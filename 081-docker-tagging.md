@@ -44,7 +44,7 @@ order.
 
 Matrix shape `1/1/1/1/1/1` — every parameter fixed, one permutation. Parameter hash stays
 `h4f9a21c8` for as long as the base image, code state, prompt set, harness, model, and
-task instruction stay pinned.
+task stay pinned.
 
 **First execution** (`e01k4x9j2e8mqz3`), 3 iterations:
 
@@ -69,7 +69,7 @@ is what makes the month-over-month regression comparison work.
 
 ### 2. Matrix shape `1/1/2/1/1/1`, 1 iteration, rerun later
 
-1 base image, 1 code state, 2 prompt sets, 1 harness, 1 model, 1 task instruction —
+1 base image, 1 code state, 2 prompt sets, 1 harness, 1 model, 1 task —
 2 permutations, 1 iteration each. The two prompt sets produce two different parameter
 hashes:
 `h4f9a21c8` and `h9d3e77a0`.

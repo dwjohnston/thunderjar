@@ -121,7 +121,7 @@ type ContainerRunRecord = {
     promptSet:       { name: "snerk",       contentHash: "c7d4…" },
     harness:         { name: "claude-code", contentHash: "d5e1…" },
     model:           { name: "haiku",       contentHash: "e3a8…" },
-    taskInstruction: { name: "add-prime",   contentHash: "f20b…" },
+    task:            { name: "add-prime",   contentHash: "f20b…" },
   },
   result: { /* as above */ },
   tokenCosts: { /* as above */ },
