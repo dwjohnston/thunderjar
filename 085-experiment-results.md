@@ -4,16 +4,14 @@ What gets recorded once a container run's postrun image is committed — picks u
 [080-docker-execution.md](080-docker-execution.md#process). The token-cost half of the
 same recording step is [087-collecting-token-costs.md](087-collecting-token-costs.md).
 
-## Storage: three tiers, not two
+## Storage
 
-Extends [070-data-architecture.md](070-data-architecture.md)'s design to three tiers:
+Two stores, described in [070-data-architecture.md](070-data-architecture.md):
 
 1. **Run data store** — date, the permutation's experiment parameters and parameter
    hash, measurements, cost, tokens, duration. Small and queryable — this is what "did
    this get worse since last week" queries run against. Covered below.
-2. **Trace store** — the OTel trace and session transcript. Not populated in v1 — see
-   [Deferred: trace store](#deferred-trace-store) below.
-3. **Image store** — the prerun/postrun images themselves. See
+2. **Image store** — the prerun/postrun images themselves. See
    [081-docker-tagging.md](081-docker-tagging.md).
 
 ## Applying measurements
@@ -159,17 +157,14 @@ Token costs are backfillable on the same terms, since the harness's result file 
 preserved in the image too — see
 [087-collecting-token-costs.md](087-collecting-token-costs.md#backfilling-token-costs).
 
-## Deferred: trace store
+## Traces and transcripts
 
-Extracting the OTel trace and session transcript out of the container into a separate
-trace store is out of scope for v1 — see
-[020-goals-non-goals.md](020-goals-non-goals.md). For now, if you want the trace or
-transcript for a run, pull its postrun image and read them from its filesystem, same as
-everything else preserved in the image.
+A run's OTel trace and session transcript stay in its postrun image. To read them, pull
+the image and read them from its filesystem, same as everything else the run left behind.
 
-This is expected to be the first fast-follow after v1, not a long-term non-goal: the
-original intent is for the trace store to make "just show me the trace" cheap, without
-needing a full image pull for the common case.
+**Future:** a separate trace store, so viewing a trace doesn't need a full image pull —
+expected to be the first fast-follow after v1. See
+[020-goals-non-goals.md](020-goals-non-goals.md#non-goals-v1).
 
 ## Open questions
 

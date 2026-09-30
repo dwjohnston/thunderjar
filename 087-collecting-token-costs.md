@@ -22,10 +22,10 @@ From the harness's own structured output — not from telemetry. Every supported
 can be asked to emit a machine-readable result (`claude -p --output-format json`,
 `codex exec --json`, `qwen --output-format json`).
 
-Since the trace store isn't populated in v1 (see
-[020-goals-non-goals.md](020-goals-non-goals.md#non-goals-v1)), **v1 needs no OTel
-collector at all** for cost reporting. It parses a file. OTel remains the route to
-per-tool and per-span detail later, when the trace store lands.
+Cost reporting needs no OTel collector — it parses a file.
+
+**Future:** per-tool and per-span cost detail via OTel, once there is a trace store. See
+[020-goals-non-goals.md](020-goals-non-goals.md#non-goals-v1).
 
 ## The result file
 

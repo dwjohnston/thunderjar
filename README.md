@@ -13,10 +13,10 @@ project glossary before diving into the rest.
 4. [User Experience](040-user-experience.md) — Local workflows and CI workflows.
 5. [Setup and Configure](050-setup-and-configure.md) — Getting the application running, plus a high-level configuration overview that references out to the detailed config pages below.
 6. [Experiment Parameters](060-experiment-parameters.md) — Parameter hashing and identity (ensuring comparability), plus the bulk of the detailed configuration reference: harnesses, prompt sets, tasks, measuring instruments.
-7. [Data Architecture](070-data-architecture.md) — The three-tier metadata + trace + artifact store design.
+7. [Data Architecture](070-data-architecture.md) — The run data store and image store.
 8. [Docker Execution](080-docker-execution.md) — The Docker run mechanics and resulting artifacts.
 8.1. [Docker Tagging](081-docker-tagging.md) — The prerun/postrun image tag formats, and why.
-8.5. [Experiment Results](085-experiment-results.md) — What gets recorded to the run data store after a container run, and why the trace store isn't populated yet.
+8.5. [Experiment Results](085-experiment-results.md) — What gets recorded to the run data store after a container run.
 8.7. [Collecting Token Costs](087-collecting-token-costs.md) — How a container run's token usage and cost are obtained from the harness, normalised across harnesses, and recorded.
 9. [Restore / Purge](090-restore-purge.md) — Lifecycle management: restoring archived containers, purging old ones.
 10. [CLI Reference](100-cli-reference.md) — The actual CLI commands.
