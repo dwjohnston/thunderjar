@@ -33,19 +33,18 @@ against it. There is no first-pass-only code path to keep in sync.
 
 ## The result record
 
-A container run's **Result** is the set of measures it produced. It is a keyed map, not
-an array, because it is append-only: adding measurements later must not disturb the
-measures already recorded, and position carries no meaning.
+A container run's **Result** is the set of measures it produced, keyed by measurement
+name: the measurement file's name (see
+[051-configuration-folder-structure.md](051-configuration-folder-structure.md)). It is a
+map rather than an array, because position carries no meaning and adding measurements
+later mustn't disturb the ones already there.
 
 ```ts
-type Result = Record<MeasurementKey, RecordedMeasure>;
-
-// instrument name + the content hash of the measurement (instrument + its config)
-type MeasurementKey = `${string}-h${string}`;
+type Result = Record<MeasurementName, RecordedMeasure>;
 
 type RecordedMeasure = {
   instrument: string;
-  contentHash: string;
+  contentHash: string; // of the measurement that produced this measure
   measuredAt: string; // ISO timestamp — NOT the date the container run happened
   outcome: MeasurementResult<unknown>;
 };
@@ -53,20 +52,20 @@ type RecordedMeasure = {
 
 ```ts
 {
-  "fileCreated-h7b21ac90": {
+  isPrimeTsExists: {
     instrument: "fileCreated",
     contentHash: "7b21ac90…",
     measuredAt: "2026-09-29T14:31:02Z",
     outcome: { outcome: "measured", data: true },
   },
-  "grep-h0c4fe218": {
+  tsIgnoreCount: {
     instrument: "grep",
     contentHash: "0c4fe218…",
     measuredAt: "2026-09-29T14:31:02Z",
     outcome: { outcome: "measured", data: 0 },
   },
   // added three months later against the same postrun image
-  "templateTest-hd91f6a07": {
+  isPrimeTemplateTest: {
     instrument: "templateTest",
     contentHash: "d91f6a07…",
     measuredAt: "2026-12-14T09:02:44Z",
@@ -75,12 +74,39 @@ type RecordedMeasure = {
 }
 ```
 
-Two things the key has to carry. The **instrument name** alone isn't enough — a task can
-declare two `grep` measurements with different configs, and they are different
-measurements. The **content hash** is what separates them, and it is also what catches
-someone editing a measurement's config in place: that isn't "adding a measurement", it's
-silently redefining an existing one, and a changed hash makes it a new key rather than a
-corrupted old one.
+### Name is identity, hash is version
+
+- **The name identifies the measurement.** Results are keyed by it, and it's what a
+  report shows.
+- **The content hash identifies the version.** It covers `instrument`, `config`, and any
+  bundled files, such as a `templateTest` template. It does **not** cover `aggregate`:
+  changing how values combine only means recomputing aggregation results, never
+  re-measuring.
+- **A stale measure is a hash mismatch.** A stored measure whose `contentHash` differs
+  from the measurement's current hash is stale. Backfilling re-measures it and replaces
+  the old value. No history of earlier versions is kept.
+- **Re-running an unchanged measurement overwrites it**, with a new `measuredAt`.
+- **The measurement set hash is derived, not stored.** It is a hash over a task's sorted
+  `name:contentHash` pairs. Two aggregation results with equal set hashes were judged by
+  exactly the same measurements. Where the set hashes differ, the results are still
+  comparable measurement by measurement, wherever name and hash both match.
+
+```
+measurement set hash = hash(
+  "isPrimeTemplateTest:d91f6a07…\n" +
+  "isPrimeTsExists:7b21ac90…\n" +
+  "tsIgnoreCount:0c4fe218…"
+)
+```
+
+### Deleted and renamed measurements
+
+- **Deleted: kept but excluded.** A deleted measurement's measures stay in past
+  iteration Results but are dropped from aggregation results. If the file is restored
+  with the same content, its hash matches and nothing is re-measured.
+- **Renamed: a delete followed by an add.** The old name is excluded as above. The new
+  name has no stored measures, so it gets backfilled. Renames are rare enough that
+  matching old and new names by hash isn't worth the logic.
 
 `measuredAt` is deliberately distinct from the date of the container run. A backfilled
 measure is dated when it was taken, not when the agent ran — otherwise the record claims
@@ -156,24 +182,147 @@ How much of that time went to waiting on the model is separate, and comes from t
 harness — see `apiDurationMs` in
 [087-collecting-token-costs.md](087-collecting-token-costs.md#api-duration).
 
+## Aggregation results
+
+Container runs aren't what gets compared. The unit of comparison is the **aggregation
+result**: the Results of every iteration of one permutation in one experiment execution,
+combined. That holds even when there's only one iteration.
+
+```
+aggregation result = (execution ID, parameter hash) → the combined Results of its iterations
+```
+
+```
+(01k4x9j2e8mqz3, 4f9a21c8e0b7…) → 5 iterations, i00–i04, combined
+```
+
+Wherever the things being compared come from — permutations in the same execution,
+repeated executions of one experiment, or executions with floating parameters —
+comparing means comparing aggregation results. The only requirement is that they have
+the same shape, and backfilling measurements is what makes that achievable. Which ones
+to fetch and set side by side is the presentation layer's problem, not the store's.
+
+**Stored, and recomputed on change.** Per-iteration Results remain the source of truth.
+Aggregation results are stored alongside them, so the presentation layer only ever
+fetches aggregation results. Whenever a measure is added or backfilled against any
+iteration, its permutation's aggregation result is recomputed, so a stored aggregate is
+never stale relative to the Results it was built from.
+
+Token costs and execution duration are aggregated alongside the measures, since they are
+per-iteration values too.
+
+### How a measure's values combine
+
+Decided: **measurement-chosen**. Each measurement states how its values combine across
+iterations. The example below uses task `is-prime` with three measurements, run for five
+iterations.
+
+```ts
+// per-iteration measures, i00–i04
+isPrimeTsExists:     true,  true,  true,  false,   true
+tsIgnoreCount:       0,     2,     0,     0,       1
+isPrimeTemplateTest: {4,1}, {5,0}, {5,0}, skipped, {3,2}  // i03: no isPrime.ts to test
+```
+
+Each measurement picks one or more combinations from a fixed menu, as an array. The
+menu is typed by the instrument's value type, so an incompatible choice is a type error
+in the measurement file. It is always an array, even for one choice, so there is one way
+to write it.
+
+```ts
+// the menu, keyed by value type
+type AggregateFor<T> =
+  T extends boolean ? "rate" | "count"
+  : T extends number ? "mean" | "median" | "min" | "max" | "sum"
+  : T extends Record<string, number> ? "sum" | "mean"
+  : never;
+```
+
+```ts
+// tasks/is-prime/measurements/isPrimeTsExists.ts
+export default declareMeasurement({
+  instrument: "fileCreated",
+  config: { glob: "**/isPrime.ts" },
+  aggregate: ["rate"],
+});
+
+// tasks/is-prime/measurements/tsIgnoreCount.ts
+export default declareMeasurement({
+  instrument: "grep",
+  config: { glob: "**/*.ts", pattern: "@ts-ignore" },
+  aggregate: ["mean", "max"], // typical and worst iteration
+});
+
+// tasks/is-prime/measurements/isPrimeTemplateTest.ts
+export default declareMeasurement({
+  instrument: "templateTest",
+  config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
+  aggregate: ["sum"],
+});
+```
+
+How it shows up in the aggregation result. Each chosen method becomes a key, so the
+record says which methods were used without a separate field. `measured` is the number
+of iterations whose value was combined:
+
+```ts
+measures: {
+  isPrimeTsExists:     { measured: 5, rate: 0.8 },
+  tsIgnoreCount:       { measured: 5, mean: 0.6, max: 2 },
+  isPrimeTemplateTest: { measured: 4, sum: { passed: 17, failed: 3 } },   // i03 skipped
+}
+```
+
+The measurement author chooses what matters for this task. For `@ts-ignore`, the worst
+iteration matters as much as the average, and the array means neither has to be given
+up. The cost: every measurement file has to state it, and the menu has to anticipate
+every value shape. A new instrument with an unusual value type gets `never` until the
+menu grows.
+
+#### Future: instrument-owned
+
+Each measuring instrument could declare a default `aggregate` next to its value type, so
+a measurement file only states one when it wants something different. Not in v1 — see
+[020-goals-non-goals.md](020-goals-non-goals.md#non-goals-v1).
+
+#### Ruled out
+
+- **Type-inferred: inferring it from the value type.** For example, booleans become a rate and numbers
+  a standard summary.
+- **Inferred-with-override: inferred by default, overridable by the instrument.** This depends on the inference
+  above for its defaults, so it goes with it.
+
+Changing a measurement's `aggregate` only recomputes its aggregation results. Because
+`aggregate` is left out of the measurement's content hash, editing it never triggers a
+re-measure.
+
+Still undecided:
+
+- **Iterations that didn't produce a value.** A `skipped` or `erroredWhileMeasuring`
+  iteration has no value to combine. Excluding it silently makes the aggregate look
+  better than it is, and counting it as a zero is wrong for the same reason as with
+  token costs — see
+  [087-collecting-token-costs.md](087-collecting-token-costs.md). The likely answer is to
+  exclude them and report how many were excluded, but that isn't settled either.
+
 ## Backfilling measurements
 
 New measurements can be applied to runs that have already happened, without re-running
 the agent. This is the payoff for preserving the postrun image.
 
-Two rules make it safe:
-
-- **Existing measurements never change.** Adding D, E and F leaves A, B and C untouched —
-  their content hashes haven't changed, so their keys haven't either.
-- **A changed hash is a new measurement, not an updated one.** Editing a measurement's
-  config produces a new key alongside the old, so the history stays legible rather than
-  being silently rewritten. A hash that no longer matches what was seen before is a
-  warning, and the run is still recorded.
+A backfill measures only what is **missing or stale**: a measurement with no stored
+measure for a run, or one whose stored `contentHash` doesn't match its current hash (see
+[Name is identity, hash is version](#name-is-identity-hash-is-version)). Everything else
+is untouched. Adding D, E and F leaves A, B and C alone. Editing B re-measures only B,
+and its new value replaces the old one.
 
 This also underwrites the authoring loop: writing an instrument is writing a test against
 a known filesystem state. Restore the image once, then iterate on the instrument against
 that fixed snapshot as often as needed — no tokens spent, no agent variance, just the
 instrument's own logic under test.
+
+A backfilled measure also triggers recomputing its permutation's
+[aggregation result](#aggregation-results).
 
 Token costs are backfillable on the same terms, since the harness's result file is
 preserved in the image too — see
@@ -190,10 +339,6 @@ expected to be the first fast-follow after v1. See
 
 ## Open questions
 
-- **Re-running an unchanged measurement.** If a measurement is applied again with the
-  same content hash — a flaky instrument, a corrected environment — it lands on the same
-  key. Overwrite, or keep both with their differing `measuredAt`? Overwriting loses
-  evidence; keeping both means the key is no longer unique.
 - **Comparing across a hash change.** The record stores full parameter hashes so a report
   can decide what's comparable, but the policy is a reporting concern and belongs in
   [110-cli-report-visualization.md](110-cli-report-visualization.md): when is it

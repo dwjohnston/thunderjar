@@ -64,8 +64,6 @@ the thing properly, the entry goes, whether or not the content changed.
   surrounding decisions are the user's — commit before measurement, the measurement
   container being short-lived and never committed, backfill as the same path. The data
   shapes are not:
-  - `MeasurementKey` as `instrument-h<contentHash>`, and using a keyed map rather than an
-    array.
   - The `RecordedMeasure` and `ContainerRunRecord` shapes in full, including field names.
   - `measuredAt` existing as a field separate from the run date.
   - Storing each parameter by *both* name and content hash.

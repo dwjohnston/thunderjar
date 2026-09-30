@@ -16,6 +16,12 @@ What's in scope vs. explicitly not.
   non-goal. (See [085-experiment-results.md](085-experiment-results.md) and
   [070-data-architecture.md](070-data-architecture.md).)
 
+- **Instrument-owned aggregation.** Measuring instruments declaring a default way their
+  values combine across iterations, so a measurement file needn't state one. In v1 each
+  measurement chooses its own (see
+  [085-experiment-results.md](085-experiment-results.md#how-a-measures-values-combine)).
+  Most likely to return as a default that a measurement's own choice overrides.
+
 ## To revisit
 
 Unresolved, but things we *are* intending to address in v1 — unlike the non-goals above.
@@ -66,6 +72,11 @@ Unresolved, but things we *are* intending to address in v1 — unlike the non-go
   If Anthropic ever ships a cache-key header, `ANTHROPIC_CUSTOM_HEADERS` means the
   claude-code harness can set it with no new mechanism. (See
   [080-docker-execution.md](080-docker-execution.md).)
+
+- **Missing values in aggregation results.** How `skipped` / `erroredWhileMeasuring`
+  iterations are counted when a measure's values are combined. Excluding them silently
+  flatters the aggregate; counting them as zero is wrong. See
+  [085-experiment-results.md](085-experiment-results.md#how-a-measures-values-combine).
 
 ## Open questions
 

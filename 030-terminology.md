@@ -165,6 +165,10 @@ Preservation precedes measurement deliberately — see
 
 An **iteration** is one repeat of a container run for the same permutation, used to gather pass-rate statistics. Each iteration gets its own container and a separate ID within the permutation.
 
+### Aggregation result
+
+An **aggregation result** combines the Results of every iteration of one permutation within one experiment execution, even when there is only one iteration. It is the unit that gets compared: comparing permutations, executions, or floating-parameter runs all means comparing aggregation results. Each measurement states how its values combine. See [085-experiment-results.md](085-experiment-results.md#aggregation-results).
+
 ## Storage
 
 | Term | Definition |
