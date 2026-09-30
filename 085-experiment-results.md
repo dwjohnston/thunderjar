@@ -104,7 +104,7 @@ type ContainerRunRecord = {
 
   result: Result;
   tokenCosts: TokenCosts; // see 087
-  durations: RunDurations; // see 087
+  execution: Execution; // see below
 };
 ```
 
@@ -125,7 +125,7 @@ type ContainerRunRecord = {
   },
   result: { /* as above */ },
   tokenCosts: { /* as above */ },
-  durations: { apiMs: 42310, containerMs: 68922 },
+  execution: { startedAt: 1790692255104, finishedAt: 1790692297416, exitCode: 0 },
 }
 ```
 
@@ -133,6 +133,28 @@ Parameters are stored **by name and by content hash**, not just by hash. The has
 proves comparability; the name is what makes a report readable. Keeping both means a
 report can say "prompt set `snerk`" while still detecting that `snerk` means something
 different than it did last month.
+
+## Execution
+
+How long the agent ran, and how its process exited — read from `/thunderjar/run.json`,
+which Thunderjar's [execution wrapper](080-docker-execution.md#the-execution-wrapper)
+writes inside the container before commit.
+
+```ts
+type Execution = {
+  startedAt: number; // epoch ms, harness start
+  finishedAt: number; // epoch ms, harness exit
+  exitCode: number; // the harness process's exit code
+};
+```
+
+Duration is `finishedAt - startedAt`: the agent's execution only, not image pulls,
+container setup, or measurement. Because the file is in the postrun image, this is
+re-derivable from the image like everything else about the run.
+
+How much of that time went to waiting on the model is separate, and comes from the
+harness — see `apiDurationMs` in
+[087-collecting-token-costs.md](087-collecting-token-costs.md#api-duration).
 
 ## Backfilling measurements
 

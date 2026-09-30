@@ -53,7 +53,6 @@ the thing properly, the entry goes, whether or not the content changed.
     to collapse five failure modes into them.
   - `/thunderjar/result.json` as the concrete path. Invented; nothing depends on that
     exact string, but it is now written down as though chosen.
-  - Recording two durations (`apiMs`, `containerMs`) at all, and that shape.
   - "Never zero-fill in aggregates" — a rule the agent introduced.
   - **The per-harness claims about Codex, OpenCode and Qwen** come from the source design
     conversation, which has since been shown to state non-existent APIs with full

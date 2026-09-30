@@ -73,7 +73,11 @@ against a fixture — layer 1 of [120-test-boundaries.md](120-test-boundaries.md
 collectTokenCosts: (raw: string) => TokenCosts;
 
 type TokenCosts =
-  | { outcome: "collected"; models: ModelTokenCosts[] }
+  | {
+      outcome: "collected";
+      models: ModelTokenCosts[];
+      apiDurationMs?: number; // absent unless the harness reports one
+    }
   | { outcome: "unavailable"; reason: "absent" | "unparseable" | "notReported" };
 
 type ModelTokenCosts = {
@@ -99,6 +103,7 @@ type ModelTokenCosts = {
       cacheCreationTokens: 0, cacheReadTokens: 0,
       costUsd: 0.0096, costBasis: "list" },
   ],
+  apiDurationMs: 31870,
 }
 ```
 
@@ -152,20 +157,17 @@ Dollars are an **optional passthrough**, never computed. Thunderjar owns no pric
 Tokens are the common denominator across harnesses. Any comparison that has to hold
 across harnesses should be made on tokens; dollars are a convenience for the common case.
 
-## Durations
+## API duration
 
-Two different numbers, recorded separately because they answer different questions:
+Where the harness reports how long it spent waiting on API calls, the collector passes it
+through as `apiDurationMs`. Like dollars, it's optional: absent rather than zero when a
+harness doesn't report it.
 
-```ts
-type RunDurations = {
-  apiMs: number; // reported by the harness: time spent in API calls
-  containerMs: number; // measured by Thunderjar: the container run wall-clock
-};
-```
-
-`containerMs` includes image pull, setup, and the measurement step; `apiMs` doesn't.
-Collapsing them hides which half of a slow run was the agent thinking and which was
-infrastructure.
+It complements the run's execution time, which Thunderjar records itself from outside the
+harness (see [085-experiment-results.md](085-experiment-results.md#execution)). The two
+answer different questions: execution time is the whole of the agent's run, and API
+duration is the part of it spent waiting on the model. A run whose execution time grows
+while its API duration stays flat got slower in its tools, not its model.
 
 ## When collection fails
 

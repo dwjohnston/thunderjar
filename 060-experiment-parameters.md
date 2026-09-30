@@ -161,7 +161,9 @@ export default {
 `cli` carries a contract worth stating plainly: **the command it returns must
 both run the agent and leave a file at `ctx.resultPath`.** Thunderjar supplies
 the path and never parses the file itself — it hands the bytes to that same
-harness's `collectTokenCosts`. See
+harness's `collectTokenCosts`. Thunderjar also wraps the command to record start time,
+finish time and exit code — the harness author does nothing for that; see
+[080-docker-execution.md](080-docker-execution.md#the-execution-wrapper). See
 [087-collecting-token-costs.md](087-collecting-token-costs.md) for the
 `TokenCosts` contract and what happens when the file is missing or malformed.
 
