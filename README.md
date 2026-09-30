@@ -9,6 +9,7 @@ project glossary before diving into the rest.
 1. [Motivation](010-motivation.md) — The problem being solved.
 2. [Goals / Non-Goals](020-goals-non-goals.md) — What's in scope vs. explicitly not.
 2.1. [Human Zone-Out](021-human-zone-out.md) — Places the user has flagged that they stopped paying close attention. Content listed there was never really reviewed and shouldn't be treated as settled.
+2.2. [Coding Conventions](022-coding-conventions.md) — Conventions for the TypeScript a Thunderjar user writes, and so for every code example in the spec. `declareX()` wrappers, not bare exports.
 3. [Terminology](030-terminology.md) — Glossary of project-specific terms, used consistently across all other spec pages.
 4. [User Experience](040-user-experience.md) — Local workflows and CI workflows.
 5. [Setup and Configure](050-setup-and-configure.md) — Getting the application running, plus a high-level configuration overview that references out to the detailed config pages below.

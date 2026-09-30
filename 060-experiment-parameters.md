@@ -24,7 +24,10 @@ in the glossary.
 ## Declarations and `applyParameter`
 
 Each parameter is set by its [declaration](030-terminology.md#declaration) —
-the `index.ts` in its folder. Every declaration exposes the same function:
+the `index.ts` in its folder, whose default export is wrapped in that kind's
+`declareX()` function (`declareHarness`, `declareModel`, …) per
+[022-coding-conventions.md](022-coding-conventions.md#declarex-functions-not-bare-exports).
+Every declaration exposes the same function:
 
 ```ts
 applyParameter: () => string; // a Dockerfile fragment
@@ -77,9 +80,9 @@ themselves.
 
 ```ts
 // experiment-parameters/baseImages/node20/index.ts
-export default {
+export default declareBaseImage({
   applyParameter: () => `FROM node:20-bookworm`,
-};
+});
 ```
 
 Most experiments just use one plain, minimal base image like the one above;
@@ -95,15 +98,15 @@ aren't special cases.
 
 ```ts
 // experiment-parameters/codeStates/baseline/index.ts
-export default {
+export default declareCodeState({
   applyParameter: () => `RUN git checkout a1b2c3`,
-};
+});
 
 // experiment-parameters/codeStates/with-fixture/index.ts
-export default {
+export default declareCodeState({
   applyParameter: () =>
     `RUN git checkout a1b2c3 && ./scripts/seed-fixture-data.sh`,
-};
+});
 ```
 
 ## Prompt set
@@ -120,10 +123,10 @@ drift the hash exists to catch.
 // experiment-parameters/promptSets/snerk/index.ts
 const commit = "e4f5a6";
 
-export default {
+export default declarePromptSet({
   applyParameter: () =>
     `RUN git checkout ${commit} -- prompts/snerk.md && cp prompts/snerk.md CLAUDE.md`,
-};
+});
 ```
 
 The commit is the prompt set's own, independent of the code state's. That
@@ -141,7 +144,7 @@ run cost.
 // experiment-parameters/harnesses/claude-code/index.ts
 const version = "2.1.283";
 
-export default {
+export default declareHarness({
   version,
 
   // build: layer the tool into the prerun image
@@ -155,7 +158,7 @@ export default {
 
   // interpret: turn that file's contents into normalised token costs
   collectTokenCosts: (raw) => { /* … */ },
-};
+});
 ```
 
 `cli` carries a contract worth stating plainly: **the command it returns must
@@ -181,10 +184,10 @@ The root LLM the harness is invoked with. Nothing to add to the image.
 
 ```ts
 // experiment-parameters/models/haiku/index.ts
-export default {
+export default declareModel({
   model: "claude-haiku-4-5-20251001",
   applyParameter: () => ``,
-};
+});
 ```
 
 Sub-agent models aren't controlled here — they're recorded as outcomes, in the
@@ -201,10 +204,10 @@ they judge the outcome, they don't determine what runs.
 
 ```ts
 // experiment-parameters/taskInstructions/add-prime/index.ts
-export default {
+export default declareTaskInstruction({
   instruction: "Write a TypeScript function that determines if a number is prime.",
   applyParameter: () => ``,
-};
+});
 ```
 
 ## Measuring instruments & measurements
