@@ -53,15 +53,16 @@ set, code state) are the axis you vary later, holding the rest fixed.
 - **Pinned experiments:** exact code state + prompt set, expected to keep
   producing the same result run after run. A change here is a signal, surfaced
   loudly through standard reporting.
-- **Floating experiments** *(deferred)*: same idea, but pointed at "current" code
-  state / prompts, to catch slow drift as the codebase and prompt set grow. Out of
-  scope for the first pass — pinned only for now.
+- **Experiments that follow a moving target:** same idea, but pointed at "current" code
+  state / prompts, to catch slow drift as the codebase and prompt set grow. A parameter
+  does this by resolving its own hash at execution time — see
+  [060-experiment-parameters.md](060-experiment-parameters.md#parameters-that-follow-a-moving-target).
 - CI invocation is non-interactive and scriptable: exit code plus a JSON summary,
   no interactive UI.
 
 ### Regression triage
 
-The motivating case for floating experiments: between two scheduled runs, one
+The motivating case for following a moving target: between two scheduled runs, one
 experiment's measurement suddenly degrades — a real regression, not noise. From
 there, the loop hands off from CI back to a developer's machine:
 
@@ -89,4 +90,3 @@ The CLI has two modes over the same underlying engine:
   of composable single-shot commands (e.g. `thunderjar show <execution-id>`).
 - What "promoting" a local run to canonical/CI status looks like, if that's a thing
   at all.
-- How floating experiments actually get designed, once pinned-only ships.

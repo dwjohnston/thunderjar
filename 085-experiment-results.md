@@ -197,7 +197,7 @@ aggregation result = (execution ID, parameter hash) → the combined Results of 
 ```
 
 Wherever the things being compared come from — permutations in the same execution,
-repeated executions of one experiment, or executions with floating parameters —
+repeated executions of one experiment, or executions whose parameters [follow a moving target](060-experiment-parameters.md#parameters-that-follow-a-moving-target) —
 comparing means comparing aggregation results. The only requirement is that they have
 the same shape, and backfilling measurements is what makes that achievable. Which ones
 to fetch and set side by side is the presentation layer's problem, not the store's.

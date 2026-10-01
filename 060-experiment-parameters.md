@@ -22,10 +22,77 @@ in the glossary.
   to a harness doesn't change any existing parameter hash; changing one
   model's ID changes only that model's permutations, through the resolved
   model ID.
+- A declaration can add to, or replace, what its content hash is derived from — see
+  [Controlling the content hash](#controlling-the-content-hash).
 - Content hash is derived from content, not name — renaming a folder doesn't
   break comparability, but editing `index.ts` does. Any report comparing "the
   same" named parameter over time should treat a hash change as a break, not
   silently merge pre/post-edit runs together.
+
+## Controlling the content hash
+
+By default a parameter's content hash comes from its folder's content. A declaration
+can change that with one of two optional functions. Each returns a shell command.
+Thunderjar runs the command on the host at the start of each experiment execution, and
+uses its output.
+
+```ts
+additionalHash?: () => string; // a command; its output is hashed with the folder's content
+determineHash?: () => string;  // a command; its output is hashed instead of the folder's content
+```
+
+| Function | Content hash is derived from |
+|---|---|
+| Neither | The folder's content. |
+| `additionalHash` | The folder's content, plus the command's output. |
+| `determineHash` | The command's output only. The folder's content is ignored. |
+| Both | As `determineHash`. |
+
+If a declaration provides both, `determineHash` takes precedence and `additionalHash`
+is ignored.
+
+```ts
+// experiment-parameters/codeStates/main/index.ts
+export default declareCodeState({
+  determineHash: () => `git rev-parse main`,
+  applyParameter: (ctx) => `RUN git checkout ${ctx.resolvedHash}`,
+});
+```
+
+```ts
+// experiment-parameters/baseImages/node20/index.ts
+export default declareBaseImage({
+  additionalHash: () => `docker image inspect --format '{{.Id}}' node:20-bookworm`,
+  applyParameter: () => `FROM node:20-bookworm`,
+});
+```
+
+### `ctx.resolvedHash`
+
+The command's output is passed to `applyParameter` as `ctx.resolvedHash`. For the code
+state above, on an execution where `main` is at `a1b2c3`:
+
+```
+git rev-parse main        → a1b2c3
+ctx.resolvedHash          = "a1b2c3"
+applyParameter returns    RUN git checkout a1b2c3
+```
+
+Use it in the fragment. A fragment of `RUN git checkout main` has the same text on
+every execution, so Docker would reuse the layer it built from an earlier commit. With
+the resolved value in the fragment, the image is built from exactly what was hashed.
+
+### Parameters that follow a moving target
+
+The code state above means "whatever `main` is when the experiment executes". Each
+execution resolves it again. When `main` has moved, the content hash is different, so
+the parameter hash is different, and the execution is recorded as a different
+permutation of the same named parameters.
+
+This is sometimes called a *floating parameter*. It is not a separate kind of parameter
+and Thunderjar has no special handling for it: it is a declaration that uses
+`determineHash`. Any parameter can do it — a prompt set following a branch, a harness
+following its latest release.
 
 ## Declarations and `applyParameter`
 
@@ -36,8 +103,12 @@ the `index.ts` in its folder, whose default export is wrapped in that kind's
 Every declaration exposes the same function:
 
 ```ts
-applyParameter: () => string; // a Dockerfile fragment
+applyParameter: (ctx) => string; // a Dockerfile fragment
 ```
+
+`ctx` carries `resolvedHash` — see
+[Controlling the content hash](#ctxresolvedhash). A declaration that doesn't need it
+leaves the argument off.
 
 Building a permutation's prerun image is then a fold: concatenate each
 parameter's fragment, in the order below, and build the result.
@@ -253,8 +324,10 @@ than a boolean — a measurement, not a verdict. The glob matching nothing gives
 
 - Hash algorithm, and exactly what gets hashed (file contents only, or also
   file paths/structure?).
-- Whether `applyParameter` should receive any context, or stay zero-argument as
-  above.
+- What happens when an `additionalHash` or `determineHash` command exits non-zero.
+- Whether the command's output is stored alongside the hash, so a report can show the
+  commit an execution resolved to rather than only its hash.
+- What else `applyParameter`'s `ctx` carries, beyond `resolvedHash`.
 - Nothing stops a declaration returning a fragment that isn't reproducible
   (`RUN apt-get install foo`). The prerun image being built once and reused
   bounds the damage within a permutation's lifetime, but the hash can't detect
