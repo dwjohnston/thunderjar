@@ -39,7 +39,7 @@ as `ctx.resultPath`.
 
 ```ts
 cli: (ctx) =>
-  `claude -p "${ctx.taskPrompt}" --model ${ctx.model} ` +
+  `claude -p "${ctx.taskPrompt}" --model ${ctx.modelId} ` +
   `--output-format json > ${ctx.resultPath}`,
 ```
 
@@ -107,7 +107,7 @@ type ModelTokenCosts = {
 }
 ```
 
-_(Referenced by: [060-experiment-parameters.md](060-experiment-parameters.md#harness).)_
+_(Referenced by: [064-harness.md](064-harness.md).)_
 
 ### Why per-model, and not one total
 
@@ -212,7 +212,7 @@ as measurements: a corrected or extended `collectTokenCosts` can be applied to h
 runs without re-running the agent. Start a measurement container from the postrun image,
 re-read the file, re-collect.
 
-The [accepted tradeoff](060-experiment-parameters.md#accepted-tradeoffs) is that
+The [accepted tradeoff](064-harness.md#accepted-tradeoffs) is that
 `collectTokenCosts` sits inside the harness declaration and is therefore part of its
 content hash, so correcting it marks old runs as not directly comparable — a warning, not
 an error.

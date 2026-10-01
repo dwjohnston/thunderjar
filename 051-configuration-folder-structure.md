@@ -1,8 +1,8 @@
 # Configuration Folder Structure
 
-What Thunderjar configuration looks like inside a user's project. The shape of each
-declaration is in [060-experiment-parameters.md](060-experiment-parameters.md); this page
-is about where things live.
+Where Thunderjar configuration lives inside a user's project. What goes in each file is
+elsewhere: experiments in [055-declaring-experiments.md](055-declaring-experiments.md),
+parameters in [060-experiment-parameters.md](060-experiment-parameters.md).
 
 ## Example project
 
@@ -68,66 +68,11 @@ my-app/
   alongside.
 - **Experiments live outside `experiment-parameters/`.** An experiment isn't a parameter;
   it's a matrix over them.
-
-## Declaring
-
-Every configuration file default-exports the result of a `declareX()` call rather than a
-bare object. The function carries the type, so the file is checked without `satisfies`,
-`as`, or a type annotation.
-
-```ts
-// thunderjar/experiments/is-prime-baseline.ts
-export default declareExperiment({
-  baseImage: ["node20"],
-  codeState: ["baseline"],
-  promptSet: ["snerk", "glurk"],
-  harness: ["claude-code-2-1-283"],
-  model: ["haiku-4-5"],
-  task: ["is-prime"],
-  iterations: 5,
-});
-```
-
-```ts
-// thunderjar/experiment-parameters/tasks/is-prime/index.ts
-export default declareTask({
-  prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
-  applyParameter: () => ``,
-});
-```
-
-```ts
-// thunderjar/experiment-parameters/tasks/is-prime/measurements/isPrimeTemplateTest.ts
-export default declareMeasurement({
-  instrument: "templateTest",
-  config: {
-    subject: "**/isPrime.ts",
-    template: "./isPrime.test.template.ts",
-  },
-});
-```
-
-The experiment declares tasks, not measurements. Measurements come with the task, so a
-second experiment using `is-prime` gets the same measurements without copying them.
-
-## Typed names
-
-The strings in `declareExperiment` are not free text. A generation step reads the
-folder names under `experiment-parameters/` and emits their union types into
-`_generated/parameter-names.d.ts`, so a misspelled or deleted parameter is a type error
-in the experiment file. The folder is git-ignored — see
-[022-coding-conventions.md](022-coding-conventions.md#generated-files-go-in-_generated-and-are-git-ignored).
-
-```ts
-// _generated/parameter-names.d.ts — generated, not edited
-type PromptSetName = "snerk" | "glurk";
-type TaskName = "is-prime";
-// …one union per parameter kind
-```
+- **Generated types live in `_generated/`.** They are built from the folder names above
+  and git-ignored — see
+  [055-declaring-experiments.md](055-declaring-experiments.md#typed-names).
 
 ## Open questions
 
-- When the generation step runs — on demand, in a watch mode, or as part of every
-  Thunderjar command.
 - Whether `thunderjar/` is a fixed location or configurable.
 - What else `thunderjar.config.ts` holds beyond stores, registry and test runner.

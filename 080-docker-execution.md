@@ -95,7 +95,7 @@ What this times is the agent's execution only: harness start to exit. Image pull
 container setup and measurement are not part of it — measurement happens after commit,
 and its duration changes every time measurements are backfilled, so it isn't a fact about
 the run. _(Referenced by: [085-experiment-results.md](085-experiment-results.md#execution),
-[060-experiment-parameters.md](060-experiment-parameters.md#harness).)_
+[064-harness.md](064-harness.md).)_
 
 ## Open questions
 

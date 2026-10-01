@@ -14,8 +14,14 @@ project glossary before diving into the rest.
 4. [User Experience](040-user-experience.md) — Local workflows and CI workflows.
 5. [Setup and Configure](050-setup-and-configure.md) — Getting the application running, plus a high-level configuration overview that references out to the detailed config pages below.
 5.1. [Configuration Folder Structure](051-configuration-folder-structure.md) — Where Thunderjar configuration lives in a user's project: parameter folders, tasks with their measurements, experiments, and generated types.
-5.1. [Configuration Folder Structure](051-configuration-folder-structure.md) — What Thunderjar looks like in a user's project: where declarations live, and what that layout implies.
-6. [Experiment Parameters](060-experiment-parameters.md) — Parameter hashing and identity (ensuring comparability), plus the bulk of the detailed configuration reference: harnesses, prompt sets, tasks, measuring instruments.
+5.5. [Declaring Experiments](055-declaring-experiments.md) — The `declareExperiment` file: the parameter matrix, typed names, and the harness × model compatibility check.
+6. [Experiment Parameters](060-experiment-parameters.md) — Parameter hashing and identity (ensuring comparability), what every declaration has in common, an example declaration of each parameter, and measuring instruments.
+6.1. [Base Image](061-base-image.md) — The image a prerun image is built `FROM`.
+6.2. [Code State](062-code-state.md) — The codebase applied on top of the base image.
+6.3. [Prompt Set](063-prompt-set.md) — Overlaying prompt files from a pinned commit.
+6.4. [Harness](064-harness.md) — The agent tool: installing it, the `cli` contract, token costs, and the `models` map.
+6.5. [Model](065-model.md) — The root LLM, and why its ID belongs to the harness.
+6.6. [Task](066-task.md) — The initial prompt, and the task measurements that live beside it.
 7. [Data Architecture](070-data-architecture.md) — The run data store and image store.
 8. [Docker Execution](080-docker-execution.md) — The Docker run mechanics and resulting artifacts.
 8.1. [Docker Tagging](081-docker-tagging.md) — The prerun/postrun image tag formats, and why.
