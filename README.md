@@ -33,3 +33,4 @@ project glossary before diving into the rest.
 12. [Test Boundaries](120-test-boundaries.md) — How Thunderjar itself is tested, kept distinct from how Thunderjar tests prompts. Each layer is defined by where the mock/real boundary sits.
 13. [Open Questions](130-open-questions.md) — Risks, deferred work, unresolved design questions (e.g. floating experiments, container-run naming risk).
 14. [Tooling](140-tooling.md) — Bun, TypeScript, linting for file structure enforcement.
+15. [Repository Layout](150-repository-layout.md) — The folder structure of the Thunderjar project itself: source, tests, and the fixture Docker images the tests start from. Distinct from 5.1, which is the structure inside a user's project.
