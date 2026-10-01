@@ -9,7 +9,7 @@ Glossary of project-specific terms, used consistently across all other spec page
 
 An **experiment** consists of a matrix of **experiment parameters** — the values that determine what happened and from what state, and whose combinations produce permutations. One of those parameters is the **task**: the initial prompt given to the harness, i.e. what the agent is asked to do.
 
-🙋‍♂️ Really an experiment is the 5 parameters + and then task measurements occur afterwards. 
+🙋‍♂️ Really an experiment is the 6 parameters + and then task measurements occur afterwards. 
 
 Associated with each task are its **task measurements**, which judge the outcome of a container run after the fact. They are not an experiment parameter: they don't inform what runs or how many permutations there are, and they aren't part of the parameter hash. They live alongside the task because they're only meaningful for it — see [051-configuration-folder-structure.md](051-configuration-folder-structure.md).
 
@@ -69,6 +69,21 @@ costs back afterwards. See
 ### Parameter hash
 
 The full content of each experiment parameter (base image, code state, prompt set, harness, model, task) produces a **parameter hash**. This hash tags the container and proves two runs are comparable — if any parameter content changes, the hash changes, so two runs are only directly comparable if they share the same hash.
+
+### Floating parameter
+
+A **floating parameter** is an experiment parameter that follows a moving target, such as
+the tip of `main`, instead of a pinned value. It is not a separate kind of parameter: it
+is a declaration that uses `determineHash`, a command Thunderjar runs at the start of
+each experiment execution, whose output replaces the folder's content as the source of
+the parameter's content hash. When the target has moved, the content hash changes, so the
+parameter hash changes too.
+
+A floating parameter is still deterministic. The value may differ from one execution to
+the next, but any one resolved value must always mean the same thing: the same commit
+SHA is always the same codebase. The command should not make API calls or read anything
+else that could give two answers for the same state. See
+[060-experiment-parameters.md](060-experiment-parameters.md#parameters-that-follow-a-moving-target).
 
 ### Permutation
 

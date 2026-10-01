@@ -26,6 +26,15 @@ Most commonly it checks out a pinned git commit. It can return any fragment that
 produces the same codebase every time: applying a patch or running a fixture generator
 aren't special cases.
 
+A code state can also follow a moving target, such as the tip of `main`, by declaring
+`determineHash` (see
+[060-experiment-parameters.md](060-experiment-parameters.md#parameters-that-follow-a-moving-target)).
+This can be called a *floating parameter*. The rule above still holds, applied to
+the resolved value: `determineHash` may return a different value on a later execution,
+but any one value it returns must always mean the same codebase. `git rev-parse main`
+qualifies, because a commit SHA identifies exactly one tree. The command itself should
+be a deterministic evaluation of local state. The user shouldn't make API calls or do anything else that could have give different code state conditions for the same hash. 
+
 ```ts
 // experiment-parameters/codeStates/with-fixture/index.ts
 export default declareCodeState({
