@@ -22,6 +22,10 @@ What's in scope vs. explicitly not.
   [085-experiment-results.md](085-experiment-results.md#how-a-measures-values-combine)).
   Most likely to return as a default that a measurement's own choice overrides.
 
+- **Skills that run or iterate experiments.** The shipped skill only helps capture a
+  test case and write its measurements; running, rerunning and comparing stays in the
+  CLI. (See [045-shipped-skills.md](045-shipped-skills.md).)
+
 ## To revisit
 
 Unresolved, but things we *are* intending to address in v1 — unlike the non-goals above.

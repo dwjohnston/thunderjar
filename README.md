@@ -12,6 +12,7 @@ project glossary before diving into the rest.
 2.2. [Coding Conventions](022-coding-conventions.md) — Conventions for the TypeScript a Thunderjar user writes, and so for every code example in the spec. `declareX()` wrappers, not bare exports.
 3. [Terminology](030-terminology.md) — Glossary of project-specific terms, used consistently across all other spec pages.
 4. [User Experience](040-user-experience.md) — Local workflows and CI workflows.
+4.5. [Shipped Skills](045-shipped-skills.md) — The agent skill that spots sessions worth capturing as test cases and helps write their measurements.
 5. [Setup and Configure](050-setup-and-configure.md) — Getting the application running, plus a high-level configuration overview that references out to the detailed config pages below.
 5.1. [Configuration Folder Structure](051-configuration-folder-structure.md) — Where Thunderjar configuration lives in a user's project: parameter folders, tasks with their measurements, experiments, and generated types.
 5.5. [Declaring Experiments](055-declaring-experiments.md) — The `declareExperiment` file: the parameter matrix, typed names, and the harness × model compatibility check.
