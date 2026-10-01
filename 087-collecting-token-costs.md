@@ -214,7 +214,7 @@ re-read the file, re-collect.
 
 The [accepted tradeoff](064-harness.md#accepted-tradeoffs) is that
 `collectTokenCosts` sits inside the harness declaration and is therefore part of its
-content hash, so correcting it marks old runs as not directly comparable — a warning, not
+parameter hash, so correcting it marks old runs as not directly comparable — a warning, not
 an error.
 
 ## Open questions

@@ -58,11 +58,11 @@ export default declareMeasurement({
 Instruments and what a measurement produces are in
 [060-experiment-parameters.md](060-experiment-parameters.md#measuring-instruments--measurements).
 
-### Excluded from the task's content hash
+### Excluded from the task's parameter hash
 
-`measurements/` is excluded from the task's content hash. Measurements judge the
+`measurements/` is excluded from the task's parameter hash. Measurements judge the
 outcome; they don't determine what runs, and they don't affect the prerun or postrun
-image. Changing them must not change the parameter hash.
+image. Changing them must not change the permutation hash.
 
 ### Experiments list tasks, not measurements
 

@@ -1,6 +1,6 @@
 # Restore / Purge
 
-Lifecycle management: restoring archived containers, purging old ones.
+Lifecycle management: restoring a container from a preserved postrun image, purging old ones.
 
 ## Open questions
 

@@ -1,15 +1,15 @@
 # Docker Tagging
 
 How prerun and postrun images are named. See [030-terminology.md](030-terminology.md) for
-**prerun image**, **postrun image**, **parameter hash**, **matrix shape**, and
+**prerun image**, **postrun image**, **permutation hash**, **matrix shape**, and
 **single-permutation experiment**; see [080-docker-execution.md](080-docker-execution.md)
 for the run mechanics these tags get attached to.
 
 ## Tag formats
 
 ```
-prerun-h<parameter hash>
-postrun-e<execution ID>-h<parameter hash>-i<iteration index>
+prerun-h<permutation hash>
+postrun-e<execution ID>-h<permutation hash>-i<iteration index>
 ```
 
 Example:
@@ -19,7 +19,7 @@ prerun-h4f9a21c8
 postrun-e01k4x9j2e8mqz3-h4f9a21c8-i00
 ```
 
-- `h<parameter hash>` — an 8-character abbreviated parameter hash (git-style; the full
+- `h<permutation hash>` — an 8-character abbreviated permutation hash (git-style; the full
   hash lives in the run data store, and any real comparability check should use that, not
   this truncated copy). Identical on a permutation's prerun tag and on every postrun tag
   produced from it, so which prerun image a postrun image started from is readable
@@ -32,7 +32,7 @@ postrun-e01k4x9j2e8mqz3-h4f9a21c8-i00
 
 Single repository, prefix-discriminated (`prerun-` vs `postrun-`) rather than two
 repositories. _(Referenced by: [070-data-architecture.md](070-data-architecture.md).)_
-No permutation index in the tag: the parameter hash already changes
+No permutation index in the tag: the permutation hash already changes
 whenever any parameter changes — including model, even though model alone doesn't affect
 the image's filesystem — so a separate positional index would be redundant, and worse,
 unstable in meaning across executions if the matrix ever gets resolved in a different
@@ -42,7 +42,7 @@ order.
 
 ### 1. Single-permutation experiment, 3 iterations, rerun later
 
-Matrix shape `1/1/1/1/1/1` — every parameter fixed, one permutation. Parameter hash stays
+Matrix shape `1/1/1/1/1/1` — every parameter fixed, one permutation. Permutation hash stays
 `h4f9a21c8` for as long as the base image, code state, prompt set, harness, model, and
 task stay pinned.
 

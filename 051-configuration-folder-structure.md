@@ -25,7 +25,7 @@ my-app/
     │   │   │   └── index.ts               # declareCodeState(...)
     │   │   └── with-fixture/
     │   │       ├── index.ts
-    │   │       └── seed-fixture-data.sh   # bundled — part of the content hash
+    │   │       └── seed-fixture-data.sh   # bundled — part of the parameter hash
     │   ├── promptSets/
     │   │   ├── snerk/
     │   │   │   └── index.ts               # declarePromptSet(...)
@@ -56,13 +56,13 @@ my-app/
   rather than copying them into `thunderjar/`.
 - **One folder per parameter**, under `experiment-parameters/<kind>/<name>/`. The folder
   name is the parameter's name; its content — `index.ts` plus anything bundled — is its
-  content hash.
+  parameter hash.
 - **A task folder holds the task and its measurements.** `index.ts` is the task — the
   initial prompt, and the experiment parameter. `measurements/` holds the task
   measurements associated with it. They live together because measurements are
   meaningless apart from their task, but `measurements/` is **excluded from the task's
-  content hash**: measurements don't affect
-  the prerun or postrun image, so changing them must not change the parameter hash.
+  parameter hash**: measurements don't affect
+  the prerun or postrun image, so changing them must not change the permutation hash.
 - **One file per measurement, named by its file.** `isPrimeTsExists.ts` is the
   measurement `isPrimeTsExists`. Supporting files, like a `templateTest` template, sit
   alongside.

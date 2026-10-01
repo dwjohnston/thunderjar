@@ -120,13 +120,13 @@ run:
 ```ts
 type ContainerRunRecord = {
   executionId: string; // the ULID from the postrun tag
-  parameterHash: string; // full, untruncated — the 8-char tag copy isn't authoritative
+  permutationHash: string; // full, untruncated — the 8-char tag copy isn't authoritative
   iteration: number;
   postrunImage: string; // the tag, so the artifact is reachable from the record
   ranAt: string;
 
-  // each resolved parameter, by name and content hash
-  parameters: Record<ParameterKind, { name: string; contentHash: string }>;
+  // each resolved parameter, by name and parameter hash
+  parameters: Record<ParameterKind, { name: string; parameterHash: string }>;
 
   result: Result;
   tokenCosts: TokenCosts; // see 087
@@ -137,17 +137,17 @@ type ContainerRunRecord = {
 ```ts
 {
   executionId: "01k4x9j2e8mqz3",
-  parameterHash: "4f9a21c8e0b7…",
+  permutationHash: "4f9a21c8e0b7…",
   iteration: 0,
   postrunImage: "postrun-e01k4x9j2e8mqz3-h4f9a21c8-i00",
   ranAt: "2026-09-29T14:30:55Z",
   parameters: {
-    baseImage:       { name: "node20",      contentHash: "a01f…" },
-    codeState:       { name: "baseline",    contentHash: "b92c…" },
-    promptSet:       { name: "snerk",       contentHash: "c7d4…" },
-    harness:         { name: "claude-code", contentHash: "d5e1…" },
-    model:           { name: "haiku",       contentHash: "e3a8…" },
-    task:            { name: "add-prime",   contentHash: "f20b…" },
+    baseImage:       { name: "node20",      parameterHash: "a01f…" },
+    codeState:       { name: "baseline",    parameterHash: "b92c…" },
+    promptSet:       { name: "snerk",       parameterHash: "c7d4…" },
+    harness:         { name: "claude-code", parameterHash: "d5e1…" },
+    model:           { name: "haiku",       parameterHash: "e3a8…" },
+    task:            { name: "add-prime",   parameterHash: "f20b…" },
   },
   result: { /* as above */ },
   tokenCosts: { /* as above */ },
@@ -155,7 +155,7 @@ type ContainerRunRecord = {
 }
 ```
 
-Parameters are stored **by name and by content hash**, not just by hash. The hash is what
+Parameters are stored **by name and by parameter hash**, not just by hash. The hash is what
 proves comparability; the name is what makes a report readable. Keeping both means a
 report can say "prompt set `snerk`" while still detecting that `snerk` means something
 different than it did last month.
@@ -189,7 +189,7 @@ result**: the Results of every iteration of one permutation in one experiment ex
 combined. That holds even when there's only one iteration.
 
 ```
-aggregation result = (execution ID, parameter hash) → the combined Results of its iterations
+aggregation result = (execution ID, permutation hash) → the combined Results of its iterations
 ```
 
 ```
@@ -339,7 +339,7 @@ expected to be the first fast-follow after v1. See
 
 ## Open questions
 
-- **Comparing across a hash change.** The record stores full parameter hashes so a report
+- **Comparing across a hash change.** The record stores full permutation hashes so a report
   can decide what's comparable, but the policy is a reporting concern and belongs in
   [110-cli-report-visualization.md](110-cli-report-visualization.md): when is it
   legitimate to plot runs whose parameters differ, and how is that shown?

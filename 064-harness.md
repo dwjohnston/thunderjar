@@ -99,19 +99,19 @@ An experiment listing a model that one of its harnesses can't run is a type erro
 
 ### Hashing
 
-`models` is excluded from the harness's content hash. The resolved model ID goes into
-the permutation's parameter hash instead.
+`models` is excluded from the harness's parameter hash. The resolved model ID goes into
+the permutation's permutation hash instead.
 
-For `claude-code-2-1-283` with `sonnet-5-5`, the parameter hash includes:
+For `claude-code-2-1-283` with `sonnet-5-5`, the permutation hash includes:
 
 ```
-harness content hash     (everything in the folder except `models`)
-model content hash       (sonnet-5-5)
+harness parameter hash     (everything in the folder except `models`)
+model parameter hash       (sonnet-5-5)
 resolved model ID        "claude-sonnet-5-5"
-…the other four parameters' content hashes
+…the other four parameters' parameter hashes
 ```
 
-| Change | Effect on existing parameter hashes |
+| Change | Effect on existing permutation hashes |
 |---|---|
 | Add a model to `models` | None. |
 | Change one model's ID | Only that model's permutations change. |
@@ -129,10 +129,10 @@ it.
 
 ## Accepted tradeoffs
 
-- **`collectTokenCosts` is part of the harness's content hash, though it doesn't
+- **`collectTokenCosts` is part of the harness's parameter hash, though it doesn't
   determine what runs.** Strictly it belongs with measurements — it interprets a run
   after the fact. Because the declaration folder is hashed, correcting a parser bug
-  changes the harness's content hash, and so the parameter hash, marking old runs as not
+  changes the harness's parameter hash, and so the permutation hash, marking old runs as not
   directly comparable even though nothing about what executed changed. Accepted for
   now: keeping the harness's three phases in one declaration is worth more than the
   hash precision, and a hash change is a warning rather than an error. Token costs stay

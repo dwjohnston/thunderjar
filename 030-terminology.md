@@ -11,9 +11,9 @@ An **experiment** consists of a matrix of **experiment parameters** — the valu
 
 🙋‍♂️ Really an experiment is the 6 parameters + and then task measurements occur afterwards. 
 
-Associated with each task are its **task measurements**, which judge the outcome of a container run after the fact. They are not an experiment parameter: they don't inform what runs or how many permutations there are, and they aren't part of the parameter hash. They live alongside the task because they're only meaningful for it — see [051-configuration-folder-structure.md](051-configuration-folder-structure.md).
+Associated with each task are its **task measurements**, which judge the outcome of a container run after the fact. They are not an experiment parameter: they don't inform what runs or how many permutations there are, and they aren't part of the permutation hash. They live alongside the task because they're only meaningful for it — see [051-configuration-folder-structure.md](051-configuration-folder-structure.md).
 
-The experiment parameters are: **base image**, **code state**, **prompt set**, **agent harness**, **agent model**, and **task**.
+The experiment parameters are: **base image**, **code state**, **prompt set**, **harness**, **model**, and **task**.
 
 ### Experiment parameters
 
@@ -50,8 +50,8 @@ experiment-parameters/
 | **Base image** | The image a permutation's prerun image is built `FROM`, before code state is applied — base OS/runtime plus any extra services a task needs (a database, a message broker) that code state, prompt set, or harness don't provision. Most experiments just use one plain, minimal base image. | `baseImages/node20` → `FROM node:20-bookworm` |
 | **Code state** | The codebase the container starts from, applied on top of the base image — most commonly a pinned git commit, but any deterministic function producing the same codebase every time works. | `codeStates/baseline` → commit `a1b2c3` |
 | **Prompt set** | The prompt files overlaid into the worktree (`CLAUDE.md`, skills, rules), expressed as a shell command or script. | `promptSets/snerk` → `cp prompts/snerk.md CLAUDE.md` |
-| **Agent harness** | An agent tool and how to invoke it headlessly, pinned to an exact version. Comparing two versions means comparing two harnesses. | `harnesses/claude-code` → pinned to version X |
-| **Agent model** | The root LLM used by the harness. Sub-agent models are recorded as outcomes, not controlled parameters. | `models/haiku` → `claude-haiku-4-5-20251001` |
+| **Harness** | An agent tool and how to invoke it headlessly, pinned to an exact version. Comparing two versions means comparing two harnesses. | `harnesses/claude-code` → pinned to version X |
+| **Model** | The root LLM used by the harness. Sub-agent models are recorded as outcomes, not controlled parameters. | `models/haiku` → `claude-haiku-4-5-20251001` |
 | **Task** | The initial prompt given to the harness — what the agent is asked to do. Distinct from prompt set, which shapes the environment. Called *task instruction* in earlier drafts and in the source conversation. | `tasks/add-function/index.ts` → "Write a TypeScript function called `add`…" |
 
 ### Declaration
@@ -68,7 +68,24 @@ costs back afterwards. See
 
 ### Parameter hash
 
-The full content of each experiment parameter (base image, code state, prompt set, harness, model, task) produces a **parameter hash**. This hash tags the container and proves two runs are comparable — if any parameter content changes, the hash changes, so two runs are only directly comparable if they share the same hash.
+Each experiment parameter has its own **parameter hash**:
+
+1. **Usually it is taken from the content of the parameter's declaration folder** —
+   `index.ts` plus anything bundled alongside it.
+2. **Some exclusions apply.** For example A task's `measurements/` folder and a harness's `models`
+   map are left out, because changing them doesn't change what runs.
+3. **A declaration can set the value itself**, with `additionalHash` or `determineHash`
+   — see [Floating parameter](#floating-parameter).
+
+### Permutation hash
+
+A permutation's **permutation hash** combines the parameter hashes of its six parameters
+(base image, code state, prompt set, harness, model, task), plus the model ID the
+harness resolves the model to. This hash tags the permutation's prerun and postrun
+images and proves two container runs are comparable — if any parameter hash
+changes, the permutation hash changes, so two runs are only directly comparable if they
+share the same hash. See
+[060-experiment-parameters.md](060-experiment-parameters.md#parameter-hashing-and-identity).
 
 ### Floating parameter
 
@@ -76,8 +93,8 @@ A **floating parameter** is an experiment parameter that follows a moving target
 the tip of `main`, instead of a pinned value. It is not a separate kind of parameter: it
 is a declaration that uses `determineHash`, a command Thunderjar runs at the start of
 each experiment execution, whose output replaces the folder's content as the source of
-the parameter's content hash. When the target has moved, the content hash changes, so the
-parameter hash changes too.
+its parameter hash. When the target has moved, the parameter hash changes, so the
+permutation hash changes too.
 
 A floating parameter is still deterministic. The value may differ from one execution to
 the next, but any one resolved value must always mean the same thing: the same commit
@@ -112,14 +129,14 @@ An **experiment execution** is one occasion of running the experiment: it resolv
 
 The starting-point image for a permutation: built `FROM` its base image, code state
 applied, prompt set overlaid, harness installed and pinned — everything from
-**Initial setup** below, before the harness is invoked. Tagged `prerun-h<parameter hash>`
+**Initial setup** below, before the harness is invoked. Tagged `prerun-h<permutation hash>`
 — see [081-docker-tagging.md](081-docker-tagging.md) for the full tag scheme.
 
 One permutation always maps to one prerun image, even for parameters (like model) that
 don't actually change the filesystem — simpler than special-casing which parameters
 affect the image. Content-addressed, so it's built once and reused as the starting point
 for every iteration of that permutation, and reused again if the same permutation (same
-parameter hash) runs again later, e.g. a pinned experiment's weekly rerun, rather than
+permutation hash) runs again later, e.g. a pinned experiment's weekly rerun, rather than
 rebuilt from scratch. Pushed to the **image store** so any iteration or runner can pull
 it without rebuilding, and so the exact runtime environment stays reproducible.
 
@@ -128,7 +145,7 @@ it without rebuilding, and so the exact runtime environment stays reproducible.
 The end-state image for one container run: the final filesystem after the harness has
 run, captured with `docker commit` *before* any measurement is applied, so it holds the
 agent's end state and nothing else. Tagged
-`postrun-e<execution ID>-h<parameter hash>-i<iteration index>` — the same parameter hash used in
+`postrun-e<execution ID>-h<permutation hash>-i<iteration index>` — the same permutation hash used in
 the prerun image's tag, so which prerun image a postrun image was built from is visible
 directly in its own tag, no separate lookup needed. Always new — never reused or shared
 across iterations or executions, unlike the prerun image.
@@ -152,7 +169,7 @@ see [085-experiment-results.md](085-experiment-results.md).
 A **container run** is the concrete execution of one permutation:
 
 1. **Initial setup:**
-   - If a prerun image already exists for this permutation's parameter hash, pull and
+   - If a prerun image already exists for this permutation's permutation hash, pull and
      reuse it.
    - Otherwise, build one: starting `FROM` the permutation's base image, code state is
      applied, prompt set files are overlaid, harness is installed and pinned to its
@@ -188,7 +205,7 @@ An **aggregation result** combines the Results of every iteration of one permuta
 
 | Term | Definition |
 |---|---|
-| **Run data store** | Where container run metadata is persisted: date, the permutation's experiment parameters and parameter hash, measurements, cost, tokens, duration. Enables querying and trending over time. See [085-experiment-results.md](085-experiment-results.md). |
+| **Run data store** | Where container run metadata is persisted: date, the permutation's experiment parameters and permutation hash, measurements, cost, tokens, duration. Enables querying and trending over time. See [085-experiment-results.md](085-experiment-results.md). |
 | **Image store** | Registry (e.g., Docker Hub, ECR) where prerun and postrun images are stored, tagged as above, enabling restore and inspection later. A run's OTel trace and session transcript live in its postrun image. |
 
 **Future:** a separate **trace store** for OTel traces and session transcripts, so

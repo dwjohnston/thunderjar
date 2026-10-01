@@ -6,7 +6,7 @@ queryable, one large.
 ## The two stores
 
 1. **Run data store** — small, queryable metadata: date, experiment parameters and
-   parameter hash, measurements, cost, tokens, duration. See
+   permutation hash, measurements, cost, tokens, duration. See
    [030-terminology.md](030-terminology.md#storage) and
    [085-experiment-results.md](085-experiment-results.md).
 2. **Image store** — a single Docker registry repository holding both prerun and postrun

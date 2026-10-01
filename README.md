@@ -27,7 +27,7 @@ project glossary before diving into the rest.
 8.1. [Docker Tagging](081-docker-tagging.md) — The prerun/postrun image tag formats, and why.
 8.5. [Experiment Results](085-experiment-results.md) — What gets recorded to the run data store after a container run.
 8.7. [Collecting Token Costs](087-collecting-token-costs.md) — How a container run's token usage and cost are obtained from the harness, normalised across harnesses, and recorded.
-9. [Restore / Purge](090-restore-purge.md) — Lifecycle management: restoring archived containers, purging old ones.
+9. [Restore / Purge](090-restore-purge.md) — Lifecycle management: restoring a container from a preserved postrun image, purging old ones.
 10. [CLI Reference](100-cli-reference.md) — The actual CLI commands.
 11. [CLI Report Visualization](110-cli-report-visualization.md) — Detailed page on the interactive CLI's report visualization.
 12. [Test Boundaries](120-test-boundaries.md) — How Thunderjar itself is tested, kept distinct from how Thunderjar tests prompts. Each layer is defined by where the mock/real boundary sits.

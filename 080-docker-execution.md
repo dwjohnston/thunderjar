@@ -14,7 +14,7 @@ flowchart TD
     B --> C
 
     subgraph PERM["Per permutation"]
-        C{"Prerun image exists<br/>for this permutation's<br/>parameter hash?"}
+        C{"Prerun image exists<br/>for this permutation's<br/>permutation hash?"}
         C -- Yes --> D["Pull existing prerun image"]
         C -- No --> E["Start FROM base image<br/>(experiment parameter)"]
         E --> F["Apply code state<br/>(usually a pinned commit)"]

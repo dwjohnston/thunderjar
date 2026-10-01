@@ -10,28 +10,28 @@ in the glossary.
 
 - Every experiment parameter folder (`experiment-parameters/<kind>/<name>/`)
   hashes its full content — `index.ts` plus any bundled scripts, templates, or
-  fixtures — to a **content hash**. The same mechanism applies to measurements
-  too, even though they aren't experiment parameters: hashing them catches
+  fixtures — to a **parameter hash**. Measurements are hashed the same way, to a
+  *content hash*, even though they aren't experiment parameters: hashing them catches
   silent drift when a named definition's content changes underneath it.
-- A permutation's **parameter hash** combines the content hashes of its six
+- A permutation's **permutation hash** combines the parameter hashes of its six
   resolved experiment parameters (base image, code state, prompt set, harness,
   model, task), plus the model ID the harness resolves the model to (see
   [064-harness.md](064-harness.md#hashing)). Two container runs are only directly comparable if
-  their parameter hashes match.
-- A harness's `models` map is excluded from its content hash. Adding a model
-  to a harness doesn't change any existing parameter hash; changing one
+  their permutation hashes match.
+- A harness's `models` map is excluded from its parameter hash. Adding a model
+  to a harness doesn't change any existing permutation hash; changing one
   model's ID changes only that model's permutations, through the resolved
   model ID.
-- A declaration can add to, or replace, what its content hash is derived from — see
-  [Controlling the content hash](#controlling-the-content-hash).
-- Content hash is derived from content, not name — renaming a folder doesn't
+- A declaration can add to, or replace, what its parameter hash is derived from — see
+  [Controlling the parameter hash](#controlling-the-parameter-hash).
+- Parameter hash is derived from content, not name — renaming a folder doesn't
   break comparability, but editing `index.ts` does. Any report comparing "the
   same" named parameter over time should treat a hash change as a break, not
   silently merge pre/post-edit runs together.
 
-## Controlling the content hash
+## Controlling the parameter hash
 
-By default a parameter's content hash comes from its folder's content. A declaration
+By default a parameter hash comes from its folder's content. A declaration
 can change that with one of two optional functions. Each returns a shell command.
 Thunderjar runs the command on the host at the start of each experiment execution, and
 uses its output.
@@ -41,7 +41,7 @@ additionalHash?: () => string; // a command; its output is hashed with the folde
 determineHash?: () => string;  // a command; its output is hashed instead of the folder's content
 ```
 
-| Function | Content hash is derived from |
+| Function | Parameter hash is derived from |
 |---|---|
 | Neither | The folder's content. |
 | `additionalHash` | The folder's content, plus the command's output. |
@@ -85,8 +85,8 @@ the resolved value in the fragment, the image is built from exactly what was has
 ### Parameters that follow a moving target
 
 The code state above means "whatever `main` is when the experiment executes". Each
-execution resolves it again. When `main` has moved, the content hash is different, so
-the parameter hash is different, and the execution is recorded as a different
+execution resolves it again. When `main` has moved, the parameter hash is different, so
+the permutation hash is different, and the execution is recorded as a different
 permutation of the same named parameters.
 
 This is sometimes called a *floating parameter*. It is not a separate kind of parameter
@@ -107,7 +107,7 @@ applyParameter: (ctx) => string; // a Dockerfile fragment
 ```
 
 `ctx` carries `resolvedHash` — see
-[Controlling the content hash](#ctxresolvedhash). A declaration that doesn't need it
+[Controlling the parameter hash](#ctxresolvedhash). A declaration that doesn't need it
 leaves the argument off.
 
 Building a permutation's prerun image is then a fold: concatenate each

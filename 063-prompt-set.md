@@ -27,7 +27,7 @@ export default declarePromptSet({
 ## Prompt files come from a pinned commit
 
 Prompt files are checked out from a pinned commit, not taken from whatever happens to
-be in the worktree. Otherwise the declaration's content hash stays the same while the
+be in the worktree. Otherwise the declaration's parameter hash stays the same while the
 file it applies changes underneath it — the silent drift the hash exists to catch.
 
 The prompt files themselves stay in the normal project tree (`prompts/snerk.md` above).

@@ -4,7 +4,7 @@ What's in scope vs. explicitly not.
 
 ## Non-goals (v1)
 
-- **Retention/purge policy for preserved containers and metadata.** No TTLs, no
+- **Retention/purge policy for preserved images and metadata.** No TTLs, no
   differentiated retention by pass/fail, no pruning. Assume everything is kept
   indefinitely for now; revisit once storage cost or volume actually becomes a
   problem. (Touches [080-docker-execution.md](080-docker-execution.md) and

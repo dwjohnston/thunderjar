@@ -55,6 +55,6 @@ Build time only. Its fragment runs after the base image's and before the prompt 
 ## Open questions
 
 - A parameter folder can bundle files, such as a fixture script, and they count toward
-  its content hash (see
+  its parameter hash (see
   [051-configuration-folder-structure.md](051-configuration-folder-structure.md)). How a
   bundled file reaches the image build is not defined.
