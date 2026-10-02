@@ -24,6 +24,7 @@ project glossary before diving into the rest.
 6.5. [Model](065-model.md) — The root LLM, and why its ID belongs to the harness.
 6.6. [Task](066-task.md) — The task, its initial prompts, and the task measurements that live beside them.
 7. [Data Architecture](070-data-architecture.md) — The run data store and image store.
+7.1. [Data Persistence](071-data-persistence.md) — Open questions about how the run data store is kept and shared across machines.
 8. [Docker Execution](080-docker-execution.md) — The Docker run mechanics and resulting artifacts.
 8.1. [Docker Tagging](081-docker-tagging.md) — The prerun/postrun image tag formats, and why.
 8.5. [Experiment Results](085-experiment-results.md) — What gets recorded to the run data store after a container run.

@@ -111,10 +111,8 @@ secrets managers are later store constructors behind the same interface.
 
 ## Open questions
 
-- Sharing the run data store between CI and a developer's machine. With only `sqliteStore`
-  in v1, the file must be shared by hand (CI artifact, synced directory), which the
-  regression triage loop in [040-user-experience.md](040-user-experience.md#regression-triage)
-  depends on.
+- Sharing the run data store between CI and a developer's machine. See
+  [071-data-persistence.md](071-data-persistence.md).
 - Whether `plan` and `run` also run the `doctor` checks first, or leave them to `doctor`.
 
 - Harnesses whose required variables depend on the model's provider (Bedrock, Vertex).
