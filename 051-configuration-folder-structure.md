@@ -13,8 +13,8 @@ my-app/
 │   ├── snerk.md                           # prompt files — what prompt sets check out
 │   └── glurk.md
 └── thunderjar/
-    ├── package.json                       # created by `init`; Thunderjar is its dependency
-    ├── .gitignore                         # created by `init`: _generated/, .data/, node_modules/
+    ├── package.json                       # only for non-JS projects; created by `init`
+    ├── .gitignore                         # created by `init`: _generated/, .data/ (+ node_modules/ if nested)
     ├── thunderjar.config.ts               # global config: stores, registry, test runner
     ├── experiments/
     │   └── is-prime-baseline.ts           # declareExperiment(...)

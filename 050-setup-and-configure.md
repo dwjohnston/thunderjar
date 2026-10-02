@@ -12,18 +12,27 @@ Getting the application running, plus a high-level configuration overview that r
 
 ## Install and `init`
 
-Thunderjar is a dev dependency of the `thunderjar/` folder, never of the user's project.
-`init` creates `thunderjar/package.json`, so there is one flow whatever language the
-project is in, and Thunderjar never touches a root `package.json`. This follows AWS CDK
-and Pulumi, which scaffold a self-contained TypeScript project beside an application in
-any language.
+Where Thunderjar is installed depends on whether the project already has a root
+`package.json`. The commands, config and folders are the same afterwards.
+
+**JS project.** Thunderjar is a dev dependency of the project:
+
+```
+bun add -d thunderjar
+bunx thunderjar init
+```
+
+**Non-JS project.** There is no root `package.json`, so `init` creates one inside
+`thunderjar/` with Thunderjar as its dependency, and Thunderjar never touches the
+project's root. This follows AWS CDK and Pulumi, which scaffold a self-contained
+TypeScript project beside an application in any language.
 
 ```
 bunx thunderjar init
 cd thunderjar && bun install
 ```
 
-Then, from the project root:
+Either way, then from the project root:
 
 ```
 export ANTHROPIC_API_KEY=...
@@ -31,19 +40,23 @@ bunx thunderjar plan is-prime-baseline
 bunx thunderjar run is-prime-baseline
 ```
 
+Bun is needed only for Thunderjar's control plane. The agent and the user's codebase run
+inside Docker containers, so the project itself can be in any language.
+
 The CLI finds `thunderjar/` by walking up from the current directory to the nearest one.
 The location is fixed: `./thunderjar/`, with no flag or setting to move it. A monorepo
 runs the CLI from each package that has its own.
 
 `init` creates:
 
-- `thunderjar/package.json`, with Thunderjar as a dependency;
+- `thunderjar/package.json`, **only when the project has no root `package.json`**;
 - `thunderjar/thunderjar.config.ts`;
 - the folder structure from [051-configuration-folder-structure.md](051-configuration-folder-structure.md);
 - a runnable **example experiment** (a cheap model, one iteration, a trivial task), so
   `plan` and `run` work straight away and the example documents the layout;
-- `thunderjar/.gitignore`, ignoring `_generated/`, `.data/` and `node_modules/`. Everything
-  else is committed, and the project's own `.gitignore` is untouched.
+- `thunderjar/.gitignore`, ignoring `_generated/` and `.data/` (and `node_modules/` when
+  `init` created the nested `package.json`). Everything else is committed, and the
+  project's own `.gitignore` is untouched.
 
 **Future:** a compiled binary (`bun build --compile`) so Bun is not a prerequisite.
 
