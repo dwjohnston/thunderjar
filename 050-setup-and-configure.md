@@ -4,22 +4,27 @@ Getting the application running, plus a high-level configuration overview that r
 
 ## Prerequisites
 
-- **Bun**, to run the CLI. The user's own project can be in any language: Bun is needed
-  only for Thunderjar's control plane, since the agent and the user's codebase run inside
-  Docker containers.
+- **A JavaScript package manager**, to install Thunderjar: npm, pnpm, yarn or Bun. Thunderjar
+  itself runs on Bun, but users don't need to install Bun separately. See
+  [How the CLI gets Bun](#how-the-cli-gets-bun).
 - **Docker**, and **git**.
 - A **registry** the user is logged in to (`docker login`), for the image store.
+
+The user's own project can be in any language. JavaScript tooling is needed only for
+Thunderjar's control plane, since the agent and the user's codebase run inside Docker
+containers.
 
 ## Install and `init`
 
 Where Thunderjar is installed depends on whether the project already has a root
-`package.json`. The commands, config and folders are the same afterwards.
+`package.json`. The commands, config and folders are the same afterwards. Examples use
+npm; the pnpm, yarn and Bun equivalents work the same way.
 
 **JS project.** Thunderjar is a dev dependency of the project:
 
 ```
-bun add -d thunderjar
-bunx thunderjar init
+npm install -D thunderjar
+npx thunderjar init
 ```
 
 **Non-JS project.** There is no root `package.json`, so `init` creates one inside
@@ -28,20 +33,20 @@ project's root. This follows AWS CDK and Pulumi, which scaffold a self-contained
 TypeScript project beside an application in any language.
 
 ```
-bunx thunderjar init
-cd thunderjar && bun install
+npx thunderjar init
+cd thunderjar && npm install
 ```
 
 Either way, then from the project root:
 
 ```
 export ANTHROPIC_API_KEY=...
-bunx thunderjar plan is-prime-baseline
-bunx thunderjar run is-prime-baseline
+npx thunderjar plan is-prime-baseline
+npx thunderjar run is-prime-baseline
 ```
 
-Bun is needed only for Thunderjar's control plane. The agent and the user's codebase run
-inside Docker containers, so the project itself can be in any language.
+Commands are run through the package manager (`npx`, `pnpm exec`, `bunx`, or a
+`package.json` script), not by invoking `node_modules/.bin/thunderjar` directly. See below.
 
 The CLI finds `thunderjar/` by walking up from the current directory to the nearest one.
 The location is fixed: `./thunderjar/`, with no flag or setting to move it. A monorepo
@@ -58,7 +63,29 @@ runs the CLI from each package that has its own.
   `init` created the nested `package.json`). Everything else is committed, and the
   project's own `.gitignore` is untouched.
 
-**Future:** a compiled binary (`bun build --compile`) so Bun is not a prerequisite.
+### How the CLI gets Bun
+
+Thunderjar's bin has a `#!/usr/bin/env bun` shebang, and Thunderjar lists the npm `bun`
+package as a dependency. That package installs the Bun binary into `node_modules/.bin`,
+and a package manager puts that directory on `PATH` when it runs a command, so the
+shebang finds the project's own Bun. Users on npm, pnpm or yarn never install Bun
+themselves, and the Bun version is pinned with the project.
+
+- **Run commands through the package manager.** Invoking `node_modules/.bin/thunderjar`
+  straight from a shell skips the `PATH` setup, and `env bun` then fails unless Bun is
+  installed globally.
+- **Non-JS users still need a way to install.** They have no package manager to begin
+  with, so they need either Node with npm, or Bun, as a one-off bootstrap.
+
+**Future:** a CLI that runs on Node, loading `thunderjar.config.ts` through a TypeScript
+loader (as Vite and Drizzle do), or a compiled binary (`bun build --compile`), so that
+neither Bun nor a package manager is a prerequisite.
+
+## Open questions about install
+
+- Installs with scripts disabled (`--ignore-scripts`, common in some CI setups) may not
+  place the `bun` binary. Needs testing.
+- Windows: the package manager's `.cmd` shims should honour the shebang. Not yet verified.
 
 ## Verifying setup
 
