@@ -13,6 +13,8 @@ my-app/
 │   ├── snerk.md                           # prompt files — what prompt sets check out
 │   └── glurk.md
 └── thunderjar/
+    ├── package.json                       # created by `init`; Thunderjar is its dependency
+    ├── .gitignore                         # created by `init`: _generated/, .data/, node_modules/
     ├── thunderjar.config.ts               # global config: stores, registry, test runner
     ├── experiments/
     │   └── is-prime-baseline.ts           # declareExperiment(...)
@@ -77,5 +79,7 @@ my-app/
 
 ## Open questions
 
-- Whether `thunderjar/` is a fixed location or configurable.
-- What else `thunderjar.config.ts` holds beyond stores, registry and test runner.
+- What else `thunderjar.config.ts` holds beyond the stores and test runner.
+
+`thunderjar/` is a fixed location, found by walking up from the current directory. See
+[050-setup-and-configure.md](050-setup-and-configure.md#install-and-init).

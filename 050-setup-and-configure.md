@@ -2,6 +2,51 @@
 
 Getting the application running, plus a high-level configuration overview that references out to the detailed config pages below.
 
+## Prerequisites
+
+- **Bun**, to run the CLI. The user's own project can be in any language: Bun is needed
+  only for Thunderjar's control plane, since the agent and the user's codebase run inside
+  Docker containers.
+- **Docker**, and **git**.
+- A **registry** the user is logged in to (`docker login`), for the image store.
+
+## Install and `init`
+
+Thunderjar is a dev dependency of the `thunderjar/` folder, never of the user's project.
+`init` creates `thunderjar/package.json`, so there is one flow whatever language the
+project is in, and Thunderjar never touches a root `package.json`. This follows AWS CDK
+and Pulumi, which scaffold a self-contained TypeScript project beside an application in
+any language.
+
+```
+bunx thunderjar init
+cd thunderjar && bun install
+```
+
+Then, from the project root:
+
+```
+export ANTHROPIC_API_KEY=...
+bunx thunderjar plan is-prime-baseline
+bunx thunderjar run is-prime-baseline
+```
+
+The CLI finds `thunderjar/` by walking up from the current directory to the nearest one.
+The location is fixed: `./thunderjar/`, with no flag or setting to move it. A monorepo
+runs the CLI from each package that has its own.
+
+`init` creates:
+
+- `thunderjar/package.json`, with Thunderjar as a dependency;
+- `thunderjar/thunderjar.config.ts`;
+- the folder structure from [051-configuration-folder-structure.md](051-configuration-folder-structure.md);
+- a runnable **example experiment** (a cheap model, one iteration, a trivial task), so
+  `plan` and `run` work straight away and the example documents the layout;
+- `thunderjar/.gitignore`, ignoring `_generated/`, `.data/` and `node_modules/`. Everything
+  else is committed, and the project's own `.gitignore` is untouched.
+
+**Future:** a compiled binary (`bun build --compile`) so Bun is not a prerequisite.
+
 ## Credentials
 
 Each [harness](064-harness.md#requiredenv-credentials) declares the names of the
