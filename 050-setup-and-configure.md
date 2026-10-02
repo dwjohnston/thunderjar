@@ -65,6 +65,8 @@ runs the CLI from each package that has its own.
 
 ### How the CLI gets Bun
 
+See [141-runnable-artifact.md](141-runnable-artifact.md) for the package behind this.
+
 Thunderjar's bin has a `#!/usr/bin/env bun` shebang, and Thunderjar lists the npm `bun`
 package as a dependency. That package installs the Bun binary into `node_modules/.bin`,
 and a package manager puts that directory on `PATH` when it runs a command, so the
