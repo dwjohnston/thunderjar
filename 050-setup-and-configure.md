@@ -8,6 +8,10 @@ Getting the application running, plus a high-level configuration overview that r
   itself runs on Bun, but users don't need to install Bun separately. See
   [How the CLI gets Bun](#how-the-cli-gets-bun).
 - **Docker**, and **git**.
+- Thunderjar runs inside the **git repository holding the code** it experiments on, with
+  enough history for every commit its parameters name. In CI that means checking out
+  with full history (e.g. `fetch-depth: 0`). See
+  [062-code-state.md](062-code-state.md#where-the-commit-comes-from).
 - A **registry** the user is logged in to (`docker login`), for the image store.
 
 The user's own project can be in any language. JavaScript tooling is needed only for

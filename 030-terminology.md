@@ -51,8 +51,8 @@ experiment-parameters/
 | Term | Definition | Example |
 |---|---|---|
 | **Base image** | The image a permutation's prerun image is built `FROM`, before code state is applied — base OS/runtime plus any extra services a task needs (a database, a message broker) that code state, prompt set, or harness don't provision. Most experiments just use one plain, minimal base image. | `baseImages/node20` → `FROM node:20-bookworm` |
-| **Code state** | The codebase the container starts from, applied on top of the base image — most commonly a pinned git commit, but any deterministic function producing the same codebase every time works. | `codeStates/baseline` → commit `a1b2c3` |
-| **Prompt set** | The prompt files overlaid into the worktree (`CLAUDE.md`, skills, rules), expressed as a shell command or script. | `promptSets/snerk` → `cp prompts/snerk.md CLAUDE.md` |
+| **Code state** | The codebase the container starts from, applied on top of the base image — a git commit from the user's repository, plus any setup it needs (installing dependencies, seeding fixtures). See [062-code-state.md](062-code-state.md). | `codeStates/baseline` → commit `a1b2c3`, then `npm ci` |
+| **Prompt set** | The prompt files overlaid into the worktree (`CLAUDE.md`, skills, rules), read from a pinned commit. | `promptSets/snerk` → `prompts/snerk.md` at `e4f5a6`, as `CLAUDE.md` |
 | **Harness** | An agent tool and how to invoke it headlessly, pinned to an exact version. Comparing two versions means comparing two harnesses. | `harnesses/claude-code` → pinned to version X |
 | **Model** | The root LLM used by the harness. Sub-agent models are recorded as outcomes, not controlled parameters. | `models/haiku` → `claude-haiku-4-5-20251001` |
 | **Task** | The goal an experiment is about, with its initial prompts and the task measurements that judge it. An experiment names exactly one, so every result in it is judged by the same measurements. Not a varied parameter. | `tasks/add-function` |
@@ -175,8 +175,8 @@ A **container run** is the concrete execution of one permutation:
 1. **Initial setup:**
    - If a prerun image already exists for this permutation's permutation hash, pull and
      reuse it.
-   - Otherwise, build one: starting `FROM` the permutation's base image, code state is
-     applied, prompt set files are overlaid, harness is installed and pinned to its
+   - Otherwise, build one: starting `FROM` the permutation's base image, the code state's
+     commit is cloned to `/workspace` and its setup run, prompt set files are overlaid, harness is installed and pinned to its
      version — then tag and push it as the prerun image.
 
 2. **Execution:**

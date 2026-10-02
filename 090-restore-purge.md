@@ -20,7 +20,7 @@ Given a developer in `/Users/my-name/git-workspace/my-project`, on branch `main`
 thunderjar restore container-run-123
 ```
 
-1. The commits in the postrun image's repository are fetched into the developer's repository.
+1. The commits the agent made on top of the code state's commit are fetched into the developer's repository. The developer's repository already has that commit (see [062-code-state.md](062-code-state.md#how-the-code-gets-into-the-image)).
 2. A branch `thunderjar/container-run-123` is created, pointing at the run's end state.
 3. The developer is left on `main`. Their working tree and index are not touched.
 

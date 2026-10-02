@@ -12,23 +12,36 @@ Lives at `experiment-parameters/promptSets/<name>/index.ts`.
 
 ```ts
 // experiment-parameters/promptSets/snerk/index.ts
-const commit = "e4f5a6";
-
 export default declarePromptSet({
-  applyParameter: () =>
-    `RUN git checkout ${commit} -- prompts/snerk.md && cp prompts/snerk.md CLAUDE.md`,
+  commit: "e4f5a6",
+  files: { "prompts/snerk.md": "CLAUDE.md" },
+  applyParameter: () => ``,
 });
 ```
 
 | Field | What it is |
 |---|---|
-| `applyParameter` | Returns a Dockerfile fragment that puts the prompt files in place. |
+| `commit` | The commit the prompt files are read from. |
+| `files` | Each prompt file's path in the repository, mapped to where it goes in `/workspace`. |
+| `applyParameter` | Returns a Dockerfile fragment run after the files are in place. Usually empty. |
 
 ## Prompt files come from a pinned commit
 
-Prompt files are checked out from a pinned commit, not taken from whatever happens to
-be in the worktree. Otherwise the declaration's parameter hash stays the same while the
-file it applies changes underneath it — the silent drift the hash exists to catch.
+Prompt files are read from a pinned commit, not taken from whatever happens to be in the
+worktree. Otherwise the declaration's parameter hash stays the same while the file it
+applies changes underneath it — the silent drift the hash exists to catch.
+
+On the host, Thunderjar reads each file with `git show e4f5a6:prompts/snerk.md` into the
+build context, and the prerun build copies it into `/workspace`:
+
+```dockerfile
+COPY prompt-set/CLAUDE.md /workspace/CLAUDE.md     # Thunderjar
+```
+
+Only the files are copied, never the commit's history, so a prompt set from a later
+commit than the code state doesn't show the agent anything after the code state's commit.
+The commit must be in the local repository, as for a code state — see
+[062-code-state.md](062-code-state.md#where-the-commit-comes-from).
 
 The prompt files themselves stay in the normal project tree (`prompts/snerk.md` above).
 The declaration points at them rather than copying them into `thunderjar/`.
@@ -41,4 +54,4 @@ the single most common experiment shape.
 
 ## When it applies
 
-Build time only. Its fragment runs after the code state's and before the harness's.
+Build time only. Its files are copied in after the code state's fragment, and before the harness's fragment.

@@ -44,6 +44,15 @@ What's in scope vs. explicitly not.
   in the prompt cache question under "To revisit". (See
   [050-setup-and-configure.md](050-setup-and-configure.md#thunderjarconfigts).)
 
+- **Experiments in a different repository from the code.** Thunderjar reads commits from
+  the repository it runs in, so `thunderjar/` lives in the same repository as the code it
+  experiments on. A setting pointing at another repository is deferred. (See
+  [062-code-state.md](062-code-state.md#where-the-commit-comes-from).)
+
+- **Fetching missing commits.** Thunderjar assumes the environment already has every
+  commit its parameters name, and fails if one is missing rather than fetching it. (See
+  [062-code-state.md](062-code-state.md#where-the-commit-comes-from).)
+
 ## To revisit
 
 Unresolved, but things we *are* intending to address in v1 — unlike the non-goals above.

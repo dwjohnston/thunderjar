@@ -30,6 +30,10 @@ build: it is simply the fragment that carries the `FROM`.
 
 ## When it needs attention
 
+The base image must have `git` installed: Thunderjar clones the code state's commit into
+it straight after the `FROM` (see
+[062-code-state.md](062-code-state.md#how-the-code-gets-into-the-image)).
+
 Most experiments use one plain, minimal base image like the one above. This parameter
 only needs attention when a task depends on something the codebase itself doesn't set
 up.

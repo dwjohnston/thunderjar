@@ -54,8 +54,9 @@ is ignored.
 ```ts
 // experiment-parameters/codeStates/main/index.ts
 export default declareCodeState({
-  determineHash: () => `git rev-parse main`,
-  applyParameter: (ctx) => `RUN git checkout ${ctx.resolvedHash}`,
+  determineHash: () => `git rev-parse origin/main`,
+  commit: (ctx) => ctx.resolvedHash,
+  applyParameter: () => `RUN npm ci`,
 });
 ```
 
@@ -69,23 +70,23 @@ export default declareBaseImage({
 
 ### `ctx.resolvedHash`
 
-The command's output is passed to `applyParameter` as `ctx.resolvedHash`. For the code
-state above, on an execution where `main` is at `a1b2c3`:
+The command's output is passed to the declaration's functions as `ctx.resolvedHash`.
+For the code state above, on an execution where `origin/main` is at `a1b2c3`:
 
 ```
-git rev-parse main        → a1b2c3
-ctx.resolvedHash          = "a1b2c3"
-applyParameter returns    RUN git checkout a1b2c3
+git rev-parse origin/main  → a1b2c3
+ctx.resolvedHash           = "a1b2c3"
+commit returns             "a1b2c3"
 ```
 
-Use it in the fragment. A fragment of `RUN git checkout main` has the same text on
-every execution, so Docker would reuse the layer it built from an earlier commit. With
-the resolved value in the fragment, the image is built from exactly what was hashed.
+Use it rather than the moving name. A checkout of `main` has the same text on every
+execution, so Docker would reuse the layer it built from an earlier commit. With the
+resolved value, the image is built from exactly what was hashed.
 
 ### Parameters that follow a moving target
 
-The code state above means "whatever `main` is when the experiment executes". Each
-execution resolves it again. When `main` has moved, the parameter hash is different, so
+The code state above means "whatever `origin/main` is when the experiment executes". Each
+execution resolves it again. When it has moved, the parameter hash is different, so
 the permutation hash is different, and the execution is recorded as a different
 permutation of the same named parameters.
 
@@ -111,13 +112,20 @@ applyParameter: (ctx) => string; // a Dockerfile fragment
 leaves the argument off.
 
 Building a permutation's prerun image is then a fold: concatenate each
-parameter's fragment, in the order below, and build the result.
+parameter's fragment, in the order below, and build the result. Code state and prompt
+set also declare a commit, which Thunderjar applies itself, ahead of their fragments —
+see [062-code-state.md](062-code-state.md#how-the-code-gets-into-the-image).
 
 ```dockerfile
 FROM node:20-bookworm                                    # base image
-RUN git checkout a1b2c3                                  # code state
-RUN git checkout e4f5a6 -- prompts/snerk.md \
-  && cp prompts/snerk.md CLAUDE.md                       # prompt set
+COPY code.bundle /tmp/code.bundle                        # Thunderjar: code state's commit
+RUN git clone /tmp/code.bundle /workspace \
+  && git -C /workspace checkout --detach a1b2c3 \
+  && git -C /workspace remote remove origin \
+  && rm /tmp/code.bundle
+WORKDIR /workspace
+RUN npm ci                                               # code state
+COPY prompt-set/CLAUDE.md /workspace/CLAUDE.md           # Thunderjar: prompt set's files
 COPY --from=thunderjar/harness-claude-code:2.1.283 \
   /opt/claude /opt/claude                                # harness
 ```
@@ -136,8 +144,8 @@ the harness is invoked, and their `applyParameter` returns an empty string:
 | Parameter | Build time | Run time |
 |---|---|---|
 | Base image | seed of the build | — |
-| Code state | checkout / fixture generation | — |
-| Prompt set | overlays prompt files | — |
+| Code state | commit, then dependencies / fixture generation | — |
+| Prompt set | prompt files | — |
 | Harness | installs the agent tool | invoked via `cli` |
 | Model | — | `ctx.modelId` |
 | Initial prompt | — | `ctx.initialPrompt` |
@@ -162,13 +170,14 @@ export default declareBaseImage({
 
 ## Code state
 
-The codebase applied on top of the base image, most commonly a pinned git commit.
+The codebase applied on top of the base image: a git commit, plus any setup it needs.
 Detail: [062-code-state.md](062-code-state.md).
 
 ```ts
 // experiment-parameters/codeStates/baseline/index.ts
 export default declareCodeState({
-  applyParameter: () => `RUN git checkout a1b2c3`,
+  commit: "a1b2c3",
+  applyParameter: () => `RUN npm ci`,
 });
 ```
 
@@ -179,11 +188,10 @@ the worktree before the harness runs. Detail: [063-prompt-set.md](063-prompt-set
 
 ```ts
 // experiment-parameters/promptSets/snerk/index.ts
-const commit = "e4f5a6";
-
 export default declarePromptSet({
-  applyParameter: () =>
-    `RUN git checkout ${commit} -- prompts/snerk.md && cp prompts/snerk.md CLAUDE.md`,
+  commit: "e4f5a6",
+  files: { "prompts/snerk.md": "CLAUDE.md" },
+  applyParameter: () => ``,
 });
 ```
 

@@ -17,7 +17,7 @@ flowchart TD
         C{"Prerun image exists<br/>for this permutation's<br/>permutation hash?"}
         C -- Yes --> D["Pull existing prerun image"]
         C -- No --> E["Start FROM base image<br/>(experiment parameter)"]
-        E --> F["Apply code state<br/>(usually a pinned commit)"]
+        E --> F["Clone code state's commit<br/>to /workspace, run its setup"]
         F --> G["Overlay prompt set files"]
         G --> H["Install harness,<br/>pinned to its version"]
         H --> I["Tag as prerun image,<br/>push to image store"]
