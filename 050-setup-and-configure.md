@@ -95,6 +95,10 @@ neither Bun nor a package manager is a prerequisite.
 run data store and the configuration, without running anything. See
 [100-cli-reference.md](100-cli-reference.md#doctor).
 
+`doctor` is opt-in: `plan` and `run` do not run its checks. They still fail before
+building anything when a harness's required environment variable is unset, as described
+under Credentials.
+
 ## Credentials
 
 Each [harness](064-harness.md#requiredenv-credentials) declares the names of the
@@ -142,7 +146,6 @@ secrets managers are later store constructors behind the same interface.
 
 - Sharing the run data store between CI and a developer's machine. See
   [071-data-persistence.md](071-data-persistence.md).
-- Whether `plan` and `run` also run the `doctor` checks first, or leave them to `doctor`.
 
 - Harnesses whose required variables depend on the model's provider (Bedrock, Vertex).
   v1 declares one harness per provider.
