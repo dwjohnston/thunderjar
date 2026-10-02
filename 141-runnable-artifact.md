@@ -18,21 +18,22 @@ Thunderjar is published as a single npm package, `thunderjar`. It serves two rol
    `sqliteStore` and so on, following [022-coding-conventions.md](022-coding-conventions.md).
 
 Both come from one package so the CLI version and the `declareX()` imports can never
-differ. The single-package question is still open in
-[150-repository-layout.md](150-repository-layout.md#open-questions).
+differ. Splitting them would only pay off if the library were light and the CLI heavy,
+and a user always installs both together, so there is nothing to gain.
 
 ```jsonc
 {
   "name": "thunderjar",
   "bin": { "thunderjar": "./dist/cli.js" },
   "exports": { ".": "./dist/index.js" },
-  "dependencies": { "bun": "<pinned>" }
+  "dependencies": { "bun": "<exact version>" }
 }
 ```
 
 ### Bun as a dependency
 
-`bun` is a regular dependency. Installing Thunderjar puts the Bun binary in
+`bun` is a regular `dependency`, not a `peerDependency`, pinned to an **exact** version
+because Thunderjar relies on specific Bun behaviour. Installing Thunderjar puts the Bun binary in
 `node_modules/.bin`, which the package manager puts on `PATH` when it runs a command, so
 the shebang finds it. The consequences for users are in
 [How the CLI gets Bun](050-setup-and-configure.md#how-the-cli-gets-bun).
@@ -52,19 +53,7 @@ The CLI loads `thunderjar.config.ts` and the experiment, parameter and measureme
 directly as TypeScript. Bun runs TypeScript without a build step, which is the reason
 the package targets it.
 
-## Future formats
+## Not specified in v1
 
-- **Runs on Node.** Ship the CLI as plain JavaScript with no Bun-only APIs, and load the
-  user's TypeScript through a loader such as `jiti`. Users bring their own runtime.
-- **Compiled binary**, from `bun build --compile`, one per platform. No runtime or
-  package manager needed. Needs a way to load the user's TypeScript from inside the
-  binary, and a distribution channel such as GitHub releases or a Homebrew formula.
-
-## Open questions
-
-- Whether the library and the CLI stay in one package or become two (`thunderjar` and
-  `@thunderjar/cli`), as in [150](150-repository-layout.md#open-questions).
-- Whether `bun` is a `dependency` or a `peerDependency`, and how its version is pinned
-  against the Bun APIs Thunderjar uses.
-- Whether a user's configuration may import other packages, and where they resolve from
-  in the nested `thunderjar/package.json` layout.
+- Whether a user's configuration may import other packages, and where those resolve from
+  in the nested `thunderjar/package.json` layout. Nothing needs it yet.

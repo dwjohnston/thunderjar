@@ -6,6 +6,9 @@ This is distinct from [051-configuration-folder-structure.md](051-configuration-
 
 No source code exists yet, so everything below is a proposal.
 
+Thunderjar is a single package, serving as both CLI and library. See
+[141-runnable-artifact.md](141-runnable-artifact.md).
+
 ## Layout
 
 ```
@@ -71,7 +74,6 @@ Because both come from the same script, a branch restored from a fixture image s
 
 ## Open questions
 
-- **Single package or workspace?** The layout assumes one package. If the `declareX()` functions users import are published separately from the CLI, this becomes a workspace with `packages/`.
 - **Breakdown of `src/`.** Only the parts the test boundaries depend on are named. The rest waits for the implementation.
 - **Enforcing the layout.** [140-tooling.md](140-tooling.md) mentions linting for file structure enforcement. Which rules apply here is not decided.
 - **Fixture image tags.** Whether the tag also carries a hash of the fixture's folder, so that a changed fixture is detected as missing (see the stale-images question in [120](120-test-boundaries.md#open-questions)).
