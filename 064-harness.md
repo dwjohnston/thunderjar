@@ -30,6 +30,9 @@ export default declareHarness({
   // interpret: turn that file's contents into normalised token costs
   collectTokenCosts: (raw) => { /* … */ },
 
+  // env vars the agent needs at run time; the user supplies the values
+  requiredEnv: ["ANTHROPIC_API_KEY"],
+
   // which models this harness runs, and the ID it passes for each
   models: {
     "sonnet-5-5": "claude-sonnet-5-5",
@@ -44,6 +47,7 @@ export default declareHarness({
 | `applyParameter` | Build | Returns the Dockerfile fragment that installs the tool. |
 | `cli` | Run | Returns the command that runs the agent. |
 | `collectTokenCosts` | Interpret | Turns the result file into normalised token costs. |
+| `requiredEnv` | Run | Names of the environment variables the agent needs, e.g. its API key. |
 | `models` | Run | Which models this harness runs, and the ID it passes for each. |
 
 ## `applyParameter`: installing the tool
@@ -77,6 +81,26 @@ harness author does nothing for that — see
 Receives the raw contents of the result file and returns normalised token costs. See
 [087-collecting-token-costs.md](087-collecting-token-costs.md) for the `TokenCosts`
 contract and what happens when the file is missing or malformed.
+
+## `requiredEnv`: credentials
+
+The harness declares the names of the environment variables its agent needs. The user
+exports them in the shell (or CI secret store) that runs Thunderjar, and Thunderjar
+passes exactly those names into that harness's containers, as `docker run -e NAME`.
+Docker copies the value from the calling environment.
+
+- **Names only.** Values never appear in the declaration, the image layers, the run data
+  store or any hash. They exist only in the container's environment at run time.
+- **Scoped to the harness.** A container sees only its own harness's variables, so a run
+  of one harness never receives another's key.
+- **Fails fast.** `plan` and `run` stop before building anything if a required variable
+  is unset, naming the variable and the harness that asked for it.
+- **Hashed by name.** `requiredEnv` is part of the harness's parameter hash: changing
+  what a harness needs is a change to the harness.
+
+A harness whose needed variables depend on the model's provider (Claude Code on Bedrock
+needs AWS variables, not `ANTHROPIC_API_KEY`) is not handled in v1. Declare one harness
+per provider for now.
 
 ## `models`: which models it runs
 
