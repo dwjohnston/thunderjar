@@ -56,7 +56,6 @@ experiment-parameters/
 | **Harness** | An agent tool and how to invoke it headlessly, pinned to an exact version. Comparing two versions means comparing two harnesses. | `harnesses/claude-code` → pinned to version X |
 | **Model** | The root LLM used by the harness. Sub-agent models are recorded as outcomes, not controlled parameters. | `models/haiku` → `claude-haiku-4-5-20251001` |
 | **Task** | The goal an experiment is about, with its initial prompts and the task measurements that judge it. An experiment names exactly one, so every result in it is judged by the same measurements. Not a varied parameter. | `tasks/add-function` |
-
 | **Initial prompt** | The first prompt given to the harness — what the agent is asked to do. One of several wordings a task can have. Distinct from prompt set, which shapes the environment. Called *task instruction* in earlier drafts and in the source conversation. | `tasks/add-function/initial-prompts/plain.ts` → "Write a TypeScript function called `add`…" |
 
 ### Declaration

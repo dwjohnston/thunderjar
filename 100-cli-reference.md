@@ -184,7 +184,7 @@ Run from inside a git repository. Fetches the run's end state and creates the br
 ## Conventions
 
 - `--json` on every command that reports, for scripting.
-- Exit codes: success, regression in a measurement, and infrastructure error are
+- Exit codes: success, and infrastructure error are
   distinct.
 - Executions are addressed by execution ID and container runs by their ID. How a
   container run is named on the command line is open in
