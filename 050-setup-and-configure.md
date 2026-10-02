@@ -60,6 +60,12 @@ runs the CLI from each package that has its own.
 
 **Future:** a compiled binary (`bun build --compile`) so Bun is not a prerequisite.
 
+## Verifying setup
+
+`thunderjar doctor` checks Docker, registry access, required environment variables, the
+run data store and the configuration, without running anything. See
+[100-cli-reference.md](100-cli-reference.md#doctor).
+
 ## Credentials
 
 Each [harness](064-harness.md#requiredenv-credentials) declares the names of the
@@ -109,7 +115,7 @@ secrets managers are later store constructors behind the same interface.
   in v1, the file must be shared by hand (CI artifact, synced directory), which the
   regression triage loop in [040-user-experience.md](040-user-experience.md#regression-triage)
   depends on.
-- Whether `plan` and `run` check that the registry accepts a push before building anything.
+- Whether `plan` and `run` also run the `doctor` checks first, or leave them to `doctor`.
 
 - Harnesses whose required variables depend on the model's provider (Bedrock, Vertex).
   v1 declares one harness per provider.

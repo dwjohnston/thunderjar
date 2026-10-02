@@ -12,6 +12,7 @@ would do in one is done with the commands below. Command names are provisional.
 | Command | Purpose |
 |---|---|
 | [`init`](#init) | Scaffold the configuration folder. |
+| [`doctor`](#doctor) | Check that the environment is ready to run. |
 | [`generate`](#generate) | Emit the typed parameter names. |
 | [`plan`](#plan) | Dry run: show what an experiment would do. |
 | [`run`](#run) | Run an experiment: one experiment execution. |
@@ -31,6 +32,25 @@ Scaffolds the `thunderjar/` configuration folder, laid out as in
 [051-configuration-folder-structure.md](051-configuration-folder-structure.md). What it
 creates, and whether it includes an example experiment, depends on
 [050-setup-and-configure.md](050-setup-and-configure.md).
+
+### `doctor`
+
+```
+thunderjar doctor
+```
+
+A preflight for the setup described in
+[050-setup-and-configure.md](050-setup-and-configure.md). It runs no experiment and costs
+nothing. It checks that:
+
+- the Docker daemon is reachable;
+- the registry accepts a push to the image store repository;
+- every environment variable named by a harness's `requiredEnv` is set, and any variable
+  the run data store names (e.g. `urlEnv`) is set;
+- the run data store can be opened;
+- the configuration loads.
+
+Each check reports pass or fail, with the reason on failure. Exits non-zero if any fails.
 
 ### `generate`
 
