@@ -82,7 +82,9 @@ The CLI has two modes over the same underlying engine:
 - **Scriptable mode**, for CI — one-shot commands, machine-readable output,
   exit-code driven.
 - **Interactive mode**, for local exploration — browsing past runs, drilling into
-  an iteration, triggering a restore.
+  an iteration, triggering a restore. **Out of scope for the first pass**: see
+  [020-goals-non-goals.md](020-goals-non-goals.md#non-goals-v1). Until then, local
+  exploration uses the scriptable commands.
 
 ## Open questions
 

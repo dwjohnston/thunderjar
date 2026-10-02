@@ -26,6 +26,14 @@ What's in scope vs. explicitly not.
   test case and write its measurements; running, rerunning and comparing stays in the
   CLI. (See [045-shipped-skills.md](045-shipped-skills.md).)
 
+- **Interactive mode / TUI.** The first pass ships scriptable, one-shot commands only.
+  Browsing past runs, drilling into an iteration and the report visualization as an
+  interactive view are deferred. Everything an interactive mode would do must remain
+  reachable through a scriptable command, so it can be added later as a thin layer over
+  the same engine. (See [040-user-experience.md](040-user-experience.md#cli-shape),
+  [100-cli-reference.md](100-cli-reference.md) and
+  [110-cli-report-visualization.md](110-cli-report-visualization.md).)
+
 ## To revisit
 
 Unresolved, but things we *are* intending to address in v1 — unlike the non-goals above.

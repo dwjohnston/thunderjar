@@ -30,7 +30,7 @@ project glossary before diving into the rest.
 8.7. [Collecting Token Costs](087-collecting-token-costs.md) — How a container run's token usage and cost are obtained from the harness, normalised across harnesses, and recorded.
 9. [Restore / Purge](090-restore-purge.md) — Lifecycle management: restoring a container from a preserved postrun image, purging old ones.
 10. [CLI Reference](100-cli-reference.md) — The actual CLI commands.
-11. [CLI Report Visualization](110-cli-report-visualization.md) — Detailed page on the interactive CLI's report visualization.
+11. [CLI Report Visualization](110-cli-report-visualization.md) — Detailed page on the interactive CLI's report visualization. Out of scope for the first pass.
 12. [Test Boundaries](120-test-boundaries.md) — How Thunderjar itself is tested, kept distinct from how Thunderjar tests prompts. Each layer is defined by where the mock/real boundary sits.
 13. [Open Questions](130-open-questions.md) — Risks, deferred work, unresolved design questions (e.g. floating experiments, container-run naming risk).
 14. [Tooling](140-tooling.md) — Bun, TypeScript, linting for file structure enforcement.
