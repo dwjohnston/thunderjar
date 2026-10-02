@@ -27,7 +27,7 @@ flowchart TD
 
     subgraph ITER["Per iteration"]
         K["Run a new container<br/>from the prerun image"]
-        K --> L["Execution: harness invoked headlessly<br/>with task + model, inside<br/>Thunderjar's execution wrapper"]
+        K --> L["Execution: harness invoked headlessly<br/>with initial prompt + model, inside<br/>Thunderjar's execution wrapper"]
         L --> M["docker commit the container<br/>into a postrun image"]
         M --> N["Tag as postrun image,<br/>push to image store"]
         N --> O["Measurement: start a short-lived measurement<br/>container from the postrun image, apply the<br/>task's measurements, then discard it"]

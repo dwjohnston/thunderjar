@@ -27,7 +27,7 @@ pair**, and lists the pairs it wants. Each pair is valid or not on its own, so a
 valid pairs is allowed.
 
 The experiment parameters go from six to five: base image, code state, prompt set,
-**harness/model pair**, task. The matrix is still a cross product, but the pair is one
+**harness/model pair**, initial prompt. The matrix is still a cross product, but the pair is one
 axis of it.
 
 ```ts
@@ -40,7 +40,8 @@ export default declareExperiment({
     "claude-code@2.2.0/haiku-4-5",
     "codex@0.9.0/gpt-luna",
   ],
-  task: ["is-prime"],
+  task: "is-prime",
+  initialPrompt: ["plain"],
   iterations: 5,
 });
 ```

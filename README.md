@@ -22,7 +22,7 @@ project glossary before diving into the rest.
 6.3. [Prompt Set](063-prompt-set.md) — Overlaying prompt files from a pinned commit.
 6.4. [Harness](064-harness.md) — The agent tool: installing it, the `cli` contract, token costs, and the `models` map.
 6.5. [Model](065-model.md) — The root LLM, and why its ID belongs to the harness.
-6.6. [Task](066-task.md) — The initial prompt, and the task measurements that live beside it.
+6.6. [Task](066-task.md) — The task, its initial prompts, and the task measurements that live beside them.
 7. [Data Architecture](070-data-architecture.md) — The run data store and image store.
 8. [Docker Execution](080-docker-execution.md) — The Docker run mechanics and resulting artifacts.
 8.1. [Docker Tagging](081-docker-tagging.md) — The prerun/postrun image tag formats, and why.

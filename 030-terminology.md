@@ -7,13 +7,13 @@ Glossary of project-specific terms, used consistently across all other spec page
 
 ### Experiments
 
-An **experiment** consists of a matrix of **experiment parameters** — the values that determine what happened and from what state, and whose combinations produce permutations. One of those parameters is the **task**: the initial prompt given to the harness, i.e. what the agent is asked to do.
+An **experiment** consists of a matrix of **experiment parameters** — the values that determine what happened and from what state, and whose combinations produce permutations. One of those parameters is the **initial prompt**: the first prompt given to the harness, i.e. what the agent is asked to do. An experiment is about one **task**: the goal its initial prompts ask for, together with the measurements that judge it.
 
 🙋‍♂️ Really an experiment is the 6 parameters + and then task measurements occur afterwards. 
 
-Associated with each task are its **task measurements**, which judge the outcome of a container run after the fact. They are not an experiment parameter: they don't inform what runs or how many permutations there are, and they aren't part of the permutation hash. They live alongside the task because they're only meaningful for it — see [051-configuration-folder-structure.md](051-configuration-folder-structure.md).
+Associated with each task are its **task measurements**, which judge the outcome of a container run after the fact. They are not an experiment parameter: they don't inform what runs or how many permutations there are, and they aren't part of the permutation hash. They live alongside the task because they're only meaningful for it, and every initial prompt of the task is judged by the same ones — see [051-configuration-folder-structure.md](051-configuration-folder-structure.md).
 
-The experiment parameters are: **base image**, **code state**, **prompt set**, **harness**, **model**, and **task**.
+The experiment parameters are: **base image**, **code state**, **prompt set**, **harness**, **model**, and **initial prompt**. The task itself is named once per experiment and is not varied.
 
 ### Experiment parameters
 
@@ -43,6 +43,9 @@ experiment-parameters/
   tasks/
     add-function/
       index.ts
+      initial-prompts/
+        plain.ts
+      measurements/
 ```
 
 | Term | Definition | Example |
@@ -52,7 +55,9 @@ experiment-parameters/
 | **Prompt set** | The prompt files overlaid into the worktree (`CLAUDE.md`, skills, rules), expressed as a shell command or script. | `promptSets/snerk` → `cp prompts/snerk.md CLAUDE.md` |
 | **Harness** | An agent tool and how to invoke it headlessly, pinned to an exact version. Comparing two versions means comparing two harnesses. | `harnesses/claude-code` → pinned to version X |
 | **Model** | The root LLM used by the harness. Sub-agent models are recorded as outcomes, not controlled parameters. | `models/haiku` → `claude-haiku-4-5-20251001` |
-| **Task** | The initial prompt given to the harness — what the agent is asked to do. Distinct from prompt set, which shapes the environment. Called *task instruction* in earlier drafts and in the source conversation. | `tasks/add-function/index.ts` → "Write a TypeScript function called `add`…" |
+| **Task** | The goal an experiment is about, with its initial prompts and the task measurements that judge it. An experiment names exactly one, so every result in it is judged by the same measurements. Not a varied parameter. | `tasks/add-function` |
+
+| **Initial prompt** | The first prompt given to the harness — what the agent is asked to do. One of several wordings a task can have. Distinct from prompt set, which shapes the environment. Called *task instruction* in earlier drafts and in the source conversation. | `tasks/add-function/initial-prompts/plain.ts` → "Write a TypeScript function called `add`…" |
 
 ### Declaration
 
@@ -80,7 +85,7 @@ Each experiment parameter has its own **parameter hash**:
 ### Permutation hash
 
 A permutation's **permutation hash** combines the parameter hashes of its six parameters
-(base image, code state, prompt set, harness, model, task), plus the model ID the
+(base image, code state, prompt set, harness, model, initial prompt), plus the model ID the
 harness resolves the model to. This hash tags the permutation's prerun and postrun
 images and proves two container runs are comparable — if any parameter hash
 changes, the permutation hash changes, so two runs are only directly comparable if they
@@ -109,10 +114,10 @@ A **permutation** is one specific combination of experiment parameter values. An
 ### Matrix shape
 
 Shorthand for the size of an experiment's parameter matrix, written
-`<base images>/<code states>/<prompt sets>/<harnesses>/<models>/<tasks>` —
+`<base images>/<code states>/<prompt sets>/<harnesses>/<models>/<initial prompts>` —
 one count per experiment parameter, in the same order as the parameter table above. The
 product of the six counts is the number of permutations. E.g. `1/1/2/1/1/1` is 1 base
-image, 1 code state, 2 prompt sets, 1 harness, 1 model, 1 task — 2
+image, 1 code state, 2 prompt sets, 1 harness, 1 model, 1 initial prompt — 2
 permutations.
 
 A matrix shape of `1/1/1/1/1/1` — every axis fixed to a single value — is a
@@ -176,7 +181,7 @@ A **container run** is the concrete execution of one permutation:
      version — then tag and push it as the prerun image.
 
 2. **Execution:**
-   - The harness is invoked headlessly with the task and model
+   - The harness is invoked headlessly with the initial prompt and model
 
 3. **Preservation:**
    - The final container state is committed to a new image

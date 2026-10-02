@@ -15,7 +15,7 @@ in the glossary.
   silent drift when a named definition's content changes underneath it.
 - A permutation's **permutation hash** combines the parameter hashes of its six
   resolved experiment parameters (base image, code state, prompt set, harness,
-  model, task), plus the model ID the harness resolves the model to (see
+  model, initial prompt), plus the model ID the harness resolves the model to (see
   [064-harness.md](064-harness.md#hashing)). Two container runs are only directly comparable if
   their permutation hashes match.
 - A harness's `models` map is excluded from its parameter hash. Adding a model
@@ -140,7 +140,7 @@ the harness is invoked, and their `applyParameter` returns an empty string:
 | Prompt set | overlays prompt files | — |
 | Harness | installs the agent tool | invoked via `cli` |
 | Model | — | `ctx.modelId` |
-| Task | — | `ctx.taskPrompt` |
+| Initial prompt | — | `ctx.initialPrompt` |
 
 This split is the same one the flowchart in
 [080-docker-execution.md](080-docker-execution.md#process) draws as its
@@ -206,7 +206,7 @@ export default declareHarness({
 
   // run: execute the agent, and write the result file
   cli: (ctx) =>
-    `claude -p "${ctx.taskPrompt}" --model ${ctx.modelId} ` +
+    `claude -p "${ctx.initialPrompt}" --model ${ctx.modelId} ` +
     `--allowedTools "Write,Edit,Read,Bash" --output-format json > ${ctx.resultPath}`,
 
   // interpret: turn that file's contents into normalised token costs
@@ -233,15 +233,15 @@ export default declareModel({
 });
 ```
 
-## Task
+## Initial prompt
 
-The initial prompt given to the harness — what the agent is asked to do. Its task
-measurements live in a `measurements/` folder beside it, excluded from its content
-hash. Detail: [066-task.md](066-task.md).
+The first prompt given to the harness — what the agent is asked to do. It is one wording
+of a task, and the task's measurements live in a `measurements/` folder beside its
+initial prompts, excluded from every parameter hash. Detail: [066-task.md](066-task.md).
 
 ```ts
-// experiment-parameters/tasks/is-prime/index.ts
-export default declareTask({
+// experiment-parameters/tasks/is-prime/initial-prompts/plain.ts
+export default declareInitialPrompt({
   prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
   applyParameter: () => ``,
 });

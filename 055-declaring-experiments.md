@@ -17,7 +17,8 @@ export default declareExperiment({
   promptSet: ["snerk", "glurk"],
   harness: ["claude-code-2-1-283"],
   model: ["haiku-4-5"],
-  task: ["is-prime"],
+  task: "is-prime",
+  initialPrompt: ["plain", "terse"],
   iterations: 5,
 });
 ```
@@ -29,22 +30,29 @@ export default declareExperiment({
 | `promptSet` | [Prompt sets](063-prompt-set.md) to run. |
 | `harness` | [Harnesses](064-harness.md) to run. |
 | `model` | [Models](065-model.md) to run. |
-| `task` | [Tasks](066-task.md) to run. |
+| `task` | The [task](066-task.md) the experiment is about. One name, not an array. |
+| `initialPrompt` | The task's [initial prompts](066-task.md#initial-prompts) to run. |
 | `iterations` | How many times each permutation runs. |
 
 Each parameter field is an array of names. Each name is a folder under
-`experiment-parameters/<kind>/`.
+`experiment-parameters/<kind>/`, except `initialPrompt`, whose names are files under the
+chosen task's `initial-prompts/` folder.
 
 ## An experiment is a matrix
 
 The six arrays form a cross product, and each combination is one permutation. The
-example above has two: `snerk` and `glurk`, with everything else held fixed.
+example above has four: `snerk` and `glurk`, each with `plain` and `terse`, with everything
+else held fixed.
 
-## Tasks, not measurements
+## One task, not measurements
 
-The experiment declares tasks, not measurements. Measurements come with the task (see
+The experiment names one task, not measurements. Measurements come with the task (see
 [066-task.md](066-task.md#task-measurements)), so a second experiment using `is-prime`
 gets the same measurements without copying them.
+
+Naming one task means every permutation is judged by the same measurements, so every
+result in the experiment can be compared with every other. Results for different tasks
+can't be, so running a harness across several tasks is several experiments.
 
 ## Typed names
 
@@ -58,8 +66,13 @@ in the experiment file. The folder is git-ignored — see
 // _generated/parameter-names.d.ts — generated, not edited
 type PromptSetName = "snerk" | "glurk";
 type TaskName = "is-prime";
+type InitialPromptNames = { "is-prime": "plain" | "terse" };
 // …one union per parameter kind
 ```
+
+`declareExperiment` is generic over the task name, and `initialPrompt` is restricted to
+the prompts of the task named in `task`. A prompt that belongs to another task is a type
+error.
 
 ## Harness and model must be compatible
 

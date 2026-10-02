@@ -47,9 +47,10 @@ The agent prefers few, cheap, deterministic measurements over broad ones. For a
 
 ### What it creates
 
-The task: `experiment-parameters/tasks/<name>/index.ts`, with the session's opening
-request as its prompt, and the `measurements/` folder beside it. The experiment
-declaration and the other five parameters are left to the user.
+The task folder `experiment-parameters/tasks/<name>/`, with the session's opening
+request as its initial prompt in `initial-prompts/`, and the `measurements/` folder
+beside it. The experiment declaration and the other five parameters are left to the
+user.
 
 ## Open questions
 

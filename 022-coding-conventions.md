@@ -15,7 +15,7 @@ assertion (`as`), or a type annotation (`const harness: Harness = …`).
 export default declareHarness({
   version: "2.1.283",
   applyParameter: () => `RUN npm install -g @anthropic-ai/claude-code@2.1.283`,
-  cli: (ctx) => `claude -p "${ctx.taskPrompt}" > ${ctx.resultPath}`,
+  cli: (ctx) => `claude -p "${ctx.initialPrompt}" > ${ctx.resultPath}`,
   collectTokenCosts: (raw) => { /* … */ },
 });
 ```
@@ -52,7 +52,7 @@ One function per kind:
 | Prompt set | `declarePromptSet` |
 | Harness | `declareHarness` |
 | Model | `declareModel` |
-| Task | `declareTask` |
+| Initial prompt | `declareInitialPrompt` |
 | Measurement | `declareMeasurement` |
 | Experiment | `declareExperiment` |
 

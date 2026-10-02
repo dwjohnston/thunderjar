@@ -125,6 +125,8 @@ type ContainerRunRecord = {
   postrunImage: string; // the tag, so the artifact is reachable from the record
   ranAt: string;
 
+  task: string; // the experiment's task, by name
+
   // each resolved parameter, by name and parameter hash
   parameters: Record<ParameterKind, { name: string; parameterHash: string }>;
 
@@ -137,6 +139,7 @@ type ContainerRunRecord = {
 ```ts
 {
   executionId: "01k4x9j2e8mqz3",
+  task: "add-prime",
   permutationHash: "4f9a21c8e0b7…",
   iteration: 0,
   postrunImage: "postrun-e01k4x9j2e8mqz3-h4f9a21c8-i00",
@@ -147,7 +150,7 @@ type ContainerRunRecord = {
     promptSet:       { name: "snerk",       parameterHash: "c7d4…" },
     harness:         { name: "claude-code", parameterHash: "d5e1…" },
     model:           { name: "haiku",       parameterHash: "e3a8…" },
-    task:            { name: "add-prime",   parameterHash: "f20b…" },
+    initialPrompt:   { name: "plain",       parameterHash: "f20b…" },
   },
   result: { /* as above */ },
   tokenCosts: { /* as above */ },

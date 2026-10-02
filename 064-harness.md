@@ -24,7 +24,7 @@ export default declareHarness({
 
   // run: execute the agent, and write the result file
   cli: (ctx) =>
-    `claude -p "${ctx.taskPrompt}" --model ${ctx.modelId} ` +
+    `claude -p "${ctx.initialPrompt}" --model ${ctx.modelId} ` +
     `--allowedTools "Write,Edit,Read,Bash" --output-format json > ${ctx.resultPath}`,
 
   // interpret: turn that file's contents into normalised token costs
@@ -60,7 +60,7 @@ Where the pre-built harness images come from is unresolved — see
 
 | Context field | What it is |
 |---|---|
-| `ctx.taskPrompt` | The [task](066-task.md)'s prompt. |
+| `ctx.initialPrompt` | The experiment's [initial prompt](066-task.md#initial-prompts). |
 | `ctx.modelId` | The ID this harness passes for the permutation's model — see [`models`](#models-which-models-it-runs). |
 | `ctx.resultPath` | Where the command must write its result file. |
 

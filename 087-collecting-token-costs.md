@@ -39,7 +39,7 @@ as `ctx.resultPath`.
 
 ```ts
 cli: (ctx) =>
-  `claude -p "${ctx.taskPrompt}" --model ${ctx.modelId} ` +
+  `claude -p "${ctx.initialPrompt}" --model ${ctx.modelId} ` +
   `--output-format json > ${ctx.resultPath}`,
 ```
 
