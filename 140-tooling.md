@@ -10,11 +10,16 @@ Everything below is a proposal. No code exists yet.
 |---|---|
 | Runtime, package manager, test runner | Bun (`bun test`) |
 | Language | TypeScript |
+| Build | `bun build`, with `tsc` for type declarations |
+| Docker and git | Their command-line tools, run with `Bun.spawn` |
+| Run data store driver | `bun:sqlite` |
+| Hashing | `Bun.CryptoHasher` |
 | CLI argument parsing | Commander |
 | Linting and formatting | Biome |
 | Folder-structure enforcement | `scripts/sync-biome-layout.ts`, which writes rules into the Biome config |
 | Versioning and release notes | Changesets (`.changeset/`) |
 | CI | GitHub Actions |
+| Dependency updates | Dependabot |
 | Documentation | VitePress, hosted on GitHub Pages |
 
 - **Bun** runs the CLI, the scripts and the tests, with no build step in development. It is
@@ -23,6 +28,19 @@ Everything below is a proposal. No code exists yet.
   [150-repository-layout.md](150-repository-layout.md).
 - **TypeScript** throughout, type-checked with `tsc --noEmit`. Bun runs the code but does not
   check it.
+- **Build.** `bun build` bundles the CLI and library into `dist/`. It does not emit type
+  declarations, so `tsc --emitDeclarationOnly` produces the `.d.ts` files for the
+  `declareX()` functions that [141-runnable-artifact.md](141-runnable-artifact.md) ships.
+- **Docker and git** are driven by running the `docker` and `git` command-line tools with
+  `Bun.spawn`, not through an API library. This is what lets the recording adapters in
+  [120-test-boundaries.md](120-test-boundaries.md) print the commands they would have run,
+  and it uses the user's existing `docker login`.
+- **`bun:sqlite`** is the driver behind `sqliteStore`
+  ([050-setup-and-configure.md](050-setup-and-configure.md#thunderjarconfigts)). It is
+  built into Bun, so there is no dependency to install.
+- **`Bun.CryptoHasher`** computes the SHA-256 behind parameter hashes
+  ([060-experiment-parameters.md](060-experiment-parameters.md)). Bun has no canonical-JSON
+  function, so key-order independence is Thunderjar's own code.
 - **Commander** defines the commands in [100-cli-reference.md](100-cli-reference.md). Each
   command is one file under `src/commands/`, registered by the entry point in `src/cli/`.
 - **Biome** does linting and formatting in one tool, so there is one config file.
@@ -31,6 +49,7 @@ Everything below is a proposal. No code exists yet.
   file under `.changeset/` saying which bump it needs and what to put in the changelog.
   Releasing consumes those files, bumps the version and writes `CHANGELOG.md`. The
   `package.json` scripts `changeset`, `version` and `release` wrap the Changesets CLI.
+- **Dependabot** opens pull requests for outdated npm packages and GitHub Actions versions.
 - **GitHub Actions** runs three workflows:
   - **CI** (`ci.yml`). On a pull request to `main`: install with Bun, `bun run lint` (which
     includes the layout sync check below), `bun run typecheck` and `bun test`. On a push to

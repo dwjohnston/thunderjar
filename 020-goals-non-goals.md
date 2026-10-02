@@ -34,6 +34,16 @@ What's in scope vs. explicitly not.
   [100-cli-reference.md](100-cli-reference.md) and
   [110-cli-report-visualization.md](110-cli-report-visualization.md).)
 
+- **Runtime validation of configuration and harness output.** A schema library (such as
+  Zod) checking `declareX()` objects, the harness's result file and stored records. In v1
+  configuration is TypeScript, checked by the type system. (See
+  [140-tooling.md](140-tooling.md).)
+
+- **Concurrent container runs.** v1 runs container runs one at a time, with no concurrency
+  setting and so no need for a concurrency-limiting library. Parallel runs would also bring
+  in the prompt cache question under "To revisit". (See
+  [050-setup-and-configure.md](050-setup-and-configure.md#thunderjarconfigts).)
+
 ## To revisit
 
 Unresolved, but things we *are* intending to address in v1 — unlike the non-goals above.
