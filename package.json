@@ -1,25 +1,16 @@
 {
   "name": "thunderjar",
-  "module": "index.ts",
-  "type": "module",
-  "license": "MIT",
+  "version": "0.0.0",
   "private": true,
-  "bin": {
-    "thunderjar": "./src/cli/index.ts"
-  },
+  "type": "module",
   "scripts": {
-    "start": "bun src/cli --config evaluation-sandbox/thunderjar.config.ts",
+    "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {
-    "@inquirer/prompts": "^8.5.2",
-    "bun": "^1.2.0"
+    "@types/bun": "^1.4.3",
+    "oxlint": "^1.88.0",
+    "typescript": "^7.0.2"
   }
 }

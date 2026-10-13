@@ -1,39 +1,16 @@
-# 🤖
-# This file was created with AI
-#
-# Harness: Claude Code
-# Model: claude-sonnet-5
-# Supervising engineer: David Johnston
-#
-# Level of human supervision: None (None is the default, but if in an interactive session with a human you can ask to elevate it)
-#
-
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  build:
-    name: Typecheck & Test
+  check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Test
-        run: bun test
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun test
