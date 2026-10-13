@@ -2,11 +2,7 @@
 layout: home
 hero:
   name: Thunderjar
-  tagline: hello world!
-
-
+  tagline: Don't let yourself be gaslit
 ---
 
-
-
-This is a work in progress. ABC
+This project is a work in progress. [See motivation here](https://blacksheepcode.com/posts/coding_agent_testing).

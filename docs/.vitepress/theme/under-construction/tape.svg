@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="686" height="28" viewBox="0 0 686 28">
+  <defs>
+    <g id="warn">
+      <polygon points="-10,23 10,23 0,5" fill="#111" stroke="#111" stroke-width="2" stroke-linejoin="round"/>
+      <rect x="-1.2" y="10.5" width="2.4" height="7" fill="#ffd200"/>
+      <circle cy="20.3" r="1.4" fill="#ffd200"/>
+    </g>
+  </defs>
+  <rect width="686" height="28" fill="#ffd200"/>
+  <g font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="900" fill="#111">
+    <text x="7" y="19.5" textLength="270" lengthAdjust="spacingAndGlyphs">DON'T LET YOURSELF BE GASLIT</text>
+    <text x="325" y="19.5" textLength="320" lengthAdjust="spacingAndGlyphs">PROMPT TESTING FOR YOUR CODEBASE</text>
+  </g>
+  <use href="#warn" x="301"/>
+  <use href="#warn" x="669"/>
+</svg>
