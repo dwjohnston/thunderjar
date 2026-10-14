@@ -22,6 +22,7 @@
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "dev:link": "bun scripts/dev-link.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
