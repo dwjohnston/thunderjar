@@ -1,11 +1,19 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { init } from "./init.ts";
 
 const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-init-"));
+
+const repoRoot = resolve(import.meta.dir, "..", "..");
+
+/** Makes `thunderjar` resolvable from `dir`, the same way `bun link` would. */
+async function linkThunderjar(dir: string) {
+  await mkdir(join(dir, "node_modules"), { recursive: true });
+  await symlink(repoRoot, join(dir, "node_modules", "thunderjar"), "dir");
+}
 
 test("creates the configuration folder", async () => {
   const dir = await tmp();
@@ -39,6 +47,16 @@ test("JS project gets no nested package.json", async () => {
   await init(dir);
   expect(existsSync(join(dir, ".thunderjar/package.json"))).toBe(false);
   expect(await readFile(join(dir, ".thunderjar/.gitignore"), "utf8")).toBe("_generated/\n.data/\n");
+});
+
+test("generated files resolve their thunderjar imports", async () => {
+  const dir = await tmp();
+  const { created } = await init(dir);
+  await linkThunderjar(dir);
+
+  for (const file of created.filter((f) => f.endsWith(".ts"))) {
+    await import(join(dir, ".thunderjar", file));
+  }
 });
 
 test("second run does not overwrite existing files", async () => {
