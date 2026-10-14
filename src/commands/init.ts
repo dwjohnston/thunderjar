@@ -10,20 +10,82 @@ export default declareConfig({
 });
 `;
 
-const stub = (fn: string, body = "{}") =>
-  `import { ${fn} } from "thunderjar";\n\nexport default ${fn}(${body});\n`;
+const stub = (fn: string, body: string) => `import { ${fn} } from "thunderjar";\n\nexport default ${fn}(${body});\n`;
 
-const harnessIndex = `import { declareHarness } from "thunderjar";
+const baseImage = stub(
+  "declareBaseImage",
+  `{
+  applyParameter: () => \`FROM node:20-bookworm\`,
+}`,
+);
 
-export default declareHarness({
+const codeState = stub(
+  "declareCodeState",
+  `{
+  commit: "a1b2c3",
+  applyParameter: () => \`RUN npm ci\`,
+}`,
+);
+
+const promptSet = stub(
+  "declarePromptSet",
+  `{
+  commit: "e4f5a6",
+  files: { "prompts/snerk.md": "CLAUDE.md" },
+  applyParameter: () => \`\`,
+}`,
+);
+
+const harnessIndex = stub(
+  "declareHarness",
+  `{
   applyParameter: (ctx) => \`RUN npm install -g @anthropic-ai/claude-code@\${ctx.version}\`,
-  cli: (ctx) => \`claude -p "\${ctx.initialPrompt}" > \${ctx.resultPath}\`,
-});
-`;
+  cli: (ctx) => \`claude -p "\${ctx.initialPrompt}" --model \${ctx.modelId} > \${ctx.resultPath}\`,
+  requiredEnv: ["ANTHROPIC_API_KEY"],
+}`,
+);
 
-const testCase = `import { declareTestCase } from "thunderjar";
+const harnessModels = stub(
+  "declareHarnessModels",
+  `{
+  "haiku-4-5": "claude-haiku-4-5-20251001",
+}`,
+);
 
-export default declareTestCase({
+const harnessVersions = stub(
+  "declareHarnessVersions",
+  `{
+  "2.1.283": { version: "2.1.283" },
+}`,
+);
+
+const collectTokenCosts = stub(
+  "declareTokenCostCollector",
+  `(raw, ctx) => {
+  return { outcome: "unavailable", reason: "notReported" };
+}`,
+);
+
+const initialPrompt = stub(
+  "declareInitialPrompt",
+  `{
+  prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
+  timeoutSeconds: 600,
+  applyParameter: () => \`\`,
+}`,
+);
+
+const measurement = stub(
+  "declareMeasurement",
+  `{
+  instrument: "fileCreated",
+  config: { path: "isPrime.ts" },
+}`,
+);
+
+const testCase = stub(
+  "declareTestCase",
+  `{
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
@@ -31,8 +93,8 @@ export default declareTestCase({
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
-});
-`;
+}`,
+);
 
 const P = "test-case-parameters";
 
@@ -41,15 +103,15 @@ function scaffold(): Record<string, string> {
   return {
     "thunderjar.config.ts": config,
     "test-cases/example.ts": testCase,
-    [`${P}/baseImages/node20/index.ts`]: stub("declareBaseImage"),
-    [`${P}/codeStates/baseline/index.ts`]: stub("declareCodeState"),
-    [`${P}/promptSets/snerk/index.ts`]: stub("declarePromptSet"),
+    [`${P}/baseImages/node20/index.ts`]: baseImage,
+    [`${P}/codeStates/baseline/index.ts`]: codeState,
+    [`${P}/promptSets/snerk/index.ts`]: promptSet,
     [`${P}/harnessModels/claude-code/index.ts`]: harnessIndex,
-    [`${P}/harnessModels/claude-code/models.ts`]: stub("declareHarnessModels"),
-    [`${P}/harnessModels/claude-code/versions.ts`]: stub("declareHarnessVersions"),
-    [`${P}/harnessModels/claude-code/collectTokenCosts.ts`]: stub("declareTokenCostCollector"),
-    [`${P}/tasks/is-prime/initial-prompts/plain.ts`]: stub("declareInitialPrompt"),
-    [`${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`]: stub("declareMeasurement"),
+    [`${P}/harnessModels/claude-code/models.ts`]: harnessModels,
+    [`${P}/harnessModels/claude-code/versions.ts`]: harnessVersions,
+    [`${P}/harnessModels/claude-code/collectTokenCosts.ts`]: collectTokenCosts,
+    [`${P}/tasks/is-prime/initial-prompts/plain.ts`]: initialPrompt,
+    [`${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`]: measurement,
   };
 }
 
