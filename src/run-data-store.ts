@@ -90,6 +90,13 @@ export interface RunDataStore {
   recordMeasures(postrunImage: string, measures: Result): Promise<void>;
   /** Recorded executions, newest first; only `testCase`'s if given. */
   listExecutions(testCase?: string): Promise<ExecutionSummary[]>;
+  /**
+   * Every container run recorded for `executionId`, by permutation in matrix order, then by
+   * iteration. Empty if there are none.
+   */
+  getExecution(executionId: string): Promise<ContainerRunRecord[]>;
+  /** The container run recorded with `postrunImage`, if there is one. */
+  getContainerRun(postrunImage: string): Promise<ContainerRunRecord | undefined>;
 }
 
 /** Where the store lives under the `.thunderjar/` folder `root`. */
@@ -114,6 +121,19 @@ export function summarizeExecutions(records: ContainerRunRecord[]): ExecutionSum
   const newestFirst = (a: string, b: string) => (a < b ? 1 : a > b ? -1 : 0);
   return [...byId.values()].toSorted(
     (a, b) => newestFirst(a.ranAt, b.ranAt) || newestFirst(a.executionId, b.executionId),
+  );
+}
+
+/**
+ * One execution's records by permutation, then by iteration. Records don't hold a permutation's
+ * place in the matrix, but `run` records permutations in matrix order, so the order each was
+ * first recorded in stands for it.
+ */
+export function inExecutionOrder(records: ContainerRunRecord[]): ContainerRunRecord[] {
+  const place = new Map<string, number>();
+  for (const { permutationHash } of records) if (!place.has(permutationHash)) place.set(permutationHash, place.size);
+  return records.toSorted(
+    (a, b) => place.get(a.permutationHash)! - place.get(b.permutationHash)! || a.iteration - b.iteration,
   );
 }
 
@@ -157,6 +177,14 @@ export function jsonFileStore(path: string): RunDataStore {
     async listExecutions(testCase) {
       const { containerRuns } = await read();
       return summarizeExecutions(testCase === undefined ? containerRuns : containerRuns.filter((r) => r.testCase === testCase));
+    },
+    async getExecution(executionId) {
+      const { containerRuns } = await read();
+      return inExecutionOrder(containerRuns.filter((r) => r.executionId === executionId));
+    },
+    async getContainerRun(postrunImage) {
+      const { containerRuns } = await read();
+      return containerRuns.find((r) => r.postrunImage === postrunImage);
     },
   };
 }

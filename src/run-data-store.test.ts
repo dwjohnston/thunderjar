@@ -127,3 +127,52 @@ test("recordMeasures for a run that isn't recorded fails and changes nothing", a
   );
   expect(await Bun.file(path).text()).toBe(before);
 });
+
+/** A run of permutation `hash` in execution `executionId`, as `run` would tag it. */
+const runOf = (executionId: string, hash: string, iteration: number): ContainerRunRecord => ({
+  ...record(executionId, "fake-is-prime", `2026-09-29T14:3${iteration}:00.000Z`, iteration),
+  permutationHash: hash.padEnd(64, "0"),
+  postrunImage: `postrun-e${executionId}-h${hash}-i0${iteration}`,
+});
+
+test("getExecution gives an execution's runs by permutation, in the order they were first recorded, then by iteration", async () => {
+  const { store } = await tempStore();
+  const id = "01k4x9j2e8mqz3";
+  // Two permutations, with an iteration of each recorded out of order, and another execution between.
+  for (const r of [
+    runOf(id, "4f9a21c8", 1),
+    runOf(id, "4f9a21c8", 0),
+    runOf("01k4xb7q0c2tnv", "4f9a21c8", 0),
+    runOf(id, "0be07d35", 0),
+    runOf(id, "4f9a21c8", 2),
+    runOf(id, "0be07d35", 1),
+  ]) {
+    await store.recordContainerRun(r);
+  }
+
+  expect((await store.getExecution(id)).map((r) => r.postrunImage)).toEqual([
+    `postrun-e${id}-h4f9a21c8-i00`,
+    `postrun-e${id}-h4f9a21c8-i01`,
+    `postrun-e${id}-h4f9a21c8-i02`,
+    `postrun-e${id}-h0be07d35-i00`,
+    `postrun-e${id}-h0be07d35-i01`,
+  ]);
+  expect(await store.getExecution("01k4xb7q0c2tnv")).toEqual([runOf("01k4xb7q0c2tnv", "4f9a21c8", 0)]);
+  expect(await store.getExecution("01k4xc00000000")).toEqual([]);
+});
+
+test("getContainerRun finds a run by its postrun tag, with its measures, or gives undefined", async () => {
+  const { store } = await tempStore();
+  expect(await store.getContainerRun("postrun-e01k4x9j2e8mqz3-h4f9a21c8-i00")).toBeUndefined();
+
+  const first = runOf("01k4x9j2e8mqz3", "4f9a21c8", 0);
+  const second = runOf("01k4x9j2e8mqz3", "4f9a21c8", 1);
+  await store.recordContainerRun(first);
+  await store.recordContainerRun(second);
+  await store.recordMeasures(second.postrunImage, { isPrimeTsExists: measure(true) });
+
+  expect(await store.getContainerRun(first.postrunImage)).toEqual(first);
+  expect(await store.getContainerRun(second.postrunImage)).toEqual({ ...second, result: { isPrimeTsExists: measure(true) } });
+  expect(await store.getContainerRun("postrun-e01k4x9j2e8mqz3-h4f9a21c8-i02")).toBeUndefined();
+  expect(await store.getContainerRun("01k4x9j2e8mqz3")).toBeUndefined();
+});
