@@ -2,7 +2,7 @@
 // in the stable listing order, gets its prerun image; inside it, each iteration is one
 // container run with its postrun image and the harness command it runs
 // (spec/064-harness.md#cli-running-the-agent). Nothing is run here: `run --dry-run` prints
-// this, and running it is a later story.
+// this, and `run` hands each container run to a ContainerRunner (src/runner.ts).
 
 import { join } from "node:path";
 import { parseHarnessModelPair } from "./config.ts";
@@ -20,11 +20,17 @@ export const RESULT_PATH = "/thunderjar/result.json";
 
 /** One iteration of one permutation. */
 export interface PlannedContainerRun {
+  executionId: string;
   /** Counts from 0, as in the postrun tag. */
   iterationIndex: number;
   postrunTag: string;
-  /** The harness's `cli` command, rendered for this permutation. */
+  /** The harness's `cli` command, rendered for this permutation with ctx.resultPath = RESULT_PATH. */
   command: string;
+  /**
+   * The same command for another ctx.resultPath, for a runner whose result file isn't at
+   * RESULT_PATH (the host runner).
+   */
+  renderCommand: (resultPath: string) => string;
   /** The initial prompt's timeout, enforced by the execution wrapper. */
   timeoutSeconds: number;
 }
@@ -64,8 +70,9 @@ async function renderCommand(root: string, task: string, permutation: ResolvedPe
     throw new Error(`${permutation.harnessModel}: floating versions are not supported yet`);
   }
   const cli = entry.cli ?? harness.cli;
+  const ctx = { version: entry.version, modelId: models[model]!, initialPrompt: initialPrompt.prompt };
   return {
-    command: cli({ version: entry.version, modelId: models[model]!, initialPrompt: initialPrompt.prompt, resultPath: RESULT_PATH }),
+    renderCommand: (resultPath: string) => cli({ ...ctx, resultPath }),
     timeoutSeconds: initialPrompt.timeoutSeconds,
   };
 }
@@ -82,14 +89,17 @@ export async function planExecution(
   const { permutations } = await resolveTestCase(root, testCase);
   const planned: PlannedPermutation[] = [];
   for (const permutation of permutations) {
-    const { command, timeoutSeconds } = await renderCommand(root, testCase.task, permutation);
+    const { renderCommand: render, timeoutSeconds } = await renderCommand(root, testCase.task, permutation);
+    const command = render(RESULT_PATH);
     planned.push({
       permutation,
       prerunTag: prerunTag(permutation.hash),
       runs: Array.from({ length: testCase.iterations }, (_, iterationIndex) => ({
+        executionId,
         iterationIndex,
         postrunTag: postrunTag(executionId, permutation.hash, iterationIndex),
         command,
+        renderCommand: render,
         timeoutSeconds,
       })),
     });
