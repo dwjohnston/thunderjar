@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -72,16 +72,16 @@ const hashesOf = (dir: string, id: string) => {
 const FIRST = "01k4x9j2e8mqz3abcdefghjkmn";
 const SECOND = "01k4xb7q0c2tnvabcdefghjkmn";
 
-const MEASURES_TABLE = `  MEASURE              i1                      i2
-  isPrimeTemplateTest  {passed: 4, failed: 1}  {passed: 4, failed: 1}
-  isPrimeTsExists      true                    true
-  readmeExists         false                   false
-  tsIgnoreCount        1                       1
+const MEASURES_TABLE = `  MEASURE              MEASURED  AGGREGATE
+  isPrimeTemplateTest  2/2       sum {passed: 8, failed: 2}
+  isPrimeTsExists      2/2       rate 1.00
+  readmeExists         2/2       rate 0.00
+  tsIgnoreCount        2/2       mean 1.0, max 1
 
-  exit                 0                       0
-  duration             0.04s                   0.04s`;
+  exit       2/2 exited 0
+  duration   mean 0.04s, max 0.04s`;
 
-test("`show <test case>` shows its latest execution, a table of every measure in each iteration", async () => {
+test("`show <test case>` shows its latest execution, each permutation's aggregation result", async () => {
   const dir = await fixture();
   await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
   await runAt(dir, "fake-is-prime", SECOND, "2026-09-29T15:02:10Z");
@@ -152,7 +152,7 @@ Duration  0.04s   exit code 0
   });
 });
 
-test("a run whose cli exits 3 shows its exit code, its measures, and why each skipped one was skipped", async () => {
+test("a run whose cli exits 3 shows its exit codes, measures measured in no iteration, and why each was skipped", async () => {
   const dir = await fixture({
     "test-case-parameters/harnessModels/fake-agent/index.ts": stub("declareHarness", `{
   applyParameter: () => \`\`,
@@ -170,14 +170,14 @@ Date       2026-09-29 14:30
 Permutation ${hash}  (2 iterations)
   node20 | baseline | snerk | fake-agent@1.0.0/fake | plain
 
-  MEASURE              i1       i2
-  isPrimeTemplateTest  skipped  skipped
-  isPrimeTsExists      false    false
-  readmeExists         true     true
-  tsIgnoreCount        skipped  skipped
+  MEASURE              MEASURED  AGGREGATE
+  isPrimeTemplateTest  0/2       —
+  isPrimeTsExists      2/2       rate 0.00
+  readmeExists         2/2       rate 1.00
+  tsIgnoreCount        0/2       —
 
-  exit                 3        3
-  duration             0.04s    0.04s`);
+  exit       2/2 exited 3
+  duration   mean 0.04s, max 0.04s`);
 
   expect(await show(`postrun-e${FIRST}-h${hash}-i00`, dir)).toBe(`Container run  postrun-e${FIRST}-h${hash}-i00
 Execution      ${FIRST}  (fake-is-prime)
@@ -200,17 +200,18 @@ Measures
 Duration  0.04s   exit code 3`);
 });
 
-test("an instrument that throws shows `error` in the table, and its message in the container run view", async () => {
+test("an instrument that throws in one iteration leaves it out of the aggregate, and shows its message in the container run view", async () => {
   const dir = await fixture();
-  // A context whose glob throws for one pattern only.
+  // A context whose glob throws for one pattern, in the first iteration only.
   await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z", (rootDir) => {
     const host = createHostMeasurementOpener(rootDir);
     return {
       async openMeasurementContext(tag) {
         const ctx = await host.openMeasurementContext(tag);
+        const throws = (pattern: string) => tag.endsWith("-i00") && pattern.includes("README");
         return {
           ...ctx,
-          glob: (pattern) => (pattern.includes("README") ? Promise.reject(new Error("disk on fire")) : ctx.glob(pattern)),
+          glob: (pattern) => (throws(pattern) ? Promise.reject(new Error("disk on fire")) : ctx.glob(pattern)),
         };
       },
     };
@@ -218,14 +219,14 @@ test("an instrument that throws shows `error` in the table, and its message in t
   const { hash } = hashesOf(dir, FIRST);
 
   expect((await show(FIRST, dir)).split("\n").slice(8)).toEqual([
-    "  MEASURE              i1                      i2",
-    "  isPrimeTemplateTest  {passed: 4, failed: 1}  {passed: 4, failed: 1}",
-    "  isPrimeTsExists      true                    true",
-    "  readmeExists         error                   error",
-    "  tsIgnoreCount        1                       1",
+    "  MEASURE              MEASURED  AGGREGATE",
+    "  isPrimeTemplateTest  2/2       sum {passed: 8, failed: 2}",
+    "  isPrimeTsExists      2/2       rate 1.00",
+    "  readmeExists         1/2       rate 0.00",
+    "  tsIgnoreCount        2/2       mean 1.0, max 1",
     "",
-    "  exit                 0                       0",
-    "  duration             0.04s                   0.04s",
+    "  exit       2/2 exited 0",
+    "  duration   mean 0.04s, max 0.04s",
   ]);
   expect((await show(`postrun-e${FIRST}-h${hash}-i00`, dir)).split("\n").slice(12, 17)).toEqual([
     "Measures",
@@ -236,24 +237,93 @@ test("an instrument that throws shows `error` in the table, and its message in t
   ]);
 });
 
-test("a measure one run doesn't have shows —, and a run with no measures shows none", async () => {
-  const dir = await fixture();
+test("each chosen method shows in the order chosen: a rate to two places, a mean or median to one, the rest as they are", async () => {
+  const measurements = "test-case-parameters/tasks/is-prime/measurements";
+  const dir = await fixture({
+    [`${measurements}/isPrimeTemplateTest.ts`]: stub("declareMeasurement", `{
+  instrument: "templateTest",
+  config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
+  aggregate: ["mean", "sum"],
+}`),
+    [`${measurements}/readmeExists.ts`]: stub("declareMeasurement", `{
+  instrument: "fileCreated",
+  config: { glob: "**/README.md" },
+  aggregate: ["count", "rate"],
+}`),
+    [`${measurements}/tsIgnoreCount.ts`]: stub("declareMeasurement", `{
+  instrument: "grep",
+  config: { glob: "**/*.ts", pattern: "@ts-ignore" },
+  aggregate: ["median", "min", "sum"],
+}`),
+  });
   await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-  // As if readmeExists had been added after the first iteration was measured, and the second
-  // had been measured for it alone.
-  const containerRuns = recordedRuns(dir);
-  delete containerRuns[0]!.result.readmeExists;
-  containerRuns[1]!.result = { readmeExists: containerRuns[1]!.result.readmeExists! };
-  writeFileSync(storePath(dir), JSON.stringify({ containerRuns }));
 
   expect((await show(FIRST, dir)).split("\n").slice(8, 13)).toEqual([
-    "  MEASURE              i1                      i2",
-    "  isPrimeTemplateTest  {passed: 4, failed: 1}  —",
-    "  isPrimeTsExists      true                    —",
-    "  readmeExists         —                       false",
-    "  tsIgnoreCount        1                       —",
+    "  MEASURE              MEASURED  AGGREGATE",
+    "  isPrimeTemplateTest  2/2       mean {passed: 4.0, failed: 1.0}, sum {passed: 8, failed: 2}",
+    "  isPrimeTsExists      2/2       rate 1.00",
+    "  readmeExists         2/2       count 0, rate 0.00",
+    "  tsIgnoreCount        2/2       median 1.0, min 1, sum 2",
   ]);
+});
 
+test("a deleted measurement is left out of later executions' aggregation results, and kept in earlier ones", async () => {
+  const dir = await fixture();
+  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
+  rmSync(join(dir, ".thunderjar", "test-case-parameters", "tasks", "is-prime", "measurements", "readmeExists.ts"));
+  await runAt(dir, "fake-is-prime", SECOND, "2026-09-29T15:02:10Z");
+
+  // The rows between the table's heading and the blank line before exit and duration.
+  const measureRows = async (id: string) => (await show(id, dir)).split("\n").slice(9, -3);
+  expect(await measureRows(FIRST)).toEqual([
+    "  isPrimeTemplateTest  2/2       sum {passed: 8, failed: 2}",
+    "  isPrimeTsExists      2/2       rate 1.00",
+    "  readmeExists         2/2       rate 0.00",
+    "  tsIgnoreCount        2/2       mean 1.0, max 1",
+  ]);
+  expect(await measureRows(SECOND)).toEqual([
+    "  isPrimeTemplateTest  2/2       sum {passed: 8, failed: 2}",
+    "  isPrimeTsExists      2/2       rate 1.00",
+    "  tsIgnoreCount        2/2       mean 1.0, max 1",
+  ]);
+});
+
+test("a task without measurements shows none, with its exit codes and durations", async () => {
+  const measurements = "test-case-parameters/tasks/is-prime/measurements";
+  const dir = await fixture(
+    Object.fromEntries(
+      ["isPrimeTsExists", "readmeExists", "tsIgnoreCount", "isPrimeTemplateTest"].map((name) => [`${measurements}/${name}.ts`, null]),
+    ),
+  );
+  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
+
+  expect((await show(FIRST, dir)).split("\n").slice(8)).toEqual([
+    "  no measures",
+    "",
+    "  exit       2/2 exited 0",
+    "  duration   mean 0.04s, max 0.04s",
+  ]);
+});
+
+test("an execution recorded without aggregation results says so, and runs with different exit codes are counted by code", async () => {
+  const dir = await fixture();
+  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
+  // As if recorded before aggregation results were stored, with the second run exiting 3.
+  const containerRuns = recordedRuns(dir);
+  containerRuns[1]!.execution.exitCode = 3;
+  writeFileSync(storePath(dir), JSON.stringify({ containerRuns }));
+
+  expect((await show(FIRST, dir)).split("\n").slice(8)).toEqual([
+    "  no aggregation result recorded",
+    "",
+    "  exit       1/2 exited 0, 1/2 exited 3",
+  ]);
+});
+
+test("a container run with no measures shows none", async () => {
+  const dir = await fixture();
+  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
+  const containerRuns = recordedRuns(dir);
   containerRuns[1]!.result = {};
   writeFileSync(storePath(dir), JSON.stringify({ containerRuns }));
   expect((await show(containerRuns[1]!.postrunImage, dir)).split("\n").slice(12)).toEqual([

@@ -63,7 +63,10 @@ export const showValue = (value: unknown): string =>
 
 /** How long a container run took, as `run` prints it: `0.04s`. */
 export const duration = ({ startedAt, finishedAt }: { startedAt: number; finishedAt: number }) =>
-  `${((finishedAt - startedAt) / 1000).toFixed(2)}s`;
+  seconds(finishedAt - startedAt);
+
+/** Milliseconds as `run` prints a duration: `0.04s`. */
+export const seconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`;
 
 /** A measure as `run` prints it: its value, or what kept it from having one. */
 const showOutcome = (outcome: RecordedOutcome) =>

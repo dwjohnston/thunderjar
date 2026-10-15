@@ -3,9 +3,10 @@
 // then an execution ID, then a test case name, meaning its latest execution; so a test case
 // named like an execution ID is shadowed by it.
 //
-// An execution prints a table per permutation: a row per measure, a column per iteration, then
-// each iteration's exit code and duration. It stands in for the spec's aggregation results until
-// those are built. A container run prints its parameters, measures, duration and exit code.
+// An execution prints each permutation's stored aggregation result: a row per measure, with how
+// many iterations it was measured in and its combined value by each chosen method, then the
+// iterations' exit codes and durations. Its per-iteration values are in each container run's
+// view, which prints its parameters, measures, duration and exit code.
 
 import { findThunderjarRoot } from "../config.ts";
 import { abbreviateHash } from "../hashing.ts";
@@ -13,12 +14,16 @@ import { AXES, permutationRows, type Permutation } from "../permutations.ts";
 import {
   defaultRunDataStorePath,
   jsonFileStore,
+  type AggregatedMeasure,
+  type AggregatedValue,
+  type AggregationMethod,
+  type AggregationResult,
   type ContainerRunRecord,
   type RecordedOutcome,
 } from "../run-data-store.ts";
 import { minute } from "./executions.ts";
 import { count } from "./plan.ts";
-import { duration, showValue } from "./run.ts";
+import { duration, seconds, showValue } from "./run.ts";
 
 /** `label  value` lines, with the labels padded to the widest so the values line up. */
 const labelled = (lines: [label: string, value: string][]) => {
@@ -37,17 +42,56 @@ function table(rows: string[][]): string[] {
   );
 }
 
-/** Measure names across `records`, sorted, as `run` prints them. */
-const measureNames = (records: ContainerRunRecord[]) =>
-  [...new Set(records.flatMap(({ result }) => Object.keys(result)))].toSorted();
-
 /** The record's parameter names as a Permutation, for permutationRows. */
 const permutationOf = ({ parameters }: ContainerRunRecord) =>
   Object.fromEntries(AXES.map((axis) => [axis, parameters[axis].name])) as unknown as Permutation;
 
-/** A measure in a table cell: its value, `skipped` or `error`. */
-const cell = (outcome: RecordedOutcome) =>
-  outcome.outcome === "measured" ? showValue(outcome.data) : outcome.outcome === "skipped" ? "skipped" : "error";
+/**
+ * Decimal places a method's value is shown to, as in the spec's examples: a rate to two, a mean
+ * or median to one. The rest are counts, sums and single values, shown as they are.
+ */
+const PLACES: Partial<Record<AggregationMethod, number>> = { rate: 2, mean: 1, median: 1 };
+
+/** A method's value, rounded for its method; a record of them key by key, `{passed: 8, failed: 2}`. */
+function aggregatedValue(method: AggregationMethod, value: AggregatedValue): string {
+  const places = PLACES[method];
+  const number = (n: number) => (places === undefined ? showValue(n) : n.toFixed(places));
+  if (typeof value === "number") return number(value);
+  return `{${Object.entries(value)
+    .map(([key, n]) => `${key}: ${number(n)}`)
+    .join(", ")}}`;
+}
+
+/** A measure's AGGREGATE cell: each method and its value, in the order chosen, or — if nothing was measured. */
+function aggregateCell({ measured, ...methods }: AggregatedMeasure): string {
+  if (measured === 0) return "—";
+  return Object.entries(methods)
+    .map(([method, value]) => `${method} ${aggregatedValue(method as AggregationMethod, value)}`)
+    .join(", ");
+}
+
+/** How the runs exited, `2/2 exited 0` or `1/2 exited 0, 1/2 exited 3`, by code. */
+function exits(runs: ContainerRunRecord[]): string {
+  const byCode = new Map<number, number>();
+  for (const { execution } of runs) byCode.set(execution.exitCode, (byCode.get(execution.exitCode) ?? 0) + 1);
+  return [...byCode]
+    .toSorted(([a], [b]) => a - b)
+    .map(([code, n]) => `${n}/${runs.length} exited ${code}`)
+    .join(", ");
+}
+
+/** A summary line below a permutation's table, its value in a column of its own. */
+const summary = (label: string, value: string) => `  ${label.padEnd(11)}${value}`;
+
+/** One permutation's aggregation result: a row per measure, sorted by name. */
+function aggregationTable({ iterations, measures }: AggregationResult): string[] {
+  const names = Object.keys(measures).toSorted();
+  if (names.length === 0) return ["  no measures"];
+  return table([
+    ["MEASURE", "MEASURED", "AGGREGATE"],
+    ...names.map((name) => [name, `${measures[name]!.measured}/${iterations}`, aggregateCell(measures[name]!)]),
+  ]);
+}
 
 /** A measure in the container run view, with why it has no value if it hasn't. */
 const detailed = (outcome: RecordedOutcome) =>
@@ -68,8 +112,11 @@ function byPermutation(records: ContainerRunRecord[]): ContainerRunRecord[][] {
   return [...groups.values()];
 }
 
-/** One execution: its header, then a block per permutation. `latestOf` is the test case it was found by. */
-function showExecution(records: ContainerRunRecord[], latestOf?: string): string {
+/**
+ * One execution: its header, then a block per permutation, from its aggregation result.
+ * `latestOf` is the test case it was found by.
+ */
+function showExecution(records: ContainerRunRecord[], aggregations: AggregationResult[], latestOf?: string): string {
   const [{ executionId, testCase, task }] = records as [ContainerRunRecord];
   const ranAt = records.map((r) => r.ranAt).toSorted()[0]!;
   const lines = labelled([
@@ -81,20 +128,21 @@ function showExecution(records: ContainerRunRecord[], latestOf?: string): string
 
   const permutations = byPermutation(records);
   const rows = permutationRows(permutations.map(([first]) => permutationOf(first!)));
+  const byHash = new Map(aggregations.map((a) => [a.permutationHash, a]));
   permutations.forEach((runs, n) => {
-    const names = measureNames(runs);
+    const aggregation = byHash.get(runs[0]!.permutationHash);
     lines.push(
       "",
       `Permutation ${abbreviateHash(runs[0]!.permutationHash)}  (${count(runs.length, "iteration")})`,
       `  ${rows[n]}`,
       "",
-      ...table([
-        ["MEASURE", ...runs.map((r) => `i${r.iteration + 1}`)],
-        ...names.map((name) => [name, ...runs.map(({ result }) => (result[name] ? cell(result[name].outcome) : "—"))]),
-        [],
-        ["exit", ...runs.map(({ execution }) => String(execution.exitCode))],
-        ["duration", ...runs.map(({ execution }) => duration(execution))],
-      ]),
+      // Only for runs recorded before aggregation results were stored.
+      ...(aggregation ? aggregationTable(aggregation) : ["  no aggregation result recorded"]),
+      "",
+      summary("exit", exits(runs)),
+      ...(aggregation
+        ? [summary("duration", `mean ${seconds(aggregation.duration.mean)}, max ${seconds(aggregation.duration.max)}`)]
+        : []),
     );
   });
   return lines.join("\n");
@@ -129,10 +177,13 @@ export async function show(target: string, cwd: string = process.cwd()): Promise
   if (containerRun) return showContainerRun(containerRun);
 
   const execution = await store.getExecution(target);
-  if (execution.length > 0) return showExecution(execution);
+  if (execution.length > 0) return showExecution(execution, await store.getAggregationResults(target));
 
   const [latest] = await store.listExecutions(target);
-  if (latest) return showExecution(await store.getExecution(latest.executionId), target);
+  if (latest) {
+    const { executionId } = latest;
+    return showExecution(await store.getExecution(executionId), await store.getAggregationResults(executionId), target);
+  }
 
   throw new Error(`${target} is not a recorded container run, execution or test case`);
 }
