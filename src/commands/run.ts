@@ -1,12 +1,16 @@
 // `thunderjar run <test case>` — spec/100-cli-reference.md#run. Creates an execution ID, then
 // walks every permutation and iteration in order and hands each container run to a
-// ContainerRunner, printing its exit code and duration as it finishes, then a summary.
+// ContainerRunner, printing its exit code and duration as it finishes, then a summary. Each
+// container run is recorded in the run data store as soon as it finishes, so the runs that
+// finished before a crash are kept.
 // `--dry-run` prints the container run each would be instead — its prerun image, its postrun
 // image and the harness command — without running anything.
 
+import { relative } from "node:path";
 import { findThunderjarRoot, loadTestCase } from "../config.ts";
 import { planExecution, type PlannedExecution } from "../execution.ts";
 import { permutationRows } from "../permutations.ts";
+import { defaultRunDataStorePath, jsonFileStore } from "../run-data-store.ts";
 import { createHostRunner, defaultRootDir, executionDir, type ContainerRunner } from "../runner.ts";
 import { ulid } from "../ulid.ts";
 import { count } from "./plan.ts";
@@ -76,17 +80,33 @@ export async function run(name: string, options: RunOptions): Promise<void> {
     return;
   }
 
+  const storePath = defaultRunDataStorePath(root);
+  const store = jsonFileStore(storePath);
+
   log(`Execution ${executionId} (${shape(execution)})`);
   log(`Output in ${executionDir(rootDir, executionId)}`);
 
   // How many container runs exited with each code. A failing agent is a result, not an error:
-  // the remaining runs still run.
+  // the remaining runs still run, and every run is recorded.
   const exitCodes = new Map<number, number>();
-  for (const [n, { runs }] of permutations.entries()) {
+  for (const [n, { permutation, parameters, harnessModel, runs }] of permutations.entries()) {
     log("");
     log(permutationLine(n));
     for (const containerRun of runs) {
       const { startedAt, finishedAt, exitCode } = await runner.runContainer(containerRun);
+      await store.recordContainerRun({
+        executionId,
+        testCase: name,
+        task: testCase.task,
+        permutationHash: permutation.hash,
+        iteration: containerRun.iterationIndex,
+        postrunImage: containerRun.postrunTag,
+        ranAt: new Date(startedAt).toISOString(),
+        parameters,
+        harnessModel,
+        result: {},
+        execution: { startedAt, finishedAt, exitCode },
+      });
       exitCodes.set(exitCode, (exitCodes.get(exitCode) ?? 0) + 1);
       const seconds = ((finishedAt - startedAt) / 1000).toFixed(2);
       log(
@@ -100,4 +120,5 @@ export async function run(name: string, options: RunOptions): Promise<void> {
   const byCode = [...exitCodes].toSorted(([a], [b]) => a - b).map(([code, n]) => `${n} exited ${code}`);
   log("");
   log(`${count(total, "container run")}: ${byCode.join(", ")}`);
+  log(`Recorded in ${relative(cwd, storePath)}`);
 }

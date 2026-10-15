@@ -3,6 +3,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { ContainerRunRecord } from "../run-data-store.ts";
+import { createHostRunner, type ContainerRunner } from "../runner.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../testing/fixture-project.ts";
 import { plan } from "./plan.ts";
 import { run, type RunOptions } from "./run.ts";
@@ -214,7 +216,8 @@ Permutation 1/1  node20 | baseline | snerk | fake-agent@1.0.0/fake | plain
   iteration 1/2  ${FAKE}${hash}-i00  exit 0  0.04s
   iteration 2/2  ${FAKE}${hash}-i01  exit 0  0.04s
 
-2 container runs: 2 exited 0`);
+2 container runs: 2 exited 0
+Recorded in .thunderjar/.data/runs.json`);
 
   expect(readdirSync(executionDir).toSorted()).toEqual([`${FAKE}${hash}-i00`, `${FAKE}${hash}-i01`]);
   for (const tag of readdirSync(executionDir)) {
@@ -227,7 +230,7 @@ Permutation 1/1  node20 | baseline | snerk | fake-agent@1.0.0/fake | plain
   }
 });
 
-test("`thunderjar run` runs under a new ULID in $TMPDIR/thunderjar, and leaves the project unchanged", async () => {
+test("`thunderjar run` runs under a new ULID in $TMPDIR/thunderjar, and changes only the run data store", async () => {
   const dir = await fixture();
   const tmpDir = await tmp();
   const before = listTree(dir);
@@ -256,7 +259,8 @@ test("`thunderjar run` runs under a new ULID in $TMPDIR/thunderjar, and leaves t
         `Permutation 1/1  node20 \\| baseline \\| snerk \\| fake-agent@1.0.0/fake \\| plain\n` +
         `  iteration 1/2  postrun-e${id}-h[0-9a-f]{8}-i00  exit 0  \\d+\\.\\d\\ds\n` +
         `  iteration 2/2  postrun-e${id}-h[0-9a-f]{8}-i01  exit 0  \\d+\\.\\d\\ds\n\n` +
-        `2 container runs: 2 exited 0\n$`,
+        `2 container runs: 2 exited 0\n` +
+        `Recorded in \\.thunderjar/\\.data/runs\\.json\n$`,
     ),
   );
   for (const tag of readdirSync(executionDir)) {
@@ -265,7 +269,7 @@ test("`thunderjar run` runs under a new ULID in $TMPDIR/thunderjar, and leaves t
     expect(run.exitCode).toBe(0);
     expect(run.finishedAt).toBeGreaterThanOrEqual(run.startedAt);
   }
-  expect(listTree(dir)).toEqual(before);
+  expect(listTree(dir)).toEqual([...before, ".data", join(".data", "runs.json")].toSorted());
 });
 
 test("records a failing cli's exit code, and still runs the remaining iterations", async () => {
@@ -291,13 +295,76 @@ test("records a failing cli's exit code, and still runs the remaining iterations
   const exits = lines.filter((line) => line.startsWith("  iteration ")).map((line) => / exit (\d+) /.exec(line)![1]);
   const failing = lines.findIndex((line) => line.includes("fake-agent@1.0.1/fake"));
   expect(exits).toEqual(failing === 3 ? ["3", "3", "0", "0"] : ["0", "0", "3", "3"]);
-  expect(lines.at(-1)).toBe("4 container runs: 2 exited 0, 2 exited 3");
+  expect(lines.at(-2)).toBe("4 container runs: 2 exited 0, 2 exited 3");
 
   const runs = readdirSync(executionDir).map((tag) => containerRun(executionDir, tag));
   expect(runs).toHaveLength(4);
   expect(runs.map(({ run }) => run.exitCode).toSorted()).toEqual([0, 0, 3, 3]);
   // Every run left its file, including those after the failures.
   for (const { workspace } of runs) expect(workspace).toEqual(["fake-agent.txt"]);
+
+  // Every run is recorded too, the failures with exit code 3.
+  const recorded = recordedRuns(dir);
+  expect(recorded).toHaveLength(4);
+  for (const { harnessModel, execution } of recorded) {
+    expect(execution.exitCode).toBe(harnessModel.version === "1.0.1" ? 3 : 0);
+  }
+});
+
+/** Every container run recorded in the fixture project's run data store. */
+const recordedRuns = (dir: string) =>
+  (JSON.parse(readFileSync(join(dir, ".thunderjar", ".data", "runs.json"), "utf8")) as {
+    containerRuns: ContainerRunRecord[];
+  }).containerRuns;
+
+const HASH = /^[0-9a-f]{64}$/;
+
+test("records each container run, with its execution as in its run.json", async () => {
+  const dir = await fixture();
+  const { executionDir } = await runForReal(dir, "fake-is-prime");
+
+  const recorded = recordedRuns(dir);
+  expect(recorded.map((r) => r.postrunImage)).toEqual(readdirSync(executionDir).toSorted());
+  recorded.forEach((record, iteration) => {
+    const { permutationHash, parameters } = record;
+    expect(permutationHash).toMatch(HASH);
+    for (const { parameterHash } of Object.values(parameters)) expect(parameterHash).toMatch(HASH);
+    const { run } = containerRun(executionDir, record.postrunImage);
+    expect(record).toEqual({
+      executionId: ID,
+      testCase: "fake-is-prime",
+      task: "is-prime",
+      permutationHash,
+      iteration,
+      postrunImage: `${FAKE}${permutationHash.slice(0, 8)}-i0${iteration}`,
+      ranAt: new Date(run.startedAt).toISOString(),
+      parameters: {
+        baseImage: { name: "node20", parameterHash: parameters.baseImage.parameterHash },
+        codeState: { name: "baseline", parameterHash: parameters.codeState.parameterHash },
+        promptSet: { name: "snerk", parameterHash: parameters.promptSet.parameterHash },
+        harnessModel: { name: "fake-agent@1.0.0/fake", parameterHash: parameters.harnessModel.parameterHash },
+        initialPrompt: { name: "plain", parameterHash: parameters.initialPrompt.parameterHash },
+      },
+      harnessModel: { family: "fake-agent", version: "1.0.0", modelId: "fake-model" },
+      result: {},
+      execution: run,
+    });
+  });
+  // The second iteration started after the first finished.
+  expect(recorded[1]!.execution.startedAt).toBeGreaterThan(recorded[0]!.execution.finishedAt);
+});
+
+test("keeps the runs recorded before a crash", async () => {
+  const dir = await fixture();
+  let calls = 0;
+  const host = createHostRunner(await tmp(), stubClock());
+  const runner: ContainerRunner = {
+    runContainer: (planned) => (++calls === 2 ? Promise.reject(new Error("docker went away")) : host.runContainer(planned)),
+  };
+
+  const options = { dryRun: false, cwd: dir, newExecutionId, log: () => {}, runner };
+  await expect(run("fake-is-prime", options)).rejects.toThrow("docker went away");
+  expect(recordedRuns(dir).map((r) => r.iteration)).toEqual([0]);
 });
 
 test("kills a cli that runs past the initial prompt's timeoutSeconds, recording exit code 124", async () => {
@@ -319,7 +386,7 @@ test("kills a cli that runs past the initial prompt's timeoutSeconds, recording 
 
   // Each of the two iterations is killed at about a second, well before `sleep 2` ends.
   expect(elapsed).toBeLessThan(3500);
-  expect(stdout.split("\n").at(-1)).toBe("2 container runs: 2 exited 124");
+  expect(stdout.split("\n").at(-2)).toBe("2 container runs: 2 exited 124");
   await Bun.sleep(1500); // past when `sleep 2` would have finished
   const executionDir = join(rootDir, ID);
   for (const tag of readdirSync(executionDir)) {

@@ -12,7 +12,8 @@ import type {
   InitialPromptDeclaration,
   TestCaseDeclaration,
 } from "./declarations.ts";
-import { resolveTestCase, type ResolvedPermutation } from "./resolve.ts";
+import { AXES } from "./permutations.ts";
+import { resolveTestCase, type Axis, type ResolvedPermutation } from "./resolve.ts";
 import { postrunTag, prerunTag } from "./tags.ts";
 
 /** Where the harness's `cli` must leave its result file — spec/087-collecting-token-costs.md#the-result-file. */
@@ -37,6 +38,10 @@ export interface PlannedContainerRun {
 
 export interface PlannedPermutation {
   permutation: ResolvedPermutation;
+  /** Each of the permutation's parameters, by name and full parameter hash. */
+  parameters: Record<Axis, { name: string; parameterHash: string }>;
+  /** The harness/model pair resolved to the version installed and the model ID passed. */
+  harnessModel: { family: string; version: string; modelId: string };
   prerunTag: string;
   runs: PlannedContainerRun[];
 }
@@ -74,6 +79,7 @@ async function renderCommand(root: string, task: string, permutation: ResolvedPe
   return {
     renderCommand: (resultPath: string) => cli({ ...ctx, resultPath }),
     timeoutSeconds: initialPrompt.timeoutSeconds,
+    harnessModel: { family, version: ctx.version, modelId: ctx.modelId },
   };
 }
 
@@ -86,13 +92,18 @@ export async function planExecution(
   testCase: TestCaseDeclaration,
   executionId: string,
 ): Promise<PlannedExecution> {
-  const { permutations } = await resolveTestCase(root, testCase);
+  const { hashes, permutations } = await resolveTestCase(root, testCase);
   const planned: PlannedPermutation[] = [];
   for (const permutation of permutations) {
-    const { renderCommand: render, timeoutSeconds } = await renderCommand(root, testCase.task, permutation);
+    const { renderCommand: render, timeoutSeconds, harnessModel } = await renderCommand(root, testCase.task, permutation);
     const command = render(RESULT_PATH);
+    const parameters = Object.fromEntries(
+      AXES.map((axis) => [axis, { name: permutation[axis], parameterHash: hashes[axis].get(permutation[axis])! }]),
+    ) as PlannedPermutation["parameters"];
     planned.push({
       permutation,
+      parameters,
+      harnessModel,
       prerunTag: prerunTag(permutation.hash),
       runs: Array.from({ length: testCase.iterations }, (_, iterationIndex) => ({
         executionId,
