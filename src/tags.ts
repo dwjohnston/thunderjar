@@ -12,3 +12,8 @@ export const prerunTag = (permutationHash: string) => `prerun-h${abbreviateHash(
  */
 export const postrunTag = (executionId: string, permutationHash: string, iterationIndex: number) =>
   `postrun-e${executionId}-h${abbreviateHash(permutationHash)}-i${String(iterationIndex).padStart(2, "0")}`;
+
+const POSTRUN = /^postrun-e([0-9a-z]+)-h[0-9a-f]{8}-i\d+$/;
+
+/** The execution ID a postrun tag carries, or undefined if `tag` isn't a postrun tag. */
+export const postrunTagExecutionId = (tag: string) => POSTRUN.exec(tag)?.[1];

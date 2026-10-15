@@ -11,12 +11,19 @@
 //
 // Base image, code state and prompt set are not applied on the host, and the environment is
 // passed through unfiltered.
+//
+// Measuring has its own seam beside it: a MeasurementOpener gives the MeasurementContext of
+// one postrun image. The host one here works over the kept directory in place of a
+// measurement container.
 
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { constants, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import type { MeasurementContext } from "./declarations.ts";
 import type { PlannedContainerRun } from "./execution.ts";
+import { postrunTagExecutionId } from "./tags.ts";
 
 /** `run.json`: when the agent started and finished (ms since the epoch), and how it exited. */
 export interface ExecutionFile {
@@ -27,6 +34,11 @@ export interface ExecutionFile {
 
 export interface ContainerRunner {
   runContainer(run: PlannedContainerRun): Promise<ExecutionFile>;
+}
+
+export interface MeasurementOpener {
+  /** The context instruments run against for the container run tagged `postrunTag`. */
+  openMeasurementContext(postrunTag: string): Promise<MeasurementContext>;
 }
 
 /** The exit code recorded for a command killed at its timeout, as GNU `timeout` reports it. */
@@ -98,6 +110,46 @@ export function createHostRunner(rootDir: string, now: () => number = Date.now):
         runPath: join(thunderjar, "run.json"),
         now,
       });
+    },
+  };
+}
+
+/** Runs `command` with `sh -c` in `cwd`, collecting its output. */
+function exec(command: string, cwd: string) {
+  return new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve, reject) => {
+    const child = spawn("sh", ["-c", command], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
+    child.on("error", reject);
+    child.on("close", (code, signal) => resolve({ stdout, stderr, exitCode: code ?? 128 + constants.signals[signal!] }));
+  });
+}
+
+/**
+ * Measurement contexts over the directories the host runner kept under `rootDir`. `workdir`
+ * is the run's `workspace/`, where paths, globs and `exec` resolve; `harnessResult` is its
+ * `thunderjar/result.json`, or empty if the cli wrote none. Throws if the run wasn't kept there.
+ */
+export function createHostMeasurementOpener(rootDir: string): MeasurementOpener {
+  return {
+    async openMeasurementContext(postrunTag) {
+      const executionId = postrunTagExecutionId(postrunTag);
+      if (!executionId) throw new Error(`not a postrun tag: ${postrunTag}`);
+      const dir = join(executionDir(rootDir, executionId), postrunTag);
+      const workdir = join(dir, "workspace");
+      if (!existsSync(workdir)) throw new Error(`no container run kept for ${postrunTag} (expected ${workdir})`);
+      const resultPath = join(dir, "thunderjar", "result.json");
+      const harnessResult = existsSync(resultPath) ? await readFile(resultPath, "utf8") : "";
+      return {
+        workdir,
+        harnessResult,
+        exec: (command) => exec(command, workdir),
+        readFile: (path) => readFile(resolve(workdir, path), "utf8"),
+        writeFile: (path, contents) => writeFile(resolve(workdir, path), contents),
+        glob: async (pattern) => (await Array.fromAsync(new Bun.Glob(pattern).scan({ cwd: workdir, dot: true }))).toSorted(),
+      };
     },
   };
 }

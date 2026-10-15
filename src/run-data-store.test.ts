@@ -84,3 +84,46 @@ test("executions that started at the same moment are ordered by execution ID", a
   await store.recordContainerRun(record("01k4x9j2e8mqz4", "b", "2026-09-29T14:30:55.000Z"));
   expect((await store.listExecutions()).map((e) => e.executionId)).toEqual(["01k4x9j2e8mqz4", "01k4x9j2e8mqz3"]);
 });
+
+const measure = (data: unknown, measuredAt = "2026-09-29T14:31:02.000Z") => ({
+  instrument: "fileCreated",
+  contentHash: "7b21ac90".padEnd(64, "0"),
+  measuredAt,
+  outcome: { outcome: "measured" as const, data },
+});
+
+test("recordMeasures merges measures into a recorded run's result by name, overwriting one of the same name", async () => {
+  const { path, store } = await tempStore();
+  const first = record("01k4x9j2e8mqz3", "fake-is-prime", "2026-09-29T14:30:55.000Z", 0);
+  const second = record("01k4x9j2e8mqz3", "fake-is-prime", "2026-09-29T14:31:40.000Z", 1);
+  await store.recordContainerRun(first);
+  await store.recordContainerRun(second);
+
+  await store.recordMeasures(first.postrunImage, { isPrimeTsExists: measure(true), readmeExists: measure(false) });
+  // Later, as a backfill would: one measure re-taken, one added.
+  const later = "2026-12-14T09:02:44.000Z";
+  await store.recordMeasures(first.postrunImage, { readmeExists: measure(true, later), tsIgnoreCount: measure(0, later) });
+
+  const { containerRuns } = (await Bun.file(path).json()) as { containerRuns: ContainerRunRecord[] };
+  expect(containerRuns[0]).toEqual({
+    ...first,
+    result: {
+      isPrimeTsExists: measure(true),
+      readmeExists: measure(true, later),
+      tsIgnoreCount: measure(0, later),
+    },
+  });
+  // The other run is untouched.
+  expect(containerRuns[1]).toEqual(second);
+});
+
+test("recordMeasures for a run that isn't recorded fails and changes nothing", async () => {
+  const { path, store } = await tempStore();
+  const r = record("01k4x9j2e8mqz3", "fake-is-prime", "2026-09-29T14:30:55.000Z");
+  await store.recordContainerRun(r);
+  const before = await Bun.file(path).text();
+  await expect(store.recordMeasures("postrun-enope-h00000000-i00", { a: measure(true) })).rejects.toThrow(
+    "no container run recorded for postrun-enope-h00000000-i00",
+  );
+  expect(await Bun.file(path).text()).toBe(before);
+});

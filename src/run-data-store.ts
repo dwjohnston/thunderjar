@@ -3,22 +3,35 @@
 // (SQLite, a shared remote one) drops in behind it without changing anything above it. For
 // now the only store is a JSON file under `.thunderjar/.data/`, which `init` gitignores; the
 // config's `runDataStore` entry isn't read yet.
+//
+// A container run is recorded with an empty Result straight after it runs; its measures are
+// merged in afterwards with recordMeasures, the same way a backfill will add them later.
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Axis } from "./resolve.ts";
 
-/** One measure in a container run's result, keyed by measurement name. Measures come later. */
+/**
+ * A MeasurementResult as stored. An `Error` doesn't survive JSON, so an instrument's error is
+ * kept as its message.
+ */
+export type RecordedOutcome =
+  | { outcome: "measured"; data: unknown }
+  | { outcome: "skipped" }
+  | { outcome: "erroredWhileMeasuring"; error: { message: string } };
+
+/** One measure in a container run's result — spec/085-test-case-results.md#the-result-record. */
 export interface RecordedMeasure {
   instrument: string;
-  /** Of the measurement that produced this measure. */
+  /** Of the measurement that produced this measure — see hashMeasurement. */
   contentHash: string;
   /** When it was measured — not when the container run happened. */
   measuredAt: string;
-  outcome: unknown;
+  outcome: RecordedOutcome;
 }
 
+/** A container run's measures, keyed by measurement name. */
 export type Result = Record<string, RecordedMeasure>;
 
 /** How the agent ran, from run.json — spec/085-test-case-results.md#execution. */
@@ -69,6 +82,12 @@ export interface ExecutionSummary {
 
 export interface RunDataStore {
   recordContainerRun(record: ContainerRunRecord): Promise<void>;
+  /**
+   * Merges `measures` into the result of the container run recorded with `postrunImage`,
+   * replacing any measure of the same name and leaving the others. Throws if no such run is
+   * recorded.
+   */
+  recordMeasures(postrunImage: string, measures: Result): Promise<void>;
   /** Recorded executions, newest first; only `testCase`'s if given. */
   listExecutions(testCase?: string): Promise<ExecutionSummary[]>;
 }
@@ -115,14 +134,25 @@ export function jsonFileStore(path: string): RunDataStore {
     return JSON.parse(text) as JsonFile;
   };
 
+  const write = async (data: JsonFile) => {
+    await mkdir(dirname(path), { recursive: true });
+    const temp = `${path}.${randomUUID()}.tmp`;
+    await writeFile(temp, `${JSON.stringify(data, null, 2)}\n`);
+    await rename(temp, path);
+  };
+
   return {
     async recordContainerRun(record) {
       const data = await read();
       data.containerRuns.push(record);
-      await mkdir(dirname(path), { recursive: true });
-      const temp = `${path}.${randomUUID()}.tmp`;
-      await writeFile(temp, `${JSON.stringify(data, null, 2)}\n`);
-      await rename(temp, path);
+      await write(data);
+    },
+    async recordMeasures(postrunImage, measures) {
+      const data = await read();
+      const record = data.containerRuns.find((r) => r.postrunImage === postrunImage);
+      if (!record) throw new Error(`no container run recorded for ${postrunImage}`);
+      record.result = { ...record.result, ...measures };
+      await write(data);
     },
     async listExecutions(testCase) {
       const { containerRuns } = await read();
