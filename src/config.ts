@@ -6,8 +6,9 @@
 // `_generated/`, so a stale generated file or an ignored type error is still caught.
 
 import { existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { declaredBy, type TestCaseDeclaration } from "./declarations.ts";
+import { basename, dirname, join, resolve } from "node:path";
+import { declaredBy, type MeasurementDeclaration, type TestCaseDeclaration } from "./declarations.ts";
+import { instruments, isInstrumentName } from "./instruments.ts";
 
 /** A problem in the user's `.thunderjar/` folder. The CLI prints the message and exits 1. */
 export class ConfigError extends Error {}
@@ -115,6 +116,53 @@ export function parseHarnessModelPair(pair: string): { family: string; version: 
   return { family, version, model };
 }
 
+/** One of a task's measurements, named by its file: `isPrimeTsExists.ts` is `isPrimeTsExists`. */
+export type Measurement = MeasurementDeclaration & { name: string };
+
+/**
+ * Loads and checks every `tasks/<task>/measurements/*.ts`, sorted by name, recording
+ * problems rather than throwing. A task without a `measurements/` folder has none.
+ */
+async function collectMeasurements(root: string, task: string, problems: Problem[]): Promise<Measurement[]> {
+  const dir = `test-case-parameters/tasks/${task}/measurements`;
+  if (!existsSync(join(root, dir))) return [];
+  const files = [...new Bun.Glob("*.ts").scanSync({ cwd: join(root, dir) })].toSorted();
+  const measurements: Measurement[] = [];
+  for (const name of files) {
+    const file = `${dir}/${name}`;
+    const declaration = (await loadDeclaration(root, file, "declareMeasurement", problems)) as
+      | Record<string, unknown>
+      | undefined;
+    if (!declaration) continue;
+    const { instrument, config, aggregate } = declaration;
+    if (!isInstrumentName(instrument)) {
+      problems.push({
+        file,
+        field: "instrument",
+        message: `${show(instrument)} is not a known instrument. Known instruments: ${Object.keys(instruments).join(", ")}`,
+      });
+      continue;
+    }
+    const before = problems.length;
+    for (const [field, message] of instruments[instrument].checkConfig(config)) problems.push({ file, field, message });
+    if (!Array.isArray(aggregate)) {
+      problems.push({ file, field: "aggregate", message: `must be an array of aggregation methods, got ${show(aggregate)}` });
+    }
+    if (problems.length === before) {
+      measurements.push({ ...(declaration as MeasurementDeclaration), name: basename(name, ".ts") });
+    }
+  }
+  return measurements;
+}
+
+/** Loads and checks a task's measurements under a `.thunderjar/` root. */
+export async function loadMeasurements(root: string, task: string): Promise<Measurement[]> {
+  const problems: Problem[] = [];
+  const measurements = await collectMeasurements(root, task, problems);
+  if (problems.length > 0) throw new InvalidConfigError(problems);
+  return measurements;
+}
+
 /** Checks a loaded test case against the files under `test-case-parameters/`. */
 async function checkTestCase(root: string, file: string, testCase: Record<string, unknown>, problems: Problem[]) {
   const parameters = "test-case-parameters";
@@ -156,6 +204,7 @@ async function checkTestCase(root: string, file: string, testCase: Record<string
   }
 
   if (taskExists) {
+    await collectMeasurements(root, task as string, problems);
     for (const name of names.initialPrompt ?? []) {
       const prompt = `${parameters}/tasks/${task}/initial-prompts/${name}.ts`;
       if (existsSync(join(root, prompt))) {

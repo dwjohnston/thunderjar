@@ -121,3 +121,12 @@ export interface PermutationHashes {
 
 /** The permutation hash: the five parameter hashes combined, each by its role. */
 export const hashPermutation = (hashes: PermutationHashes) => hashValue(hashes);
+
+/**
+ * A measurement's content hash — spec/085-test-case-results.md#name-is-identity-hash-is-version.
+ * Covers `instrument` and `config` only: not the measurement's name, so renaming its file keeps
+ * it, and not `aggregate`, so changing how values combine never makes a measure stale. Bundled
+ * files, such as a `templateTest` template, are not covered yet.
+ */
+export const hashMeasurement = ({ instrument, config }: { instrument: string; config: unknown }) =>
+  hashValue({ instrument, config });

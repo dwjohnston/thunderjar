@@ -157,3 +157,65 @@ export default declareInitialPrompt({
   },
   30000,
 );
+
+/** The fixture project with one more measurement on is-prime, `bad.ts`, whose body is `body`. */
+async function setUpMeasurement(body: string): Promise<string> {
+  const dir = await setUp(`export {};\n`);
+  const measurements = join(dir, ".thunderjar", "test-case-parameters", "tasks", "is-prime", "measurements");
+  await mkdir(measurements, { recursive: true });
+  await writeFile(
+    join(measurements, "bad.ts"),
+    `import { declareMeasurement } from "thunderjar";\n\nexport default declareMeasurement(${body});\n`,
+  );
+  return dir;
+}
+
+test(
+  "a measurement whose config fits its instrument compiles cleanly",
+  async () => {
+    const dir = await setUpMeasurement(`{ instrument: "fileCreated", config: { glob: "src/**/*.ts" }, aggregate: ["rate", "count"] }`);
+    const { exitCode, output } = await runTsc(dir);
+    expect(output).toBe("");
+    expect(exitCode).toBe(0);
+  },
+  30000,
+);
+
+test(
+  "a measurement whose config doesn't fit its instrument fails to compile",
+  async () => {
+    const dir = await setUpMeasurement(`{ instrument: "fileCreated", config: { path: "isPrime.ts" }, aggregate: ["rate"] }`);
+    const { exitCode, output } = await runTsc(dir);
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain("bad.ts");
+    expect(output).toContain("path");
+  },
+  30000,
+);
+
+test(
+  "a measurement naming an unknown instrument fails to compile",
+  async () => {
+    const dir = await setUpMeasurement(`{ instrument: "fileCraeted", config: { glob: "isPrime.ts" }, aggregate: ["rate"] }`);
+    const { exitCode, output } = await runTsc(dir);
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain("fileCraeted");
+  },
+  30000,
+);
+
+test(
+  "a measurement without an aggregate, or with one that doesn't fit its value type, fails to compile",
+  async () => {
+    for (const body of [
+      `{ instrument: "fileCreated", config: { glob: "isPrime.ts" } }`,
+      `{ instrument: "fileCreated", config: { glob: "isPrime.ts" }, aggregate: ["mean"] }`,
+    ]) {
+      const dir = await setUpMeasurement(body);
+      const { exitCode, output } = await runTsc(dir);
+      expect(exitCode).not.toBe(0);
+      expect(output).toContain("bad.ts");
+    }
+  },
+  30000,
+);

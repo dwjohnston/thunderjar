@@ -2,5 +2,6 @@ import { declareMeasurement } from "thunderjar";
 
 export default declareMeasurement({
   instrument: "fileCreated",
-  config: { path: "isPrime.ts" },
+  config: { glob: "**/isPrime.ts" },
+  aggregate: ["rate"],
 });

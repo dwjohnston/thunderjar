@@ -8,9 +8,11 @@ import {
   hashCodeState,
   hashHarnessModelPair,
   hashInitialPrompt,
+  hashMeasurement,
   hashPermutation,
   hashPromptSet,
 } from "./hashing.ts";
+import { loadMeasurements } from "./config.ts";
 import { createFixtureProject, linkThunderjar, stub } from "./testing/fixture-project.ts";
 
 /**
@@ -228,4 +230,46 @@ test("a permutation hash combines its five parameter hashes, in any key order", 
   for (const key of Object.keys(hashes)) expect(hashPermutation({ ...hashes, [key]: "z" })).not.toBe(hash);
   // Each hash counts by its role: swapping two values is a different permutation.
   expect(hashPermutation({ ...hashes, baseImage: "b", codeState: "a" })).not.toBe(hash);
+});
+
+// --- Measurements: spec/085-test-case-results.md#name-is-identity-hash-is-version ---
+
+const IS_PRIME = { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] } as const;
+
+test("a measurement's hash covers its config", () => {
+  expect(hashMeasurement(IS_PRIME)).toMatch(/^[0-9a-f]{64}$/);
+  expect(hashMeasurement({ ...IS_PRIME, config: { glob: "**/isPrime.js" } })).not.toBe(hashMeasurement(IS_PRIME));
+  expect(hashMeasurement({ ...IS_PRIME, instrument: "grep" })).not.toBe(hashMeasurement(IS_PRIME));
+});
+
+test("a measurement's hash leaves out aggregate", () => {
+  const reaggregated = { ...IS_PRIME, aggregate: ["rate", "count"] };
+  expect(hashMeasurement(reaggregated)).toBe(hashMeasurement(IS_PRIME));
+});
+
+test("renaming a measurement's file keeps its hash; editing it changes no parameter or permutation hash", async () => {
+  const measurementFile = (glob: string) =>
+    stub("declareMeasurement", `{ instrument: "fileCreated", config: { glob: "${glob}" }, aggregate: ["rate"] }`);
+  const projectWith = (files: Record<string, string>) =>
+    parameters({
+      "test-case-parameters/tasks/is-prime/measurements/isPrimeTsExists.ts": null,
+      "test-case-parameters/tasks/is-prime/measurements/readmeExists.ts": null,
+      ...Object.fromEntries(Object.entries(files).map(([name, content]) => [`test-case-parameters/tasks/is-prime/measurements/${name}`, content])),
+    });
+  const hashesOf = async (files: Record<string, string>) => {
+    const dir = await projectWith(files);
+    const measurements = await loadMeasurements(join(dir, ".."), "is-prime");
+    const prompt = hashInitialPrompt(join(dir, "tasks", "is-prime", "initial-prompts", "plain.ts"));
+    return { measurements: Object.fromEntries(measurements.map((m) => [m.name, hashMeasurement(m)])), prompt };
+  };
+
+  const original = await hashesOf({ "isPrimeTsExists.ts": measurementFile("**/isPrime.ts") });
+  const renamed = await hashesOf({ "primeFile.ts": measurementFile("**/isPrime.ts") });
+  const edited = await hashesOf({ "isPrimeTsExists.ts": measurementFile("src/isPrime.ts") });
+
+  expect(renamed.measurements.primeFile).toBe(original.measurements.isPrimeTsExists!);
+  expect(edited.measurements.isPrimeTsExists).not.toBe(original.measurements.isPrimeTsExists!);
+  // The initial prompt, and so every permutation using it, is unchanged throughout.
+  expect(renamed.prompt).toBe(original.prompt);
+  expect(edited.prompt).toBe(original.prompt);
 });

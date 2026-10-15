@@ -12,4 +12,9 @@ export {
   declareTokenCostCollector,
   sqliteStore,
 } from "./declarations.ts";
-export type { TestCaseDeclaration } from "./declarations.ts";
+export type {
+  MeasurementContext,
+  MeasurementDeclaration,
+  MeasurementResult,
+  TestCaseDeclaration,
+} from "./declarations.ts";

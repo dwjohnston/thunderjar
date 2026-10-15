@@ -1,6 +1,7 @@
 // spec/100-cli-reference.md#conventions: a configuration error is reported as a clear
 // message naming the file, the field and the offending value, with a non-zero exit code.
 import { afterEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -172,5 +173,45 @@ test("generate reports an unwrapped family map", async () => {
   expect(stderr).toBe(
     "error: .thunderjar/test-case-parameters/harnessModels/codex/versions.ts: default export is not wrapped in declareHarnessVersions(...).\n",
   );
+  expect(exitCode).toBe(1);
+});
+
+const MEASUREMENT = ".thunderjar/test-case-parameters/tasks/is-prime/measurements/isPrimeTsExists.ts";
+
+const measurement = (body: string) => ({
+  "test-case-parameters/tasks/is-prime/measurements/isPrimeTsExists.ts": stub("declareMeasurement", body),
+});
+
+test("a measurement naming an unknown instrument", async () => {
+  const dir = await project(measurement(`{ instrument: "fileCraeted", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] }`));
+  for (const result of [await plan(dir), await run(dir, "run", "fake-is-prime")]) {
+    expect(result.stderr).toBe(
+      `error: ${MEASUREMENT}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated\n`,
+    );
+    expect(result.exitCode).toBe(1);
+  }
+  // Nothing ran, so nothing was recorded.
+  expect(existsSync(join(dir, ".thunderjar", ".data"))).toBe(false);
+});
+
+test("a measurement whose config doesn't fit its instrument, or with no aggregate", async () => {
+  const { stderr, exitCode } = await plan(await project(measurement(`{ instrument: "fileCreated", config: { path: "isPrime.ts" } }`)));
+  expect(stderr).toBe(
+    [
+      `error: ${MEASUREMENT}: config.glob: must be a glob pattern, got undefined`,
+      `error: ${MEASUREMENT}: aggregate: must be an array of aggregation methods, got undefined`,
+      "",
+    ].join("\n"),
+  );
+  expect(exitCode).toBe(1);
+});
+
+test("a measurement not wrapped in declareMeasurement", async () => {
+  const { stderr, exitCode } = await plan(
+    await project({
+      "test-case-parameters/tasks/is-prime/measurements/isPrimeTsExists.ts": `export default { instrument: "fileCreated" };\n`,
+    }),
+  );
+  expect(stderr).toBe(`error: ${MEASUREMENT}: default export is not wrapped in declareMeasurement(...).\n`);
   expect(exitCode).toBe(1);
 });

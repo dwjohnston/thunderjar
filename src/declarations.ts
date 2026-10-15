@@ -150,10 +150,57 @@ export function declareInitialPrompt(declaration: InitialPromptDeclaration): Ini
 
 // --- Measurement: spec/060-test-case-parameters.md#measuring-instruments--measurements ---
 
-interface MeasurementDeclaration {
-  instrument: string;
-  config: unknown;
+/** What an instrument's `evaluate` gives for one measurement of one container run. */
+export type MeasurementResult<T> =
+  | { outcome: "measured"; data: T }
+  | { outcome: "skipped" } // e.g. no output existed to check
+  | { outcome: "erroredWhileMeasuring"; error: Error }; // the instrument itself threw
+
+/**
+ * What an instrument runs against: the postrun state of one container run —
+ * spec/060-test-case-parameters.md#measurement-context. Relative paths and glob patterns
+ * resolve in `workdir`.
+ */
+export interface MeasurementContext {
+  exec(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, contents: string): Promise<void>;
+  /** Files matching `pattern`, relative to `workdir`, sorted. */
+  glob(pattern: string): Promise<string[]>;
+  /** Raw contents of the file the harness's `cli` wrote. */
+  harnessResult: string;
+  workdir: string;
 }
+
+/**
+ * The built-in instruments' config and value types, by name. src/instruments.ts implements
+ * each against exactly these types.
+ */
+export interface InstrumentTypes {
+  /** Did the agent leave a file matching `glob`? */
+  fileCreated: { config: { glob: string }; value: boolean };
+}
+
+export type InstrumentName = keyof InstrumentTypes;
+
+/** The ways a value type's measures can combine — spec/085-test-case-results.md#how-a-measures-values-combine. */
+export type AggregateFor<T> = [T] extends [boolean]
+  ? "rate" | "count"
+  : [T] extends [number]
+    ? "mean" | "median" | "min" | "max" | "sum"
+    : [T] extends [Record<string, number>]
+      ? "sum" | "mean"
+      : never;
+
+/** An instrument plus its config, typed by the instrument: a `config` that doesn't fit it is a type error. */
+export type MeasurementDeclaration = {
+  [I in InstrumentName]: {
+    instrument: I;
+    config: InstrumentTypes[I]["config"];
+    /** How this measurement's values combine across iterations. Not applied yet. */
+    aggregate: AggregateFor<InstrumentTypes[I]["value"]>[];
+  };
+}[InstrumentName];
 
 export function declareMeasurement(declaration: MeasurementDeclaration): MeasurementDeclaration {
   return declared("declareMeasurement", declaration);
