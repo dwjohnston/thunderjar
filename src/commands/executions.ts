@@ -6,7 +6,7 @@ import { findThunderjarRoot } from "../config.ts";
 import { defaultRunDataStorePath, jsonFileStore } from "../run-data-store.ts";
 
 /** `2026-09-29 14:30`, from an ISO timestamp. */
-const minute = (iso: string) => iso.slice(0, 16).replace("T", " ");
+export const minute = (iso: string) => iso.slice(0, 16).replace("T", " ");
 
 export async function executions(testCase?: string, cwd: string = process.cwd()): Promise<string> {
   const store = jsonFileStore(defaultRunDataStorePath(findThunderjarRoot(cwd)));

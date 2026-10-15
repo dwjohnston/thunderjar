@@ -4,6 +4,7 @@ import { generate } from "../commands/generate.ts";
 import { init } from "../commands/init.ts";
 import { plan } from "../commands/plan.ts";
 import { run } from "../commands/run.ts";
+import { show } from "../commands/show.ts";
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -38,6 +39,13 @@ try {
       process.exitCode = 1;
     } else {
       console.log(await executions(args[0]));
+    }
+  } else if (command === "show") {
+    if (args.length !== 1 || args[0]!.startsWith("-")) {
+      console.error("usage: thunderjar show <test case | execution | container run>");
+      process.exitCode = 1;
+    } else {
+      console.log(await show(args[0]!));
     }
   } else {
     console.log("hello world!");

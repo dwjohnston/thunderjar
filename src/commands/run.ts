@@ -52,12 +52,16 @@ const indent = (text: string, spaces: number) =>
 const ordinal = (n: number, total: number) => `${String(n).padStart(String(total).length)}/${total}`;
 
 /** A measured value as `run` prints it: JSON, but with an object's keys unquoted, `{passed: 4, failed: 1}`. */
-const showValue = (value: unknown): string =>
+export const showValue = (value: unknown): string =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? `{${Object.entries(value)
         .map(([key, v]) => `${key}: ${showValue(v)}`)
         .join(", ")}}`
     : (JSON.stringify(value) ?? String(value));
+
+/** How long a container run took, as `run` prints it: `0.04s`. */
+export const duration = ({ startedAt, finishedAt }: { startedAt: number; finishedAt: number }) =>
+  `${((finishedAt - startedAt) / 1000).toFixed(2)}s`;
 
 /** A measure as `run` prints it: its value, or what kept it from having one. */
 const showOutcome = (outcome: RecordedOutcome) =>
@@ -139,10 +143,9 @@ export async function run(name: string, options: RunOptions): Promise<void> {
         execution: { startedAt, finishedAt, exitCode },
       });
       exitCodes.set(exitCode, (exitCodes.get(exitCode) ?? 0) + 1);
-      const seconds = ((finishedAt - startedAt) / 1000).toFixed(2);
       log(
         `  iteration ${ordinal(containerRun.iterationIndex + 1, iterations)}  ${containerRun.postrunTag}` +
-          `  exit ${exitCode}  ${seconds}s`,
+          `  exit ${exitCode}  ${duration({ startedAt, finishedAt })}`,
       );
 
       if (measurements.length === 0) continue;
