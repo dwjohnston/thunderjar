@@ -107,6 +107,14 @@ const ARRAY_FIELDS = ["baseImage", "codeState", "promptSet", "harnessModel", "in
 
 const PAIR = /^([^@/]+)@([^/]+)\/(.+)$/;
 
+/** Splits `<family>@<version>/<model>` into its keys, or undefined if it is not of that form. */
+export function parseHarnessModelPair(pair: string): { family: string; version: string; model: string } | undefined {
+  const match = PAIR.exec(pair);
+  if (!match) return undefined;
+  const [, family, version, model] = match as unknown as [string, string, string, string];
+  return { family, version, model };
+}
+
 /** Checks a loaded test case against the files under `test-case-parameters/`. */
 async function checkTestCase(root: string, file: string, testCase: Record<string, unknown>, problems: Problem[]) {
   const parameters = "test-case-parameters";
@@ -166,12 +174,12 @@ async function checkTestCase(root: string, file: string, testCase: Record<string
   }
 
   for (const pair of names.harnessModel ?? []) {
-    const match = PAIR.exec(pair);
-    if (!match) {
+    const parsed = parseHarnessModelPair(pair);
+    if (!parsed) {
       problems.push({ file, field: "harnessModel", message: `${show(pair)} is not of the form family@version/model` });
       continue;
     }
-    const [, family, version, model] = match as unknown as [string, string, string, string];
+    const { family, version, model } = parsed;
     const familyDir = `${parameters}/harnessModels/${family}`;
     if (!requireFile(root, file, "harnessModel", pair, `${familyDir}/`, problems)) continue;
 
