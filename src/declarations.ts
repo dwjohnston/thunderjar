@@ -75,7 +75,7 @@ interface HarnessApplyCtx {
   resolvedHash?: string;
 }
 
-interface HarnessCliCtx {
+export interface HarnessCliCtx {
   version: string;
   modelId: string;
   initialPrompt: string;
@@ -88,7 +88,7 @@ interface HarnessExecutionOverrides {
   requiredEnv?: string[];
 }
 
-interface HarnessDeclaration {
+export interface HarnessDeclaration {
   applyParameter: (ctx: HarnessApplyCtx) => string;
   cli: (ctx: HarnessCliCtx) => string;
   requiredEnv?: string[];
@@ -102,7 +102,7 @@ export function declareHarnessModels(models: Record<string, string>): Record<str
   return declared("declareHarnessModels", models);
 }
 
-type HarnessVersionEntry = ({ version: string } | { determineHash: () => string }) & HarnessExecutionOverrides;
+export type HarnessVersionEntry = ({ version: string } | { determineHash: () => string }) & HarnessExecutionOverrides;
 
 export function declareHarnessVersions(
   versions: Record<string, HarnessVersionEntry>,
@@ -138,7 +138,7 @@ export function declareTokenCostCollector(collector: TokenCostCollector): TokenC
 
 // --- Initial prompt: spec/066-task.md#initial-prompts ---
 
-interface InitialPromptDeclaration extends HashOverrides {
+export interface InitialPromptDeclaration extends HashOverrides {
   prompt: string;
   timeoutSeconds: number;
   applyParameter: (ctx: ApplyParameterCtx) => string;

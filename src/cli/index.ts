@@ -2,6 +2,7 @@
 import { generate } from "../commands/generate.ts";
 import { init } from "../commands/init.ts";
 import { plan } from "../commands/plan.ts";
+import { run } from "../commands/run.ts";
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -20,6 +21,15 @@ try {
       process.exitCode = 1;
     } else {
       console.log(await plan(name));
+    }
+  } else if (command === "run") {
+    const flags = args.filter((a) => a.startsWith("-"));
+    const [name, ...extra] = args.filter((a) => !a.startsWith("-"));
+    if (!name || extra.length > 0 || flags.some((f) => f !== "--dry-run")) {
+      console.error("usage: thunderjar run <test case> --dry-run");
+      process.exitCode = 1;
+    } else {
+      console.log(await run(name, { dryRun: flags.includes("--dry-run") }));
     }
   } else {
     console.log("hello world!");
