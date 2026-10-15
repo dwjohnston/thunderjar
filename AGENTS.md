@@ -19,4 +19,8 @@ If being provided feedback for behaviour to change:
 - Write the fix and commit it with a message starting with the 🟢 emoji. 
 
 
+#### Annotated tags 
 
+The final commit should contain an annotated tag of the format `<task-name>-complete`. 
+
+The tag contents should contain details of what was delivered and high light any important design decisions made. 
