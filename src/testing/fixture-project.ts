@@ -1,7 +1,7 @@
 // A throwaway `.thunderjar/` project for tests, matching the example in
 // spec/055-declaring-test-cases.md and spec/100-cli-reference.md#plan: one base image,
 // one code state, two prompt sets, two harness/model pairs across two families, one
-// task with two initial prompts.
+// task with two initial prompts and two measurements.
 
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -59,10 +59,11 @@ const FILES: Record<string, string> = {
   (raw, ctx) => ({ outcome: "unavailable", reason: "notReported" }),
 `),
   // The fake agent (spec/120-test-boundaries.md#32-generating-the-post-run-image): an ordinary
-  // harness family whose cli writes a known file into the workspace and a result file.
+  // harness family whose cli writes a known file into the workspace, isPrime.ts holding the
+  // prompt as a comment, and a result file.
   "test-case-parameters/harnessModels/fake-agent/index.ts": stub("declareHarness", `{
   applyParameter: () => \`\`,
-  cli: (ctx) => \`echo "\${ctx.initialPrompt}" > fake-agent.txt && echo '{"model":"\${ctx.modelId}"}' > \${ctx.resultPath}\`,
+  cli: (ctx) => \`echo "// \${ctx.initialPrompt}" > isPrime.ts && echo '{"model":"\${ctx.modelId}"}' > \${ctx.resultPath}\`,
 }`),
   "test-case-parameters/harnessModels/fake-agent/models.ts": stub("declareHarnessModels", `{
   fake: "fake-model",
@@ -82,6 +83,17 @@ const FILES: Record<string, string> = {
   prompt: "isPrime.ts: export a primality test.",
   timeoutSeconds: 600,
   applyParameter: () => \`\`,
+}`),
+  // One measurement the fake agent satisfies and one it doesn't.
+  "test-case-parameters/tasks/is-prime/measurements/isPrimeTsExists.ts": stub("declareMeasurement", `{
+  instrument: "fileCreated",
+  config: { glob: "**/isPrime.ts" },
+  aggregate: ["rate"],
+}`),
+  "test-case-parameters/tasks/is-prime/measurements/readmeExists.ts": stub("declareMeasurement", `{
+  instrument: "fileCreated",
+  config: { glob: "**/README.md" },
+  aggregate: ["rate"],
 }`),
   "test-cases/is-prime-baseline.ts": stub("declareTestCase", `{
   baseImage: ["node20"],

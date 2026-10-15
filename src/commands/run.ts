@@ -2,16 +2,26 @@
 // walks every permutation and iteration in order and hands each container run to a
 // ContainerRunner, printing its exit code and duration as it finishes, then a summary. Each
 // container run is recorded in the run data store as soon as it finishes, so the runs that
-// finished before a crash are kept.
+// finished before a crash are kept. Then the task's measurements are taken against it, through
+// a MeasurementOpener, printed, and merged into its record — so a crash while measuring leaves
+// it recorded with an empty Result. Runs that exit non-zero are measured too, for now.
 // `--dry-run` prints the container run each would be instead — its prerun image, its postrun
 // image and the harness command — without running anything.
 
 import { relative } from "node:path";
-import { findThunderjarRoot, loadTestCase } from "../config.ts";
+import { findThunderjarRoot, loadMeasurements, loadTestCase } from "../config.ts";
 import { planExecution, type PlannedExecution } from "../execution.ts";
+import { measureContainerRun } from "../measure.ts";
 import { permutationRows } from "../permutations.ts";
-import { defaultRunDataStorePath, jsonFileStore } from "../run-data-store.ts";
-import { createHostRunner, defaultRootDir, executionDir, type ContainerRunner } from "../runner.ts";
+import { defaultRunDataStorePath, jsonFileStore, type RecordedOutcome } from "../run-data-store.ts";
+import {
+  createHostMeasurementOpener,
+  createHostRunner,
+  defaultRootDir,
+  executionDir,
+  type ContainerRunner,
+  type MeasurementOpener,
+} from "../runner.ts";
 import { ulid } from "../ulid.ts";
 import { count } from "./plan.ts";
 
@@ -28,6 +38,8 @@ export interface RunOptions {
   rootDir?: string;
   /** Runs each container run. Defaults to the host runner under `rootDir`. */
   runner?: ContainerRunner;
+  /** Gives each container run's measurement context. Defaults to the host one under `rootDir`. */
+  measurementOpener?: MeasurementOpener;
 }
 
 const indent = (text: string, spaces: number) =>
@@ -38,6 +50,14 @@ const indent = (text: string, spaces: number) =>
 
 /** `n/total`, with `n` padded to the width of `total` so the lines line up. */
 const ordinal = (n: number, total: number) => `${String(n).padStart(String(total).length)}/${total}`;
+
+/** A measure as `run` prints it: its value, or what kept it from having one. */
+const showOutcome = (outcome: RecordedOutcome) =>
+  outcome.outcome === "measured"
+    ? (JSON.stringify(outcome.data) ?? String(outcome.data))
+    : outcome.outcome === "skipped"
+      ? "skipped"
+      : `erroredWhileMeasuring: ${outcome.error.message}`;
 
 const shape = ({ permutations, iterations }: PlannedExecution) =>
   `${count(permutations.length, "permutation")} × ${count(iterations, "iteration")}`;
@@ -51,6 +71,7 @@ export async function run(name: string, options: RunOptions): Promise<void> {
     newExecutionId = () => ulid(now()),
     rootDir = defaultRootDir(),
     runner = createHostRunner(rootDir, now),
+    measurementOpener = createHostMeasurementOpener(rootDir),
   } = options;
 
   const root = findThunderjarRoot(cwd);
@@ -80,6 +101,8 @@ export async function run(name: string, options: RunOptions): Promise<void> {
     return;
   }
 
+  const measurements = await loadMeasurements(root, testCase.task);
+  const nameWidth = Math.max(0, ...measurements.map((m) => m.name.length));
   const storePath = defaultRunDataStorePath(root);
   const store = jsonFileStore(storePath);
 
@@ -112,6 +135,16 @@ export async function run(name: string, options: RunOptions): Promise<void> {
       log(
         `  iteration ${ordinal(containerRun.iterationIndex + 1, iterations)}  ${containerRun.postrunTag}` +
           `  exit ${exitCode}  ${seconds}s`,
+      );
+
+      if (measurements.length === 0) continue;
+      const ctx = await measurementOpener.openMeasurementContext(containerRun.postrunTag);
+      const result = await measureContainerRun(measurements, ctx, now);
+      await store.recordMeasures(containerRun.postrunTag, result);
+      log(
+        Object.entries(result)
+          .map(([name, { outcome }]) => `    ${name.padEnd(nameWidth)}  ${showOutcome(outcome)}`)
+          .join("\n"),
       );
     }
   }

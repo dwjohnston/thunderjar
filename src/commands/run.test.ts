@@ -3,8 +3,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { hashMeasurement } from "../hashing.ts";
 import type { ContainerRunRecord } from "../run-data-store.ts";
-import { createHostRunner, type ContainerRunner } from "../runner.ts";
+import { createHostMeasurementOpener, createHostRunner, type ContainerRunner } from "../runner.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../testing/fixture-project.ts";
 import { plan } from "./plan.ts";
 import { run, type RunOptions } from "./run.ts";
@@ -195,7 +196,7 @@ const containerRun = (executionDir: string, tag: string) => {
   const read = (rel: string) => (existsSync(join(dir, rel)) ? readFileSync(join(dir, rel), "utf8") : undefined);
   return {
     workspace: readdirSync(join(dir, "workspace")).toSorted(),
-    fakeAgentFile: read("workspace/fake-agent.txt"),
+    fakeAgentFile: read("workspace/isPrime.ts"),
     result: read("thunderjar/result.json"),
     run: JSON.parse(read("thunderjar/run.json")!) as { startedAt: number; finishedAt: number; exitCode: number },
   };
@@ -203,7 +204,7 @@ const containerRun = (executionDir: string, tag: string) => {
 
 const FAKE = `postrun-e${ID}-h`;
 
-test("runs each container run on the host, leaving the agent's files, its result and run.json", async () => {
+test("runs each container run on the host, leaving the agent's files, its result and run.json, and measures it", async () => {
   const dir = await fixture();
   const { stdout, executionDir } = await runForReal(dir, "fake-is-prime");
 
@@ -214,7 +215,11 @@ Output in ${executionDir}
 
 Permutation 1/1  node20 | baseline | snerk | fake-agent@1.0.0/fake | plain
   iteration 1/2  ${FAKE}${hash}-i00  exit 0  0.04s
+    isPrimeTsExists  true
+    readmeExists     false
   iteration 2/2  ${FAKE}${hash}-i01  exit 0  0.04s
+    isPrimeTsExists  true
+    readmeExists     false
 
 2 container runs: 2 exited 0
 Recorded in .thunderjar/.data/runs.json`);
@@ -222,8 +227,8 @@ Recorded in .thunderjar/.data/runs.json`);
   expect(readdirSync(executionDir).toSorted()).toEqual([`${FAKE}${hash}-i00`, `${FAKE}${hash}-i01`]);
   for (const tag of readdirSync(executionDir)) {
     const { workspace, fakeAgentFile, result, run } = containerRun(executionDir, tag);
-    expect(workspace).toEqual(["fake-agent.txt"]);
-    expect(fakeAgentFile).toBe("Create a file isPrime.ts exporting a function that tests for primality.\n");
+    expect(workspace).toEqual(["isPrime.ts"]);
+    expect(fakeAgentFile).toBe("// Create a file isPrime.ts exporting a function that tests for primality.\n");
     expect(result).toBe(`{"model":"fake-model"}\n`);
     expect(run.exitCode).toBe(0);
     expect(run.finishedAt - run.startedAt).toBe(40);
@@ -258,14 +263,16 @@ test("`thunderjar run` runs under a new ULID in $TMPDIR/thunderjar, and changes 
         `Output in ${executionDir}\n\n` +
         `Permutation 1/1  node20 \\| baseline \\| snerk \\| fake-agent@1.0.0/fake \\| plain\n` +
         `  iteration 1/2  postrun-e${id}-h[0-9a-f]{8}-i00  exit 0  \\d+\\.\\d\\ds\n` +
-        `  iteration 2/2  postrun-e${id}-h[0-9a-f]{8}-i01  exit 0  \\d+\\.\\d\\ds\n\n` +
+        `    isPrimeTsExists  true\n    readmeExists     false\n` +
+        `  iteration 2/2  postrun-e${id}-h[0-9a-f]{8}-i01  exit 0  \\d+\\.\\d\\ds\n` +
+        `    isPrimeTsExists  true\n    readmeExists     false\n\n` +
         `2 container runs: 2 exited 0\n` +
         `Recorded in \\.thunderjar/\\.data/runs\\.json\n$`,
     ),
   );
   for (const tag of readdirSync(executionDir)) {
     const { workspace, run } = containerRun(executionDir, tag);
-    expect(workspace).toEqual(["fake-agent.txt"]);
+    expect(workspace).toEqual(["isPrime.ts"]);
     expect(run.exitCode).toBe(0);
     expect(run.finishedAt).toBeGreaterThanOrEqual(run.startedAt);
   }
@@ -277,7 +284,7 @@ test("records a failing cli's exit code, and still runs the remaining iterations
     // 1.0.1 writes its file, then fails.
     "test-case-parameters/harnessModels/fake-agent/versions.ts": stub("declareHarnessVersions", `{
   "1.0.0": { version: "1.0.0" },
-  "1.0.1": { version: "1.0.1", cli: () => \`touch fake-agent.txt && exit 3\` },
+  "1.0.1": { version: "1.0.1", cli: () => \`touch isPrime.ts && exit 3\` },
 }`),
     "test-cases/fake-fails.ts": stub("declareTestCase", `{
   baseImage: ["node20"],
@@ -301,7 +308,7 @@ test("records a failing cli's exit code, and still runs the remaining iterations
   expect(runs).toHaveLength(4);
   expect(runs.map(({ run }) => run.exitCode).toSorted()).toEqual([0, 0, 3, 3]);
   // Every run left its file, including those after the failures.
-  for (const { workspace } of runs) expect(workspace).toEqual(["fake-agent.txt"]);
+  for (const { workspace } of runs) expect(workspace).toEqual(["isPrime.ts"]);
 
   // Every run is recorded too, the failures with exit code 3.
   const recorded = recordedRuns(dir);
@@ -319,7 +326,7 @@ const recordedRuns = (dir: string) =>
 
 const HASH = /^[0-9a-f]{64}$/;
 
-test("records each container run, with its execution as in its run.json", async () => {
+test("records each container run, with its execution as in its run.json and both measures as its result", async () => {
   const dir = await fixture();
   const { executionDir } = await runForReal(dir, "fake-is-prime");
 
@@ -346,9 +353,26 @@ test("records each container run, with its execution as in its run.json", async 
         initialPrompt: { name: "plain", parameterHash: parameters.initialPrompt.parameterHash },
       },
       harnessModel: { family: "fake-agent", version: "1.0.0", modelId: "fake-model" },
-      result: {},
+      result: {
+        isPrimeTsExists: {
+          instrument: "fileCreated",
+          contentHash: hashMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" } }),
+          measuredAt: record.result.isPrimeTsExists!.measuredAt,
+          outcome: { outcome: "measured", data: true },
+        },
+        readmeExists: {
+          instrument: "fileCreated",
+          contentHash: hashMeasurement({ instrument: "fileCreated", config: { glob: "**/README.md" } }),
+          measuredAt: record.result.readmeExists!.measuredAt,
+          outcome: { outcome: "measured", data: false },
+        },
+      },
       execution: run,
     });
+    // Measured after the agent finished, by the same clock.
+    for (const { measuredAt } of Object.values(record.result)) {
+      expect(Date.parse(measuredAt)).toBeGreaterThan(run.finishedAt);
+    }
   });
   // The second iteration started after the first finished.
   expect(recorded[1]!.execution.startedAt).toBeGreaterThan(recorded[0]!.execution.finishedAt);
@@ -357,14 +381,88 @@ test("records each container run, with its execution as in its run.json", async 
 test("keeps the runs recorded before a crash", async () => {
   const dir = await fixture();
   let calls = 0;
-  const host = createHostRunner(await tmp(), stubClock());
+  const rootDir = await tmp();
+  const host = createHostRunner(rootDir, stubClock());
   const runner: ContainerRunner = {
     runContainer: (planned) => (++calls === 2 ? Promise.reject(new Error("docker went away")) : host.runContainer(planned)),
   };
 
-  const options = { dryRun: false, cwd: dir, newExecutionId, log: () => {}, runner };
+  const options = { dryRun: false, cwd: dir, newExecutionId, log: () => {}, runner, rootDir };
   await expect(run("fake-is-prime", options)).rejects.toThrow("docker went away");
   expect(recordedRuns(dir).map((r) => r.iteration)).toEqual([0]);
+  expect(Object.keys(recordedRuns(dir)[0]!.result)).toEqual(["isPrimeTsExists", "readmeExists"]);
+});
+
+test("a crash while measuring leaves the container run recorded with an empty result", async () => {
+  const dir = await fixture();
+  const rootDir = await tmp();
+  const options = {
+    dryRun: false,
+    cwd: dir,
+    newExecutionId,
+    log: () => {},
+    rootDir,
+    measurementOpener: { openMeasurementContext: () => Promise.reject(new Error("measurement container went away")) },
+  };
+  await expect(run("fake-is-prime", options)).rejects.toThrow("measurement container went away");
+  expect(recordedRuns(dir).map((r) => [r.iteration, r.result])).toEqual([[0, {}]]);
+});
+
+test("an instrument that throws is recorded as erroredWhileMeasuring, and every other measure is still taken", async () => {
+  const dir = await fixture();
+  const rootDir = await tmp();
+  const host = createHostMeasurementOpener(rootDir);
+  // A context whose glob throws for one pattern only.
+  const measurementOpener = {
+    async openMeasurementContext(tag: string) {
+      const ctx = await host.openMeasurementContext(tag);
+      return {
+        ...ctx,
+        glob: (pattern: string) => (pattern.includes("README") ? Promise.reject(new Error("disk on fire")) : ctx.glob(pattern)),
+      };
+    },
+  };
+  const stdout = await printed("fake-is-prime", { dryRun: false, cwd: dir, newExecutionId, now: stubClock(), rootDir, measurementOpener });
+
+  expect(stdout.split("\n").filter((line) => line.startsWith("    "))).toEqual([
+    "    isPrimeTsExists  true",
+    "    readmeExists     erroredWhileMeasuring: disk on fire",
+    "    isPrimeTsExists  true",
+    "    readmeExists     erroredWhileMeasuring: disk on fire",
+  ]);
+  expect(stdout.split("\n").at(-2)).toBe("2 container runs: 2 exited 0");
+  for (const { result } of recordedRuns(dir)) {
+    expect(result.isPrimeTsExists!.outcome).toEqual({ outcome: "measured", data: true });
+    expect(result.readmeExists!.outcome).toEqual({ outcome: "erroredWhileMeasuring", error: { message: "disk on fire" } });
+    expect(result.readmeExists!.instrument).toBe("fileCreated");
+    expect(result.readmeExists!.contentHash).toMatch(HASH);
+  }
+});
+
+test("runs that exit non-zero are still measured", async () => {
+  const dir = await fixture({
+    "test-case-parameters/harnessModels/fake-agent/index.ts": stub("declareHarness", `{
+  applyParameter: () => \`\`,
+  cli: () => \`touch README.md && exit 3\`,
+}`),
+  });
+  const { stdout } = await runForReal(dir, "fake-is-prime");
+  expect(stdout.split("\n").filter((line) => line.startsWith("    "))).toEqual([
+    "    isPrimeTsExists  false",
+    "    readmeExists     true",
+    "    isPrimeTsExists  false",
+    "    readmeExists     true",
+  ]);
+});
+
+test("a task without measurements prints and records none", async () => {
+  const dir = await fixture({
+    "test-case-parameters/tasks/is-prime/measurements/isPrimeTsExists.ts": null,
+    "test-case-parameters/tasks/is-prime/measurements/readmeExists.ts": null,
+  });
+  const { stdout } = await runForReal(dir, "fake-is-prime");
+  expect(stdout.split("\n").filter((line) => line.startsWith("    "))).toEqual([]);
+  for (const { result } of recordedRuns(dir)) expect(result).toEqual({});
 });
 
 test("kills a cli that runs past the initial prompt's timeoutSeconds, recording exit code 124", async () => {
