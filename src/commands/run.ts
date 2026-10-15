@@ -4,11 +4,13 @@
 // container run is recorded in the run data store as soon as it finishes, so the runs that
 // finished before a crash are kept. Then the task's measurements are taken against it, through
 // a MeasurementOpener, printed, and merged into its record — so a crash while measuring leaves
-// it recorded with an empty Result. Runs that exit non-zero are measured too, for now.
+// it recorded with an empty Result. After each, its permutation's aggregation result is
+// recomputed and stored, though not printed. Runs that exit non-zero are measured too, for now.
 // `--dry-run` prints the container run each would be instead — its prerun image, its postrun
 // image and the harness command — without running anything.
 
 import { relative } from "node:path";
+import { recomputeAggregationResult } from "../aggregate.ts";
 import { findThunderjarRoot, loadMeasurements, loadTestCase } from "../config.ts";
 import { planExecution, type PlannedExecution } from "../execution.ts";
 import { measureContainerRun } from "../measure.ts";
@@ -148,15 +150,18 @@ export async function run(name: string, options: RunOptions): Promise<void> {
           `  exit ${exitCode}  ${duration({ startedAt, finishedAt })}`,
       );
 
-      if (measurements.length === 0) continue;
-      const open = () => measurementOpener.openMeasurementContext(containerRun.postrunTag);
-      const result = await measureContainerRun(measurements, open, now);
-      await store.recordMeasures(containerRun.postrunTag, result);
-      log(
-        Object.entries(result)
-          .map(([name, { outcome }]) => `    ${name.padEnd(nameWidth)}  ${showOutcome(outcome)}`)
-          .join("\n"),
-      );
+      if (measurements.length > 0) {
+        const open = () => measurementOpener.openMeasurementContext(containerRun.postrunTag);
+        const result = await measureContainerRun(measurements, open, now);
+        await store.recordMeasures(containerRun.postrunTag, result);
+        log(
+          Object.entries(result)
+            .map(([name, { outcome }]) => `    ${name.padEnd(nameWidth)}  ${showOutcome(outcome)}`)
+            .join("\n"),
+        );
+      }
+      // With no measurements there is still a duration to aggregate.
+      await recomputeAggregationResult(store, executionId, permutation.hash, measurements);
     }
   }
 

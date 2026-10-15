@@ -4,7 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { hashMeasurement } from "../hashing.ts";
-import type { ContainerRunRecord } from "../run-data-store.ts";
+import type { AggregationResult, ContainerRunRecord } from "../run-data-store.ts";
 import { createHostMeasurementOpener, createHostRunner, type ContainerRunner } from "../runner.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../testing/fixture-project.ts";
 import { plan } from "./plan.ts";
@@ -544,4 +544,61 @@ test("kills a cli that runs past the initial prompt's timeoutSeconds, recording 
     expect(run.finishedAt - run.startedAt).toBeGreaterThanOrEqual(1000);
     expect(run.finishedAt - run.startedAt).toBeLessThan(1900);
   }
+});
+
+/** Every aggregation result stored in the fixture project's run data store. */
+const storedAggregations = (dir: string) =>
+  (JSON.parse(readFileSync(join(dir, ".thunderjar", ".data", "runs.json"), "utf8")) as {
+    aggregationResults?: AggregationResult[];
+  }).aggregationResults;
+
+test("stores each permutation's aggregation result beside its runs, by each measurement's aggregate", async () => {
+  const dir = await fixture();
+  await runForReal(dir, "fake-is-prime");
+  const [{ permutationHash }] = recordedRuns(dir) as [ContainerRunRecord];
+
+  expect(storedAggregations(dir)).toEqual([
+    {
+      executionId: ID,
+      permutationHash,
+      iterations: 2,
+      measures: {
+        isPrimeTemplateTest: { measured: 2, sum: { passed: 8, failed: 2 } },
+        isPrimeTsExists: { measured: 2, rate: 1 },
+        readmeExists: { measured: 2, rate: 0 },
+        tsIgnoreCount: { measured: 2, mean: 1, max: 1 },
+      },
+      duration: { mean: 40, max: 40 },
+    },
+  ]);
+});
+
+test("recomputes the aggregation result after each container run, so a crash leaves it up to date", async () => {
+  const dir = await fixture();
+  let calls = 0;
+  const rootDir = await tmp();
+  const host = createHostRunner(rootDir, stubClock());
+  const runner: ContainerRunner = {
+    runContainer: (planned) => (++calls === 2 ? Promise.reject(new Error("docker went away")) : host.runContainer(planned)),
+  };
+
+  await expect(run("fake-is-prime", { dryRun: false, cwd: dir, newExecutionId, log: () => {}, runner, rootDir })).rejects.toThrow(
+    "docker went away",
+  );
+  expect(storedAggregations(dir)!.map(({ iterations, measures }) => [iterations, measures.isPrimeTsExists])).toEqual([
+    [1, { measured: 1, rate: 1 }],
+  ]);
+});
+
+test("a task without measurements still stores an aggregation result, of its durations", async () => {
+  const dir = await fixture({
+    "test-case-parameters/tasks/is-prime/measurements/isPrimeTsExists.ts": null,
+    "test-case-parameters/tasks/is-prime/measurements/readmeExists.ts": null,
+    "test-case-parameters/tasks/is-prime/measurements/tsIgnoreCount.ts": null,
+    "test-case-parameters/tasks/is-prime/measurements/isPrimeTemplateTest.ts": null,
+  });
+  await runForReal(dir, "fake-is-prime");
+  expect(storedAggregations(dir)!.map(({ iterations, measures, duration }) => ({ iterations, measures, duration }))).toEqual([
+    { iterations: 2, measures: {}, duration: { mean: 40, max: 40 } },
+  ]);
 });
