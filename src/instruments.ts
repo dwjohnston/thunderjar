@@ -45,12 +45,13 @@ const lines = (text: string) => (text === "" ? [] : text.replace(/\r?\n$/, "").s
 /**
  * The number of lines matching `pattern`, a JavaScript regex, across every file matching
  * `glob`. Files are read through the context, so it doesn't depend on which `grep` the image
- * has. `skipped` when no file matches: a run that left no output isn't a count of 0.
+ * has. `skipped` when no file matches, giving the glob as the reason: a run that left no
+ * output isn't a count of 0.
  */
 export const grep: Instrument<{ glob: string; pattern: string }, number> = {
   async evaluate({ glob, pattern }, ctx) {
     const files = await ctx.glob(glob);
-    if (files.length === 0) return { outcome: "skipped" };
+    if (files.length === 0) return { outcome: "skipped", reason: `no file matches ${glob}` };
     const regex = new RegExp(pattern);
     let count = 0;
     for (const file of files) {
@@ -161,7 +162,7 @@ async function runTest(testPath: string, ctx: MeasurementContext) {
 export const templateTest: Instrument<{ subject: string; template: string }, { passed: number; failed: number }> = {
   async evaluate({ subject, template }, ctx) {
     const subjects = await ctx.glob(subject);
-    if (subjects.length === 0) return { outcome: "skipped" };
+    if (subjects.length === 0) return { outcome: "skipped", reason: `no file matches ${subject}` };
     const source = await readFile(template, "utf8");
     const total = { passed: 0, failed: 0 };
     try {

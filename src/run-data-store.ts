@@ -18,7 +18,7 @@ import type { Axis } from "./resolve.ts";
  */
 export type RecordedOutcome =
   | { outcome: "measured"; data: unknown }
-  | { outcome: "skipped" }
+  | { outcome: "skipped"; reason?: string }
   | { outcome: "erroredWhileMeasuring"; error: { message: string } };
 
 /** One measure in a container run's result — spec/085-test-case-results.md#the-result-record. */

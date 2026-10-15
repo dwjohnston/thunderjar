@@ -153,7 +153,7 @@ export function declareInitialPrompt(declaration: InitialPromptDeclaration): Ini
 /** What an instrument's `evaluate` gives for one measurement of one container run. */
 export type MeasurementResult<T> =
   | { outcome: "measured"; data: T }
-  | { outcome: "skipped" } // e.g. no output existed to check
+  | { outcome: "skipped"; reason?: string } // e.g. no output existed to check; `show` prints the reason
   | { outcome: "erroredWhileMeasuring"; error: Error }; // the instrument itself threw
 
 /**

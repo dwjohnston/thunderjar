@@ -71,7 +71,10 @@ test("fileCreated checks its config is a glob", () => {
 
 test("grep is skipped when no file matches the glob, rather than counting 0", async () => {
   const ctx = await contextWith({ "README.md": "// @ts-ignore\n" });
-  expect(await grep.evaluate({ glob: "**/*.ts", pattern: "@ts-ignore" }, ctx)).toEqual({ outcome: "skipped" });
+  expect(await grep.evaluate({ glob: "**/*.ts", pattern: "@ts-ignore" }, ctx)).toEqual({
+    outcome: "skipped",
+    reason: "no file matches **/*.ts",
+  });
 });
 
 test("grep counts matching lines across every file the glob matches", async () => {
@@ -135,6 +138,7 @@ test("templateTest is skipped when nothing matches the subject", async () => {
   const ctx = await contextWith({ "src/prime.ts": CORRECT });
   expect(await templateTest.evaluate({ subject: "**/isPrime.ts", template: await templateFile() }, ctx)).toEqual({
     outcome: "skipped",
+    reason: "no file matches **/isPrime.ts",
   });
 });
 
