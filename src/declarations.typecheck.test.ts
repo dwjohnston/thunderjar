@@ -27,6 +27,8 @@ const TSCONFIG = JSON.stringify(
       allowImportingTsExtensions: true,
     },
     include: [".thunderjar/**/*.ts"],
+    // Templates aren't TypeScript until rendered, as in the tsconfig `init` scaffolds.
+    exclude: [".thunderjar/**/*.template.ts"],
   },
   null,
   2,
@@ -202,6 +204,39 @@ test(
     expect(output).toContain("fileCraeted");
   },
   30000,
+);
+
+test(
+  "grep and templateTest measurements whose config and aggregate fit compile cleanly",
+  async () => {
+    const dir = await setUpMeasurement(`{ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, aggregate: ["mean", "max"] }`);
+    await writeFile(
+      join(dir, ".thunderjar", "test-case-parameters", "tasks", "is-prime", "measurements", "good.ts"),
+      `import { declareMeasurement } from "thunderjar";\n\nexport default declareMeasurement({ instrument: "templateTest", config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" }, aggregate: ["sum", "mean"] });\n`,
+    );
+    const { exitCode, output } = await runTsc(dir);
+    expect(output).toBe("");
+    expect(exitCode).toBe(0);
+  },
+  30000,
+);
+
+test(
+  "an aggregate that doesn't fit grep's or templateTest's value type, or a config missing a field, fails to compile",
+  async () => {
+    for (const body of [
+      `{ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, aggregate: ["rate"] }`,
+      `{ instrument: "grep", config: { glob: "**/*.ts" }, aggregate: ["max"] }`,
+      `{ instrument: "templateTest", config: { subject: "**/isPrime.ts", template: "./t.ts" }, aggregate: ["max"] }`,
+      `{ instrument: "templateTest", config: { subject: "**/isPrime.ts" }, aggregate: ["sum"] }`,
+    ]) {
+      const dir = await setUpMeasurement(body);
+      const { exitCode, output } = await runTsc(dir);
+      expect(exitCode).not.toBe(0);
+      expect(output).toContain("bad.ts");
+    }
+  },
+  60000,
 );
 
 test(

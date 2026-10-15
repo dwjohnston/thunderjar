@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findThunderjarRoot, loadTestCase, TestCaseNotFoundError, ThunderjarRootNotFoundError } from "./config.ts";
+import { findThunderjarRoot, loadMeasurements, loadTestCase, TestCaseNotFoundError, ThunderjarRootNotFoundError } from "./config.ts";
 import { createFixtureProject, linkThunderjar } from "./testing/fixture-project.ts";
 
 const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-config-"));
@@ -47,4 +47,23 @@ test("throws a clear error for an unknown test case", async () => {
   await linkThunderjar(dir);
 
   await expect(loadTestCase(join(dir, ".thunderjar"), "no-such-test-case")).rejects.toThrow(TestCaseNotFoundError);
+});
+
+test("loads a task's measurements by name, leaving out the supporting files beside them", async () => {
+  const dir = await tmp();
+  await createFixtureProject(dir);
+  await linkThunderjar(dir);
+  const root = join(dir, ".thunderjar");
+
+  const measurements = await loadMeasurements(root, "is-prime");
+
+  // isPrime.test.template.ts sits beside them, and isn't loaded as one.
+  expect(measurements.map((m) => m.name)).toEqual(["isPrimeTemplateTest", "isPrimeTsExists", "readmeExists", "tsIgnoreCount"]);
+  for (const { dir: measurementDir } of measurements) {
+    expect(measurementDir).toBe(join(root, "test-case-parameters", "tasks", "is-prime", "measurements"));
+  }
+  expect(measurements.find((m) => m.name === "isPrimeTemplateTest")!.config).toEqual({
+    subject: "**/isPrime.ts",
+    template: "./isPrime.test.template.ts",
+  });
 });

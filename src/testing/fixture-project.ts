@@ -1,7 +1,7 @@
 // A throwaway `.thunderjar/` project for tests, matching the example in
 // spec/055-declaring-test-cases.md and spec/100-cli-reference.md#plan: one base image,
 // one code state, two prompt sets, two harness/model pairs across two families, one
-// task with two initial prompts and two measurements.
+// task with two initial prompts and four measurements.
 
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -59,12 +59,26 @@ const FILES: Record<string, string> = {
   (raw, ctx) => ({ outcome: "unavailable", reason: "notReported" }),
 `),
   // The fake agent (spec/120-test-boundaries.md#32-generating-the-post-run-image): an ordinary
-  // harness family whose cli writes a known file into the workspace, isPrime.ts holding the
-  // prompt as a comment, and a result file.
-  "test-case-parameters/harnessModels/fake-agent/index.ts": stub("declareHarness", `{
+  // harness family whose cli writes a known file into the workspace, and a result file. Its
+  // isPrime.ts has the prompt as a comment, one @ts-ignore, and a bug: 1 is reported as prime.
+  "test-case-parameters/harnessModels/fake-agent/index.ts": `import { declareHarness } from "thunderjar";
+
+const IS_PRIME = [
+  "export function isPrime(n: number): boolean {",
+  "  // @ts-ignore",
+  "  if (n < 1) return false;",
+  "  for (let i = 2; i * i <= n; i++) if (n % i === 0) return false;",
+  "  return true;",
+  "}",
+];
+
+export default declareHarness({
   applyParameter: () => \`\`,
-  cli: (ctx) => \`echo "// \${ctx.initialPrompt}" > isPrime.ts && echo '{"model":"\${ctx.modelId}"}' > \${ctx.resultPath}\`,
-}`),
+  cli: (ctx) =>
+    \`printf '%s\\\\n' "// \${ctx.initialPrompt}" \${IS_PRIME.map((line) => \`'\${line}'\`).join(" ")} > isPrime.ts\` +
+    \` && echo '{"model":"\${ctx.modelId}"}' > \${ctx.resultPath}\`,
+});
+`,
   "test-case-parameters/harnessModels/fake-agent/models.ts": stub("declareHarnessModels", `{
   fake: "fake-model",
 }`),
@@ -84,7 +98,7 @@ const FILES: Record<string, string> = {
   timeoutSeconds: 600,
   applyParameter: () => \`\`,
 }`),
-  // One measurement the fake agent satisfies and one it doesn't.
+  // One file the fake agent leaves and one it doesn't, its @ts-ignores, and a test its bug fails.
   "test-case-parameters/tasks/is-prime/measurements/isPrimeTsExists.ts": stub("declareMeasurement", `{
   instrument: "fileCreated",
   config: { glob: "**/isPrime.ts" },
@@ -95,6 +109,24 @@ const FILES: Record<string, string> = {
   config: { glob: "**/README.md" },
   aggregate: ["rate"],
 }`),
+  "test-case-parameters/tasks/is-prime/measurements/tsIgnoreCount.ts": stub("declareMeasurement", `{
+  instrument: "grep",
+  config: { glob: "**/*.ts", pattern: "@ts-ignore" },
+  aggregate: ["mean", "max"],
+}`),
+  "test-case-parameters/tasks/is-prime/measurements/isPrimeTemplateTest.ts": stub("declareMeasurement", `{
+  instrument: "templateTest",
+  config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
+  aggregate: ["sum"],
+}`),
+  "test-case-parameters/tasks/is-prime/measurements/isPrime.test.template.ts": `import { {{defaultExport}} } from "{{subjectPath}}";
+
+test("2 is prime", () => expect({{defaultExport}}(2)).toBe(true));
+test("17 is prime", () => expect({{defaultExport}}(17)).toBe(true));
+test("15 is not prime", () => expect({{defaultExport}}(15)).toBe(false));
+test("0 is not prime", () => expect({{defaultExport}}(0)).toBe(false));
+test("1 is not prime", () => expect({{defaultExport}}(1)).toBe(false));
+`,
   "test-cases/is-prime-baseline.ts": stub("declareTestCase", `{
   baseImage: ["node20"],
   codeState: ["baseline"],

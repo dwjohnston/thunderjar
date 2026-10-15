@@ -273,3 +273,27 @@ test("renaming a measurement's file keeps its hash; editing it changes no parame
   expect(renamed.prompt).toBe(original.prompt);
   expect(edited.prompt).toBe(original.prompt);
 });
+
+test("a templateTest measurement's hash covers its template, but not an unreferenced file beside it", async () => {
+  const MEASUREMENTS = "test-case-parameters/tasks/is-prime/measurements";
+  const TEMPLATE = `test("2 is prime", () => expect({{defaultExport}}(2)).toBe(true));\n`;
+  const hashOf = async (files: Record<string, string>) => {
+    const dir = await parameters(Object.fromEntries(Object.entries(files).map(([name, content]) => [`${MEASUREMENTS}/${name}`, content])));
+    const measurements = await loadMeasurements(join(dir, ".."), "is-prime");
+    return hashMeasurement(measurements.find((m) => m.name === "isPrimeTemplateTest")!);
+  };
+
+  const original = await hashOf({ "isPrime.test.template.ts": TEMPLATE });
+  expect(original).toMatch(/^[0-9a-f]{64}$/);
+  expect(await hashOf({ "isPrime.test.template.ts": TEMPLATE })).toBe(original);
+  expect(await hashOf({ "isPrime.test.template.ts": TEMPLATE.replace("(2)", "(3)") })).not.toBe(original);
+  expect(await hashOf({ "isPrime.test.template.ts": TEMPLATE, "notes.template.md": "unrelated\n" })).toBe(original);
+  expect(await hashOf({ "isPrime.test.template.ts": TEMPLATE, "other.test.template.ts": "// unrelated\n" })).toBe(original);
+});
+
+test("a measurement with a bundled file can't be hashed without the folder it is relative to", () => {
+  const config = { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" };
+  expect(() => hashMeasurement({ instrument: "templateTest", config })).toThrow(
+    "a templateTest measurement's hash needs the folder its bundled files are in",
+  );
+});
