@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "..", "..");
 
-const stub = (fn: string, body: string) => `import { ${fn} } from "thunderjar";\n\nexport default ${fn}(${body});\n`;
+export const stub = (fn: string, body: string) => `import { ${fn} } from "thunderjar";\n\nexport default ${fn}(${body});\n`;
 
 const FILES: Record<string, string> = {
   "test-case-parameters/baseImages/node20/index.ts": stub("declareBaseImage", `{
@@ -79,10 +79,14 @@ const FILES: Record<string, string> = {
 }`),
 };
 
-/** Writes the fixture project's `.thunderjar/` folder into `dir`. */
-export async function createFixtureProject(dir: string): Promise<void> {
+/**
+ * Writes the fixture project's `.thunderjar/` folder into `dir`. `changes` replaces or adds
+ * files by their path under `.thunderjar/`; null leaves a file out.
+ */
+export async function createFixtureProject(dir: string, changes: Record<string, string | null> = {}): Promise<void> {
   const root = join(dir, ".thunderjar");
-  for (const [rel, content] of Object.entries(FILES)) {
+  for (const [rel, content] of Object.entries({ ...FILES, ...changes })) {
+    if (content === null) continue;
     const path = join(root, rel);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, content);

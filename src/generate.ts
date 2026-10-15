@@ -4,6 +4,7 @@
 
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { InvalidConfigError, loadDeclaration, type Problem } from "./config.ts";
 
 interface HarnessFamilyNames {
   versions: string[];
@@ -42,12 +43,13 @@ async function listFileStems(dir: string): Promise<string[]> {
   }
 }
 
-async function loadFamilyNames(familyDir: string): Promise<HarnessFamilyNames> {
-  const models = (await import(join(familyDir, "models.ts"))) as { default?: Record<string, string> };
-  const versions = (await import(join(familyDir, "versions.ts"))) as { default?: Record<string, unknown> };
+async function loadFamilyNames(root: string, family: string, problems: Problem[]): Promise<HarnessFamilyNames> {
+  const familyDir = `test-case-parameters/harnessModels/${family}`;
+  const models = await loadDeclaration(root, `${familyDir}/models.ts`, "declareHarnessModels", problems);
+  const versions = await loadDeclaration(root, `${familyDir}/versions.ts`, "declareHarnessVersions", problems);
   return {
-    models: Object.keys(models.default ?? {}).sort(),
-    versions: Object.keys(versions.default ?? {}).sort(),
+    models: Object.keys(models ?? {}).sort(),
+    versions: Object.keys(versions ?? {}).sort(),
   };
 }
 
@@ -69,9 +71,11 @@ export async function collectParameterNames(root: string): Promise<ParameterName
   }
 
   const harnessFamilies: Record<string, HarnessFamilyNames> = {};
+  const problems: Problem[] = [];
   for (const family of familyNames) {
-    harnessFamilies[family] = await loadFamilyNames(join(parameters, "harnessModels", family));
+    harnessFamilies[family] = await loadFamilyNames(root, family, problems);
   }
+  if (problems.length > 0) throw new InvalidConfigError(problems);
 
   return { baseImages, codeStates, promptSets, tasks, harnessFamilies };
 }

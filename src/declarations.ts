@@ -6,6 +6,25 @@
 // `BaseImageName`, `CodeStateName`, `PromptSetName`, `TaskName`, `InitialPromptNames` and
 // `HarnessModelName` are ambient globals with no import — see src/parameter-names.d.ts.
 
+// Each declareX() marks what it returns with its own name, so the config loader can tell
+// a wrapped default export from a bare one. Symbol.for, so the mark is recognised even
+// when the user's project resolves a different copy of this module.
+const DECLARED_BY = Symbol.for("thunderjar.declaredBy");
+
+function declared<T extends object>(declareFn: string, value: T): T {
+  if ((typeof value === "object" && value !== null) || typeof value === "function") {
+    Object.defineProperty(value, DECLARED_BY, { value: declareFn, configurable: true });
+  }
+  return value;
+}
+
+/** The name of the declareX() function `value` was returned from, if any. */
+export function declaredBy(value: unknown): string | undefined {
+  if ((typeof value !== "object" || value === null) && typeof value !== "function") return undefined;
+  const mark = (value as { [DECLARED_BY]?: unknown })[DECLARED_BY];
+  return typeof mark === "string" ? mark : undefined;
+}
+
 interface ApplyParameterCtx {
   resolvedHash?: string;
 }
@@ -23,7 +42,7 @@ interface BaseImageDeclaration extends HashOverrides {
 }
 
 export function declareBaseImage(declaration: BaseImageDeclaration): BaseImageDeclaration {
-  return declaration;
+  return declared("declareBaseImage", declaration);
 }
 
 // --- Code state: spec/062-code-state.md ---
@@ -34,7 +53,7 @@ interface CodeStateDeclaration extends HashOverrides {
 }
 
 export function declareCodeState(declaration: CodeStateDeclaration): CodeStateDeclaration {
-  return declaration;
+  return declared("declareCodeState", declaration);
 }
 
 // --- Prompt set: spec/063-prompt-set.md ---
@@ -46,7 +65,7 @@ interface PromptSetDeclaration extends HashOverrides {
 }
 
 export function declarePromptSet(declaration: PromptSetDeclaration): PromptSetDeclaration {
-  return declaration;
+  return declared("declarePromptSet", declaration);
 }
 
 // --- Harness/model pair: spec/064-harness.md ---
@@ -76,11 +95,11 @@ interface HarnessDeclaration {
 }
 
 export function declareHarness(declaration: HarnessDeclaration): HarnessDeclaration {
-  return declaration;
+  return declared("declareHarness", declaration);
 }
 
 export function declareHarnessModels(models: Record<string, string>): Record<string, string> {
-  return models;
+  return declared("declareHarnessModels", models);
 }
 
 type HarnessVersionEntry = ({ version: string } | { determineHash: () => string }) & HarnessExecutionOverrides;
@@ -88,7 +107,7 @@ type HarnessVersionEntry = ({ version: string } | { determineHash: () => string 
 export function declareHarnessVersions(
   versions: Record<string, HarnessVersionEntry>,
 ): Record<string, HarnessVersionEntry> {
-  return versions;
+  return declared("declareHarnessVersions", versions);
 }
 
 // spec/087-collecting-token-costs.md#normalising-collecttokencosts
@@ -114,7 +133,7 @@ type TokenCosts =
 type TokenCostCollector = (raw: string, ctx: CollectorContext) => TokenCosts;
 
 export function declareTokenCostCollector(collector: TokenCostCollector): TokenCostCollector {
-  return collector;
+  return declared("declareTokenCostCollector", collector);
 }
 
 // --- Initial prompt: spec/066-task.md#initial-prompts ---
@@ -126,7 +145,7 @@ interface InitialPromptDeclaration extends HashOverrides {
 }
 
 export function declareInitialPrompt(declaration: InitialPromptDeclaration): InitialPromptDeclaration {
-  return declaration;
+  return declared("declareInitialPrompt", declaration);
 }
 
 // --- Measurement: spec/060-test-case-parameters.md#measuring-instruments--measurements ---
@@ -137,7 +156,7 @@ interface MeasurementDeclaration {
 }
 
 export function declareMeasurement(declaration: MeasurementDeclaration): MeasurementDeclaration {
-  return declaration;
+  return declared("declareMeasurement", declaration);
 }
 
 // --- Test case: spec/055-declaring-test-cases.md ---
@@ -153,7 +172,7 @@ export interface TestCaseDeclaration<T extends TaskName = TaskName> {
 }
 
 export function declareTestCase<T extends TaskName>(declaration: TestCaseDeclaration<T>): TestCaseDeclaration<T> {
-  return declaration;
+  return declared("declareTestCase", declaration);
 }
 
 // --- Global config: spec/050-setup-and-configure.md#thunderjarconfigts ---
@@ -172,5 +191,5 @@ interface ThunderjarConfigDeclaration {
 }
 
 export function declareConfig(config: ThunderjarConfigDeclaration): ThunderjarConfigDeclaration {
-  return config;
+  return declared("declareConfig", config);
 }
