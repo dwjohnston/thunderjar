@@ -61,7 +61,7 @@ const harnessVersions = stub(
 
 const collectTokenCosts = stub(
   "declareTokenCostCollector",
-  `(raw, ctx) => {
+  `(_raw, _ctx) => {
   return { outcome: "unavailable", reason: "notReported" };
 }`,
 );
