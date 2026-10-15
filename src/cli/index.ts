@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { executions } from "../commands/executions.ts";
 import { generate } from "../commands/generate.ts";
 import { init } from "../commands/init.ts";
 import { plan } from "../commands/plan.ts";
@@ -30,6 +31,13 @@ try {
       process.exitCode = 1;
     } else {
       await run(name, { dryRun: flags.includes("--dry-run") });
+    }
+  } else if (command === "executions") {
+    if (args.length > 1 || args.some((a) => a.startsWith("-"))) {
+      console.error("usage: thunderjar executions [<test case>]");
+      process.exitCode = 1;
+    } else {
+      console.log(await executions(args[0]));
     }
   } else {
     console.log("hello world!");
