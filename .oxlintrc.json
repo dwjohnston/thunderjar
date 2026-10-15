@@ -2,5 +2,114 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "categories": { "correctness": "error" },
   "rules": { "eqeqeq": "error" },
-  "ignorePatterns": ["node_modules", "dist"]
+  "ignorePatterns": ["node_modules", "dist"],
+
+  // sync-oxlint-layout: begin — generated, do not edit
+  "overrides": [
+    {
+      "files": [
+        "src/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\./cli(/[^/]+)?$",
+                "message": "src may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/cli/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/cli may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./testing(/[^/]+)?$",
+                "message": "src/cli may not import from src/testing. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/commands/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/testing/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/testing may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  // sync-oxlint-layout: end
 }

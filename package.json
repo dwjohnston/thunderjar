@@ -22,7 +22,7 @@
   },
   "scripts": {
     "build": "bun build src/cli/index.ts --target bun --outfile dist/cli.js",
-    "lint": "oxlint",
+    "lint": "bun scripts/sync-oxlint-layout.ts && bun scripts/sync-oxlint-layout.ts --check && oxlint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "dev:link": "bun scripts/dev-link.ts",
