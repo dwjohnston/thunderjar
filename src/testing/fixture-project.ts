@@ -58,6 +58,21 @@ const FILES: Record<string, string> = {
   "test-case-parameters/harnessModels/codex/collectTokenCosts.ts": stub("declareTokenCostCollector", `
   (raw, ctx) => ({ outcome: "unavailable", reason: "notReported" }),
 `),
+  // The fake agent (spec/120-test-boundaries.md#32-generating-the-post-run-image): an ordinary
+  // harness family whose cli writes a known file into the workspace and a result file.
+  "test-case-parameters/harnessModels/fake-agent/index.ts": stub("declareHarness", `{
+  applyParameter: () => \`\`,
+  cli: (ctx) => \`echo "\${ctx.initialPrompt}" > fake-agent.txt && echo '{"model":"\${ctx.modelId}"}' > \${ctx.resultPath}\`,
+}`),
+  "test-case-parameters/harnessModels/fake-agent/models.ts": stub("declareHarnessModels", `{
+  fake: "fake-model",
+}`),
+  "test-case-parameters/harnessModels/fake-agent/versions.ts": stub("declareHarnessVersions", `{
+  "1.0.0": { version: "1.0.0" },
+}`),
+  "test-case-parameters/harnessModels/fake-agent/collectTokenCosts.ts": stub("declareTokenCostCollector", `
+  (raw, ctx) => ({ outcome: "unavailable", reason: "notReported" }),
+`),
   "test-case-parameters/tasks/is-prime/initial-prompts/plain.ts": stub("declareInitialPrompt", `{
   prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
   timeoutSeconds: 600,
@@ -76,6 +91,15 @@ const FILES: Record<string, string> = {
   task: "is-prime",
   initialPrompt: ["plain", "terse"],
   iterations: 5,
+}`),
+  "test-cases/fake-is-prime.ts": stub("declareTestCase", `{
+  baseImage: ["node20"],
+  codeState: ["baseline"],
+  promptSet: ["snerk"],
+  harnessModel: ["fake-agent@1.0.0/fake"],
+  task: "is-prime",
+  initialPrompt: ["plain"],
+  iterations: 2,
 }`),
 };
 

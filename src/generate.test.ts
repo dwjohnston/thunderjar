@@ -21,6 +21,7 @@ test("collects parameter names from the fixture project", async () => {
   expect(names.harnessFamilies).toEqual({
     "claude-code": { versions: ["2.1.283", "2.2.0"], models: ["haiku-4-5", "sonnet-5-5"] },
     codex: { versions: ["0.9.0"], models: ["gpt-luna"] },
+    "fake-agent": { versions: ["1.0.0"], models: ["fake"] },
   });
 });
 
