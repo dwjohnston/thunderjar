@@ -36,3 +36,15 @@ export function expandPermutations(testCase: TestCaseDeclaration): Permutation[]
             permutations.push({ baseImage, codeState, promptSet, harnessModel, initialPrompt });
   return permutations;
 }
+
+/**
+ * Each permutation's five names as columns joined by ` | `, each padded to its widest value
+ * across `permutations` (the last isn't padded), so the rows line up.
+ */
+export function permutationRows(permutations: Permutation[]): string[] {
+  const cells = permutations.map((p) => AXES.map((axis) => p[axis]));
+  const widths = AXES.map((_, i) => Math.max(...cells.map((row) => row[i]!.length)));
+  return cells.map((row) =>
+    row.map((cell, i) => (i === AXES.length - 1 ? cell : cell.padEnd(widths[i]!))).join(" | "),
+  );
+}
