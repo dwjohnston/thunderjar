@@ -2,11 +2,13 @@
 // The run is reached only through its MeasurementContext, so a fresh run and a backfill take
 // the same path.
 
+import { resolve } from "node:path";
 import type { Measurement } from "./config.ts";
 import type { MeasurementContext, MeasurementResult } from "./declarations.ts";
 import { hashMeasurement } from "./hashing.ts";
-import { instruments, isInstrumentName } from "./instruments.ts";
+import { instruments, isInstrumentName, type Instrument } from "./instruments.ts";
 import type { RecordedOutcome, Result } from "./run-data-store.ts";
+import type { OpenedMeasurementContext } from "./runner.ts";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -16,27 +18,39 @@ const recordable = (result: MeasurementResult<unknown>): RecordedOutcome =>
     ? { outcome: "erroredWhileMeasuring", error: { message: message(result.error) } }
     : result;
 
-async function evaluate({ instrument, config }: Measurement, ctx: MeasurementContext): Promise<RecordedOutcome> {
+async function evaluate({ instrument, config, dir }: Measurement, ctx: MeasurementContext): Promise<RecordedOutcome> {
   try {
     if (!isInstrumentName(instrument)) throw new Error(`unknown instrument ${JSON.stringify(instrument)}`);
-    return recordable(await instruments[instrument].evaluate(config, ctx));
+    const chosen = instruments[instrument] as Instrument<Record<string, string>, unknown>;
+    const fields = config as Record<string, string>;
+    // Bundled files reach the instrument as host paths, not relative to the measurement file.
+    const bundled = Object.fromEntries((chosen.bundledFiles ?? []).map((key) => [key, resolve(dir, fields[key]!)]));
+    return recordable(await chosen.evaluate({ ...fields, ...bundled }, ctx));
   } catch (error) {
     return { outcome: "erroredWhileMeasuring", error: { message: message(error) } };
   }
 }
 
 /**
- * Takes each measurement in turn against `ctx`. An instrument that throws gives that measure
- * `erroredWhileMeasuring`; the others are still taken. Each measure is dated when it was taken.
+ * Takes each measurement in turn, each against a context of its own from `open`, closed once
+ * it is taken, so nothing one measurement writes is seen by the next. An instrument that throws
+ * gives that measure `erroredWhileMeasuring`; the others are still taken. Each measure is dated
+ * when it was taken.
  */
 export async function measureContainerRun(
   measurements: Measurement[],
-  ctx: MeasurementContext,
+  open: () => Promise<OpenedMeasurementContext>,
   now: () => number = Date.now,
 ): Promise<Result> {
   const result: Result = {};
   for (const measurement of measurements) {
-    const outcome = await evaluate(measurement, ctx);
+    const ctx = await open();
+    let outcome: RecordedOutcome;
+    try {
+      outcome = await evaluate(measurement, ctx);
+    } finally {
+      await ctx.close();
+    }
     result[measurement.name] = {
       instrument: measurement.instrument,
       contentHash: hashMeasurement(measurement),

@@ -12,15 +12,16 @@
 // Base image, code state and prompt set are not applied on the host, and the environment is
 // passed through unfiltered.
 //
-// Measuring has its own seam beside it: a MeasurementOpener gives the MeasurementContext of
-// one postrun image. The host one here works over the kept directory in place of a
-// measurement container.
+// Measuring has its own seam beside it: a MeasurementOpener gives a MeasurementContext over
+// one postrun image, a fresh one for each measurement. The host one here works over a scratch
+// copy of the kept directory's workspace/ in place of a measurement container, so nothing a
+// measurement writes reaches the kept directory or the next measurement.
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { constants, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { MeasurementContext } from "./declarations.ts";
 import type { PlannedContainerRun } from "./execution.ts";
 import { postrunTagExecutionId } from "./tags.ts";
@@ -36,9 +37,17 @@ export interface ContainerRunner {
   runContainer(run: PlannedContainerRun): Promise<ExecutionFile>;
 }
 
+/** A MeasurementContext of its own for one measurement, discarded by `close`. */
+export interface OpenedMeasurementContext extends MeasurementContext {
+  close(): Promise<void>;
+}
+
 export interface MeasurementOpener {
-  /** The context instruments run against for the container run tagged `postrunTag`. */
-  openMeasurementContext(postrunTag: string): Promise<MeasurementContext>;
+  /**
+   * A fresh context for the container run tagged `postrunTag`, which instruments run against.
+   * Nothing written through one is seen by another.
+   */
+  openMeasurementContext(postrunTag: string): Promise<OpenedMeasurementContext>;
 }
 
 /** The exit code recorded for a command killed at its timeout, as GNU `timeout` reports it. */
@@ -129,8 +138,9 @@ function exec(command: string, cwd: string) {
 
 /**
  * Measurement contexts over the directories the host runner kept under `rootDir`. `workdir`
- * is the run's `workspace/`, where paths, globs and `exec` resolve; `harnessResult` is its
- * `thunderjar/result.json`, or empty if the cli wrote none. Throws if the run wasn't kept there.
+ * is a scratch copy of the run's `workspace/`, where paths, globs and `exec` resolve, and
+ * `close` deletes it; `harnessResult` is its `thunderjar/result.json`, or empty if the cli
+ * wrote none. Throws if the run wasn't kept there.
  */
 export function createHostMeasurementOpener(rootDir: string): MeasurementOpener {
   return {
@@ -138,17 +148,26 @@ export function createHostMeasurementOpener(rootDir: string): MeasurementOpener 
       const executionId = postrunTagExecutionId(postrunTag);
       if (!executionId) throw new Error(`not a postrun tag: ${postrunTag}`);
       const dir = join(executionDir(rootDir, executionId), postrunTag);
-      const workdir = join(dir, "workspace");
-      if (!existsSync(workdir)) throw new Error(`no container run kept for ${postrunTag} (expected ${workdir})`);
+      const kept = join(dir, "workspace");
+      if (!existsSync(kept)) throw new Error(`no container run kept for ${postrunTag} (expected ${kept})`);
       const resultPath = join(dir, "thunderjar", "result.json");
       const harnessResult = existsSync(resultPath) ? await readFile(resultPath, "utf8") : "";
+      const workdir = await mkdtemp(join(tmpdir(), "thunderjar-measure-"));
+      await cp(kept, workdir, { recursive: true, verbatimSymlinks: true }).catch(async (error: unknown) => {
+        await rm(workdir, { recursive: true, force: true });
+        throw error;
+      });
       return {
         workdir,
         harnessResult,
         exec: (command) => exec(command, workdir),
         readFile: (path) => readFile(resolve(workdir, path), "utf8"),
-        writeFile: (path, contents) => writeFile(resolve(workdir, path), contents),
+        async writeFile(path, contents) {
+          await mkdir(dirname(resolve(workdir, path)), { recursive: true });
+          await writeFile(resolve(workdir, path), contents);
+        },
         glob: async (pattern) => (await Array.fromAsync(new Bun.Glob(pattern).scan({ cwd: workdir, dot: true }))).toSorted(),
+        close: () => rm(workdir, { recursive: true, force: true }),
       };
     },
   };

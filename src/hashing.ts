@@ -9,7 +9,8 @@
 
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
+import { instruments, isInstrumentName } from "./instruments.ts";
 
 const sha256 = (data: string | Uint8Array) => createHash("sha256").update(data).digest("hex");
 
@@ -124,9 +125,16 @@ export const hashPermutation = (hashes: PermutationHashes) => hashValue(hashes);
 
 /**
  * A measurement's content hash — spec/085-test-case-results.md#name-is-identity-hash-is-version.
- * Covers `instrument` and `config` only: not the measurement's name, so renaming its file keeps
- * it, and not `aggregate`, so changing how values combine never makes a measure stale. Bundled
- * files, such as a `templateTest` template, are not covered yet.
+ * Covers `instrument`, `config` and the content of the files its instrument bundles, such as a
+ * `templateTest` template, found relative to `dir`. Not the measurement's name, so renaming its
+ * file keeps it; not `aggregate`, so changing how values combine never makes a measure stale;
+ * and not other files beside it that its config doesn't name.
  */
-export const hashMeasurement = ({ instrument, config }: { instrument: string; config: unknown }) =>
-  hashValue({ instrument, config });
+export function hashMeasurement({ instrument, config, dir }: { instrument: string; config: unknown; dir?: string }): string {
+  const keys = isInstrumentName(instrument) ? (instruments[instrument].bundledFiles ?? []) : [];
+  if (keys.length === 0) return hashValue({ instrument, config });
+  if (dir === undefined) throw new Error(`a ${instrument} measurement's hash needs the folder its bundled files are in`);
+  const paths = config as Record<string, string>;
+  const files = Object.fromEntries(keys.map((key) => [key, sha256(readFileSync(resolve(dir, paths[key]!)))]));
+  return hashValue({ instrument, config, files });
+}

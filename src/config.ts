@@ -116,17 +116,24 @@ export function parseHarnessModelPair(pair: string): { family: string; version: 
   return { family, version, model };
 }
 
-/** One of a task's measurements, named by its file: `isPrimeTsExists.ts` is `isPrimeTsExists`. */
-export type Measurement = MeasurementDeclaration & { name: string };
+/**
+ * One of a task's measurements, named by its file: `isPrimeTsExists.ts` is `isPrimeTsExists`.
+ * `dir` is the folder holding the file, which its bundled files are relative to.
+ */
+export type Measurement = MeasurementDeclaration & { name: string; dir: string };
 
 /**
  * Loads and checks every `tasks/<task>/measurements/*.ts`, sorted by name, recording
- * problems rather than throwing. A task without a `measurements/` folder has none.
+ * problems rather than throwing. A task without a `measurements/` folder has none. A file
+ * whose name has a further dot, such as `isPrime.test.template.ts`, is a supporting file
+ * beside the measurements (spec/066-task.md#task-measurements), not a measurement.
  */
 async function collectMeasurements(root: string, task: string, problems: Problem[]): Promise<Measurement[]> {
   const dir = `test-case-parameters/tasks/${task}/measurements`;
   if (!existsSync(join(root, dir))) return [];
-  const files = [...new Bun.Glob("*.ts").scanSync({ cwd: join(root, dir) })].toSorted();
+  const files = [...new Bun.Glob("*.ts").scanSync({ cwd: join(root, dir) })]
+    .filter((name) => !basename(name, ".ts").includes("."))
+    .toSorted();
   const measurements: Measurement[] = [];
   for (const name of files) {
     const file = `${dir}/${name}`;
@@ -144,12 +151,20 @@ async function collectMeasurements(root: string, task: string, problems: Problem
       continue;
     }
     const before = problems.length;
-    for (const [field, message] of instruments[instrument].checkConfig(config)) problems.push({ file, field, message });
+    const { checkConfig, bundledFiles = [] } = instruments[instrument];
+    const configProblems = checkConfig(config);
+    for (const [field, message] of configProblems) problems.push({ file, field, message });
+    if (configProblems.length === 0) {
+      for (const key of bundledFiles) {
+        const path = (config as Record<string, string>)[key]!;
+        requireFile(root, file, `config.${key}`, path, join(dir, path), problems);
+      }
+    }
     if (!Array.isArray(aggregate)) {
       problems.push({ file, field: "aggregate", message: `must be an array of aggregation methods, got ${show(aggregate)}` });
     }
     if (problems.length === before) {
-      measurements.push({ ...(declaration as MeasurementDeclaration), name: basename(name, ".ts") });
+      measurements.push({ ...(declaration as MeasurementDeclaration), name: basename(name, ".ts"), dir: join(root, dir) });
     }
   }
   return measurements;

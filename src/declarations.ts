@@ -179,6 +179,13 @@ export interface MeasurementContext {
 export interface InstrumentTypes {
   /** Did the agent leave a file matching `glob`? */
   fileCreated: { config: { glob: string }; value: boolean };
+  /** How many lines, across the files matching `glob`, match `pattern`, a JavaScript regex? */
+  grep: { config: { glob: string; pattern: string }; value: number };
+  /**
+   * How many tests pass and fail when `template`, a path relative to the measurement file, is
+   * rendered against each file matching `subject` and run with `bun test`?
+   */
+  templateTest: { config: { subject: string; template: string }; value: { passed: number; failed: number } };
 }
 
 export type InstrumentName = keyof InstrumentTypes;

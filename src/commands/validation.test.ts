@@ -186,7 +186,7 @@ test("a measurement naming an unknown instrument", async () => {
   const dir = await project(measurement(`{ instrument: "fileCraeted", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] }`));
   for (const result of [await plan(dir), await run(dir, "run", "fake-is-prime")]) {
     expect(result.stderr).toBe(
-      `error: ${MEASUREMENT}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated\n`,
+      `error: ${MEASUREMENT}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest\n`,
     );
     expect(result.exitCode).toBe(1);
   }
@@ -213,5 +213,38 @@ test("a measurement not wrapped in declareMeasurement", async () => {
     }),
   );
   expect(stderr).toBe(`error: ${MEASUREMENT}: default export is not wrapped in declareMeasurement(...).\n`);
+  expect(exitCode).toBe(1);
+});
+
+const TEMPLATE_TEST = ".thunderjar/test-case-parameters/tasks/is-prime/measurements/isPrimeTemplateTest.ts";
+
+test("a templateTest measurement whose template is missing", async () => {
+  const dir = await project({
+    "test-case-parameters/tasks/is-prime/measurements/isPrimeTemplateTest.ts": stub(
+      "declareMeasurement",
+      `{ instrument: "templateTest", config: { subject: "**/isPrime.ts", template: "./isPrime.tset.template.ts" }, aggregate: ["sum"] }`,
+    ),
+  });
+  for (const result of [await plan(dir), await run(dir, "run", "fake-is-prime")]) {
+    expect(result.stderr).toBe(
+      `error: ${TEMPLATE_TEST}: config.template: "./isPrime.tset.template.ts" has no matching test-case-parameters/tasks/is-prime/measurements/isPrime.tset.template.ts\n`,
+    );
+    expect(result.exitCode).toBe(1);
+  }
+  expect(existsSync(join(dir, ".thunderjar", ".data"))).toBe(false);
+});
+
+test("a grep measurement whose pattern isn't a valid regex", async () => {
+  const { stderr, exitCode } = await plan(
+    await project({
+      "test-case-parameters/tasks/is-prime/measurements/tsIgnoreCount.ts": stub(
+        "declareMeasurement",
+        `{ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore(" }, aggregate: ["max"] }`,
+      ),
+    }),
+  );
+  expect(stderr).toStartWith(
+    `error: .thunderjar/test-case-parameters/tasks/is-prime/measurements/tsIgnoreCount.ts: config.pattern: "@ts-ignore(" is not a valid regular expression: `,
+  );
   expect(exitCode).toBe(1);
 });

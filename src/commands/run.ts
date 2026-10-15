@@ -51,10 +51,18 @@ const indent = (text: string, spaces: number) =>
 /** `n/total`, with `n` padded to the width of `total` so the lines line up. */
 const ordinal = (n: number, total: number) => `${String(n).padStart(String(total).length)}/${total}`;
 
+/** A measured value as `run` prints it: JSON, but with an object's keys unquoted, `{passed: 4, failed: 1}`. */
+const showValue = (value: unknown): string =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? `{${Object.entries(value)
+        .map(([key, v]) => `${key}: ${showValue(v)}`)
+        .join(", ")}}`
+    : (JSON.stringify(value) ?? String(value));
+
 /** A measure as `run` prints it: its value, or what kept it from having one. */
 const showOutcome = (outcome: RecordedOutcome) =>
   outcome.outcome === "measured"
-    ? (JSON.stringify(outcome.data) ?? String(outcome.data))
+    ? showValue(outcome.data)
     : outcome.outcome === "skipped"
       ? "skipped"
       : `erroredWhileMeasuring: ${outcome.error.message}`;
@@ -138,8 +146,8 @@ export async function run(name: string, options: RunOptions): Promise<void> {
       );
 
       if (measurements.length === 0) continue;
-      const ctx = await measurementOpener.openMeasurementContext(containerRun.postrunTag);
-      const result = await measureContainerRun(measurements, ctx, now);
+      const open = () => measurementOpener.openMeasurementContext(containerRun.postrunTag);
+      const result = await measureContainerRun(measurements, open, now);
       await store.recordMeasures(containerRun.postrunTag, result);
       log(
         Object.entries(result)

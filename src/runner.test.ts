@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,29 +20,49 @@ async function keptRun({ result }: { result?: string } = {}) {
   return { rootDir, workspace: join(dir, "workspace") };
 }
 
-test("the host measurement context works in the run's workspace", async () => {
+test("the host measurement context works in a scratch copy of the run's workspace", async () => {
   const { rootDir, workspace } = await keptRun({ result: `{"model":"fake-model"}\n` });
   const ctx = await createHostMeasurementOpener(rootDir).openMeasurementContext(TAG);
 
-  expect(ctx.workdir).toBe(workspace);
+  expect(ctx.workdir).not.toBe(workspace);
   expect(ctx.harnessResult).toBe(`{"model":"fake-model"}\n`);
   expect(await ctx.glob("**/*")).toEqual([".hidden", "src/isPrime.ts"]);
   expect(await ctx.readFile("src/isPrime.ts")).toBe("export default () => true;\n");
 
   await ctx.writeFile("src/isPrime.test.ts", "test\n");
-  expect(readFileSync(join(workspace, "src", "isPrime.test.ts"), "utf8")).toBe("test\n");
+  await ctx.writeFile("new/dir/file.txt", "made\n");
+  expect(readFileSync(join(ctx.workdir, "src", "isPrime.test.ts"), "utf8")).toBe("test\n");
+  expect(await ctx.readFile("new/dir/file.txt")).toBe("made\n");
 
   expect(await ctx.exec("pwd && ls src && echo oops >&2 && exit 4")).toEqual({
-    stdout: `${workspace}\nisPrime.test.ts\nisPrime.ts\n`,
+    stdout: `${ctx.workdir}\nisPrime.test.ts\nisPrime.ts\n`,
     stderr: "oops\n",
     exitCode: 4,
   });
+
+  // Nothing written reached the kept workspace, and closing discards the copy.
+  expect(readdirSync(workspace, { recursive: true }).map(String).toSorted()).toEqual([".hidden", "src", "src/isPrime.ts"]);
+  await ctx.close();
+  expect(existsSync(ctx.workdir)).toBe(false);
+  expect(existsSync(join(workspace, "src", "isPrime.ts"))).toBe(true);
+});
+
+test("each host measurement context is a copy of its own", async () => {
+  const { rootDir } = await keptRun();
+  const opener = createHostMeasurementOpener(rootDir);
+  const first = await opener.openMeasurementContext(TAG);
+  await first.writeFile("src/isPrime.test.ts", "test\n");
+  const second = await opener.openMeasurementContext(TAG);
+  expect(await second.glob("**/*")).toEqual([".hidden", "src/isPrime.ts"]);
+  await first.close();
+  await second.close();
 });
 
 test("the host measurement context's harnessResult is empty if the cli wrote no result file", async () => {
   const { rootDir } = await keptRun();
   const ctx = await createHostMeasurementOpener(rootDir).openMeasurementContext(TAG);
   expect(ctx.harnessResult).toBe("");
+  await ctx.close();
 });
 
 test("opening a measurement context for a run that wasn't kept, or a tag that isn't a postrun tag, fails", async () => {

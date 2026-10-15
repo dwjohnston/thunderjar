@@ -114,7 +114,8 @@ const tsconfig =
         allowImportingTsExtensions: true,
       },
       include: ["**/*.ts"],
-      exclude: ["node_modules", ".data"],
+      // A templateTest template isn't TypeScript until it is rendered.
+      exclude: ["node_modules", ".data", "**/*.template.ts"],
     },
     null,
     2,
