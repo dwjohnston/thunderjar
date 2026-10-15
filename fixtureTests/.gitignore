@@ -1,0 +1,3 @@
+# Written by typecheck.test.ts before each scenario is checked.
+node_modules/
+*/fixtures/.thunderjar/tsconfig.json

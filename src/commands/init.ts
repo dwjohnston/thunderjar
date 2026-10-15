@@ -96,12 +96,36 @@ const testCase = stub(
 }`,
 );
 
+// Brings _generated/parameter-names.d.ts into the editor's program alongside the files
+// that use its names — without it they don't resolve, and nothing is checked
+// (spec/055-declaring-test-cases.md#typed-names). `allowImportingTsExtensions` because
+// thunderjar ships its TypeScript source.
+const tsconfig =
+  JSON.stringify(
+    {
+      compilerOptions: {
+        target: "ESNext",
+        module: "ESNext",
+        moduleResolution: "bundler",
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        allowImportingTsExtensions: true,
+      },
+      include: ["**/*.ts"],
+      exclude: ["node_modules", ".data"],
+    },
+    null,
+    2,
+  ) + "\n";
+
 const P = "test-case-parameters";
 
 /** Files `init` creates under `.thunderjar/`, keyed by relative path. */
 function scaffold(): Record<string, string> {
   return {
     "thunderjar.config.ts": config,
+    "tsconfig.json": tsconfig,
     "test-cases/example.ts": testCase,
     [`${P}/baseImages/node20/index.ts`]: baseImage,
     [`${P}/codeStates/baseline/index.ts`]: codeState,
