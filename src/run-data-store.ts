@@ -6,6 +6,8 @@
 //
 // A container run is recorded with an empty Result straight after it runs; its measures are
 // merged in afterwards with recordMeasures, the same way a backfill will add them later.
+// Aggregation results sit beside the container run records, in the same file. They are
+// computed in src/aggregate.ts; the store only keeps them.
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -70,6 +72,35 @@ export interface ContainerRunRecord {
   execution: Execution;
 }
 
+/** One way a measure's values combine — spec/085-test-case-results.md#how-a-measures-values-combine. */
+export type AggregationMethod = "rate" | "count" | "mean" | "median" | "min" | "max" | "sum";
+
+/** What one method gives: a number, or for `Record<string, number>` values, a record of them. */
+export type AggregatedValue = number | Record<string, number>;
+
+/**
+ * One measure combined across a permutation's iterations: how many iterations gave it a value,
+ * then a key per method its measurement chose, in the order it chose them. With nothing
+ * measured there are no method keys.
+ */
+export type AggregatedMeasure = { measured: number } & { [M in AggregationMethod]?: AggregatedValue };
+
+/**
+ * One permutation of one execution, its iterations combined — spec/085-test-case-results.md#aggregation-results.
+ * Recomputed from the container run records whenever a measure is recorded.
+ */
+export interface AggregationResult {
+  executionId: string;
+  /** Full and untruncated, as in ContainerRunRecord. */
+  permutationHash: string;
+  /** How many container runs it combines. */
+  iterations: number;
+  /** By measurement name: only the measurements the task declared when it was computed. */
+  measures: Record<string, AggregatedMeasure>;
+  /** Of each iteration's `finishedAt - startedAt`, in ms. */
+  duration: { mean: number; max: number };
+}
+
 /** One test case execution, as `executions` lists it. */
 export interface ExecutionSummary {
   executionId: string;
@@ -97,6 +128,10 @@ export interface RunDataStore {
   getExecution(executionId: string): Promise<ContainerRunRecord[]>;
   /** The container run recorded with `postrunImage`, if there is one. */
   getContainerRun(postrunImage: string): Promise<ContainerRunRecord | undefined>;
+  /** Stores `result`, replacing any stored for the same execution and permutation. */
+  recordAggregationResult(result: AggregationResult): Promise<void>;
+  /** The aggregation results stored for `executionId`, in matrix order. Empty if there are none. */
+  getAggregationResults(executionId: string): Promise<AggregationResult[]>;
 }
 
 /** Where the store lives under the `.thunderjar/` folder `root`. */
@@ -104,6 +139,8 @@ export const defaultRunDataStorePath = (root: string) => join(root, ".data", "ru
 
 interface JsonFile {
   containerRuns: ContainerRunRecord[];
+  /** Absent from a file written before aggregation results were stored. */
+  aggregationResults?: AggregationResult[];
 }
 
 /** Groups records by execution ID, newest first. */
@@ -130,11 +167,17 @@ export function summarizeExecutions(records: ContainerRunRecord[]): ExecutionSum
  * first recorded in stands for it.
  */
 export function inExecutionOrder(records: ContainerRunRecord[]): ContainerRunRecord[] {
-  const place = new Map<string, number>();
-  for (const { permutationHash } of records) if (!place.has(permutationHash)) place.set(permutationHash, place.size);
+  const place = matrixPlaces(records);
   return records.toSorted(
     (a, b) => place.get(a.permutationHash)! - place.get(b.permutationHash)! || a.iteration - b.iteration,
   );
+}
+
+/** Each permutation's place in one execution's matrix, as the order its first run was recorded in. */
+function matrixPlaces(records: ContainerRunRecord[]): Map<string, number> {
+  const place = new Map<string, number>();
+  for (const { permutationHash } of records) if (!place.has(permutationHash)) place.set(permutationHash, place.size);
+  return place;
 }
 
 /**
@@ -185,6 +228,23 @@ export function jsonFileStore(path: string): RunDataStore {
     async getContainerRun(postrunImage) {
       const { containerRuns } = await read();
       return containerRuns.find((r) => r.postrunImage === postrunImage);
+    },
+    async recordAggregationResult(result) {
+      const data = await read();
+      const results = (data.aggregationResults ??= []);
+      const same = results.findIndex(
+        (r) => r.executionId === result.executionId && r.permutationHash === result.permutationHash,
+      );
+      if (same === -1) results.push(result);
+      else results[same] = result;
+      await write(data);
+    },
+    async getAggregationResults(executionId) {
+      const { containerRuns, aggregationResults = [] } = await read();
+      const place = matrixPlaces(containerRuns.filter((r) => r.executionId === executionId));
+      // A result with no recorded runs has no place in the matrix, so it goes last.
+      const placeOf = ({ permutationHash }: AggregationResult) => place.get(permutationHash) ?? place.size;
+      return aggregationResults.filter((r) => r.executionId === executionId).toSorted((a, b) => placeOf(a) - placeOf(b));
     },
   };
 }

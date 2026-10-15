@@ -3,7 +3,7 @@ import { readdirSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { jsonFileStore, type ContainerRunRecord } from "./run-data-store.ts";
+import { jsonFileStore, type AggregationResult, type ContainerRunRecord } from "./run-data-store.ts";
 
 /** A store in a fresh temp directory, under a `.data/` folder that doesn't exist yet. */
 async function tempStore() {
@@ -175,4 +175,60 @@ test("getContainerRun finds a run by its postrun tag, with its measures, or give
   expect(await store.getContainerRun(second.postrunImage)).toEqual({ ...second, result: { isPrimeTsExists: measure(true) } });
   expect(await store.getContainerRun("postrun-e01k4x9j2e8mqz3-h4f9a21c8-i02")).toBeUndefined();
   expect(await store.getContainerRun("01k4x9j2e8mqz3")).toBeUndefined();
+});
+
+/** An aggregation result of permutation `hash` in `executionId`, of `iterations` iterations. */
+const aggregationOf = (executionId: string, hash: string, iterations = 2): AggregationResult => ({
+  executionId,
+  permutationHash: hash.padEnd(64, "0"),
+  iterations,
+  measures: { isPrimeTsExists: { measured: iterations, rate: 1 } },
+  duration: { mean: 40, max: 40 },
+});
+
+test("aggregation results sit in the same file as the run records, and a file without any reads as none", async () => {
+  const { dir, path, store } = await tempStore();
+  const id = "01k4x9j2e8mqz3";
+  await store.recordContainerRun(runOf(id, "4f9a21c8", 0));
+  expect(await store.getAggregationResults(id)).toEqual([]);
+
+  await store.recordAggregationResult(aggregationOf(id, "4f9a21c8"));
+  expect(await Bun.file(path).json()).toEqual({
+    containerRuns: [runOf(id, "4f9a21c8", 0)],
+    aggregationResults: [aggregationOf(id, "4f9a21c8")],
+  });
+  expect(readdirSync(join(dir, ".data"))).toEqual(["runs.json"]);
+});
+
+test("recordAggregationResult overwrites by execution and permutation", async () => {
+  const { store } = await tempStore();
+  const id = "01k4x9j2e8mqz3";
+  const other = "01k4xb7q0c2tnv";
+  for (const r of [runOf(id, "4f9a21c8", 0), runOf(id, "0be07d35", 0), runOf(other, "4f9a21c8", 0)]) {
+    await store.recordContainerRun(r);
+  }
+  await store.recordAggregationResult(aggregationOf(id, "4f9a21c8", 1));
+  await store.recordAggregationResult(aggregationOf(id, "0be07d35", 1));
+  await store.recordAggregationResult(aggregationOf(other, "4f9a21c8", 1));
+  // The same permutation again, in each execution: replaced, not added.
+  await store.recordAggregationResult(aggregationOf(id, "4f9a21c8", 2));
+
+  expect(await store.getAggregationResults(id)).toEqual([aggregationOf(id, "4f9a21c8", 2), aggregationOf(id, "0be07d35", 1)]);
+  expect(await store.getAggregationResults(other)).toEqual([aggregationOf(other, "4f9a21c8", 1)]);
+  expect(await store.getAggregationResults("01k4xc00000000")).toEqual([]);
+});
+
+test("getAggregationResults gives an execution's results in matrix order, whatever order they were recorded in", async () => {
+  const { store } = await tempStore();
+  const id = "01k4x9j2e8mqz3";
+  for (const r of [runOf(id, "4f9a21c8", 0), runOf(id, "0be07d35", 0), runOf(id, "77aa0c12", 0)]) {
+    await store.recordContainerRun(r);
+  }
+  for (const hash of ["77aa0c12", "4f9a21c8", "0be07d35"]) await store.recordAggregationResult(aggregationOf(id, hash));
+
+  expect((await store.getAggregationResults(id)).map((r) => r.permutationHash.slice(0, 8))).toEqual([
+    "4f9a21c8",
+    "0be07d35",
+    "77aa0c12",
+  ]);
 });
