@@ -204,7 +204,7 @@ export type MeasurementDeclaration = {
   [I in InstrumentName]: {
     instrument: I;
     config: InstrumentTypes[I]["config"];
-    /** How this measurement's values combine across iterations. Not applied yet. */
+    /** How this measurement's values combine across iterations — see src/aggregate.ts. */
     aggregate: AggregateFor<InstrumentTypes[I]["value"]>[];
   };
 }[InstrumentName];

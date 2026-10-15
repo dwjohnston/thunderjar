@@ -7,6 +7,7 @@
 
 import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { aggregateMethods } from "./aggregate.ts";
 import { declaredBy, type MeasurementDeclaration, type TestCaseDeclaration } from "./declarations.ts";
 import { instruments, isInstrumentName } from "./instruments.ts";
 
@@ -162,6 +163,16 @@ async function collectMeasurements(root: string, task: string, problems: Problem
     }
     if (!Array.isArray(aggregate)) {
       problems.push({ file, field: "aggregate", message: `must be an array of aggregation methods, got ${show(aggregate)}` });
+    } else {
+      const menu: readonly unknown[] = aggregateMethods[instrument];
+      for (const method of aggregate) {
+        if (menu.includes(method)) continue;
+        problems.push({
+          file,
+          field: "aggregate",
+          message: `${show(method)} is not a way ${instrument}'s values combine. Use one of: ${menu.join(", ")}`,
+        });
+      }
     }
     if (problems.length === before) {
       measurements.push({ ...(declaration as MeasurementDeclaration), name: basename(name, ".ts"), dir: join(root, dir) });

@@ -234,6 +234,21 @@ test("a templateTest measurement whose template is missing", async () => {
   expect(existsSync(join(dir, ".thunderjar", ".data"))).toBe(false);
 });
 
+test("a measurement whose aggregate names a method its instrument's values don't combine by", async () => {
+  const dir = await project(measurement(`{ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate", "mean", "avg"] }`));
+  for (const result of [await plan(dir), await run(dir, "run", "fake-is-prime")]) {
+    expect(result.stderr).toBe(
+      [
+        `error: ${MEASUREMENT}: aggregate: "mean" is not a way fileCreated's values combine. Use one of: rate, count`,
+        `error: ${MEASUREMENT}: aggregate: "avg" is not a way fileCreated's values combine. Use one of: rate, count`,
+        "",
+      ].join("\n"),
+    );
+    expect(result.exitCode).toBe(1);
+  }
+  expect(existsSync(join(dir, ".thunderjar", ".data"))).toBe(false);
+});
+
 test("a grep measurement whose pattern isn't a valid regex", async () => {
   const { stderr, exitCode } = await plan(
     await project({
