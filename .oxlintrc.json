@@ -2,7 +2,7 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "categories": { "correctness": "error" },
   "rules": { "eqeqeq": "error" },
-  "ignorePatterns": ["node_modules", "dist"],
+  "ignorePatterns": ["node_modules", "dist", "**/*.template.ts"],
 
   // sync-oxlint-layout: begin — generated, do not edit
   "overrides": [
