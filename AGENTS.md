@@ -19,6 +19,41 @@ If being provided feedback for behaviour to change:
 - Write the fix and commit it with a message starting with the 🟢 emoji. 
 
 
+### Fixture tests
+
+`fixtureTests/` holds checked-in Thunderjar projects that the CLI is run against, the way a user would run it.
+
+**Why:** a unit test that builds its project in a temp folder can't be checked by hand. With a real project on disk, a developer can run the same command the test runs and see the same output:
+
+```sh
+bun run fixture scenario_2 run two-pairs --dry-run   # or just: bun run fixture 2 …
+```
+
+Rules:
+
+- **Each folder is a scenario, not a feature.** Name it `scenario_<n>_<what the project is>`, e.g. `scenario_2_typical_project`, not `run`. A scenario is a kind of project, and tests of any command can use it. Inside, name test files after the command they drive: `run.test.ts`, `plan.test.ts`.
+- **Each scenario has `fixtures/.thunderjar/`** (the project) and a `tsconfig.json`, so `fixtureTests/typecheck.test.ts` type-checks it too. `thunderjar` resolves from every scenario through the checked-in link `fixtureTests/node_modules/thunderjar`.
+- **Tests drive the CLI**, not internal functions, using `fixtureTests/helpers.ts`. They normalise only what changes between runs (execution ID, `$TMPDIR`, durations), so expected output reads like what's printed. Real runs work on a copy of `fixtures/`; dry runs run in place.
+- **Behaviour the CLI can't trigger** (e.g. a crash injected through a runner) stays in `src/` unit tests.
+
+### Never refer to real agents in tests
+
+Fixtures and `src/` unit tests never name a real agent: no real harness (claude-code, codex, …), no real model, and none of their files (`CLAUDE.md`, …).
+
+**Why:** tests mustn't look like they depend on, cost money with, or endorse a real product, and an obviously fake name makes it clear which agent produced what. Use:
+
+| | Name | Model ID | Behaviour |
+|---|---|---|---|
+| harness | `fake-harness-alpha` | | writes a buggy `isPrime.ts` with a `@ts-ignore` |
+| harness | `fake-harness-beta` | | writes a correct `isPrime.ts` |
+| model | `fake-model-small` | `fake-model-small-001` | |
+| model | `fake-model-large` | `fake-model-large-001` | |
+
+Both harnesses' `cli` really run, so any test case can be run for real by hand, and the two give different measures. Misbehaving agents (failing, hanging) are further versions of `fake-harness-alpha`; see `fixtureTests/scenario_3_misbehaving_agents`.
+
+The one exception is `src/commands/init.ts` and its test: `init` scaffolds claude-code for real users, and the test checks exactly that.
+
+
 #### Annotated tags 
 
 The final commit should contain an annotated tag of the format `<task-name>-complete`. 
