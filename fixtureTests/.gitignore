@@ -1,3 +1,6 @@
+# fixtureTests/node_modules/thunderjar is a checked-in link to the repo, so every scenario's
+# fixtures resolve `thunderjar` from a fresh clone, before any test has run.
+!/node_modules/
+*/node_modules/
 # Written by typecheck.test.ts before each scenario is checked.
-node_modules/
 */fixtures/.thunderjar/tsconfig.json

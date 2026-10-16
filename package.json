@@ -25,7 +25,7 @@
     "lint": "bun scripts/sync-oxlint-layout.ts && bun scripts/sync-oxlint-layout.ts --check && oxlint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "fixture:run": "bun --cwd fixtureTests/run/fixtures ../../../src/cli/index.ts",
+    "fixture": "bun scripts/fixture.ts",
     "dev:link": "bun scripts/dev-link.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",

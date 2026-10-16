@@ -1,0 +1,8 @@
+import { declareInitialPrompt } from "thunderjar";
+
+// A task without measurements.
+export default declareInitialPrompt({
+  prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
+  timeoutSeconds: 600,
+  applyParameter: () => ``,
+});

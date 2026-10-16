@@ -19,11 +19,12 @@
 //
 // Before checking, the scenario gets the tsconfig `init` scaffolds and the types `generate`
 // writes, so it's type-checked the way a user's editor would check it. Generated names are
-// ambient globals, so each scenario needs its own `tsc` program.
+// ambient globals, so each scenario needs its own `tsc` program. `thunderjar` resolves through
+// the checked-in fixtureTests/node_modules/thunderjar link.
 
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, mkdtemp, readdir, symlink } from "node:fs/promises";
+import { copyFile, mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { generate } from "../src/commands/generate.ts";
@@ -36,14 +37,6 @@ const tsc = join(repoRoot, "node_modules", ".bin", "tsc");
 const scenarios = (await readdir(here, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory() && existsSync(join(here, entry.name, "fixtures")))
   .map((entry) => entry.name);
-
-/** Makes `thunderjar` resolvable from the scenario's assertions and fixtures alike. */
-async function linkThunderjar(scenarioDir: string) {
-  const link = join(scenarioDir, "node_modules", "thunderjar");
-  if (existsSync(link)) return;
-  await mkdir(join(scenarioDir, "node_modules"), { recursive: true });
-  await symlink(repoRoot, link, "dir");
-}
 
 /** Copies in the `.thunderjar/tsconfig.json` that `init` scaffolds for a fresh project. */
 async function copyScaffoldedTsconfig(fixturesDir: string) {
@@ -66,7 +59,6 @@ for (const scenario of scenarios) {
     async () => {
       const scenarioDir = join(here, scenario);
       const fixturesDir = join(scenarioDir, "fixtures");
-      await linkThunderjar(scenarioDir);
       await copyScaffoldedTsconfig(fixturesDir);
       await generate(fixturesDir);
 
