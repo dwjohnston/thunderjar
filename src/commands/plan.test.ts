@@ -15,36 +15,36 @@ const cli = resolve(import.meta.dir, "..", "cli", "index.ts");
 // deliberately, in the change that alters the fixture or the hashing.
 const EXPECTED = `baseImage:     node20 (26d9745f)
 codeState:     baseline (f8347787)
-promptSet:     snerk (75b565ee), glurk (b7f809fa)
-harnessModel:  claude-code@2.1.283/haiku-4-5 (cd63409c), codex@0.9.0/gpt-luna (fed18e07)
+promptSet:     snerk (cd75eb5f), glurk (10059fa1)
+harnessModel:  fake-harness-alpha@1.0.0/fake-model-small (1cfded20), fake-harness-beta@1.0.0/fake-model-large (fde31306)
 task:          is-prime
 initialPrompt: plain (9e30b385), terse (7bb8874f)
 
 Matrix shape: 1/1/2/2/2 (8 permutations × 5 iterations = 40 container runs)
 
- 1  node20 | baseline | snerk | claude-code@2.1.283/haiku-4-5 | plain
-    prerun-h848b6f74
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
+    prerun-h3ae8d594
 
- 2  node20 | baseline | snerk | claude-code@2.1.283/haiku-4-5 | terse
-    prerun-h4fcb1a62
+ 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
+    prerun-h402eac7c
 
- 3  node20 | baseline | snerk | codex@0.9.0/gpt-luna          | plain
-    prerun-he8a3aaee
+ 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain
+    prerun-h89ce6d87
 
- 4  node20 | baseline | snerk | codex@0.9.0/gpt-luna          | terse
-    prerun-he8af79ce
+ 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
+    prerun-haf29f0fa
 
- 5  node20 | baseline | glurk | claude-code@2.1.283/haiku-4-5 | plain
-    prerun-h5c8397d7
+ 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain
+    prerun-h257bdc02
 
- 6  node20 | baseline | glurk | claude-code@2.1.283/haiku-4-5 | terse
-    prerun-hbf1b6f21
+ 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse
+    prerun-h9d8d12ed
 
- 7  node20 | baseline | glurk | codex@0.9.0/gpt-luna          | plain
-    prerun-hd82f20b9
+ 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain
+    prerun-h97455516
 
- 8  node20 | baseline | glurk | codex@0.9.0/gpt-luna          | terse
-    prerun-hf8d9ea44`;
+ 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse
+    prerun-h4ca35225`;
 
 test("`thunderjar plan` prints the parameters with their hashes, and each permutation's prerun image", async () => {
   const dir = await tmp();
@@ -74,7 +74,7 @@ test("renaming a parameter keeps its hash and every prerun image", async () => {
   baseImage: ["node-lts"],
   codeState: ["baseline"],
   promptSet: ["snerk", "glurk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5", "codex@0.9.0/gpt-luna"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small", "fake-harness-beta@1.0.0/fake-model-large"],
   task: "is-prime",
   initialPrompt: ["plain", "terse"],
   iterations: 5,
@@ -92,7 +92,7 @@ test("editing a parameter changes its hash and the prerun image of every permuta
   await createFixtureProject(dir, {
     "test-case-parameters/promptSets/glurk/index.ts": stub("declarePromptSet", `{
   commit: "f0f0f0",
-  files: { "prompts/glurk.md": "CLAUDE.md" },
+  files: { "prompts/glurk.md": "FAKE_INSTRUCTIONS.md" },
   applyParameter: () => \`\`,
 }`),
   });
@@ -101,8 +101,8 @@ test("editing a parameter changes its hash and the prerun image of every permuta
   const output = await plan("is-prime-baseline", dir);
   const tags = output.match(/prerun-h[0-9a-f]{8}/g)!;
   const expectedTags = EXPECTED.match(/prerun-h[0-9a-f]{8}/g)!;
-  expect(output).toContain("promptSet:     snerk (75b565ee), glurk (");
-  expect(output).not.toContain("glurk (b7f809fa)");
+  expect(output).toContain("promptSet:     snerk (cd75eb5f), glurk (");
+  expect(output).not.toContain("glurk (10059fa1)");
   expect(tags.slice(0, 4)).toEqual(expectedTags.slice(0, 4)); // snerk
   for (let i = 4; i < 8; i++) expect(expectedTags).not.toContain(tags[i]!); // glurk
 });
@@ -114,7 +114,7 @@ test("a 1/1/1/1/1 test case has one permutation", async () => {
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["codex@0.9.0/gpt-luna"],
+  harnessModel: ["fake-harness-beta@1.0.0/fake-model-large"],
   task: "is-prime",
   initialPrompt: ["terse"],
   iterations: 1,
@@ -126,15 +126,15 @@ test("a 1/1/1/1/1 test case has one permutation", async () => {
     [
       "baseImage:     node20 (26d9745f)",
       "codeState:     baseline (f8347787)",
-      "promptSet:     snerk (75b565ee)",
-      "harnessModel:  codex@0.9.0/gpt-luna (fed18e07)",
+      "promptSet:     snerk (cd75eb5f)",
+      "harnessModel:  fake-harness-beta@1.0.0/fake-model-large (fde31306)",
       "task:          is-prime",
       "initialPrompt: terse (7bb8874f)",
       "",
       "Matrix shape: 1/1/1/1/1 (1 permutation × 1 iteration = 1 container run)",
       "",
-      " 1  node20 | baseline | snerk | codex@0.9.0/gpt-luna | terse",
-      "    prerun-he8af79ce", // the same permutation as entry 4 of the larger test case
+      " 1  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large | terse",
+      "    prerun-haf29f0fa", // the same permutation as entry 4 of the larger test case
     ].join("\n"),
   );
 });

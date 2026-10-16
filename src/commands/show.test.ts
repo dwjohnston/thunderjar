@@ -73,7 +73,7 @@ const FIRST = "01k4x9j2e8mqz3abcdefghjkmn";
 const SECOND = "01k4xb7q0c2tnvabcdefghjkmn";
 
 const MEASURES_TABLE = `  MEASURE              MEASURED  AGGREGATE
-  isPrimeTemplateTest  2/2       sum {passed: 8, failed: 2}
+  isPrimeTemplateTest  2/2       sum {passed: 6, failed: 4}
   isPrimeTsExists      2/2       rate 1.00
   readmeExists         2/2       rate 0.00
   tsIgnoreCount        2/2       mean 1.0, max 1
@@ -93,7 +93,7 @@ Task       is-prime
 Date       2026-09-29 15:02
 
 Permutation ${hash}  (2 iterations)
-  node20 | baseline | snerk | fake-agent@1.0.0/fake | plain
+  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
 
 ${MEASURES_TABLE}`);
 });
@@ -111,7 +111,7 @@ Task       is-prime
 Date       2026-09-29 14:30
 
 Permutation ${hash}  (2 iterations)
-  node20 | baseline | snerk | fake-agent@1.0.0/fake | plain
+  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
 
 ${MEASURES_TABLE}
 `,
@@ -133,14 +133,14 @@ Permutation    ${hash}, iteration 2
 Ran at         2026-09-29 14:30
 
 Parameters
-  baseImage      node20                 ${p.baseImage}
-  codeState      baseline               ${p.codeState}
-  promptSet      snerk                  ${p.promptSet}
-  harnessModel   fake-agent@1.0.0/fake  ${p.harnessModel}
-  initialPrompt  plain                  ${p.initialPrompt}
+  baseImage      node20                                     ${p.baseImage}
+  codeState      baseline                                   ${p.codeState}
+  promptSet      snerk                                      ${p.promptSet}
+  harnessModel   fake-harness-alpha@1.0.0/fake-model-small  ${p.harnessModel}
+  initialPrompt  plain                                      ${p.initialPrompt}
 
 Measures
-  isPrimeTemplateTest  {passed: 4, failed: 1}
+  isPrimeTemplateTest  {passed: 3, failed: 2}
   isPrimeTsExists      true
   readmeExists         false
   tsIgnoreCount        1
@@ -154,7 +154,7 @@ Duration  0.04s   exit code 0
 
 test("a run whose cli exits 3 shows its exit codes, measures measured in no iteration, and why each was skipped", async () => {
   const dir = await fixture({
-    "test-case-parameters/harnessModels/fake-agent/index.ts": stub("declareHarness", `{
+    "test-case-parameters/harnessModels/fake-harness-alpha/index.ts": stub("declareHarness", `{
   applyParameter: () => \`\`,
   cli: () => \`touch README.md && exit 3\`,
 }`),
@@ -168,7 +168,7 @@ Task       is-prime
 Date       2026-09-29 14:30
 
 Permutation ${hash}  (2 iterations)
-  node20 | baseline | snerk | fake-agent@1.0.0/fake | plain
+  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
 
   MEASURE              MEASURED  AGGREGATE
   isPrimeTemplateTest  0/2       —
@@ -185,11 +185,11 @@ Permutation    ${hash}, iteration 1
 Ran at         2026-09-29 14:30
 
 Parameters
-  baseImage      node20                 ${p.baseImage}
-  codeState      baseline               ${p.codeState}
-  promptSet      snerk                  ${p.promptSet}
-  harnessModel   fake-agent@1.0.0/fake  ${p.harnessModel}
-  initialPrompt  plain                  ${p.initialPrompt}
+  baseImage      node20                                     ${p.baseImage}
+  codeState      baseline                                   ${p.codeState}
+  promptSet      snerk                                      ${p.promptSet}
+  harnessModel   fake-harness-alpha@1.0.0/fake-model-small  ${p.harnessModel}
+  initialPrompt  plain                                      ${p.initialPrompt}
 
 Measures
   isPrimeTemplateTest  skipped  (no file matches **/isPrime.ts)
@@ -220,7 +220,7 @@ test("an instrument that throws in one iteration leaves it out of the aggregate,
 
   expect((await show(FIRST, dir)).split("\n").slice(8)).toEqual([
     "  MEASURE              MEASURED  AGGREGATE",
-    "  isPrimeTemplateTest  2/2       sum {passed: 8, failed: 2}",
+    "  isPrimeTemplateTest  2/2       sum {passed: 6, failed: 4}",
     "  isPrimeTsExists      2/2       rate 1.00",
     "  readmeExists         1/2       rate 0.00",
     "  tsIgnoreCount        2/2       mean 1.0, max 1",
@@ -230,7 +230,7 @@ test("an instrument that throws in one iteration leaves it out of the aggregate,
   ]);
   expect((await show(`postrun-e${FIRST}-h${hash}-i00`, dir)).split("\n").slice(12, 17)).toEqual([
     "Measures",
-    "  isPrimeTemplateTest  {passed: 4, failed: 1}",
+    "  isPrimeTemplateTest  {passed: 3, failed: 2}",
     "  isPrimeTsExists      true",
     "  readmeExists         error  (disk on fire)",
     "  tsIgnoreCount        1",
@@ -260,7 +260,7 @@ test("each chosen method shows in the order chosen: a rate to two places, a mean
 
   expect((await show(FIRST, dir)).split("\n").slice(8, 13)).toEqual([
     "  MEASURE              MEASURED  AGGREGATE",
-    "  isPrimeTemplateTest  2/2       mean {passed: 4.0, failed: 1.0}, sum {passed: 8, failed: 2}",
+    "  isPrimeTemplateTest  2/2       mean {passed: 3.0, failed: 2.0}, sum {passed: 6, failed: 4}",
     "  isPrimeTsExists      2/2       rate 1.00",
     "  readmeExists         2/2       count 0, rate 0.00",
     "  tsIgnoreCount        2/2       median 1.0, min 1, sum 2",
@@ -276,13 +276,13 @@ test("a deleted measurement is left out of later executions' aggregation results
   // The rows between the table's heading and the blank line before exit and duration.
   const measureRows = async (id: string) => (await show(id, dir)).split("\n").slice(9, -3);
   expect(await measureRows(FIRST)).toEqual([
-    "  isPrimeTemplateTest  2/2       sum {passed: 8, failed: 2}",
+    "  isPrimeTemplateTest  2/2       sum {passed: 6, failed: 4}",
     "  isPrimeTsExists      2/2       rate 1.00",
     "  readmeExists         2/2       rate 0.00",
     "  tsIgnoreCount        2/2       mean 1.0, max 1",
   ]);
   expect(await measureRows(SECOND)).toEqual([
-    "  isPrimeTemplateTest  2/2       sum {passed: 8, failed: 2}",
+    "  isPrimeTemplateTest  2/2       sum {passed: 6, failed: 4}",
     "  isPrimeTsExists      2/2       rate 1.00",
     "  tsIgnoreCount        2/2       mean 1.0, max 1",
   ]);

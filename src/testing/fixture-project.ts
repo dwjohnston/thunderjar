@@ -20,73 +20,49 @@ const FILES: Record<string, string> = {
 }`),
   "test-case-parameters/promptSets/snerk/index.ts": stub("declarePromptSet", `{
   commit: "e4f5a6",
-  files: { "prompts/snerk.md": "CLAUDE.md" },
+  files: { "prompts/snerk.md": "FAKE_INSTRUCTIONS.md" },
   applyParameter: () => \`\`,
 }`),
   "test-case-parameters/promptSets/glurk/index.ts": stub("declarePromptSet", `{
   commit: "e4f5a6",
-  files: { "prompts/glurk.md": "CLAUDE.md" },
+  files: { "prompts/glurk.md": "FAKE_INSTRUCTIONS.md" },
   applyParameter: () => \`\`,
 }`),
-  "test-case-parameters/harnessModels/claude-code/index.ts": stub("declareHarness", `{
-  applyParameter: (ctx) => \`RUN npm install -g @anthropic-ai/claude-code@\${ctx.version}\`,
-  cli: (ctx) => \`claude -p "\${ctx.initialPrompt}" --model \${ctx.modelId} > \${ctx.resultPath}\`,
-  requiredEnv: ["ANTHROPIC_API_KEY"],
-}`),
-  "test-case-parameters/harnessModels/claude-code/models.ts": stub("declareHarnessModels", `{
-  "haiku-4-5": "claude-haiku-4-5-20251001",
-  "sonnet-5-5": "claude-sonnet-5-5",
-}`),
-  "test-case-parameters/harnessModels/claude-code/versions.ts": stub("declareHarnessVersions", `{
-  "2.1.283": { version: "2.1.283" },
-  "2.2.0": { version: "2.2.0" },
-}`),
-  "test-case-parameters/harnessModels/claude-code/collectTokenCosts.ts": stub("declareTokenCostCollector", `
-  (raw, ctx) => ({ outcome: "unavailable", reason: "notReported" }),
-`),
-  "test-case-parameters/harnessModels/codex/index.ts": stub("declareHarness", `{
-  applyParameter: (ctx) => \`RUN npm install -g @openai/codex@\${ctx.version}\`,
-  cli: (ctx) => \`codex exec "\${ctx.initialPrompt}" --model \${ctx.modelId} > \${ctx.resultPath}\`,
-  requiredEnv: ["OPENAI_API_KEY"],
-}`),
-  "test-case-parameters/harnessModels/codex/models.ts": stub("declareHarnessModels", `{
-  "gpt-luna": "gpt-luna",
-}`),
-  "test-case-parameters/harnessModels/codex/versions.ts": stub("declareHarnessVersions", `{
-  "0.9.0": { version: "0.9.0" },
-}`),
-  "test-case-parameters/harnessModels/codex/collectTokenCosts.ts": stub("declareTokenCostCollector", `
-  (raw, ctx) => ({ outcome: "unavailable", reason: "notReported" }),
-`),
-  // The fake agent (spec/120-test-boundaries.md#32-generating-the-post-run-image): an ordinary
-  // harness family whose cli writes a known file into the workspace, and a result file. Its
-  // isPrime.ts has the prompt as a comment, one @ts-ignore, and a bug: 1 is reported as prime.
-  "test-case-parameters/harnessModels/fake-agent/index.ts": `import { declareHarness } from "thunderjar";
-
-const IS_PRIME = [
-  "export function isPrime(n: number): boolean {",
-  "  // @ts-ignore",
-  "  if (n < 1) return false;",
-  "  for (let i = 2; i * i <= n; i++) if (n % i === 0) return false;",
-  "  return true;",
-  "}",
-];
-
-export default declareHarness({
-  applyParameter: () => \`\`,
+  // The fake agents (spec/120-test-boundaries.md#32-generating-the-post-run-image): ordinary
+  // harness families whose cli writes a known isPrime.ts into the workspace, with the prompt as
+  // a comment, and a result file. fake-harness-alpha's has a @ts-ignore and a bug (2 isn't
+  // prime, 15 is); fake-harness-beta's is correct. The same as fixtureTests/scenario_2.
+  "test-case-parameters/harnessModels/fake-harness-alpha/index.ts": stub("declareHarness", `{
+  applyParameter: (ctx) => \`RUN echo "install fake-harness-alpha@\${ctx.version}"\`,
   cli: (ctx) =>
-    \`printf '%s\\\\n' "// \${ctx.initialPrompt}" \${IS_PRIME.map((line) => \`'\${line}'\`).join(" ")} > isPrime.ts\` +
+    \`printf '%s\\\\n' '// \${ctx.initialPrompt}' '// @ts-ignore' 'export const isPrime = (n: number) => n > 1 && n % 2 !== 0;' > isPrime.ts\` +
     \` && echo '{"model":"\${ctx.modelId}"}' > \${ctx.resultPath}\`,
-});
-`,
-  "test-case-parameters/harnessModels/fake-agent/models.ts": stub("declareHarnessModels", `{
-  fake: "fake-model",
 }`),
-  "test-case-parameters/harnessModels/fake-agent/versions.ts": stub("declareHarnessVersions", `{
+  "test-case-parameters/harnessModels/fake-harness-alpha/models.ts": stub("declareHarnessModels", `{
+  "fake-model-small": "fake-model-small-001",
+  "fake-model-large": "fake-model-large-001",
+}`),
+  "test-case-parameters/harnessModels/fake-harness-alpha/versions.ts": stub("declareHarnessVersions", `{
+  "1.0.0": { version: "1.0.0" },
+  "1.1.0": { version: "1.1.0" },
+}`),
+  "test-case-parameters/harnessModels/fake-harness-alpha/collectTokenCosts.ts": stub("declareTokenCostCollector", `
+  (_raw, _ctx) => ({ outcome: "unavailable", reason: "notReported" }),
+`),
+  "test-case-parameters/harnessModels/fake-harness-beta/index.ts": stub("declareHarness", `{
+  applyParameter: (ctx) => \`RUN echo "install fake-harness-beta@\${ctx.version}"\`,
+  cli: (ctx) =>
+    \`printf '%s\\\\n' '// \${ctx.initialPrompt}' 'export const isPrime = (n: number) => n > 1 && Array.from({ length: n - 2 }, (_, i) => i + 2).every((d) => n % d !== 0);' > isPrime.ts\` +
+    \` && echo '{"model":"\${ctx.modelId}"}' > \${ctx.resultPath}\`,
+}`),
+  "test-case-parameters/harnessModels/fake-harness-beta/models.ts": stub("declareHarnessModels", `{
+  "fake-model-large": "fake-model-large-001",
+}`),
+  "test-case-parameters/harnessModels/fake-harness-beta/versions.ts": stub("declareHarnessVersions", `{
   "1.0.0": { version: "1.0.0" },
 }`),
-  "test-case-parameters/harnessModels/fake-agent/collectTokenCosts.ts": stub("declareTokenCostCollector", `
-  (raw, ctx) => ({ outcome: "unavailable", reason: "notReported" }),
+  "test-case-parameters/harnessModels/fake-harness-beta/collectTokenCosts.ts": stub("declareTokenCostCollector", `
+  (_raw, _ctx) => ({ outcome: "unavailable", reason: "notReported" }),
 `),
   "test-case-parameters/tasks/is-prime/initial-prompts/plain.ts": stub("declareInitialPrompt", `{
   prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
@@ -131,7 +107,7 @@ test("1 is not prime", () => expect({{defaultExport}}(1)).toBe(false));
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk", "glurk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5", "codex@0.9.0/gpt-luna"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small", "fake-harness-beta@1.0.0/fake-model-large"],
   task: "is-prime",
   initialPrompt: ["plain", "terse"],
   iterations: 5,
@@ -140,7 +116,7 @@ test("1 is not prime", () => expect({{defaultExport}}(1)).toBe(false));
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-agent@1.0.0/fake"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 2,

@@ -24,28 +24,37 @@ const TWO_PAIRS = stub("declareTestCase", `{
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5", "codex@0.9.0/gpt-luna"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small", "fake-harness-beta@1.0.0/fake-model-large"],
   task: "is-prime",
   initialPrompt: ["terse"],
   iterations: 2,
 }`);
 
+/** Each fake harness's cli, as the dry run prints it. */
+const ALPHA_CLI = (prompt: string, model: string) =>
+  `printf '%s\\n' '// ${prompt}' '// @ts-ignore' 'export const isPrime = (n: number) => n > 1 && n % 2 !== 0;' > isPrime.ts && echo '{"model":"${model}"}' > /thunderjar/result.json`;
+const BETA_CLI = (prompt: string, model: string) =>
+  `printf '%s\\n' '// ${prompt}' 'export const isPrime = (n: number) => n > 1 && Array.from({ length: n - 2 }, (_, i) => i + 2).every((d) => n % d !== 0);' > isPrime.ts && echo '{"model":"${model}"}' > /thunderjar/result.json`;
+
+const TERSE = "isPrime.ts: export a primality test.";
+const PLAIN = "Create a file isPrime.ts exporting a function that tests for primality.";
+
 // The prerun hashes are those `plan` shows for the same permutations (src/commands/plan.test.ts).
 const TWO_PAIRS_EXPECTED = `Execution ${ID} (dry run, 2 permutations × 2 iterations)
 
-Permutation 1/2  node20 | baseline | snerk | claude-code@2.1.283/haiku-4-5 | terse
-  prerun-h4fcb1a62
-  iteration 1/2  postrun-e${ID}-h4fcb1a62-i00
-    claude -p "isPrime.ts: export a primality test." --model claude-haiku-4-5-20251001 > /thunderjar/result.json
-  iteration 2/2  postrun-e${ID}-h4fcb1a62-i01
-    claude -p "isPrime.ts: export a primality test." --model claude-haiku-4-5-20251001 > /thunderjar/result.json
+Permutation 1/2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
+  prerun-h402eac7c
+  iteration 1/2  postrun-e${ID}-h402eac7c-i00
+    ${ALPHA_CLI(TERSE, "fake-model-small-001")}
+  iteration 2/2  postrun-e${ID}-h402eac7c-i01
+    ${ALPHA_CLI(TERSE, "fake-model-small-001")}
 
-Permutation 2/2  node20 | baseline | snerk | codex@0.9.0/gpt-luna          | terse
-  prerun-he8af79ce
-  iteration 1/2  postrun-e${ID}-he8af79ce-i00
-    codex exec "isPrime.ts: export a primality test." --model gpt-luna > /thunderjar/result.json
-  iteration 2/2  postrun-e${ID}-he8af79ce-i01
-    codex exec "isPrime.ts: export a primality test." --model gpt-luna > /thunderjar/result.json`;
+Permutation 2/2  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
+  prerun-haf29f0fa
+  iteration 1/2  postrun-e${ID}-haf29f0fa-i00
+    ${BETA_CLI(TERSE, "fake-model-large-001")}
+  iteration 2/2  postrun-e${ID}-haf29f0fa-i01
+    ${BETA_CLI(TERSE, "fake-model-large-001")}`;
 
 /** Everything `run` prints, as one string. */
 async function printed(name: string, options: RunOptions) {
@@ -125,26 +134,26 @@ test("walks permutations in plan's order, with every iteration inside each", asy
     expect(line).toEndWith(`-i0${i % 5}`);
   });
 
-  expect(lines.slice(2, 6).join("\n")).toBe(`Permutation 1/8  node20 | baseline | snerk | claude-code@2.1.283/haiku-4-5 | plain
-  prerun-h848b6f74
-  iteration 1/5  postrun-e${ID}-h848b6f74-i00
-    claude -p "Create a file isPrime.ts exporting a function that tests for primality." --model claude-haiku-4-5-20251001 > /thunderjar/result.json`);
+  expect(lines.slice(2, 6).join("\n")).toBe(`Permutation 1/8  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
+  prerun-h3ae8d594
+  iteration 1/5  postrun-e${ID}-h3ae8d594-i00
+    ${ALPHA_CLI(PLAIN, "fake-model-small-001")}`);
 });
 
 test("uses the selected version's cli override, and indents every line of a multi-line command", async () => {
   const dir = await fixture({
-    "test-case-parameters/harnessModels/claude-code/versions.ts": stub("declareHarnessVersions", `{
-  "2.1.283": { version: "2.1.283" },
-  "2.2.0": {
-    version: "2.2.0",
-    cli: (ctx) => \`cd /workspace\\nclaude@\${ctx.version} -p "\${ctx.initialPrompt}" --model \${ctx.modelId} > \${ctx.resultPath}\`,
+    "test-case-parameters/harnessModels/fake-harness-alpha/versions.ts": stub("declareHarnessVersions", `{
+  "1.0.0": { version: "1.0.0" },
+  "1.1.0": {
+    version: "1.1.0",
+    cli: (ctx) => \`echo "fake-harness-alpha@\${ctx.version}" > version.txt\\nfake-harness-alpha -p "\${ctx.initialPrompt}" --model \${ctx.modelId} > \${ctx.resultPath}\`,
   },
 }`),
     "test-cases/override.ts": stub("declareTestCase", `{
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.2.0/sonnet-5-5"],
+  harnessModel: ["fake-harness-alpha@1.1.0/fake-model-large"],
   task: "is-prime",
   initialPrompt: ["terse"],
   iterations: 1,
@@ -153,8 +162,8 @@ test("uses the selected version's cli override, and indents every line of a mult
 
   const output = await printed("override", { dryRun: true, cwd: dir, newExecutionId });
   expect(output.split("\n").slice(5).join("\n")).toBe(
-    `    cd /workspace
-    claude@2.2.0 -p "isPrime.ts: export a primality test." --model claude-sonnet-5-5 > /thunderjar/result.json`,
+    `    echo "fake-harness-alpha@1.1.0" > version.txt
+    fake-harness-alpha -p "isPrime.ts: export a primality test." --model fake-model-large-001 > /thunderjar/result.json`,
   );
   expect(output).toStartWith(`Execution ${ID} (dry run, 1 permutation × 1 iteration)`);
 });
@@ -175,7 +184,7 @@ test("reports an unknown test case as a configuration error", async () => {
   expect(exitCode).toBe(1);
 });
 
-// --- Running for real, on the host, with the fake agent (fake-agent@1.0.0/fake) ---
+// --- Running for real, on the host, with the fake agent (fake-harness-alpha@1.0.0/fake-model-small) ---
 
 /** A clock that moves 40 ms each time it is read, so every container run takes 0.04s. */
 const stubClock = () => {
@@ -213,14 +222,14 @@ test("runs each container run on the host, leaving the agent's files, its result
   expect(stdout).toBe(`Execution ${ID} (1 permutation × 2 iterations)
 Output in ${executionDir}
 
-Permutation 1/1  node20 | baseline | snerk | fake-agent@1.0.0/fake | plain
+Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
   iteration 1/2  ${FAKE}${hash}-i00  exit 0  0.04s
-    isPrimeTemplateTest  {passed: 4, failed: 1}
+    isPrimeTemplateTest  {passed: 3, failed: 2}
     isPrimeTsExists      true
     readmeExists         false
     tsIgnoreCount        1
   iteration 2/2  ${FAKE}${hash}-i01  exit 0  0.04s
-    isPrimeTemplateTest  {passed: 4, failed: 1}
+    isPrimeTemplateTest  {passed: 3, failed: 2}
     isPrimeTsExists      true
     readmeExists         false
     tsIgnoreCount        1
@@ -233,15 +242,11 @@ Recorded in .thunderjar/.data/runs.json`);
     const { workspace, fakeAgentFile, result, run } = containerRun(executionDir, tag);
     // Only what the agent left: no test rendered while measuring.
     expect(workspace).toEqual(["isPrime.ts"]);
-    expect(fakeAgentFile).toBe(`// Create a file isPrime.ts exporting a function that tests for primality.
-export function isPrime(n: number): boolean {
-  // @ts-ignore
-  if (n < 1) return false;
-  for (let i = 2; i * i <= n; i++) if (n % i === 0) return false;
-  return true;
-}
+    expect(fakeAgentFile).toBe(`// ${PLAIN}
+// @ts-ignore
+export const isPrime = (n: number) => n > 1 && n % 2 !== 0;
 `);
-    expect(result).toBe(`{"model":"fake-model"}\n`);
+    expect(result).toBe(`{"model":"fake-model-small-001"}\n`);
     expect(run.exitCode).toBe(0);
     expect(run.finishedAt - run.startedAt).toBe(40);
   }
@@ -249,7 +254,7 @@ export function isPrime(n: number): boolean {
 
 /** The measures each fake agent run prints, as a pattern. */
 const MEASURES = [
-  "    isPrimeTemplateTest  \\{passed: 4, failed: 1\\}\n",
+  "    isPrimeTemplateTest  \\{passed: 3, failed: 2\\}\n",
   "    isPrimeTsExists      true\n",
   "    readmeExists         false\n",
   "    tsIgnoreCount        1\n",
@@ -281,7 +286,7 @@ test("`thunderjar run` runs under a new ULID in $TMPDIR/thunderjar, and changes 
     new RegExp(
       `^Execution ${id} \\(1 permutation × 2 iterations\\)\n` +
         `Output in ${executionDir}\n\n` +
-        `Permutation 1/1  node20 \\| baseline \\| snerk \\| fake-agent@1.0.0/fake \\| plain\n` +
+        `Permutation 1/1  node20 \\| baseline \\| snerk \\| fake-harness-alpha@1.0.0/fake-model-small \\| plain\n` +
         `  iteration 1/2  postrun-e${id}-h[0-9a-f]{8}-i00  exit 0  \\d+\\.\\d\\ds\n` +
         MEASURES +
         `  iteration 2/2  postrun-e${id}-h[0-9a-f]{8}-i01  exit 0  \\d+\\.\\d\\ds\n` +
@@ -305,7 +310,7 @@ test("`thunderjar run` runs under a new ULID in $TMPDIR/thunderjar, and changes 
 test("records a failing cli's exit code, and still runs the remaining iterations", async () => {
   const dir = await fixture({
     // 1.0.1 writes its file, then fails.
-    "test-case-parameters/harnessModels/fake-agent/versions.ts": stub("declareHarnessVersions", `{
+    "test-case-parameters/harnessModels/fake-harness-alpha/versions.ts": stub("declareHarnessVersions", `{
   "1.0.0": { version: "1.0.0" },
   "1.0.1": { version: "1.0.1", cli: () => \`touch isPrime.ts && exit 3\` },
 }`),
@@ -313,7 +318,7 @@ test("records a failing cli's exit code, and still runs the remaining iterations
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-agent@1.0.1/fake", "fake-agent@1.0.0/fake"],
+  harnessModel: ["fake-harness-alpha@1.0.1/fake-model-small", "fake-harness-alpha@1.0.0/fake-model-small"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 2,
@@ -323,7 +328,7 @@ test("records a failing cli's exit code, and still runs the remaining iterations
 
   const lines = stdout.split("\n");
   const exits = lines.filter((line) => line.startsWith("  iteration ")).map((line) => / exit (\d+) /.exec(line)![1]);
-  const failing = lines.findIndex((line) => line.includes("fake-agent@1.0.1/fake"));
+  const failing = lines.findIndex((line) => line.includes("fake-harness-alpha@1.0.1/fake-model-small"));
   expect(exits).toEqual(failing === 3 ? ["3", "3", "0", "0"] : ["0", "0", "3", "3"]);
   expect(lines.at(-2)).toBe("4 container runs: 2 exited 0, 2 exited 3");
 
@@ -376,16 +381,16 @@ test("records each container run, with its execution as in its run.json and ever
         baseImage: { name: "node20", parameterHash: parameters.baseImage.parameterHash },
         codeState: { name: "baseline", parameterHash: parameters.codeState.parameterHash },
         promptSet: { name: "snerk", parameterHash: parameters.promptSet.parameterHash },
-        harnessModel: { name: "fake-agent@1.0.0/fake", parameterHash: parameters.harnessModel.parameterHash },
+        harnessModel: { name: "fake-harness-alpha@1.0.0/fake-model-small", parameterHash: parameters.harnessModel.parameterHash },
         initialPrompt: { name: "plain", parameterHash: parameters.initialPrompt.parameterHash },
       },
-      harnessModel: { family: "fake-agent", version: "1.0.0", modelId: "fake-model" },
+      harnessModel: { family: "fake-harness-alpha", version: "1.0.0", modelId: "fake-model-small-001" },
       result: {
         isPrimeTemplateTest: {
           instrument: "templateTest",
           contentHash: hashMeasurement({ instrument: "templateTest", config: TEMPLATE_TEST_CONFIG, dir: measurementsDir(dir) }),
           measuredAt: record.result.isPrimeTemplateTest!.measuredAt,
-          outcome: { outcome: "measured", data: { passed: 4, failed: 1 } },
+          outcome: { outcome: "measured", data: { passed: 3, failed: 2 } },
         },
         isPrimeTsExists: {
           instrument: "fileCreated",
@@ -464,11 +469,11 @@ test("an instrument that throws is recorded as erroredWhileMeasuring, and every 
   const stdout = await printed("fake-is-prime", { dryRun: false, cwd: dir, newExecutionId, now: stubClock(), rootDir, measurementOpener });
 
   expect(stdout.split("\n").filter((line) => line.startsWith("    "))).toEqual([
-    "    isPrimeTemplateTest  {passed: 4, failed: 1}",
+    "    isPrimeTemplateTest  {passed: 3, failed: 2}",
     "    isPrimeTsExists      true",
     "    readmeExists         erroredWhileMeasuring: disk on fire",
     "    tsIgnoreCount        1",
-    "    isPrimeTemplateTest  {passed: 4, failed: 1}",
+    "    isPrimeTemplateTest  {passed: 3, failed: 2}",
     "    isPrimeTsExists      true",
     "    readmeExists         erroredWhileMeasuring: disk on fire",
     "    tsIgnoreCount        1",
@@ -484,7 +489,7 @@ test("an instrument that throws is recorded as erroredWhileMeasuring, and every 
 
 test("runs that exit non-zero are still measured", async () => {
   const dir = await fixture({
-    "test-case-parameters/harnessModels/fake-agent/index.ts": stub("declareHarness", `{
+    "test-case-parameters/harnessModels/fake-harness-alpha/index.ts": stub("declareHarness", `{
   applyParameter: () => \`\`,
   cli: () => \`touch README.md && exit 3\`,
 }`),
@@ -522,7 +527,7 @@ test("kills a cli that runs past the initial prompt's timeoutSeconds, recording 
   timeoutSeconds: 1,
   applyParameter: () => \`\`,
 }`),
-    "test-case-parameters/harnessModels/fake-agent/index.ts": stub("declareHarness", `{
+    "test-case-parameters/harnessModels/fake-harness-alpha/index.ts": stub("declareHarness", `{
   applyParameter: () => \`\`,
   cli: () => \`touch started.txt && sleep 2 && touch finished.txt\`,
 }`),
@@ -563,7 +568,7 @@ test("stores each permutation's aggregation result beside its runs, by each meas
       permutationHash,
       iterations: 2,
       measures: {
-        isPrimeTemplateTest: { measured: 2, sum: { passed: 8, failed: 2 } },
+        isPrimeTemplateTest: { measured: 2, sum: { passed: 6, failed: 4 } },
         isPrimeTsExists: { measured: 2, rate: 1 },
         readmeExists: { measured: 2, rate: 0 },
         tsIgnoreCount: { measured: 2, mean: 1, max: 1 },

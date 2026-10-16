@@ -49,17 +49,17 @@ test("run two-pairs --dry-run: each permutation's prerun image, then each iterat
   expect(normalise(stdout)).toBe(`Execution <id> (dry run, 2 permutations × 2 iterations)
 
 Permutation 1/2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
-  prerun-h59a96fed
-  iteration 1/2  postrun-e<id>-h59a96fed-i00
+  prerun-h462c3943
+  iteration 1/2  postrun-e<id>-h462c3943-i00
     ${ALPHA_CLI(TERSE, "fake-model-small-001")}
-  iteration 2/2  postrun-e<id>-h59a96fed-i01
+  iteration 2/2  postrun-e<id>-h462c3943-i01
     ${ALPHA_CLI(TERSE, "fake-model-small-001")}
 
 Permutation 2/2  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
-  prerun-h7b38cbd7
-  iteration 1/2  postrun-e<id>-h7b38cbd7-i00
+  prerun-hb66ca6ed
+  iteration 1/2  postrun-e<id>-hb66ca6ed-i00
     ${BETA_CLI(TERSE, "fake-model-large-001")}
-  iteration 2/2  postrun-e<id>-h7b38cbd7-i01
+  iteration 2/2  postrun-e<id>-hb66ca6ed-i01
     ${BETA_CLI(TERSE, "fake-model-large-001")}
 `);
   // A dry run writes nothing.
@@ -72,8 +72,8 @@ test("run version-cli-override --dry-run: the selected version's cli override, e
   expect(normalise(stdout)).toBe(`Execution <id> (dry run, 1 permutation × 1 iteration)
 
 Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.1.0/fake-model-large | terse
-  prerun-h6395ea06
-  iteration 1/1  postrun-e<id>-h6395ea06-i00
+  prerun-h4951fd05
+  iteration 1/1  postrun-e<id>-h4951fd05-i00
     echo "fake-harness-alpha@1.1.0" > version.txt
     ${ALPHA_CLI(TERSE, "fake-model-large-001")}
 `);
@@ -126,15 +126,15 @@ test("run two-pairs: each harness leaves its own isPrime.ts, measured differentl
 Output in $TMPDIR/thunderjar/<id>
 
 Permutation 1/2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
-  iteration 1/2  postrun-e<id>-h59a96fed-i00  exit 0  <t>s
+  iteration 1/2  postrun-e<id>-h462c3943-i00  exit 0  <t>s
 ${ALPHA_MEASURES}
-  iteration 2/2  postrun-e<id>-h59a96fed-i01  exit 0  <t>s
+  iteration 2/2  postrun-e<id>-h462c3943-i01  exit 0  <t>s
 ${ALPHA_MEASURES}
 
 Permutation 2/2  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
-  iteration 1/2  postrun-e<id>-h7b38cbd7-i00  exit 0  <t>s
+  iteration 1/2  postrun-e<id>-hb66ca6ed-i00  exit 0  <t>s
 ${BETA_MEASURES}
-  iteration 2/2  postrun-e<id>-h7b38cbd7-i01  exit 0  <t>s
+  iteration 2/2  postrun-e<id>-hb66ca6ed-i01  exit 0  <t>s
 ${BETA_MEASURES}
 
 4 container runs: 4 exited 0
@@ -164,9 +164,9 @@ test("run alpha-is-prime: leaves the agent's files, its result and run.json, and
 Output in $TMPDIR/thunderjar/<id>
 
 Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
-  iteration 1/2  postrun-e<id>-hd3d9e0f3-i00  exit 0  <t>s
+  iteration 1/2  postrun-e<id>-ha97a9ea6-i00  exit 0  <t>s
 ${ALPHA_MEASURES}
-  iteration 2/2  postrun-e<id>-hd3d9e0f3-i01  exit 0  <t>s
+  iteration 2/2  postrun-e<id>-ha97a9ea6-i01  exit 0  <t>s
 ${ALPHA_MEASURES}
 
 2 container runs: 2 exited 0
@@ -223,8 +223,8 @@ test("run without-measurements: a task without measurements prints and records n
 Output in $TMPDIR/thunderjar/<id>
 
 Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
-  iteration 1/2  postrun-e<id>-hb3bd98e8-i00  exit 0  <t>s
-  iteration 2/2  postrun-e<id>-hb3bd98e8-i01  exit 0  <t>s
+  iteration 1/2  postrun-e<id>-hcfc33eb3-i00  exit 0  <t>s
+  iteration 2/2  postrun-e<id>-hcfc33eb3-i01  exit 0  <t>s
 
 2 container runs: 2 exited 0
 Recorded in .thunderjar/.data/runs.json

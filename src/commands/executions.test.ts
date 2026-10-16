@@ -17,7 +17,7 @@ async function fixture() {
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-agent@1.0.0/fake"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,

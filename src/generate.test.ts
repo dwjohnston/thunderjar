@@ -19,9 +19,8 @@ test("collects parameter names from the fixture project", async () => {
   expect(names.promptSets).toEqual(["glurk", "snerk"]);
   expect(names.tasks).toEqual({ "is-prime": ["plain", "terse"] });
   expect(names.harnessFamilies).toEqual({
-    "claude-code": { versions: ["2.1.283", "2.2.0"], models: ["haiku-4-5", "sonnet-5-5"] },
-    codex: { versions: ["0.9.0"], models: ["gpt-luna"] },
-    "fake-agent": { versions: ["1.0.0"], models: ["fake"] },
+    "fake-harness-alpha": { versions: ["1.0.0", "1.1.0"], models: ["fake-model-large", "fake-model-small"] },
+    "fake-harness-beta": { versions: ["1.0.0"], models: ["fake-model-large"] },
   });
 });
 
@@ -46,8 +45,8 @@ test("renders the typed-pairs example from the spec", async () => {
   expect(content).toContain('type TaskName = "is-prime";');
   expect(content).toContain('"is-prime": "plain" | "terse";');
   expect(content).toContain("type HarnessModelName =");
-  expect(content).toContain('`claude-code@${"2.1.283" | "2.2.0"}/${"haiku-4-5" | "sonnet-5-5"}`');
-  expect(content).toContain('`codex@${"0.9.0"}/${"gpt-luna"}`');
+  expect(content).toContain('`fake-harness-alpha@${"1.0.0" | "1.1.0"}/${"fake-model-large" | "fake-model-small"}`');
+  expect(content).toContain('`fake-harness-beta@${"1.0.0"}/${"fake-model-large"}`');
 });
 
 test("writeGeneratedTypes writes _generated/parameter-names.d.ts", async () => {

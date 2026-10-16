@@ -6,7 +6,7 @@ const testCase = (overrides: Partial<TestCaseDeclaration> = {}): TestCaseDeclara
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -20,7 +20,7 @@ test("a 1/1/1/1/1 test case has one permutation", () => {
       baseImage: "node20",
       codeState: "baseline",
       promptSet: "snerk",
-      harnessModel: "claude-code@2.1.283/haiku-4-5",
+      harnessModel: "fake-harness-alpha@1.0.0/fake-model-small",
       initialPrompt: "plain",
     },
   ]);

@@ -21,11 +21,11 @@ async function keptRun({ result }: { result?: string } = {}) {
 }
 
 test("the host measurement context works in a scratch copy of the run's workspace", async () => {
-  const { rootDir, workspace } = await keptRun({ result: `{"model":"fake-model"}\n` });
+  const { rootDir, workspace } = await keptRun({ result: `{"model":"fake-model-small-001"}\n` });
   const ctx = await createHostMeasurementOpener(rootDir).openMeasurementContext(TAG);
 
   expect(ctx.workdir).not.toBe(workspace);
-  expect(ctx.harnessResult).toBe(`{"model":"fake-model"}\n`);
+  expect(ctx.harnessResult).toBe(`{"model":"fake-model-small-001"}\n`);
   expect(await ctx.glob("**/*")).toEqual([".hidden", "src/isPrime.ts"]);
   expect(await ctx.readFile("src/isPrime.ts")).toBe("export default () => true;\n");
 

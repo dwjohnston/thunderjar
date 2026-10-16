@@ -24,10 +24,10 @@ const record = (executionId: string, testCase: string, ranAt: string, iteration 
     baseImage: { name: "node20", parameterHash: "a01f" },
     codeState: { name: "baseline", parameterHash: "b92c" },
     promptSet: { name: "snerk", parameterHash: "c7d4" },
-    harnessModel: { name: "claude-code@2.1.283/haiku-4-5", parameterHash: "d5e1" },
+    harnessModel: { name: "fake-harness-alpha@1.0.0/fake-model-small", parameterHash: "d5e1" },
     initialPrompt: { name: "plain", parameterHash: "f20b" },
   },
-  harnessModel: { family: "claude-code", version: "2.1.283", modelId: "claude-haiku-4-5-20251001" },
+  harnessModel: { family: "fake-harness-alpha", version: "1.0.0", modelId: "fake-model-small-001" },
   result: {},
   execution: { startedAt: Date.parse(ranAt), finishedAt: Date.parse(ranAt) + 42312, exitCode: 0 },
 });

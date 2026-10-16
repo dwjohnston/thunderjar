@@ -63,7 +63,7 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -86,7 +86,7 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["totally-unknown-prompt-set"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -109,7 +109,7 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/gpt-luna"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-huge"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -118,7 +118,7 @@ export default declareTestCase({
 
     const { exitCode, output } = await runTsc(dir);
     expect(exitCode).not.toBe(0);
-    expect(output).toContain("claude-code@2.1.283/gpt-luna");
+    expect(output).toContain("fake-harness-alpha@1.0.0/fake-model-huge");
   },
   30000,
 );
@@ -132,7 +132,7 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5"],
+  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
   task: "is-prime",
   initialPrompt: ["basic"],
   iterations: 1,

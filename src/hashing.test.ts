@@ -27,18 +27,18 @@ async function parameters(changes: Record<string, string | null> = {}): Promise<
   return join(dir, ".thunderjar", "test-case-parameters");
 }
 
-const MODELS = "harnessModels/claude-code/models.ts";
-const VERSIONS = "harnessModels/claude-code/versions.ts";
+const MODELS = "harnessModels/fake-harness-alpha/models.ts";
+const VERSIONS = "harnessModels/fake-harness-alpha/versions.ts";
 const prefixed = (changes: Record<string, string | null>) =>
   Object.fromEntries(Object.entries(changes).map(([k, v]) => [`test-case-parameters/${k}`, v]));
 
-/** The hash of every claude-code pair in a project, keyed by its address. */
-async function claudeCodePairs(changes: Record<string, string | null> = {}) {
-  const family = join(await parameters(prefixed(changes)), "harnessModels", "claude-code");
+/** The hash of every fake-harness-alpha pair in a project, keyed by its address. */
+async function alphaPairs(changes: Record<string, string | null> = {}) {
+  const family = join(await parameters(prefixed(changes)), "harnessModels", "fake-harness-alpha");
   const pairs: Record<string, string> = {};
-  for (const version of ["2.1.283", "2.2.0"])
-    for (const model of ["haiku-4-5", "sonnet-5-5"])
-      pairs[`claude-code@${version}/${model}`] = await hashHarnessModelPair(family, version, model);
+  for (const version of ["1.0.0", "1.1.0"])
+    for (const model of ["fake-model-small", "fake-model-large"])
+      pairs[`fake-harness-alpha@${version}/${model}`] = await hashHarnessModelPair(family, version, model);
   return pairs;
 }
 
@@ -110,22 +110,22 @@ test("an initial prompt's timeout is part of its hash", async () => {
 });
 
 test("a family's pairs each have their own hash, the same in every project", async () => {
-  const pairs = await claudeCodePairs();
+  const pairs = await alphaPairs();
   expect(new Set(Object.values(pairs)).size).toBe(4);
-  expect(await claudeCodePairs()).toEqual(pairs);
+  expect(await alphaPairs()).toEqual(pairs);
 });
 
 test("adding a model or a version does not change existing pairs", async () => {
-  const before = await claudeCodePairs();
-  const after = await claudeCodePairs({
+  const before = await alphaPairs();
+  const after = await alphaPairs({
     [MODELS]: stub("declareHarnessModels", `{
-  "haiku-4-5": "claude-haiku-4-5-20251001",
-  "sonnet-5-5": "claude-sonnet-5-5",
-  "opus-5-5": "claude-opus-5-5",
+  "fake-model-small": "fake-model-small-001",
+  "fake-model-large": "fake-model-large-001",
+  "fake-model-huge": "fake-model-huge-001",
 }`),
     [VERSIONS]: stub("declareHarnessVersions", `{
-  "2.1.283": { version: "2.1.283" },
-  "2.2.0": { version: "2.2.0" },
+  "1.0.0": { version: "1.0.0" },
+  "1.1.0": { version: "1.1.0" },
   "2.3.0": { version: "2.3.0" },
 }`),
   });
@@ -133,66 +133,66 @@ test("adding a model or a version does not change existing pairs", async () => {
 });
 
 test("changing one model's ID changes only that model's pairs", async () => {
-  const before = await claudeCodePairs();
-  const after = await claudeCodePairs({
+  const before = await alphaPairs();
+  const after = await alphaPairs({
     [MODELS]: stub("declareHarnessModels", `{
-  "haiku-4-5": "claude-haiku-4-5-20251101",
-  "sonnet-5-5": "claude-sonnet-5-5",
+  "fake-model-small": "fake-model-small-002",
+  "fake-model-large": "fake-model-large-001",
 }`),
   });
-  expect(after["claude-code@2.1.283/haiku-4-5"]).not.toBe(before["claude-code@2.1.283/haiku-4-5"]);
-  expect(after["claude-code@2.2.0/haiku-4-5"]).not.toBe(before["claude-code@2.2.0/haiku-4-5"]);
-  expect(after["claude-code@2.1.283/sonnet-5-5"]).toBe(before["claude-code@2.1.283/sonnet-5-5"]!);
-  expect(after["claude-code@2.2.0/sonnet-5-5"]).toBe(before["claude-code@2.2.0/sonnet-5-5"]!);
+  expect(after["fake-harness-alpha@1.0.0/fake-model-small"]).not.toBe(before["fake-harness-alpha@1.0.0/fake-model-small"]);
+  expect(after["fake-harness-alpha@1.1.0/fake-model-small"]).not.toBe(before["fake-harness-alpha@1.1.0/fake-model-small"]);
+  expect(after["fake-harness-alpha@1.0.0/fake-model-large"]).toBe(before["fake-harness-alpha@1.0.0/fake-model-large"]!);
+  expect(after["fake-harness-alpha@1.1.0/fake-model-large"]).toBe(before["fake-harness-alpha@1.1.0/fake-model-large"]!);
 });
 
 test("editing one version's overrides or resolved version changes only that version's pairs", async () => {
-  const before = await claudeCodePairs();
-  for (const entry of [`{ version: "2.2.1" }`, `{ version: "2.2.0", requiredEnv: ["ANTHROPIC_API_KEY", "EXTRA"] }`]) {
-    const after = await claudeCodePairs({
+  const before = await alphaPairs();
+  for (const entry of [`{ version: "1.1.1" }`, `{ version: "1.1.0", requiredEnv: ["FAKE_API_KEY", "EXTRA"] }`]) {
+    const after = await alphaPairs({
       [VERSIONS]: stub("declareHarnessVersions", `{
-  "2.1.283": { version: "2.1.283" },
-  "2.2.0": ${entry},
+  "1.0.0": { version: "1.0.0" },
+  "1.1.0": ${entry},
 }`),
     });
-    expect(after["claude-code@2.1.283/haiku-4-5"]).toBe(before["claude-code@2.1.283/haiku-4-5"]!);
-    expect(after["claude-code@2.1.283/sonnet-5-5"]).toBe(before["claude-code@2.1.283/sonnet-5-5"]!);
-    expect(after["claude-code@2.2.0/haiku-4-5"]).not.toBe(before["claude-code@2.2.0/haiku-4-5"]);
-    expect(after["claude-code@2.2.0/sonnet-5-5"]).not.toBe(before["claude-code@2.2.0/sonnet-5-5"]);
+    expect(after["fake-harness-alpha@1.0.0/fake-model-small"]).toBe(before["fake-harness-alpha@1.0.0/fake-model-small"]!);
+    expect(after["fake-harness-alpha@1.0.0/fake-model-large"]).toBe(before["fake-harness-alpha@1.0.0/fake-model-large"]!);
+    expect(after["fake-harness-alpha@1.1.0/fake-model-small"]).not.toBe(before["fake-harness-alpha@1.1.0/fake-model-small"]);
+    expect(after["fake-harness-alpha@1.1.0/fake-model-large"]).not.toBe(before["fake-harness-alpha@1.1.0/fake-model-large"]);
   }
 });
 
 test("renaming map keys or reordering map entries keeps the resolved pairs' hashes", async () => {
-  const before = await claudeCodePairs({
+  const before = await alphaPairs({
     [VERSIONS]: stub("declareHarnessVersions", `{
-  "2.1.283": { version: "2.1.283", requiredEnv: ["A"], cli: (ctx) => \`claude \${ctx.modelId}\` },
-  "2.2.0": { version: "2.2.0" },
+  "1.0.0": { version: "1.0.0", requiredEnv: ["A"], cli: (ctx) => \`fake-harness-alpha \${ctx.modelId}\` },
+  "1.1.0": { version: "1.1.0" },
 }`),
   });
   const family = join(
     await parameters(
       prefixed({
         [MODELS]: stub("declareHarnessModels", `{
-  "sonnet": "claude-sonnet-5-5",
-  "haiku": "claude-haiku-4-5-20251001",
+  "large": "fake-model-large-001",
+  "small": "fake-model-small-001",
 }`),
         [VERSIONS]: stub("declareHarnessVersions", `{
-  "latest": { version: "2.2.0" },
-  "pinned": { cli: (ctx) => \`claude \${ctx.modelId}\`, requiredEnv: ["A"], version: "2.1.283" },
+  "latest": { version: "1.1.0" },
+  "pinned": { cli: (ctx) => \`fake-harness-alpha \${ctx.modelId}\`, requiredEnv: ["A"], version: "1.0.0" },
 }`),
       }),
     ),
     "harnessModels",
-    "claude-code",
+    "fake-harness-alpha",
   );
-  expect(await hashHarnessModelPair(family, "pinned", "haiku")).toBe(before["claude-code@2.1.283/haiku-4-5"]!);
-  expect(await hashHarnessModelPair(family, "latest", "sonnet")).toBe(before["claude-code@2.2.0/sonnet-5-5"]!);
+  expect(await hashHarnessModelPair(family, "pinned", "small")).toBe(before["fake-harness-alpha@1.0.0/fake-model-small"]!);
+  expect(await hashHarnessModelPair(family, "latest", "large")).toBe(before["fake-harness-alpha@1.1.0/fake-model-large"]!);
 });
 
 test("editing collectTokenCosts.ts changes nothing", async () => {
-  const before = await claudeCodePairs();
-  const after = await claudeCodePairs({
-    "harnessModels/claude-code/collectTokenCosts.ts": stub("declareTokenCostCollector", `
+  const before = await alphaPairs();
+  const after = await alphaPairs({
+    "harnessModels/fake-harness-alpha/collectTokenCosts.ts": stub("declareTokenCostCollector", `
   (raw, ctx) => ({ outcome: "unavailable", reason: "unparseable" }),
 `),
   });
@@ -200,23 +200,23 @@ test("editing collectTokenCosts.ts changes nothing", async () => {
 });
 
 test("editing shared execution content changes every pair in the family", async () => {
-  const before = await claudeCodePairs();
-  const after = await claudeCodePairs({ "harnessModels/claude-code/install.sh": "npm install -g claude\n" });
+  const before = await alphaPairs();
+  const after = await alphaPairs({ "harnessModels/fake-harness-alpha/install.sh": "echo install fake-harness-alpha\n" });
   for (const [pair, hash] of Object.entries(after)) expect(hash).not.toBe(before[pair]!);
 });
 
 test("renaming the family folder keeps its pairs' hashes", async () => {
   const dir = await parameters();
-  const pair = await hashHarnessModelPair(join(dir, "harnessModels", "claude-code"), "2.1.283", "haiku-4-5");
-  await rename(join(dir, "harnessModels", "claude-code"), join(dir, "harnessModels", "claude"));
-  expect(await hashHarnessModelPair(join(dir, "harnessModels", "claude"), "2.1.283", "haiku-4-5")).toBe(pair);
+  const pair = await hashHarnessModelPair(join(dir, "harnessModels", "fake-harness-alpha"), "1.0.0", "fake-model-small");
+  await rename(join(dir, "harnessModels", "fake-harness-alpha"), join(dir, "harnessModels", "alpha"));
+  expect(await hashHarnessModelPair(join(dir, "harnessModels", "alpha"), "1.0.0", "fake-model-small")).toBe(pair);
 });
 
 test("a floating version is reported as not supported yet", async () => {
   const dir = await parameters(
-    prefixed({ [VERSIONS]: stub("declareHarnessVersions", `{ latest: { determineHash: () => "echo 2.2.0" } }`) }),
+    prefixed({ [VERSIONS]: stub("declareHarnessVersions", `{ latest: { determineHash: () => "echo 1.1.0" } }`) }),
   );
-  await expect(hashHarnessModelPair(join(dir, "harnessModels", "claude-code"), "latest", "haiku-4-5")).rejects.toThrow(
+  await expect(hashHarnessModelPair(join(dir, "harnessModels", "fake-harness-alpha"), "latest", "fake-model-small")).rejects.toThrow(
     /floating versions are not supported yet/,
   );
 });

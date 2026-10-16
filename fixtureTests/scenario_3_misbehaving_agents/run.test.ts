@@ -17,24 +17,24 @@ test("run fails: a failing cli's exit code is recorded, its runs are still measu
 Output in $TMPDIR/thunderjar/<id>
 
 Permutation 1/2  node20 | baseline | snerk | fake-harness-alpha@1.0.1/fake-model-small | plain
-  iteration 1/2  postrun-e<id>-h92e23284-i00  exit 3  <t>s
+  iteration 1/2  postrun-e<id>-h48e574a1-i00  exit 3  <t>s
     isPrimeTemplateTest  skipped
     isPrimeTsExists      false
     readmeExists         true
     tsIgnoreCount        skipped
-  iteration 2/2  postrun-e<id>-h92e23284-i01  exit 3  <t>s
+  iteration 2/2  postrun-e<id>-h48e574a1-i01  exit 3  <t>s
     isPrimeTemplateTest  skipped
     isPrimeTsExists      false
     readmeExists         true
     tsIgnoreCount        skipped
 
 Permutation 2/2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
-  iteration 1/2  postrun-e<id>-hd3d9e0f3-i00  exit 0  <t>s
+  iteration 1/2  postrun-e<id>-ha97a9ea6-i00  exit 0  <t>s
     isPrimeTemplateTest  {passed: 3, failed: 2}
     isPrimeTsExists      true
     readmeExists         false
     tsIgnoreCount        1
-  iteration 2/2  postrun-e<id>-hd3d9e0f3-i01  exit 0  <t>s
+  iteration 2/2  postrun-e<id>-ha97a9ea6-i01  exit 0  <t>s
     isPrimeTemplateTest  {passed: 3, failed: 2}
     isPrimeTsExists      true
     readmeExists         false
@@ -64,8 +64,8 @@ test("run times-out: a cli that runs past the initial prompt's timeoutSeconds is
 Output in $TMPDIR/thunderjar/<id>
 
 Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.0.2/fake-model-small | impatient
-  iteration 1/2  postrun-e<id>-h26875491-i00  exit 124  <t>s
-  iteration 2/2  postrun-e<id>-h26875491-i01  exit 124  <t>s
+  iteration 1/2  postrun-e<id>-h87b7d849-i00  exit 124  <t>s
+  iteration 2/2  postrun-e<id>-h87b7d849-i01  exit 124  <t>s
 
 2 container runs: 2 exited 124
 Recorded in .thunderjar/.data/runs.json

@@ -40,7 +40,7 @@ function testCase(fields: Record<string, string> = {}) {
     baseImage: `["node20"]`,
     codeState: `["baseline"]`,
     promptSet: `["snerk", "glurk"]`,
-    harnessModel: `["claude-code@2.1.283/haiku-4-5", "codex@0.9.0/gpt-luna"]`,
+    harnessModel: `["fake-harness-alpha@1.0.0/fake-model-small", "fake-harness-beta@1.0.0/fake-model-large"]`,
     task: `"is-prime"`,
     initialPrompt: `["plain", "terse"]`,
     iterations: `5`,
@@ -135,14 +135,14 @@ test("a declaration wrapped in the wrong declareX", async () => {
 
 test("a harness/model pair naming a version or model absent from its family", async () => {
   const dir = await project(
-    testCase({ harnessModel: `["claude-code@9.9.9/haiku-4-5", "claude-code@2.1.283/gpt-luna", "codex-0.9.0"]` }),
+    testCase({ harnessModel: `["fake-harness-alpha@9.9.9/fake-model-small", "fake-harness-alpha@1.0.0/fake-model-huge", "fake-harness-beta-1.0.0"]` }),
   );
   const { stderr, exitCode } = await plan(dir);
   expect(stderr).toBe(
     [
-      `error: ${TEST_CASE}: harnessModel: "claude-code@9.9.9/haiku-4-5": version "9.9.9" is not in test-case-parameters/harnessModels/claude-code/versions.ts`,
-      `error: ${TEST_CASE}: harnessModel: "claude-code@2.1.283/gpt-luna": model "gpt-luna" is not in test-case-parameters/harnessModels/claude-code/models.ts`,
-      `error: ${TEST_CASE}: harnessModel: "codex-0.9.0" is not of the form family@version/model`,
+      `error: ${TEST_CASE}: harnessModel: "fake-harness-alpha@9.9.9/fake-model-small": version "9.9.9" is not in test-case-parameters/harnessModels/fake-harness-alpha/versions.ts`,
+      `error: ${TEST_CASE}: harnessModel: "fake-harness-alpha@1.0.0/fake-model-huge": model "fake-model-huge" is not in test-case-parameters/harnessModels/fake-harness-alpha/models.ts`,
+      `error: ${TEST_CASE}: harnessModel: "fake-harness-beta-1.0.0" is not of the form family@version/model`,
       "",
     ].join("\n"),
   );
@@ -167,11 +167,11 @@ test("an empty array, and iterations that is not a positive integer", async () =
 
 test("generate reports an unwrapped family map", async () => {
   const { stderr, exitCode } = await run(
-    await project({ "test-case-parameters/harnessModels/codex/versions.ts": `export default { "0.9.0": { version: "0.9.0" } };\n` }),
+    await project({ "test-case-parameters/harnessModels/fake-harness-beta/versions.ts": `export default { "1.0.0": { version: "1.0.0" } };\n` }),
     "generate",
   );
   expect(stderr).toBe(
-    "error: .thunderjar/test-case-parameters/harnessModels/codex/versions.ts: default export is not wrapped in declareHarnessVersions(...).\n",
+    "error: .thunderjar/test-case-parameters/harnessModels/fake-harness-beta/versions.ts: default export is not wrapped in declareHarnessVersions(...).\n",
   );
   expect(exitCode).toBe(1);
 });
