@@ -39,7 +39,8 @@ Rules:
 
 - **Each folder is a scenario, not a feature.** Name it `scenario_<n>_<what the project is>`, e.g. `scenario_2_typical_project`, not `run`. A scenario is a kind of project, and tests of any command can use it. Inside, name test files after the command they drive: `run.test.ts`, `plan.test.ts`.
 - **Each scenario has `fixtures/.thunderjar/`** (the project) and a `tsconfig.json`, so `fixtureTests/typecheck.test.ts` type-checks it too. `thunderjar` resolves from every scenario through the checked-in link `fixtureTests/node_modules/thunderjar`.
-- **Tests drive the CLI**, not internal functions, using `fixtureTests/helpers.ts`. They normalise only what changes between runs (execution ID, `$TMPDIR`, durations), so expected output reads like what's printed. Real runs work on a copy of `fixtures/`; dry runs run in place.
+- **A command's scenario tests can sit beside the command**, e.g. `build`'s are in `src/commands/build/build.test.ts`. They reach a scenario through `scenario()` in `src/testing/cli.ts`, and are still reproducible with `bun run fixture`.
+- **Tests drive the CLI**, not internal functions, using `src/testing/cli.ts` (re-exported, with the `run` helpers, by `fixtureTests/helpers.ts`). They normalise only what changes between runs (execution ID, `$TMPDIR`, durations), so expected output reads like what's printed. Real runs work on a copy of `fixtures/`; dry runs run in place.
 - **Behaviour the CLI can't trigger** (e.g. a crash injected through a runner) stays in `src/` unit tests.
 
 ### Never refer to real agents in tests

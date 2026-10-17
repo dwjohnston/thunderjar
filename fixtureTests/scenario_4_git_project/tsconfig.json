@@ -2,6 +2,5 @@
   "extends": "./fixtures/.thunderjar/tsconfig.json",
   "compilerOptions": {
     "types": ["bun"]
-  },
-  "files": ["build.test.ts"]
+  }
 }

@@ -68,7 +68,7 @@ Unless its entry says otherwise, scenarios 1–3 use these:
     - `example`: 1 permutation, 1 iteration.
   - Tests
     - Type-level assertions on the generated parameter names.
-    - `build` in place.
+    - `build` in place, from `src/commands/build/build.test.ts`.
 
 - `scenario_2_typical_project`
   - A typical project: two agents that behave, two prompt sets, two wordings of the task, and a task with no measurements.
@@ -83,7 +83,7 @@ Unless its entry says otherwise, scenarios 1–3 use these:
     - `is-prime`, with the prompts `plain` and `terse` and four measurements: whether `isPrime.ts` exists, whether a README exists, the number of `@ts-ignore`s, and a template test of `isPrime`.
     - `no-measures`, with one prompt and no measurements.
   - Test cases
-    - `two-pairs`: both agents, 2 permutations. Most `run` and `build` tests use this one.
+    - `two-pairs`: both agents, 2 permutations. Most `run` and `build` tests use this one; `build`'s are in `src/commands/build/build.test.ts`.
     - `is-prime-baseline`: the full matrix, 8 permutations × 5 iterations.
     - `alpha-is-prime`, `version-cli-override`, `without-measurements`: one permutation each.
 
@@ -122,6 +122,8 @@ Unless its entry says otherwise, scenarios 1–3 use these:
   - Test cases
     - `two-commits`: both code states × both prompt sets, 4 permutations.
     - `unpushed-commit`: the missing commit, which stops the build before anything is built.
+  - Tests
+    - `build`, with and without real Docker, from `src/commands/build/`.
 
 ### Changing scenario 4's commits
 

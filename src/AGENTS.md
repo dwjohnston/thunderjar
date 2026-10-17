@@ -89,7 +89,7 @@ src/
 - `adapters/docker/`
   - The real Docker, behind the seam tests swap out. It imports nothing else from `src/`.
 - `testing/`
-  - Test helpers: the in-memory fixture project, the seed repository, the recording fake Docker, and `test-setup.ts`, which every `bun test` preloads.
+  - Test helpers: the in-memory fixture project, the seed repository, the recording fake Docker, running the CLI in a fixtureTests/ scenario (`cli.ts`), and `test-setup.ts`, which every `bun test` preloads.
 
 ## Rules
 

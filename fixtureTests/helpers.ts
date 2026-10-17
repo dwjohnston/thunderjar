@@ -3,64 +3,25 @@
 //
 // What varies from run to run (the execution ID, $TMPDIR and durations) is replaced with
 // placeholders, so expected output reads like what is printed. Real runs work on a copy of
-// fixtures/, because they write .thunderjar/.data/; dry runs and builds run in fixtures/ itself.
+// fixtures/, because they write .thunderjar/.data/; dry runs run in fixtures/ itself.
 //
-// Docker is the recording fake (src/testing/fake-docker.ts), which every CLI a test starts
-// inherits from src/testing/test-setup.ts; `fakeDocker` gives it a state of its own to read.
+// Running the CLI against the fake Docker is src/testing/cli.ts's, shared with src/commands/'s
+// tests, which run it in these scenarios too.
 
 import { expect } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { cp, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import type { AggregationResult, ContainerRunRecord } from "../src/store/run-data-store.ts";
-import { linkThunderjar } from "../src/testing/fixture-project.ts";
+import { copyOfFixtures, thunderjar } from "../src/testing/cli.ts";
 
-const repoRoot = resolve(import.meta.dir, "..");
-const cli = join(repoRoot, "src", "cli", "index.ts");
+export { copyOfFixtures, fakeDocker, thunderjar } from "../src/testing/cli.ts";
 
 export const ULID = /^[0-9a-hjkmnp-tv-z]{26}$/;
 
 /** A scenario's fixtures/ project. `thunderjar` resolves from it through fixtureTests/node_modules. */
 export const scenarioFixtures = (scenarioDir: string) => join(scenarioDir, "fixtures");
-
-/** A copy of `fixtures`, without anything a manual run left behind, for a real run to write to. */
-export async function copyOfFixtures(fixtures: string) {
-  const dir = await mkdtemp(join(tmpdir(), "thunderjar-fixture-run-"));
-  await cp(fixtures, dir, {
-    recursive: true,
-    filter: (src) => !/[/\\]\.thunderjar[/\\](\.data|_generated)$/.test(src),
-  });
-  await linkThunderjar(dir);
-  return dir;
-}
-
-/**
- * A fresh state for the fake Docker, in which `images` exist. Pass `env` to `thunderjar`; read
- * back the commands it was given.
- */
-export async function fakeDocker(images: string[] = [], flags: ("unreachable" | "fail-build")[] = []) {
-  const dir = await mkdtemp(join(tmpdir(), "thunderjar-fake-docker-"));
-  await writeFile(join(dir, "images"), images.map((ref) => `${ref}\n`).join(""));
-  for (const flag of flags) await writeFile(join(dir, flag), "");
-  const read = (name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "");
-  return {
-    env: { FAKE_DOCKER_DIR: dir },
-    /** Each command run, `docker <args…>`. */
-    commands: () => read("commands").split("\n").filter(Boolean),
-    images: () => read("images").split("\n").filter(Boolean),
-  };
-}
-
-export async function thunderjar(cwd: string, args: string[], env: Record<string, string> = {}) {
-  const proc = Bun.spawn(["bun", cli, ...args], { cwd, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
-}
 
 export const executionIdOf = (stdout: string) => /^Execution (\S+) /.exec(stdout)![1]!;
 
