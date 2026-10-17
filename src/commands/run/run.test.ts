@@ -7,6 +7,7 @@ import { hashMeasurement } from "../../matrix/hashing.ts";
 import type { AggregationResult, ContainerRunRecord } from "../../store/run-data-store.ts";
 import { createHostMeasurementOpener, createHostRunner, type ContainerRunner } from "../../running/runner.ts";
 import { fakeDocker, scenario, thunderjar } from "../../testing/cli.ts";
+import { memoryDocker } from "../../testing/fake-docker.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../../testing/fixture-project.ts";
 import { plan } from "../plan/plan.ts";
 import { run, type RunOptions } from "./run.ts";
@@ -207,7 +208,10 @@ test("reports an unknown test case as a configuration error", async () => {
   expect(exitCode).toBe(1);
 });
 
-// --- Running for real, on the host, with the fake agent (fake-harness-alpha@1.0.0/fake-model-small) ---
+// --- Running for real, with the fake agent (fake-harness-alpha@1.0.0/fake-model-small) ---
+// In a container on the host in place of Docker, with prerun images "built" by an in-memory
+// Docker: what `run` does around each container run, not Docker itself. Real Docker runs are in
+// fixtureTests/*/run.docker.test.ts.
 
 /** A clock that moves 40 ms each time it is read, so every container run takes 0.04s. */
 const stubClock = () => {
@@ -215,11 +219,20 @@ const stubClock = () => {
   return () => (t += 40);
 };
 
+/** Runs each container run on the host under `rootDir`, timed by `now`, and builds prerun images in memory. */
+const onHost = (rootDir: string, now: () => number = Date.now) => ({
+  rootDir,
+  now,
+  docker: memoryDocker(),
+  runner: createHostRunner(rootDir, now),
+  measurementOpener: createHostMeasurementOpener(rootDir),
+});
+
 /** Runs `name` for real with the ID and clock stubbed, keeping container runs under a fresh root. */
 async function runForReal(dir: string, name: string) {
   const rootDir = await tmp();
-  const stdout = await printed(name, { dryRun: false, cwd: dir, newExecutionId, now: stubClock(), rootDir });
-  return { stdout, executionDir: join(rootDir, ID) };
+  const stdout = await printed(name, { dryRun: false, cwd: dir, newExecutionId, ...onHost(rootDir, stubClock()) });
+  return { stdout, rootDir, executionDir: join(rootDir, ID) };
 }
 
 /** The host's stand-in for one postrun image: what the fake agent left, and run.json. */
@@ -236,16 +249,18 @@ const containerRun = (executionDir: string, tag: string) => {
 
 const FAKE = `postrun-e${ID}-h`;
 
-test("runs each container run on the host, leaving the agent's files, its result and run.json, and measures it", async () => {
+test("builds the prerun image, then runs each container run, leaving the agent's files, its result and run.json, and measures it", async () => {
   const dir = await fixture();
-  const { stdout, executionDir } = await runForReal(dir, "fake-is-prime");
+  const { stdout, rootDir, executionDir } = await runForReal(dir, "fake-is-prime");
 
   const tag = /iteration 1\/2  (\S+)/.exec(stdout)![1]!;
   const hash = tag.slice(FAKE.length, -"-i00".length);
   expect(stdout).toBe(`Execution ${ID} (1 permutation × 2 iterations)
-Output in ${executionDir}
+Images in thunderjar
+Build contexts in ${join(rootDir, "builds")}
 
 Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
+  prerun-h${hash}  built (0.04s)
   iteration 1/2  ${FAKE}${hash}-i00  exit 0  0.04s
     isPrimeTemplateTest  {passed: 3, failed: 2}
     isPrimeTsExists      true
@@ -273,61 +288,6 @@ export const isPrime = (n: number) => n > 1 && n % 2 !== 0;
     expect(run.exitCode).toBe(0);
     expect(run.finishedAt - run.startedAt).toBe(40);
   }
-});
-
-/** The measures each fake agent run prints, as a pattern. */
-const MEASURES = [
-  "    isPrimeTemplateTest  \\{passed: 3, failed: 2\\}\n",
-  "    isPrimeTsExists      true\n",
-  "    readmeExists         false\n",
-  "    tsIgnoreCount        1\n",
-].join("");
-
-test("`thunderjar run` runs under a new ULID in $TMPDIR/thunderjar, and changes only the run data store", async () => {
-  const dir = await fixture();
-  const tmpDir = await tmp();
-  const before = listTree(dir);
-
-  const proc = Bun.spawn(["bun", cli, "run", "fake-is-prime"], {
-    cwd: dir,
-    env: { ...process.env, TMPDIR: tmpDir },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  expect(stderr).toBe("");
-  expect(exitCode).toBe(0);
-  const id = /^Execution (\S+) /.exec(stdout)![1]!;
-  expect(id).toMatch(ULID);
-  const executionDir = join(tmpDir, "thunderjar", id);
-  expect(stdout).toMatch(
-    new RegExp(
-      `^Execution ${id} \\(1 permutation × 2 iterations\\)\n` +
-        `Output in ${executionDir}\n\n` +
-        `Permutation 1/1  node20 \\| baseline \\| snerk \\| fake-harness-alpha@1.0.0/fake-model-small \\| plain\n` +
-        `  iteration 1/2  postrun-e${id}-h[0-9a-f]{8}-i00  exit 0  \\d+\\.\\d\\ds\n` +
-        MEASURES +
-        `  iteration 2/2  postrun-e${id}-h[0-9a-f]{8}-i01  exit 0  \\d+\\.\\d\\ds\n` +
-        MEASURES +
-        "\n" +
-        `2 container runs: 2 exited 0\n` +
-        `Recorded in \\.thunderjar/\\.data/runs\\.json\n$`,
-    ),
-  );
-  for (const tag of readdirSync(executionDir)) {
-    const { workspace, run } = containerRun(executionDir, tag);
-    expect(workspace).toEqual(["isPrime.ts"]);
-    expect(run.exitCode).toBe(0);
-    expect(run.finishedAt).toBeGreaterThanOrEqual(run.startedAt);
-  }
-  expect(listTree(dir)).toEqual([...before, ".data", join(".data", "runs.json")].toSorted());
-  // Every scratch copy measured in was discarded.
-  expect(readdirSync(tmpDir).filter((name) => name.startsWith("thunderjar-measure-"))).toEqual([]);
 });
 
 test("records a failing cli's exit code, and still runs the remaining iterations", async () => {
@@ -454,7 +414,7 @@ test("keeps the runs recorded before a crash", async () => {
     runContainer: (planned) => (++calls === 2 ? Promise.reject(new Error("docker went away")) : host.runContainer(planned)),
   };
 
-  const options = { dryRun: false, cwd: dir, newExecutionId, log: () => {}, runner, rootDir };
+  const options = { dryRun: false, cwd: dir, newExecutionId, log: () => {}, ...onHost(rootDir), runner };
   await expect(run("fake-is-prime", options)).rejects.toThrow("docker went away");
   expect(recordedRuns(dir).map((r) => r.iteration)).toEqual([0]);
   expect(Object.keys(recordedRuns(dir)[0]!.result)).toEqual(["isPrimeTemplateTest", "isPrimeTsExists", "readmeExists", "tsIgnoreCount"]);
@@ -468,7 +428,7 @@ test("a crash while measuring leaves the container run recorded with an empty re
     cwd: dir,
     newExecutionId,
     log: () => {},
-    rootDir,
+    ...onHost(rootDir),
     measurementOpener: { openMeasurementContext: () => Promise.reject(new Error("measurement container went away")) },
   };
   await expect(run("fake-is-prime", options)).rejects.toThrow("measurement container went away");
@@ -489,7 +449,7 @@ test("an instrument that throws is recorded as erroredWhileMeasuring, and every 
       };
     },
   };
-  const stdout = await printed("fake-is-prime", { dryRun: false, cwd: dir, newExecutionId, now: stubClock(), rootDir, measurementOpener });
+  const stdout = await printed("fake-is-prime", { dryRun: false, cwd: dir, newExecutionId, ...onHost(rootDir, stubClock()), measurementOpener });
 
   expect(stdout.split("\n").filter((line) => line.startsWith("    "))).toEqual([
     "    isPrimeTemplateTest  {passed: 3, failed: 2}",
@@ -557,7 +517,7 @@ test("kills a cli that runs past the initial prompt's timeoutSeconds, recording 
   });
   const rootDir = await tmp();
   const startedAt = Date.now();
-  const stdout = await printed("fake-is-prime", { dryRun: false, cwd: dir, newExecutionId, rootDir });
+  const stdout = await printed("fake-is-prime", { dryRun: false, cwd: dir, newExecutionId, ...onHost(rootDir) });
   const elapsed = Date.now() - startedAt;
 
   // Each of the two iterations is killed at about a second, well before `sleep 2` ends.
@@ -610,7 +570,7 @@ test("recomputes the aggregation result after each container run, so a crash lea
     runContainer: (planned) => (++calls === 2 ? Promise.reject(new Error("docker went away")) : host.runContainer(planned)),
   };
 
-  await expect(run("fake-is-prime", { dryRun: false, cwd: dir, newExecutionId, log: () => {}, runner, rootDir })).rejects.toThrow(
+  await expect(run("fake-is-prime", { dryRun: false, cwd: dir, newExecutionId, log: () => {}, ...onHost(rootDir), runner })).rejects.toThrow(
     "docker went away",
   );
   expect(storedAggregations(dir)!.map(({ iterations, measures }) => [iterations, measures.isPrimeTsExists])).toEqual([
@@ -629,4 +589,37 @@ test("a task without measurements still stores an aggregation result, of its dur
   expect(storedAggregations(dir)!.map(({ iterations, measures, duration }) => ({ iterations, measures, duration }))).toEqual([
     { iterations: 2, measures: {}, duration: { mean: 40, max: 40 } },
   ]);
+});
+
+test("builds each missing prerun image once, under --image-prefix, and reuses one that exists", async () => {
+  const dir = await fixture();
+  const rootDir = await tmp();
+  const host = onHost(rootDir, stubClock());
+  const options = { dryRun: false, cwd: dir, newExecutionId, ...host, repository: "thunderjar-test-prefix" };
+
+  const first = await printed("fake-is-prime", options);
+  expect(host.docker.builds).toEqual([expect.stringMatching(/^thunderjar-test-prefix:prerun-h[0-9a-f]{8}$/)]);
+  expect(first).toContain("Images in thunderjar-test-prefix\n");
+
+  const second = await printed("fake-is-prime", options);
+  expect(host.docker.builds).toHaveLength(1);
+  const tag = host.docker.builds[0]!.split(":")[1]!;
+  expect(second.split("\n").slice(0, 5)).toEqual([
+    `Execution ${ID} (1 permutation × 2 iterations)`,
+    "Images in thunderjar-test-prefix",
+    "",
+    "Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain",
+    `  ${tag}  reused`,
+  ]);
+});
+
+test("fails before running anything when Docker can't be reached", async () => {
+  const dir = await fixture();
+  const rootDir = await tmp();
+  const docker = { ...memoryDocker(), unreachable: async () => "no daemon" };
+  const options = { dryRun: false, cwd: dir, newExecutionId, log: () => {}, ...onHost(rootDir), docker };
+  await expect(run("fake-is-prime", options)).rejects.toThrow(
+    "error: Docker can't be reached (no daemon). Running a test case needs Docker.",
+  );
+  expect(existsSync(join(dir, ".thunderjar", ".data"))).toBe(false);
 });

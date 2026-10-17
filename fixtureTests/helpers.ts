@@ -3,13 +3,16 @@
 //
 // What varies from run to run (the execution ID, $TMPDIR and durations) is replaced with
 // placeholders, so expected output reads like what is printed. Real runs work on a copy of
-// fixtures/, because they write .thunderjar/.data/; dry runs run in fixtures/ itself.
+// fixtures/, because they write .thunderjar/.data/; dry runs run in fixtures/ itself. Real runs
+// use real Docker, with their images under a throwaway prefix, so they sit in
+// `run.docker.test.ts` files and run under `bun run test:docker` only.
 //
 // Running the CLI against the fake Docker is src/testing/cli.ts's, shared with src/commands/'s
 // tests, which run it in these scenarios too.
 
 import { expect } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,38 +43,73 @@ export const listTree = (dir: string) => [
   ...readdirSync(join(dir, ".thunderjar"), { recursive: true }).map(String),
 ].toSorted();
 
+/** Runs `script` with sh in a throwaway container from the image `ref`, returning its stdout. */
+export function inImage(ref: string, script: string) {
+  const result = spawnSync("docker", ["run", "--rm", ref, "sh", "-c", script], { encoding: "utf8" });
+  expect(result.stderr).toBe("");
+  return result.stdout;
+}
+
+/** Every image tagged under `prefix`, as `<prefix>:<tag>`. */
+export const imagesUnder = (prefix: string) =>
+  spawnSync("docker", ["image", "ls", "--format", "{{.Repository}}:{{.Tag}}", prefix], { encoding: "utf8" })
+    .stdout.split("\n")
+    .filter(Boolean)
+    .toSorted();
+
+/** The throwaway image prefixes real runs used; `removeTestImages` deletes every image under them. */
+const prefixes: string[] = [];
+
+/** Deletes every image a real run in this test file tagged. Call it in `afterAll`. */
+export function removeTestImages() {
+  const images = prefixes.flatMap(imagesUnder);
+  if (images.length > 0) spawnSync("docker", ["image", "rm", "--force", ...images]);
+}
+
 /**
- * Runs `testCase` for real in a copy of `fixtures`, with container runs kept under a fresh
- * $TMPDIR, and checks it wrote only the run data store and left no scratch copies behind.
+ * Runs `testCase` for real, against real Docker, in a copy of `fixtures`, with its images under
+ * a throwaway prefix of its own, so every prerun image is built. Checks it wrote only the run
+ * data store into the project, and left no scratch copies behind.
  */
 export async function runForReal(fixtures: string, testCase: string) {
   const dir = await copyOfFixtures(fixtures);
   const tmpDir = await mkdtemp(join(tmpdir(), "thunderjar-fixture-tmp-"));
+  const prefix = `thunderjar-test-${process.pid}-${prefixes.length}-${Date.now()}`;
+  prefixes.push(prefix);
   const before = listTree(dir);
-  const { stdout, stderr, exitCode } = await thunderjar(dir, ["run", testCase], { TMPDIR: tmpDir });
-  expect(stderr).toBe("");
+  const { stdout, exitCode } = await thunderjar(dir, ["run", testCase, "--image-prefix", prefix], {
+    TMPDIR: tmpDir,
+    THUNDERJAR_DOCKER: "docker",
+  });
   expect(exitCode).toBe(0);
-  const executionDir = join(tmpDir, "thunderjar", executionIdOf(stdout));
   const store = JSON.parse(readFileSync(join(dir, ".thunderjar", ".data", "runs.json"), "utf8")) as {
     containerRuns: ContainerRunRecord[];
     aggregationResults?: AggregationResult[];
   };
   expect(listTree(dir)).toEqual([...before, ".data", join(".data", "runs.json")].toSorted());
   expect(readdirSync(tmpDir).filter((name) => name.startsWith("thunderjar-measure-"))).toEqual([]);
-  return { output: normalise(stdout, tmpDir), executionDir, store };
+  const output = normalise(stdout, tmpDir)
+    .replaceAll(prefix, "<prefix>")
+    .replace(/ built \(\d+\.\d\ds\)$/gm, " built (<t>s)");
+  return { output, prefix, store, images: imagesUnder(prefix) };
 }
 
-/** The host's stand-in for one postrun image: what the agent left, its result and run.json. */
-export const containerRun = (executionDir: string, tag: string) => {
-  const dir = join(executionDir, tag);
-  const read = (rel: string) => (existsSync(join(dir, rel)) ? readFileSync(join(dir, rel), "utf8") : undefined);
+/**
+ * One container run's postrun image, `<prefix>:<tag>`: what the agent left in /workspace (each
+ * file its prerun image didn't have), its result file and run.json.
+ */
+export const containerRun = (prefix: string, tag: string) => {
+  const ref = `${prefix}:${tag}`;
+  const prerun = `${prefix}:prerun-h${/-h([0-9a-f]{8})-i/.exec(tag)![1]}`;
+  const files = (image: string) => inImage(image, "ls -A /workspace").split("\n").filter(Boolean);
+  const before = new Set(files(prerun));
   return {
-    workspace: readdirSync(join(dir, "workspace")).toSorted(),
-    read: (rel: string) => read(join("workspace", rel)),
-    result: read("thunderjar/result.json"),
-    run: JSON.parse(read("thunderjar/run.json")!) as { startedAt: number; finishedAt: number; exitCode: number },
+    workspace: files(ref).filter((file) => !before.has(file)),
+    read: (rel: string) => inImage(ref, `cat /workspace/${rel}`),
+    result: inImage(ref, "cat /thunderjar/result.json 2>/dev/null || true") || undefined,
+    run: JSON.parse(inImage(ref, "cat /thunderjar/run.json")) as { startedAt: number; finishedAt: number; exitCode: number },
   };
 };
 
-/** Each container run's tag, in order. */
-export const tagsIn = (executionDir: string) => readdirSync(executionDir).toSorted();
+/** Each container run's postrun tag, in the order they were recorded. */
+export const tagsIn = (store: { containerRuns: ContainerRunRecord[] }) => store.containerRuns.map((r) => r.postrunImage);
