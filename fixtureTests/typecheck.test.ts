@@ -20,7 +20,8 @@
 // Before checking, the scenario gets the tsconfig `init` scaffolds and the types `generate`
 // writes, so it's type-checked the way a user's editor would check it. Generated names are
 // ambient globals, so each scenario needs its own `tsc` program. `thunderjar` resolves through
-// the checked-in fixtureTests/node_modules/thunderjar link.
+// the checked-in fixtureTests/node_modules/thunderjar link. A scenario with no
+// fixtures/.thunderjar/ is a project before `init`, so there's nothing to check.
 
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
@@ -35,7 +36,7 @@ const repoRoot = resolve(here, "..");
 const tsc = join(repoRoot, "node_modules", ".bin", "tsc");
 
 const scenarios = (await readdir(here, { withFileTypes: true }))
-  .filter((entry) => entry.isDirectory() && existsSync(join(here, entry.name, "fixtures")))
+  .filter((entry) => entry.isDirectory() && existsSync(join(here, entry.name, "fixtures", ".thunderjar")))
   .map((entry) => entry.name);
 
 /** Copies in the `.thunderjar/tsconfig.json` that `init` scaffolds for a fresh project. */

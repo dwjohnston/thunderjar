@@ -36,6 +36,8 @@ bun run fixture 1 build example
 | 3 misbehaving agents | 📁 copied files | 📁 copied files |
 | 4 git project | 🌿 **real git** | 🌿 **real git** |
 | 5 empty parameter folders | none | none |
+| 6 uninitialised project | none | none |
+| 7 uninitialised JS project | none | none |
 
 - 📁 **Copied files**
   - The parameter copies files kept beside its declaration, through `ctx.dir`. It reads no commits, so it builds anywhere, even outside a repository, and editing one of those files changes its hash.
@@ -141,6 +143,14 @@ Unless its entry says otherwise, scenarios 1–3 use these:
     - `baseImages`, `codeStates`, `promptSets`, `tasks` and `harnessModels`, each holding only a `.gitkeep`.
   - Test cases
     - None.
+
+- `scenario_6_uninitialised_project`
+  - A project that isn't JavaScript, before `init`: only a `README.md`, with no `.thunderjar/` and no `package.json`.
+  - Run `init` by hand in a copy of `fixtures/`, not through `bun run fixture`, which would write into the scenario.
+
+- `scenario_7_uninitialised_js_project`
+  - A JavaScript project before `init`: only a root `package.json`, with no `.thunderjar/`.
+  - Run `init` by hand in a copy, as for scenario 6.
 
 ### Changing scenario 4's commits
 

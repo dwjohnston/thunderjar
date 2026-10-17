@@ -14,12 +14,15 @@ const cli = join(repoRoot, "src", "cli", "index.ts");
 /** The fixtures/ project of the fixtureTests/ scenario `name`, e.g. "scenario_2_typical_project". */
 export const scenario = (name: string) => join(repoRoot, "fixtureTests", name, "fixtures");
 
-/** A copy of `fixtures`, without anything a manual run left behind, for a real run to write to. */
+/**
+ * A copy of `fixtures`, for `init` or a real run to write to, as a fresh clone has it: without
+ * anything a manual run left behind, or the tsconfig fixtureTests/typecheck.test.ts writes.
+ */
 export async function copyOfFixtures(fixtures: string) {
   const dir = await mkdtemp(join(tmpdir(), "thunderjar-fixture-run-"));
   await cp(fixtures, dir, {
     recursive: true,
-    filter: (src) => !/[/\\]\.thunderjar[/\\](\.data|_generated)$/.test(src),
+    filter: (src) => !/[/\\]\.thunderjar[/\\](\.data|_generated|tsconfig\.json)$/.test(src),
   });
   await linkThunderjar(dir);
   return dir;
