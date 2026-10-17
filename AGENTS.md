@@ -19,7 +19,13 @@ If being provided feedback for behaviour to change:
 - Write the fix and commit it with a message starting with the 🟢 emoji. 
 
 
+### Source layout
+
+`src/` is in layers that only import downward, with one folder per command. Read [src/AGENTS.md](src/AGENTS.md) before adding or moving a module.
+
 ### Fixture tests
+
+Each scenario is described in [fixtureTests/AGENTS.md](fixtureTests/AGENTS.md).
 
 `fixtureTests/` holds checked-in Thunderjar projects that the CLI is run against, the way a user would run it.
 
