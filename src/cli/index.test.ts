@@ -16,6 +16,7 @@ commands:
   run <test case>                       run a test case
   executions [<test case>]              list recorded executions
   show <test case | execution | run>    show a test case, an execution or a container run
+  remeasure <test case | execution>     apply the current measurements to past runs
 `;
 
 describe("scenario_1_minimal_initial_setup", () => {

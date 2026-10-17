@@ -33,7 +33,7 @@ export const LAYERS = [
 ] as const;
 
 /** One folder per command under src/commands/, holding the command and its tests. */
-export const COMMANDS = ["build", "executions", "generate", "init", "plan", "run", "show"] as const;
+export const COMMANDS = ["build", "executions", "generate", "init", "plan", "remeasure", "run", "show"] as const;
 
 /** What every layer may use besides the layers below it: the real seams, and test helpers. */
 const SHARED = ["src/adapters/docker", "src/testing"];

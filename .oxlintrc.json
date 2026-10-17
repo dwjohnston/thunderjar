@@ -54,6 +54,10 @@
                 "message": "src may not import from src/commands/plan. See scripts/layout.ts."
               },
               {
+                "regex": "^\\./commands/remeasure(/[^/]+)?$",
+                "message": "src may not import from src/commands/remeasure. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\./commands/run(/[^/]+)?$",
                 "message": "src may not import from src/commands/run. See scripts/layout.ts."
               },
@@ -158,6 +162,10 @@
                 "message": "src/adapters/docker may not import from src/commands/plan. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands/remeasure. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./\\.\\./commands/run(/[^/]+)?$",
                 "message": "src/adapters/docker may not import from src/commands/run. See scripts/layout.ts."
               },
@@ -256,6 +264,10 @@
               {
                 "regex": "^\\.\\./commands/plan(/[^/]+)?$",
                 "message": "src/api may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/api may not import from src/commands/remeasure. See scripts/layout.ts."
               },
               {
                 "regex": "^\\.\\./commands/run(/[^/]+)?$",
@@ -592,6 +604,42 @@
     },
     {
       "files": [
+        "src/commands/remeasure/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/commands/remeasure may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands/remeasure may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/commands/remeasure may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/commands/remeasure may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
         "src/commands/run/*"
       ],
       "rules": {
@@ -710,6 +758,10 @@
                 "message": "src/images may not import from src/commands/plan. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/images may not import from src/commands/remeasure. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./commands/run(/[^/]+)?$",
                 "message": "src/images may not import from src/commands/run. See scripts/layout.ts."
               },
@@ -780,6 +832,10 @@
               {
                 "regex": "^\\.\\./commands/plan(/[^/]+)?$",
                 "message": "src/instruments may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/instruments may not import from src/commands/remeasure. See scripts/layout.ts."
               },
               {
                 "regex": "^\\.\\./commands/run(/[^/]+)?$",
@@ -874,6 +930,10 @@
                 "message": "src/matrix may not import from src/commands/plan. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/matrix may not import from src/commands/remeasure. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./commands/run(/[^/]+)?$",
                 "message": "src/matrix may not import from src/commands/run. See scripts/layout.ts."
               },
@@ -958,6 +1018,10 @@
                 "message": "src/measuring may not import from src/commands/plan. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/measuring may not import from src/commands/remeasure. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./commands/run(/[^/]+)?$",
                 "message": "src/measuring may not import from src/commands/run. See scripts/layout.ts."
               },
@@ -1032,6 +1096,10 @@
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./commands/plan(/[^/]+)?$",
                 "message": "src/measuring/remeasure-templates/v1 may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/commands/remeasure. See scripts/layout.ts."
               },
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./commands/run(/[^/]+)?$",
@@ -1138,6 +1206,10 @@
                 "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/plan. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/remeasure. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./\\.\\./\\.\\./commands/run(/[^/]+)?$",
                 "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/run. See scripts/layout.ts."
               },
@@ -1234,6 +1306,10 @@
                 "message": "src/project may not import from src/commands/plan. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/project may not import from src/commands/remeasure. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./commands/run(/[^/]+)?$",
                 "message": "src/project may not import from src/commands/run. See scripts/layout.ts."
               },
@@ -1322,6 +1398,10 @@
                 "message": "src/running may not import from src/commands/plan. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/running may not import from src/commands/remeasure. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./commands/run(/[^/]+)?$",
                 "message": "src/running may not import from src/commands/run. See scripts/layout.ts."
               },
@@ -1396,6 +1476,10 @@
               {
                 "regex": "^\\.\\./commands/plan(/[^/]+)?$",
                 "message": "src/store may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/store may not import from src/commands/remeasure. See scripts/layout.ts."
               },
               {
                 "regex": "^\\.\\./commands/run(/[^/]+)?$",
@@ -1476,6 +1560,10 @@
               {
                 "regex": "^\\.\\./commands/plan(/[^/]+)?$",
                 "message": "src/testing may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/remeasure(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands/remeasure. See scripts/layout.ts."
               },
               {
                 "regex": "^\\.\\./commands/run(/[^/]+)?$",
