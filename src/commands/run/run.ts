@@ -5,9 +5,9 @@
 // (src/images/prerun-builds.ts). Then each iteration's container run goes to a
 // ContainerRunner, by default one that runs it in a container from the prerun image and
 // commits it into its postrun image, both under `--image-prefix`. Each prints its exit code
-// and duration as it finishes, then a summary. Each
-// container run is recorded in the run data store as soon as it finishes, so the runs that
-// finished before a crash are kept. Then the task's measurements are taken against it, through
+// and duration as it finishes, then a summary. Each container run is recorded in the run data
+// store, under `--data-dir` if given, as soon as it finishes, so the runs that finished before
+// a crash are kept. Then the task's measurements are taken against it, through
 // a MeasurementOpener, printed, and merged into its record — so a crash while measuring leaves
 // it recorded with an empty Result. After each, its permutation's aggregation result is
 // recomputed and stored, though not printed. Runs that exit non-zero are measured too, for now.
@@ -24,7 +24,7 @@ import { measureContainerRun } from "../../measuring/measure.ts";
 import { permutationRows } from "../../matrix/permutations.ts";
 import { LOCAL_REPOSITORY, prerunStatuses, showPrerunStatus, unreachableNote } from "../../images/prerun.ts";
 import { preparePrerunBuilds } from "../../images/prerun-builds.ts";
-import { defaultRunDataStorePath, jsonFileStore, type RecordedOutcome } from "../../store/run-data-store.ts";
+import { jsonFileStore, runDataStorePath, type RecordedOutcome } from "../../store/run-data-store.ts";
 import {
   createDockerMeasurementOpener,
   createDockerRunner,
@@ -52,6 +52,8 @@ export interface RunOptions {
   measurementOpener?: MeasurementOpener;
   /** Builds missing prerun images, and is asked, on a dry run, whether each exists. */
   docker?: Docker;
+  /** The run data store goes under this folder, `--data-dir`, in place of `.thunderjar/.data/`. */
+  dataDir?: string;
   /** The image repository prerun and postrun images are tagged in, `--image-prefix`. */
   repository?: string;
 }
@@ -88,6 +90,7 @@ export async function run(name: string, options: RunOptions): Promise<void> {
     repository = LOCAL_REPOSITORY,
     runner = createDockerRunner(docker, repository),
     measurementOpener = createDockerMeasurementOpener(docker, repository),
+    dataDir,
   } = options;
 
   const root = findThunderjarRoot(cwd);
@@ -121,7 +124,7 @@ export async function run(name: string, options: RunOptions): Promise<void> {
 
   const measurements = await loadMeasurements(root, testCase.task);
   const nameWidth = Math.max(0, ...measurements.map((m) => m.name.length));
-  const storePath = defaultRunDataStorePath(root);
+  const storePath = runDataStorePath(cwd, dataDir);
   const store = jsonFileStore(storePath);
   const builds = await preparePrerunBuilds({
     root,

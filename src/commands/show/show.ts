@@ -7,13 +7,14 @@
 // many iterations it was measured in and its combined value by each chosen method, then the
 // iterations' exit codes and durations. Its per-iteration values are in each container run's
 // view, which prints its parameters, measures, duration and exit code.
+//
+// `--data-dir` reads a store kept outside the project.
 
-import { findThunderjarRoot } from "../../project/config.ts";
 import { abbreviateHash } from "../../matrix/hashing.ts";
 import { AXES, permutationRows, type Permutation } from "../../matrix/permutations.ts";
 import {
-  defaultRunDataStorePath,
   jsonFileStore,
+  runDataStorePath,
   type AggregatedMeasure,
   type AggregatedValue,
   type AggregationMethod,
@@ -168,8 +169,11 @@ function showContainerRun(record: ContainerRunRecord): string {
   ].join("\n");
 }
 
-export async function show(target: string, cwd: string = process.cwd()): Promise<string> {
-  const store = jsonFileStore(defaultRunDataStorePath(findThunderjarRoot(cwd)));
+export async function show(
+  target: string,
+  { cwd = process.cwd(), dataDir }: { cwd?: string; dataDir?: string } = {},
+): Promise<string> {
+  const store = jsonFileStore(runDataStorePath(cwd, dataDir));
 
   const containerRun = await store.getContainerRun(target);
   if (containerRun) return showContainerRun(containerRun);

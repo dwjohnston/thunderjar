@@ -1,8 +1,8 @@
 // The run data store — spec/085-test-case-results.md#what-gets-written-to-the-run-data-store
 // and spec/050-setup-and-configure.md#thunderjarconfigts. A small interface, so a later store
 // (SQLite, a shared remote one) drops in behind it without changing anything above it. For
-// now the only store is a JSON file under `.thunderjar/.data/`, which `init` gitignores; the
-// config's `runDataStore` entry isn't read yet.
+// now the only store is a JSON file under `.thunderjar/.data/`, which `init` gitignores, or
+// under `--data-dir`; the config's `runDataStore` entry isn't read yet.
 //
 // A container run is recorded with an empty Result straight after it runs; its measures are
 // merged in afterwards with recordMeasures, the same way a backfill will add them later.
@@ -11,8 +11,9 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { Axis } from "../matrix/resolve.ts";
+import { findThunderjarRoot } from "../project/config.ts";
 
 /**
  * A MeasurementResult as stored. An `Error` doesn't survive JSON, so an instrument's error is
@@ -134,8 +135,12 @@ export interface RunDataStore {
   getAggregationResults(executionId: string): Promise<AggregationResult[]>;
 }
 
-/** Where the store lives under the `.thunderjar/` folder `root`. */
-export const defaultRunDataStorePath = (root: string) => join(root, ".data", "runs.json");
+/**
+ * The store's file: under `dataDir`, `--data-dir`, resolved against `cwd`. By default it's under
+ * `.data/` in the `.thunderjar/` folder found from `cwd`.
+ */
+export const runDataStorePath = (cwd: string, dataDir?: string) =>
+  join(dataDir === undefined ? join(findThunderjarRoot(cwd), ".data") : resolve(cwd, dataDir), "runs.json");
 
 interface JsonFile {
   containerRuns: ContainerRunRecord[];

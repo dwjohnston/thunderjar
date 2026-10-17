@@ -21,16 +21,32 @@ commands:
   show <test case | execution | run>    show a test case, an execution or a container run`;
 
 /**
- * `args` without `--image-prefix <name>`, and the name, or `"invalid"` if the flag is given
- * without a name or more than once.
+ * `args` without `<flag> <value>`, and the value, or `"invalid"` if the flag is given without a
+ * value or more than once.
  */
-function takeImagePrefix(args: string[]): { rest: string[]; imagePrefix?: string } | "invalid" {
-  const at = args.indexOf("--image-prefix");
+function takeOption(args: string[], flag: string): { rest: string[]; value?: string } | "invalid" {
+  const at = args.indexOf(flag);
   if (at === -1) return { rest: args };
-  const imagePrefix = args[at + 1];
+  const value = args[at + 1];
   const rest = args.toSpliced(at, 2);
-  if (!imagePrefix || imagePrefix.startsWith("-") || rest.includes("--image-prefix")) return "invalid";
-  return { rest, imagePrefix };
+  if (!value || value.startsWith("-") || rest.includes(flag)) return "invalid";
+  return { rest, value };
+}
+
+/** `args` without each of `flags` and its value, and the values by flag, or `"invalid"`. */
+function takeOptions<F extends string>(
+  args: string[],
+  flags: F[],
+): { rest: string[]; values: Partial<Record<F, string>> } | "invalid" {
+  const values: Partial<Record<F, string>> = {};
+  let rest = args;
+  for (const flag of flags) {
+    const taken = takeOption(rest, flag);
+    if (taken === "invalid") return "invalid";
+    rest = taken.rest;
+    values[flag] = taken.value;
+  }
+  return { rest, values };
 }
 
 try {
@@ -42,26 +58,30 @@ try {
     const { path } = await generate();
     console.log(`generated ${path}`);
   } else if (command === "plan") {
-    const parsed = takeImagePrefix(args);
+    const parsed = takeOptions(args, ["--image-prefix"]);
     if (parsed === "invalid" || parsed.rest.length !== 1 || parsed.rest[0]!.startsWith("-")) {
       console.error("usage: thunderjar plan <test case> [--image-prefix <name>]");
       process.exitCode = 1;
     } else {
-      console.log(await plan(parsed.rest[0]!, process.cwd(), { repository: parsed.imagePrefix }));
+      console.log(await plan(parsed.rest[0]!, process.cwd(), { repository: parsed.values["--image-prefix"] }));
     }
   } else if (command === "run") {
-    const parsed = takeImagePrefix(args);
+    const parsed = takeOptions(args, ["--image-prefix", "--data-dir"]);
     const rest = parsed === "invalid" ? [] : parsed.rest;
     const flags = rest.filter((a) => a.startsWith("-"));
     const [name, ...extra] = rest.filter((a) => !a.startsWith("-"));
     if (parsed === "invalid" || !name || extra.length > 0 || flags.some((f) => f !== "--dry-run")) {
-      console.error("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>]");
+      console.error("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>] [--data-dir <dir>]");
       process.exitCode = 1;
     } else {
-      await run(name, { dryRun: flags.includes("--dry-run"), repository: parsed.imagePrefix });
+      await run(name, {
+        dryRun: flags.includes("--dry-run"),
+        repository: parsed.values["--image-prefix"],
+        dataDir: parsed.values["--data-dir"],
+      });
     }
   } else if (command === "build") {
-    const parsed = takeImagePrefix(args);
+    const parsed = takeOptions(args, ["--image-prefix"]);
     const rest = parsed === "invalid" ? [] : parsed.rest;
     const flags = rest.filter((a) => a.startsWith("-"));
     const [name, ...extra] = rest.filter((a) => !a.startsWith("-"));
@@ -69,21 +89,23 @@ try {
       console.error("usage: thunderjar build <test case> [--dry-run] [--image-prefix <name>]");
       process.exitCode = 1;
     } else {
-      await build(name, { dryRun: flags.includes("--dry-run"), repository: parsed.imagePrefix });
+      await build(name, { dryRun: flags.includes("--dry-run"), repository: parsed.values["--image-prefix"] });
     }
   } else if (command === "executions") {
-    if (args.length > 1 || args.some((a) => a.startsWith("-"))) {
-      console.error("usage: thunderjar executions [<test case>]");
+    const parsed = takeOptions(args, ["--data-dir"]);
+    if (parsed === "invalid" || parsed.rest.length > 1 || parsed.rest.some((a) => a.startsWith("-"))) {
+      console.error("usage: thunderjar executions [<test case>] [--data-dir <dir>]");
       process.exitCode = 1;
     } else {
-      console.log(await executions(args[0]));
+      console.log(await executions(parsed.rest[0], { dataDir: parsed.values["--data-dir"] }));
     }
   } else if (command === "show") {
-    if (args.length !== 1 || args[0]!.startsWith("-")) {
-      console.error("usage: thunderjar show <test case | execution | container run>");
+    const parsed = takeOptions(args, ["--data-dir"]);
+    if (parsed === "invalid" || parsed.rest.length !== 1 || parsed.rest[0]!.startsWith("-")) {
+      console.error("usage: thunderjar show <test case | execution | container run> [--data-dir <dir>]");
       process.exitCode = 1;
     } else {
-      console.log(await show(args[0]!));
+      console.log(await show(parsed.rest[0]!, { dataDir: parsed.values["--data-dir"] }));
     }
   } else {
     if (command !== undefined) console.error(`unknown command: ${command}`);
