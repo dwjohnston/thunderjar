@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { memoryDocker } from "../testing/fake-docker.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../testing/fixture-project.ts";
 import { plan } from "./plan.ts";
 
@@ -23,28 +24,28 @@ initialPrompt: plain (9e30b385), terse (7bb8874f)
 Matrix shape: 1/1/2/2/2 (8 permutations × 5 iterations = 40 container runs)
 
  1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
-    prerun-h3ae8d594
+    prerun-h3ae8d594 (will build)
 
  2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
-    prerun-h402eac7c
+    prerun-h402eac7c (will build)
 
  3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain
-    prerun-h89ce6d87
+    prerun-h89ce6d87 (will build)
 
  4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
-    prerun-haf29f0fa
+    prerun-haf29f0fa (will build)
 
  5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain
-    prerun-h257bdc02
+    prerun-h257bdc02 (will build)
 
  6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse
-    prerun-h9d8d12ed
+    prerun-h9d8d12ed (will build)
 
  7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain
-    prerun-h97455516
+    prerun-h97455516 (will build)
 
  8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse
-    prerun-h4ca35225`;
+    prerun-h4ca35225 (will build)`;
 
 test("`thunderjar plan` prints the parameters with their hashes, and each permutation's prerun image", async () => {
   const dir = await tmp();
@@ -134,7 +135,7 @@ test("a 1/1/1/1/1 test case has one permutation", async () => {
       "Matrix shape: 1/1/1/1/1 (1 permutation × 1 iteration = 1 container run)",
       "",
       " 1  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large | terse",
-      "    prerun-haf29f0fa", // the same permutation as entry 4 of the larger test case
+      "    prerun-haf29f0fa (will build)", // the same permutation as entry 4 of the larger test case
     ].join("\n"),
   );
 });
@@ -145,4 +146,39 @@ test("throws a clear error for an unknown test case", async () => {
   await linkThunderjar(dir);
 
   await expect(plan("no-such-test-case", dir)).rejects.toThrow(/no test case named "no-such-test-case"/);
+});
+
+test("a prerun image that already exists is shown as reused; the rest as built", async () => {
+  const dir = await tmp();
+  await createFixtureProject(dir);
+  await linkThunderjar(dir);
+
+  const docker = memoryDocker(["thunderjar:prerun-h3ae8d594", "thunderjar:prerun-h4ca35225"]);
+  const output = await plan("is-prime-baseline", dir, { docker });
+  expect(output.split("\n").filter((line) => line.includes("prerun-h"))).toEqual([
+    "    prerun-h3ae8d594 (exists, reused)",
+    "    prerun-h402eac7c (will build)",
+    "    prerun-h89ce6d87 (will build)",
+    "    prerun-haf29f0fa (will build)",
+    "    prerun-h257bdc02 (will build)",
+    "    prerun-h9d8d12ed (will build)",
+    "    prerun-h97455516 (will build)",
+    "    prerun-h4ca35225 (exists, reused)",
+  ]);
+  // An image is looked for in the repository it is tagged in.
+  const elsewhere = await plan("is-prime-baseline", dir, { docker, repository: "somewhere-else" });
+  expect(elsewhere).not.toContain("(exists, reused)");
+});
+
+test("without Docker, plan still prints, and says whether images exist is unknown", async () => {
+  const dir = await tmp();
+  await createFixtureProject(dir);
+  await linkThunderjar(dir);
+
+  const docker = { ...memoryDocker(), unreachable: async () => "Cannot connect to the Docker daemon" };
+  const output = await plan("is-prime-baseline", dir, { docker });
+  expect(output).toBe(
+    `${EXPECTED.replaceAll(" (will build)", "")}\n\n` +
+      "Docker can't be reached (Cannot connect to the Docker daemon), so whether each prerun image exists is unknown.",
+  );
 });

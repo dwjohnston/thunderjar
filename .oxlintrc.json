@@ -32,6 +32,42 @@
     },
     {
       "files": [
+        "src/adapters/docker/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./commands(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./testing(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/testing. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
         "src/cli/*"
       ],
       "rules": {
@@ -48,6 +84,10 @@
               {
                 "regex": "^\\.\\.(/[^/]+)?$",
                 "message": "src/cli may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./adapters/docker(/[^/]+)?$",
+                "message": "src/cli may not import from src/adapters/docker. See scripts/layout.ts."
               },
               {
                 "regex": "^\\.\\./testing(/[^/]+)?$",

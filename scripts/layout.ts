@@ -18,8 +18,10 @@ export type LayoutEntry = {
 export type Layout = Record<string, LayoutEntry>;
 
 export const layout: Layout = {
-  src: { allowedFiles: ["*.ts"], mayImport: ["src/commands", "src/testing"] },
+  src: { allowedFiles: ["*.ts"], mayImport: ["src/adapters/docker", "src/commands", "src/testing"] },
+  // The real implementations of the seams tests swap out. They depend on nothing else in src.
+  "src/adapters/docker": { allowedFiles: ["*.ts"] },
   "src/cli": { allowedFiles: ["*.ts"], mayImport: ["src/commands"] },
-  "src/commands": { allowedFiles: ["*.ts"], mayImport: ["src", "src/testing"] },
-  "src/testing": { allowedFiles: ["*.ts"], mayImport: ["src"] },
+  "src/commands": { allowedFiles: ["*.ts"], mayImport: ["src", "src/adapters/docker", "src/testing"] },
+  "src/testing": { allowedFiles: ["*.ts"], mayImport: ["src", "src/adapters/docker"] },
 };

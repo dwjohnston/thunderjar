@@ -6,15 +6,18 @@
 // a MeasurementOpener, printed, and merged into its record — so a crash while measuring leaves
 // it recorded with an empty Result. After each, its permutation's aggregation result is
 // recomputed and stored, though not printed. Runs that exit non-zero are measured too, for now.
-// `--dry-run` prints the container run each would be instead — its prerun image, its postrun
-// image and the harness command — without running anything.
+// `--dry-run` prints the container run each would be instead — its prerun image and whether
+// it exists or would be built, its postrun image and the harness command — without running
+// anything. `run` itself doesn't build prerun images yet; `build` does.
 
 import { relative } from "node:path";
+import { dockerCli, type Docker } from "../adapters/docker/docker.ts";
 import { recomputeAggregationResult } from "../aggregate.ts";
 import { findThunderjarRoot, loadMeasurements, loadTestCase } from "../config.ts";
 import { planExecution, type PlannedExecution } from "../execution.ts";
 import { measureContainerRun } from "../measure.ts";
 import { permutationRows } from "../permutations.ts";
+import { LOCAL_REPOSITORY, prerunStatuses, showPrerunStatus, unreachableNote } from "../prerun.ts";
 import { defaultRunDataStorePath, jsonFileStore, type RecordedOutcome } from "../run-data-store.ts";
 import {
   createHostMeasurementOpener,
@@ -42,6 +45,10 @@ export interface RunOptions {
   runner?: ContainerRunner;
   /** Gives each container run's measurement context. Defaults to the host one under `rootDir`. */
   measurementOpener?: MeasurementOpener;
+  /** Asked, on a dry run, whether each prerun image exists. */
+  docker?: Docker;
+  /** The image repository prerun images are looked up in. */
+  repository?: string;
 }
 
 const indent = (text: string, spaces: number) =>
@@ -89,6 +96,8 @@ export async function run(name: string, options: RunOptions): Promise<void> {
     rootDir = defaultRootDir(),
     runner = createHostRunner(rootDir, now),
     measurementOpener = createHostMeasurementOpener(rootDir),
+    docker = dockerCli(),
+    repository = LOCAL_REPOSITORY,
   } = options;
 
   const root = findThunderjarRoot(cwd);
@@ -101,13 +110,15 @@ export async function run(name: string, options: RunOptions): Promise<void> {
   if (dryRun) {
     // Each permutation: its number and five names, its prerun image, then each iteration's
     // postrun image with the harness command below it.
+    const found = await prerunStatuses(docker, repository, permutations.map((p) => p.permutation));
     log(`Execution ${executionId} (dry run, ${shape(execution)})`);
-    permutations.forEach(({ prerunTag, runs }, n) => {
+    if ("unreachable" in found) log(unreachableNote(found.unreachable));
+    permutations.forEach(({ permutation, prerunTag, runs }, n) => {
       log("");
       log(
         [
           permutationLine(n),
-          `  ${prerunTag}`,
+          `  ${prerunTag}${"statuses" in found ? showPrerunStatus(found.statuses.get(permutation.hash)) : ""}`,
           ...runs.map(
             ({ iterationIndex, postrunTag, command }) =>
               `  iteration ${ordinal(iterationIndex + 1, iterations)}  ${postrunTag}\n${indent(command, 4)}`,
