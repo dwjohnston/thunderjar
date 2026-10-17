@@ -1,208 +1,162 @@
-import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+// `thunderjar plan`, through the CLI, in the checked-in fixtureTests/ scenarios, in place. Each
+// asserts on stdout, against the recording fake Docker, which says which prerun images exist. Any
+// of these can be run by hand:
+//
+//   bun run fixture scenario_2 plan is-prime-baseline
+
+import { describe, expect, test } from "bun:test";
 import { fakeDocker, scenario, thunderjar } from "../../testing/cli.ts";
-import { memoryDocker } from "../../testing/fake-docker.ts";
-import { createFixtureProject, linkThunderjar, stub } from "../../testing/fixture-project.ts";
-import { plan } from "./plan.ts";
 
-const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-plan-"));
+const prerunTags = (stdout: string) => stdout.match(/prerun-h[0-9a-f]{8}/g);
 
-const cli = resolve(import.meta.dir, "..", "..", "cli", "index.ts");
+describe("scenario_1_minimal_initial_setup", () => {
+  const fixtures = scenario("scenario_1_minimal_initial_setup");
 
-// spec/100-cli-reference.md#plan, with the fixture project's real hashes. The fixture is
-// deterministic, so these are exact: a changed hash is a change to execution identity, a
-// tripwire to investigate rather than loosen (spec/120-test-boundaries.md). Regenerate them
-// deliberately, in the change that alters the fixture or the hashing.
-const EXPECTED = `baseImage:     node20 (26d9745f)
+  test("plan example: a 1/1/1/1/1 test case has one permutation", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "example"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`baseImage:     node20 (26d9745f)
+codeState:     baseline (bb1584cd)
+promptSet:     snerk (827aa0ce)
+harnessModel:  fake-harness-alpha@1.0.0/fake-model-small (da287975)
+task:          is-prime
+initialPrompt: plain (9e30b385)
+
+Matrix shape: 1/1/1/1/1 (1 permutation × 1 iteration = 1 container run)
+
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
+    prerun-h8ffdda6e (will build)
+`);
+  });
+});
+
+describe("scenario_2_typical_project", () => {
+  const fixtures = scenario("scenario_2_typical_project");
+
+  // spec/100-cli-reference.md#plan, with the scenario's real hashes. The scenario is deterministic,
+  // so these are exact: a changed hash is a change to execution identity, a tripwire to investigate
+  // rather than loosen (spec/120-test-boundaries.md). Regenerate them deliberately, in the change
+  // that alters the scenario or the hashing.
+  const IS_PRIME_BASELINE = `baseImage:     node20 (26d9745f)
 codeState:     baseline (bb1584cd)
 promptSet:     snerk (827aa0ce), glurk (a4ecb061)
-harnessModel:  fake-harness-alpha@1.0.0/fake-model-small (b81a20ff), fake-harness-beta@1.0.0/fake-model-large (90b04061)
+harnessModel:  fake-harness-alpha@1.0.0/fake-model-small (da287975), fake-harness-beta@1.0.0/fake-model-large (832747bd)
 task:          is-prime
 initialPrompt: plain (9e30b385), terse (7bb8874f)
 
 Matrix shape: 1/1/2/2/2 (8 permutations × 5 iterations = 40 container runs)
 
  1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
-    prerun-hcb08a2eb (will build)
+    prerun-h8ffdda6e (will build)
 
  2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
-    prerun-h25cb39de (will build)
+    prerun-hefe85dda (will build)
 
  3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain
-    prerun-h6f09569c (will build)
+    prerun-h8baa2cff (will build)
 
  4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
-    prerun-h65c7b4e2 (will build)
+    prerun-h56ea4852 (will build)
 
  5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain
-    prerun-hcdb7fd67 (will build)
+    prerun-hfaa55eaf (will build)
 
  6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse
-    prerun-hfb5aa5e7 (will build)
+    prerun-h3e2038b8 (will build)
 
  7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain
-    prerun-h6dd40da0 (will build)
+    prerun-h09fa95b9 (will build)
 
  8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse
-    prerun-h88709bd5 (will build)`;
+    prerun-he7379c79 (will build)`;
 
-test("`thunderjar plan` prints the parameters with their hashes, and each permutation's prerun image", async () => {
-  const dir = await tmp();
-  await createFixtureProject(dir);
-  await linkThunderjar(dir);
+  test("plan is-prime-baseline prints the parameters with their hashes, and each permutation's prerun image", async () => {
+    const docker = await fakeDocker();
+    const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "is-prime-baseline"], docker.env);
 
-  const proc = Bun.spawn(["bun", cli, "plan", "is-prime-baseline"], { cwd: dir, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  expect(stderr).toBe("");
-  expect(exitCode).toBe(0);
-  expect(stdout).toBe(`${EXPECTED}\n`);
-});
-
-test("renaming a parameter keeps its hash and every prerun image", async () => {
-  const dir = await tmp();
-  await createFixtureProject(dir, {
-    "test-case-parameters/baseImages/node20/index.ts": null,
-    "test-case-parameters/baseImages/node-lts/index.ts": stub("declareBaseImage", `{
-  applyParameter: () => \`FROM node:20-bookworm\`,
-}`),
-    "test-cases/is-prime-baseline.ts": stub("declareTestCase", `{
-  baseImage: ["node-lts"],
-  codeState: ["baseline"],
-  promptSet: ["snerk", "glurk"],
-  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small", "fake-harness-beta@1.0.0/fake-model-large"],
-  task: "is-prime",
-  initialPrompt: ["plain", "terse"],
-  iterations: 5,
-}`),
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`${IS_PRIME_BASELINE}\n`);
   });
-  await linkThunderjar(dir);
 
-  const output = await plan("is-prime-baseline", dir);
-  expect(output).toContain("baseImage:     node-lts (26d9745f)");
-  expect(output.match(/prerun-h[0-9a-f]{8}/g)).toEqual(EXPECTED.match(/prerun-h[0-9a-f]{8}/g));
-});
+  test("plan glurk-on-node-lts: a renamed parameter keeps its hash; one whose file differs doesn't", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "glurk-on-node-lts"]);
 
-test("editing a file beside a parameter's declaration changes its hash and the prerun image of every permutation using it", async () => {
-  const dir = await tmp();
-  await createFixtureProject(dir, {
-    "test-case-parameters/promptSets/glurk/FAKE_INSTRUCTIONS.md": "# Glurk\n\nPrefer two clear expressions to a loop.\n",
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    // node-lts is node20 under another name, so it has node20's hash, and glurk on it has the same
+    // prerun image as on node20 (entry 8 of is-prime-baseline). glurk-reworded is glurk with its
+    // FAKE_INSTRUCTIONS.md beside the declaration edited, so its hash and prerun image differ.
+    expect(stdout).toContain("baseImage:     node-lts (26d9745f)\n");
+    expect(stdout).toContain("promptSet:     glurk (a4ecb061), glurk-reworded (88256825)\n");
+    expect(prerunTags(stdout)).toEqual(["prerun-he7379c79", "prerun-h2960067a"]);
+    expect(prerunTags(IS_PRIME_BASELINE)).not.toContain("prerun-h2960067a");
   });
-  await linkThunderjar(dir);
 
-  const output = await plan("is-prime-baseline", dir);
-  const tags = output.match(/prerun-h[0-9a-f]{8}/g)!;
-  const expectedTags = EXPECTED.match(/prerun-h[0-9a-f]{8}/g)!;
-  expect(output).toContain("promptSet:     snerk (827aa0ce), glurk (");
-  expect(output).not.toContain("glurk (a4ecb061)");
-  expect(tags.slice(0, 4)).toEqual(expectedTags.slice(0, 4)); // snerk
-  for (let i = 4; i < 8; i++) expect(expectedTags).not.toContain(tags[i]!); // glurk
-});
+  test("plan with an unknown test case says so", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "no-such-test-case"]);
 
-test("a 1/1/1/1/1 test case has one permutation", async () => {
-  const dir = await tmp();
-  await createFixtureProject(dir, {
-    "test-cases/single.ts": stub("declareTestCase", `{
-  baseImage: ["node20"],
-  codeState: ["baseline"],
-  promptSet: ["snerk"],
-  harnessModel: ["fake-harness-beta@1.0.0/fake-model-large"],
-  task: "is-prime",
-  initialPrompt: ["terse"],
-  iterations: 1,
-}`),
-  });
-  await linkThunderjar(dir);
-
-  expect(await plan("single", dir)).toBe(
-    [
-      "baseImage:     node20 (26d9745f)",
-      "codeState:     baseline (bb1584cd)",
-      "promptSet:     snerk (827aa0ce)",
-      "harnessModel:  fake-harness-beta@1.0.0/fake-model-large (90b04061)",
-      "task:          is-prime",
-      "initialPrompt: terse (7bb8874f)",
-      "",
-      "Matrix shape: 1/1/1/1/1 (1 permutation × 1 iteration = 1 container run)",
-      "",
-      " 1  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large | terse",
-      "    prerun-h65c7b4e2 (will build)", // the same permutation as entry 4 of the larger test case
-    ].join("\n"),
-  );
-});
-
-test("throws a clear error for an unknown test case", async () => {
-  const dir = await tmp();
-  await createFixtureProject(dir);
-  await linkThunderjar(dir);
-
-  await expect(plan("no-such-test-case", dir)).rejects.toThrow(/no test case named "no-such-test-case"/);
-});
-
-test("a prerun image that already exists is shown as reused; the rest as built", async () => {
-  const dir = await tmp();
-  await createFixtureProject(dir);
-  await linkThunderjar(dir);
-
-  const docker = memoryDocker(["thunderjar:prerun-hcb08a2eb", "thunderjar:prerun-h88709bd5"]);
-  const output = await plan("is-prime-baseline", dir, { docker });
-  expect(output.split("\n").filter((line) => line.includes("prerun-h"))).toEqual([
-    "    prerun-hcb08a2eb (exists, reused)",
-    "    prerun-h25cb39de (will build)",
-    "    prerun-h6f09569c (will build)",
-    "    prerun-h65c7b4e2 (will build)",
-    "    prerun-hcdb7fd67 (will build)",
-    "    prerun-hfb5aa5e7 (will build)",
-    "    prerun-h6dd40da0 (will build)",
-    "    prerun-h88709bd5 (exists, reused)",
-  ]);
-  // An image is looked for in the repository it is tagged in.
-  const elsewhere = await plan("is-prime-baseline", dir, { docker, repository: "somewhere-else" });
-  expect(elsewhere).not.toContain("(exists, reused)");
-});
-
-test("without Docker, plan still prints, and says whether images exist is unknown", async () => {
-  const dir = await tmp();
-  await createFixtureProject(dir);
-  await linkThunderjar(dir);
-
-  const docker = { ...memoryDocker(), unreachable: async () => "Cannot connect to the Docker daemon" };
-  const output = await plan("is-prime-baseline", dir, { docker });
-  expect(output).toBe(
-    `${EXPECTED.replaceAll(" (will build)", "")}\n\n` +
-      "Docker can't be reached (Cannot connect to the Docker daemon), so whether each prerun image exists is unknown.",
-  );
-});
-
-test("`thunderjar plan --image-prefix` looks up each prerun image under the prefix", async () => {
-  const fixtures = scenario("scenario_2_typical_project");
-  const docker = await fakeDocker(["throwaway:prerun-hefe85dda", "thunderjar:prerun-h56ea4852"]);
-
-  const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "two-pairs", "--image-prefix", "throwaway"], docker.env);
-
-  expect(stderr).toBe("");
-  expect(exitCode).toBe(0);
-  // Only the image under the prefix counts; the one under the default prefix doesn't.
-  expect(stdout).toContain("    prerun-hefe85dda (exists, reused)\n");
-  expect(stdout).toContain("    prerun-h56ea4852 (will build)\n");
-  expect(docker.commands()).toEqual([
-    "docker version --format {{.Server.Version}}",
-    "docker image inspect --format {{.Id}} throwaway:prerun-hefe85dda",
-    "docker image inspect --format {{.Id}} throwaway:prerun-h56ea4852",
-  ]);
-});
-
-test("`thunderjar plan` with no test case, or --image-prefix without a name, prints its usage", async () => {
-  const fixtures = scenario("scenario_2_typical_project");
-  for (const args of [["plan"], ["plan", "two-pairs", "--image-prefix"], ["plan", "two-pairs", "extra"]]) {
-    const { stderr, exitCode } = await thunderjar(fixtures, args);
-    expect(stderr).toBe("usage: thunderjar plan <test case> [--image-prefix <name>]\n");
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      `error: no test case named "no-such-test-case" (expected ${fixtures}/.thunderjar/test-cases/no-such-test-case.ts)\n`,
+    );
     expect(exitCode).toBe(1);
-  }
+  });
+
+  test("a prerun image that already exists is shown as reused; the rest as built", async () => {
+    const docker = await fakeDocker(["thunderjar:prerun-h8ffdda6e", "thunderjar:prerun-he7379c79"]);
+    const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "is-prime-baseline"], docker.env);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout.split("\n").filter((line) => line.includes("prerun-h"))).toEqual([
+      "    prerun-h8ffdda6e (exists, reused)",
+      "    prerun-hefe85dda (will build)",
+      "    prerun-h8baa2cff (will build)",
+      "    prerun-h56ea4852 (will build)",
+      "    prerun-hfaa55eaf (will build)",
+      "    prerun-h3e2038b8 (will build)",
+      "    prerun-h09fa95b9 (will build)",
+      "    prerun-he7379c79 (exists, reused)",
+    ]);
+  });
+
+  test("without Docker, plan still prints, and says whether images exist is unknown", async () => {
+    const docker = await fakeDocker([], ["unreachable"]);
+    const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "is-prime-baseline"], docker.env);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(
+      `${IS_PRIME_BASELINE.replaceAll(" (will build)", "")}\n\n` +
+        "Docker can't be reached (Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?), so whether each prerun image exists is unknown.\n",
+    );
+  });
+
+  test("plan --image-prefix looks up each prerun image under the prefix", async () => {
+    const docker = await fakeDocker(["throwaway:prerun-hefe85dda", "thunderjar:prerun-h56ea4852"]);
+
+    const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "two-pairs", "--image-prefix", "throwaway"], docker.env);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    // Only the image under the prefix counts; the one under the default prefix doesn't.
+    expect(stdout).toContain("    prerun-hefe85dda (exists, reused)\n");
+    expect(stdout).toContain("    prerun-h56ea4852 (will build)\n");
+    expect(docker.commands()).toEqual([
+      "docker version --format {{.Server.Version}}",
+      "docker image inspect --format {{.Id}} throwaway:prerun-hefe85dda",
+      "docker image inspect --format {{.Id}} throwaway:prerun-h56ea4852",
+    ]);
+  });
+
+  test("plan with no test case, or --image-prefix without a name, prints its usage", async () => {
+    for (const args of [["plan"], ["plan", "two-pairs", "--image-prefix"], ["plan", "two-pairs", "extra"]]) {
+      const { stderr, exitCode } = await thunderjar(fixtures, args);
+      expect(stderr).toBe("usage: thunderjar plan <test case> [--image-prefix <name>]\n");
+      expect(exitCode).toBe(1);
+    }
+  });
 });

@@ -79,6 +79,8 @@ Unless its entry says otherwise, scenarios 1–3 use these:
 
 - `scenario_2_typical_project`
   - A typical project: two agents that behave, two prompt sets, two wordings of the task, and a task with no measurements.
+  - Base images
+    - `node20`, and `node-lts`, which is the same declaration under another name.
   - Fake agents
     - `fake-harness-alpha@1.0.0` (buggy) and `fake-harness-beta@1.0.0` (correct).
     - `fake-harness-alpha@1.1.0` overrides the family's cli: it also writes `version.txt`, so tests can see which cli ran.
@@ -86,6 +88,7 @@ Unless its entry says otherwise, scenarios 1–3 use these:
     - `baseline`
   - Prompt sets
     - `snerk` and `glurk`, which differ only in their instructions.
+    - `glurk-reworded`, which is `glurk` with one word of its instructions changed.
   - Tasks
     - `is-prime`, with the prompts `plain` and `terse` and four measurements: whether `isPrime.ts` exists, whether a README exists, the number of `@ts-ignore`s, and a template test of `isPrime`.
     - `no-measures`, with one prompt and no measurements.
@@ -93,6 +96,7 @@ Unless its entry says otherwise, scenarios 1–3 use these:
     - `two-pairs`: both agents, 2 permutations.
     - `is-prime-baseline`: the full matrix, 8 permutations × 5 iterations.
     - `alpha-is-prime`, `version-cli-override`, `without-measurements`: one permutation each.
+    - `glurk-on-node-lts`: `glurk` and `glurk-reworded` on `node-lts`, 2 permutations.
 
 - `scenario_3_misbehaving_agents`
   - Agents that fail, so tests can check how `run` records them.
