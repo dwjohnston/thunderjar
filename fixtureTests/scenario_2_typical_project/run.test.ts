@@ -87,7 +87,7 @@ test("each invocation gets its own execution ID", async () => {
 test("prints usage for a missing test case name or an unknown flag", async () => {
   for (const args of [["run"], ["run", "--dry-run"], ["run", "two-pairs", "--dry-run", "--json"]]) {
     const { stderr, exitCode } = await thunderjar(fixtures, args);
-    expect(stderr).toBe("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>]\n");
+    expect(stderr).toBe("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>] [--data-dir <dir>]\n");
     expect(exitCode).toBe(1);
   }
 });

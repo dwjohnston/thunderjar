@@ -145,9 +145,11 @@ Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.1.0/fake-model
       ["--dry-run"],
       ["is-prime-baseline", "--dry-run", "--json"],
       ["is-prime-baseline", "--dry-run", "--image-prefix"],
+      ["is-prime-baseline", "--dry-run", "--data-dir"],
+      ["is-prime-baseline", "--data-dir", "a", "--data-dir", "b"],
     ]) {
       const { stderr, exitCode } = await runCli(fixtures, args);
-      expect(stderr).toBe("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>]\n");
+      expect(stderr).toBe("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>] [--data-dir <dir>]\n");
       expect(exitCode).toBe(1);
     }
   });
@@ -166,6 +168,19 @@ Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.1.0/fake-model
       "docker image inspect --format {{.Id}} throwaway:prerun-hefe85dda",
       "docker image inspect --format {{.Id}} throwaway:prerun-h56ea4852",
     ]);
+  });
+
+  test("run two-pairs with a data dir writes the run data store only under it, leaving .thunderjar/.data/ untouched", async () => {
+    const before = listTree(fixtures);
+    const dataDir = join(await tmp(), "data");
+
+    const stdout = await printed("two-pairs", { dryRun: false, cwd: fixtures, newExecutionId, dataDir, ...onHost(await tmp()) });
+
+    expect(stdout).toContain(`Execution ${ID} (2 permutations × 2 iterations)`);
+    expect(readdirSync(dataDir)).toEqual(["runs.json"]);
+    const { containerRuns } = JSON.parse(readFileSync(join(dataDir, "runs.json"), "utf8")) as { containerRuns: ContainerRunRecord[] };
+    expect(containerRuns.map((r) => r.executionId)).toEqual([ID, ID, ID, ID]);
+    expect(listTree(fixtures)).toEqual(before);
   });
 
   test("reports an unknown test case as a configuration error", async () => {

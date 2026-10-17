@@ -5,6 +5,7 @@
 //   bun run fixture 8 executions fails
 
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { scenario, thunderjar } from "../../testing/cli.ts";
 
 describe("scenario_5_empty_parameter_folders", () => {
@@ -18,6 +19,15 @@ describe("scenario_5_empty_parameter_folders", () => {
     });
     expect(await thunderjar(fixtures, ["executions", "fails"])).toEqual({
       stdout: "No executions recorded for fails.\n",
+      stderr: "",
+      exitCode: 0,
+    });
+  });
+
+  test("--data-dir lists the executions in a store kept elsewhere", async () => {
+    const dataDir = join(scenario("scenario_8_recorded_executions"), ".thunderjar", ".data");
+    expect(await thunderjar(fixtures, ["executions", "times-out", "--data-dir", dataDir])).toEqual({
+      stdout: "01k4xb7q0c2tnvabcdefghjkmn  times-out  2026-09-29 15:02\n",
       stderr: "",
       exitCode: 0,
     });
@@ -59,9 +69,9 @@ describe("scenario_8_recorded_executions", () => {
   });
 
   test("prints usage for extra arguments or a flag", async () => {
-    for (const args of [["executions", "a", "b"], ["executions", "--json"]]) {
+    for (const args of [["executions", "a", "b"], ["executions", "--json"], ["executions", "--data-dir"]]) {
       const { stderr, exitCode } = await thunderjar(fixtures, args);
-      expect(stderr).toBe("usage: thunderjar executions [<test case>]\n");
+      expect(stderr).toBe("usage: thunderjar executions [<test case>] [--data-dir <dir>]\n");
       expect(exitCode).toBe(1);
     }
   });

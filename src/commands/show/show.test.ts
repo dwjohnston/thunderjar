@@ -13,6 +13,7 @@
 //   bun run fixture 8 show fails
 
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { scenario, thunderjar } from "../../testing/cli.ts";
 
 const OLDEST = "01k4tq3h8r0000000000000000";
@@ -216,10 +217,20 @@ Permutation 389190d4  (2 iterations)
   });
 
   test("prints usage for no argument, extra arguments or a flag", async () => {
-    for (const args of [["show"], ["show", "a", "b"], ["show", "--json"]]) {
+    for (const args of [["show"], ["show", "a", "b"], ["show", "--json"], ["show", "fails", "--data-dir"]]) {
       const { stderr, exitCode } = await thunderjar(fixtures, args);
-      expect(stderr).toBe("usage: thunderjar show <test case | execution | container run>\n");
+      expect(stderr).toBe("usage: thunderjar show <test case | execution | container run> [--data-dir <dir>]\n");
       expect(exitCode).toBe(1);
     }
+  });
+});
+
+describe("scenario_5_empty_parameter_folders", () => {
+  test("show --data-dir reads a store kept elsewhere", async () => {
+    const recorded = scenario("scenario_8_recorded_executions");
+    const dataDir = join(recorded, ".thunderjar", ".data");
+    const elsewhere = await thunderjar(scenario("scenario_5_empty_parameter_folders"), ["show", TIMES_OUT, "--data-dir", dataDir]);
+    expect(elsewhere.exitCode).toBe(0);
+    expect(elsewhere).toEqual(await thunderjar(recorded, ["show", TIMES_OUT]));
   });
 });
