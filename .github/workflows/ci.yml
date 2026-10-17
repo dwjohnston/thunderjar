@@ -12,11 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # fixtureTests/scenario_4_git_project builds from real commits of this repository
+          # (tags fixture-scenario-4-*), so the history and tags must be there.
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run lint
+      - name: Fail if .oxlintrc.json is out of date with scripts/layout.ts
+        run: git diff --exit-code .oxlintrc.json
       - run: bun run typecheck
       - run: bun test
+      - name: Docker image tests (GitHub's Ubuntu runners have Docker)
+        run: bun run test:prepare && bun run test:docker
 
   build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -2,5 +2,1142 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "categories": { "correctness": "error" },
   "rules": { "eqeqeq": "error" },
-  "ignorePatterns": ["node_modules", "dist"]
+  "ignorePatterns": ["node_modules", "dist", "**/*.template.ts"],
+
+  // sync-oxlint-layout: begin — generated, do not edit
+  "overrides": [
+    {
+      "files": [
+        "src/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\./adapters/docker(/[^/]+)?$",
+                "message": "src may not import from src/adapters/docker. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./cli(/[^/]+)?$",
+                "message": "src may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./commands(/[^/]+)?$",
+                "message": "src may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./commands/build(/[^/]+)?$",
+                "message": "src may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./commands/executions(/[^/]+)?$",
+                "message": "src may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./commands/generate(/[^/]+)?$",
+                "message": "src may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./commands/init(/[^/]+)?$",
+                "message": "src may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./commands/plan(/[^/]+)?$",
+                "message": "src may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./commands/run(/[^/]+)?$",
+                "message": "src may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./commands/show(/[^/]+)?$",
+                "message": "src may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./images(/[^/]+)?$",
+                "message": "src may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./instruments(/[^/]+)?$",
+                "message": "src may not import from src/instruments. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./matrix(/[^/]+)?$",
+                "message": "src may not import from src/matrix. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./measuring(/[^/]+)?$",
+                "message": "src may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./project(/[^/]+)?$",
+                "message": "src may not import from src/project. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./running(/[^/]+)?$",
+                "message": "src may not import from src/running. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./store(/[^/]+)?$",
+                "message": "src may not import from src/store. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./testing(/[^/]+)?$",
+                "message": "src may not import from src/testing. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/adapters/docker/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./api(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/api. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./commands(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./images(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./instruments(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/instruments. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./matrix(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/matrix. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./project(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/project. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./running(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/running. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./store(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/store. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./testing(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/testing. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/api/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/api may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/api may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/api may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/api may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/api may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/api may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/api may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/api may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/api may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/api may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./images(/[^/]+)?$",
+                "message": "src/api may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./instruments(/[^/]+)?$",
+                "message": "src/api may not import from src/instruments. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./matrix(/[^/]+)?$",
+                "message": "src/api may not import from src/matrix. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring(/[^/]+)?$",
+                "message": "src/api may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./project(/[^/]+)?$",
+                "message": "src/api may not import from src/project. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./running(/[^/]+)?$",
+                "message": "src/api may not import from src/running. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./store(/[^/]+)?$",
+                "message": "src/api may not import from src/store. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/cli/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/cli may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./adapters/docker(/[^/]+)?$",
+                "message": "src/cli may not import from src/adapters/docker. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./api(/[^/]+)?$",
+                "message": "src/cli may not import from src/api. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/cli may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./images(/[^/]+)?$",
+                "message": "src/cli may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./instruments(/[^/]+)?$",
+                "message": "src/cli may not import from src/instruments. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./matrix(/[^/]+)?$",
+                "message": "src/cli may not import from src/matrix. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring(/[^/]+)?$",
+                "message": "src/cli may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./project(/[^/]+)?$",
+                "message": "src/cli may not import from src/project. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./running(/[^/]+)?$",
+                "message": "src/cli may not import from src/running. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./store(/[^/]+)?$",
+                "message": "src/cli may not import from src/store. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./testing(/[^/]+)?$",
+                "message": "src/cli may not import from src/testing. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/commands/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/commands may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/commands/build/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/commands/build may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands/build may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/commands/executions/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/commands/executions may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands/executions may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/commands/generate/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/commands/generate may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands/generate may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/commands/init/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/commands/init may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands/init may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/commands/plan/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/commands/plan may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands/plan may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/commands/run/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/commands/run may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands/run may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/commands/show/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/commands/show may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/commands/show may not import from src/cli. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/images/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/images may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/images may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/images may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/images may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/images may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/images may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/images may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/images may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/images may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/images may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring(/[^/]+)?$",
+                "message": "src/images may not import from src/measuring. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/instruments/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/instruments may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/instruments may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/instruments may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/instruments may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/instruments may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/instruments may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/instruments may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/instruments may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/instruments may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/instruments may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./images(/[^/]+)?$",
+                "message": "src/instruments may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./matrix(/[^/]+)?$",
+                "message": "src/instruments may not import from src/matrix. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring(/[^/]+)?$",
+                "message": "src/instruments may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./project(/[^/]+)?$",
+                "message": "src/instruments may not import from src/project. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./running(/[^/]+)?$",
+                "message": "src/instruments may not import from src/running. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./store(/[^/]+)?$",
+                "message": "src/instruments may not import from src/store. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/matrix/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/matrix may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/matrix may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/matrix may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/matrix may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/matrix may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/matrix may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/matrix may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/matrix may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/matrix may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/matrix may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./images(/[^/]+)?$",
+                "message": "src/matrix may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring(/[^/]+)?$",
+                "message": "src/matrix may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./running(/[^/]+)?$",
+                "message": "src/matrix may not import from src/running. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./store(/[^/]+)?$",
+                "message": "src/matrix may not import from src/store. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/measuring/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/measuring may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/measuring may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/measuring may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/measuring may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/measuring may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/measuring may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/measuring may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/measuring may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/measuring may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/measuring may not import from src/commands/show. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/project/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/project may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/project may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/project may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/project may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/project may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/project may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/project may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/project may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/project may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/project may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./images(/[^/]+)?$",
+                "message": "src/project may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./matrix(/[^/]+)?$",
+                "message": "src/project may not import from src/matrix. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring(/[^/]+)?$",
+                "message": "src/project may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./running(/[^/]+)?$",
+                "message": "src/project may not import from src/running. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./store(/[^/]+)?$",
+                "message": "src/project may not import from src/store. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/running/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/running may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/running may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/running may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/running may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/running may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/running may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/running may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/running may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/running may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/running may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./images(/[^/]+)?$",
+                "message": "src/running may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring(/[^/]+)?$",
+                "message": "src/running may not import from src/measuring. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/store/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/store may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/store may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/store may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/store may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/store may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/store may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/store may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/store may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/store may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/store may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./images(/[^/]+)?$",
+                "message": "src/store may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring(/[^/]+)?$",
+                "message": "src/store may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./running(/[^/]+)?$",
+                "message": "src/store may not import from src/running. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/testing/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\.(/[^/]+)?$",
+                "message": "src/testing may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./cli(/[^/]+)?$",
+                "message": "src/testing may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/testing may not import from src/commands/show. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  // sync-oxlint-layout: end
 }
