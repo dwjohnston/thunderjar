@@ -34,8 +34,18 @@ export interface RemeasurePlan {
 
 /**
  * Plans a backfill of `records` against a task's current `measurements`
- * (spec/085-test-case-results.md#backfilling-measurements).
+ * (spec/085-test-case-results.md#backfilling-measurements): each run takes the measurements
+ * whose stored measure is missing or stale. A measure under a name the task no longer declares
+ * is never taken again, so a rename only schedules the new name. Runs are planned whatever
+ * their agent's exit code.
  */
-export function planRemeasure(_records: ContainerRunRecord[], _measurements: Measurement[]): RemeasurePlan {
-  throw new Error("not implemented");
+export function planRemeasure(records: ContainerRunRecord[], measurements: Measurement[]): RemeasurePlan {
+  const runs = records.flatMap(({ executionId, postrunImage, result }) => {
+    const measurementNames = measurements
+      .filter((measurement) => measureStatus(result[measurement.name], measurement) !== "current")
+      .map(({ name }) => name)
+      .toSorted();
+    return measurementNames.length === 0 ? [] : [{ executionId, postrunImage, measurementNames }];
+  });
+  return { runs };
 }
