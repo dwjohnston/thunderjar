@@ -60,4 +60,7 @@ export const layout: Layout = {
   "src/adapters/docker": { allowedFiles: ["*.ts"] },
   // Test helpers: fixture projects, the seed repository, the fake docker.
   "src/testing": { allowedFiles: ["*.ts"], mayImport: [...LAYERS, "src/adapters/docker"] },
+  // Two versions of one bundled template, for remeasure.test.ts. Not code, so not .ts.
+  "src/measuring/remeasure-templates/v1": { allowedFiles: ["*.template.txt"] },
+  "src/measuring/remeasure-templates/v2": { allowedFiles: ["*.template.txt"] },
 };

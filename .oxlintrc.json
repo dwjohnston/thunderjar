@@ -78,6 +78,14 @@
                 "message": "src may not import from src/measuring. See scripts/layout.ts."
               },
               {
+                "regex": "^\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\./project(/[^/]+)?$",
                 "message": "src may not import from src/project. See scripts/layout.ts."
               },
@@ -174,6 +182,14 @@
                 "message": "src/adapters/docker may not import from src/measuring. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/adapters/docker may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./\\.\\./project(/[^/]+)?$",
                 "message": "src/adapters/docker may not import from src/project. See scripts/layout.ts."
               },
@@ -266,6 +282,14 @@
                 "message": "src/api may not import from src/measuring. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/api may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/api may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./project(/[^/]+)?$",
                 "message": "src/api may not import from src/project. See scripts/layout.ts."
               },
@@ -326,6 +350,14 @@
                 "message": "src/cli may not import from src/measuring. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/cli may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/cli may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./project(/[^/]+)?$",
                 "message": "src/cli may not import from src/project. See scripts/layout.ts."
               },
@@ -364,6 +396,14 @@
               {
                 "regex": "^\\.\\./cli(/[^/]+)?$",
                 "message": "src/commands may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/commands may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/commands may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -392,6 +432,14 @@
               {
                 "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
                 "message": "src/commands/build may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/commands/build may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/commands/build may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -420,6 +468,14 @@
               {
                 "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
                 "message": "src/commands/executions may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/commands/executions may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/commands/executions may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -448,6 +504,14 @@
               {
                 "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
                 "message": "src/commands/generate may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/commands/generate may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/commands/generate may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -476,6 +540,14 @@
               {
                 "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
                 "message": "src/commands/init may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/commands/init may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/commands/init may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -504,6 +576,14 @@
               {
                 "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
                 "message": "src/commands/plan may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/commands/plan may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/commands/plan may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -532,6 +612,14 @@
               {
                 "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
                 "message": "src/commands/run may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/commands/run may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/commands/run may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -560,6 +648,14 @@
               {
                 "regex": "^\\.\\./\\.\\./cli(/[^/]+)?$",
                 "message": "src/commands/show may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/commands/show may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/commands/show may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -624,6 +720,14 @@
               {
                 "regex": "^\\.\\./measuring(/[^/]+)?$",
                 "message": "src/images may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/images may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/images may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -696,6 +800,14 @@
               {
                 "regex": "^\\.\\./measuring(/[^/]+)?$",
                 "message": "src/instruments may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/instruments may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/instruments may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               },
               {
                 "regex": "^\\.\\./project(/[^/]+)?$",
@@ -778,6 +890,14 @@
                 "message": "src/matrix may not import from src/measuring. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/matrix may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/matrix may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./running(/[^/]+)?$",
                 "message": "src/matrix may not import from src/running. See scripts/layout.ts."
               },
@@ -844,6 +964,222 @@
               {
                 "regex": "^\\.\\./commands/show(/[^/]+)?$",
                 "message": "src/measuring may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/measuring may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\./remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/measuring may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/measuring/remeasure-templates/v1/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./adapters/docker(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/adapters/docker. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./api(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/api. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./images(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./instruments(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/instruments. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./matrix(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/matrix. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./v2(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./project(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/project. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./running(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/running. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./store(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/store. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./testing(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v1 may not import from src/testing. See scripts/layout.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/measuring/remeasure-templates/v2/*"
+      ],
+      "rules": {
+        "unicorn/filename-case": [
+          "error",
+          {
+            "case": "kebabCase"
+          }
+        ],
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./adapters/docker(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/adapters/docker. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./api(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/api. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./cli(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/cli. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/commands. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/build(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/build. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/executions(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/executions. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/generate(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/generate. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/init(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/init. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/plan(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/plan. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/run(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/run. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./commands/show(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./images(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/images. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./instruments(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/instruments. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./matrix(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/matrix. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\.(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./v1(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./project(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/project. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./running(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/running. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./store(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/store. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./testing(/[^/]+)?$",
+                "message": "src/measuring/remeasure-templates/v2 may not import from src/testing. See scripts/layout.ts."
               }
             ]
           }
@@ -916,6 +1252,14 @@
               {
                 "regex": "^\\.\\./measuring(/[^/]+)?$",
                 "message": "src/project may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/project may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/project may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               },
               {
                 "regex": "^\\.\\./running(/[^/]+)?$",
@@ -992,6 +1336,14 @@
               {
                 "regex": "^\\.\\./measuring(/[^/]+)?$",
                 "message": "src/running may not import from src/measuring. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/running may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/running may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
@@ -1062,6 +1414,14 @@
                 "message": "src/store may not import from src/measuring. See scripts/layout.ts."
               },
               {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/store may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/store may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
+              },
+              {
                 "regex": "^\\.\\./running(/[^/]+)?$",
                 "message": "src/store may not import from src/running. See scripts/layout.ts."
               }
@@ -1124,6 +1484,14 @@
               {
                 "regex": "^\\.\\./commands/show(/[^/]+)?$",
                 "message": "src/testing may not import from src/commands/show. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v1(/[^/]+)?$",
+                "message": "src/testing may not import from src/measuring/remeasure-templates/v1. See scripts/layout.ts."
+              },
+              {
+                "regex": "^\\.\\./measuring/remeasure-templates/v2(/[^/]+)?$",
+                "message": "src/testing may not import from src/measuring/remeasure-templates/v2. See scripts/layout.ts."
               }
             ]
           }
