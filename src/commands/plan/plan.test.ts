@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fakeDocker, scenario, thunderjar } from "../../testing/cli.ts";
 import { memoryDocker } from "../../testing/fake-docker.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../../testing/fixture-project.ts";
 import { plan } from "./plan.ts";
@@ -177,4 +178,31 @@ test("without Docker, plan still prints, and says whether images exist is unknow
     `${EXPECTED.replaceAll(" (will build)", "")}\n\n` +
       "Docker can't be reached (Cannot connect to the Docker daemon), so whether each prerun image exists is unknown.",
   );
+});
+
+test("`thunderjar plan --image-prefix` looks up each prerun image under the prefix", async () => {
+  const fixtures = scenario("scenario_2_typical_project");
+  const docker = await fakeDocker(["throwaway:prerun-hefe85dda", "thunderjar:prerun-h56ea4852"]);
+
+  const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "two-pairs", "--image-prefix", "throwaway"], docker.env);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  // Only the image under the prefix counts; the one under the default prefix doesn't.
+  expect(stdout).toContain("    prerun-hefe85dda (exists, reused)\n");
+  expect(stdout).toContain("    prerun-h56ea4852 (will build)\n");
+  expect(docker.commands()).toEqual([
+    "docker version --format {{.Server.Version}}",
+    "docker image inspect --format {{.Id}} throwaway:prerun-hefe85dda",
+    "docker image inspect --format {{.Id}} throwaway:prerun-h56ea4852",
+  ]);
+});
+
+test("`thunderjar plan` with no test case, or --image-prefix without a name, prints its usage", async () => {
+  const fixtures = scenario("scenario_2_typical_project");
+  for (const args of [["plan"], ["plan", "two-pairs", "--image-prefix"], ["plan", "two-pairs", "extra"]]) {
+    const { stderr, exitCode } = await thunderjar(fixtures, args);
+    expect(stderr).toBe("usage: thunderjar plan <test case> [--image-prefix <name>]\n");
+    expect(exitCode).toBe(1);
+  }
 });

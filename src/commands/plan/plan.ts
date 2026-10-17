@@ -15,7 +15,7 @@ import { count } from "../format.ts";
 
 export interface PlanOptions {
   docker?: Docker;
-  /** The image repository prerun images are looked up in. */
+  /** The image repository prerun images are looked up in, `--image-prefix`. */
   repository?: string;
 }
 

@@ -47,7 +47,7 @@ export interface RunOptions {
   measurementOpener?: MeasurementOpener;
   /** Asked, on a dry run, whether each prerun image exists. */
   docker?: Docker;
-  /** The image repository prerun images are looked up in. */
+  /** The image repository prerun images are looked up in, `--image-prefix`. */
   repository?: string;
 }
 

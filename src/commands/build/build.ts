@@ -40,7 +40,7 @@ export interface BuildOptions {
   /** Receives the output a block at a time, as it is produced. */
   log?: (text: string) => void;
   docker?: Docker;
-  /** The image repository prerun images are tagged in. Tests use a throwaway one. */
+  /** The image repository prerun images are tagged in, `--image-prefix`. Tests use a throwaway one. */
   repository?: string;
   /** Build contexts are kept under `<rootDir>/builds/`. Defaults to `$TMPDIR/thunderjar`. */
   rootDir?: string;

@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { hashMeasurement } from "../../matrix/hashing.ts";
 import type { AggregationResult, ContainerRunRecord } from "../../store/run-data-store.ts";
 import { createHostMeasurementOpener, createHostRunner, type ContainerRunner } from "../../running/runner.ts";
+import { fakeDocker, scenario, thunderjar } from "../../testing/cli.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../../testing/fixture-project.ts";
 import { plan } from "../plan/plan.ts";
 import { run, type RunOptions } from "./run.ts";
@@ -170,11 +171,33 @@ test("uses the selected version's cli override, and indents every line of a mult
 
 test("prints usage for a missing test case name or an unknown flag", async () => {
   const dir = await fixture();
-  for (const args of [["run"], ["run", "--dry-run"], ["run", "is-prime-baseline", "--dry-run", "--json"]]) {
+  for (const args of [
+    ["run"],
+    ["run", "--dry-run"],
+    ["run", "is-prime-baseline", "--dry-run", "--json"],
+    ["run", "is-prime-baseline", "--dry-run", "--image-prefix"],
+  ]) {
     const { stderr, exitCode } = await spawnCli(dir, ...args);
-    expect(stderr).toBe("usage: thunderjar run <test case> [--dry-run]\n");
+    expect(stderr).toBe("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>]\n");
     expect(exitCode).toBe(1);
   }
+});
+
+test("`thunderjar run --dry-run --image-prefix` looks up each prerun image under the prefix", async () => {
+  const fixtures = scenario("scenario_2_typical_project");
+  const docker = await fakeDocker(["throwaway:prerun-hefe85dda"]);
+
+  const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["run", "two-pairs", "--dry-run", "--image-prefix", "throwaway"], docker.env);
+
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain("  prerun-hefe85dda (exists, reused)\n");
+  expect(stdout).toContain("  prerun-h56ea4852 (will build)\n");
+  expect(docker.commands()).toEqual([
+    "docker version --format {{.Server.Version}}",
+    "docker image inspect --format {{.Id}} throwaway:prerun-hefe85dda",
+    "docker image inspect --format {{.Id}} throwaway:prerun-h56ea4852",
+  ]);
 });
 
 test("reports an unknown test case as a configuration error", async () => {

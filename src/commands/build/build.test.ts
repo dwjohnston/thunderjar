@@ -28,13 +28,13 @@ const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-build-"));
 type FakeDocker = Awaited<ReturnType<typeof fakeDocker>>;
 
 /**
- * Runs `thunderjar build <testCase>` in `project`, keeping build contexts under a fresh $TMPDIR,
+ * Runs `thunderjar build <testCase> <flags…>` in `project`, keeping build contexts under a fresh $TMPDIR,
  * with $TMPDIR and durations replaced by placeholders.
  */
-async function cliBuild(project: string, testCase: string, docker?: FakeDocker) {
+async function cliBuild(project: string, testCase: string, docker?: FakeDocker, flags: string[] = []) {
   docker ??= await fakeDocker();
   const tmpDir = await mkdtemp(join(tmpdir(), "thunderjar-fixture-tmp-"));
-  const result = await thunderjar(project, ["build", testCase], { ...docker.env, TMPDIR: tmpDir });
+  const result = await thunderjar(project, ["build", testCase, ...flags], { ...docker.env, TMPDIR: tmpDir });
   const normalise = (text: string) => text.replaceAll(tmpDir, "$TMPDIR").replace(/ built \(\d+\.\d\ds\)$/gm, " built (<t>s)");
   const stdout = normalise(result.stdout);
   const builds = join(tmpDir, "thunderjar", "builds");
@@ -206,10 +206,28 @@ Its build context is kept in $TMPDIR/thunderjar/builds/prerun-hefe85dda
     expect(readdirSync(join(builds, "prerun-hefe85dda"))).toContain("Dockerfile");
   });
 
-  test("build with no test case prints its usage", async () => {
-    const { stderr, exitCode } = await thunderjar(fixtures, ["build"]);
-    expect(exitCode).toBe(1);
-    expect(stderr).toBe("usage: thunderjar build <test case>\n");
+  test("build --image-prefix: looks up and tags each prerun image under the prefix", async () => {
+    const docker = await fakeDocker(["throwaway:prerun-h56ea4852"]);
+    const { stdout, stderr, exitCode, commands } = await cliBuild(fixtures, "two-pairs", docker, ["--image-prefix", "throwaway"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("    throwaway:prerun-hefe85dda  built (<t>s)\n");
+    expect(stdout).toContain("    throwaway:prerun-h56ea4852  reused\n");
+    expect(commands).toEqual([
+      "docker version --format {{.Server.Version}}",
+      "docker image inspect --format {{.Id}} throwaway:prerun-hefe85dda",
+      "docker image inspect --format {{.Id}} throwaway:prerun-h56ea4852",
+      "docker build --tag throwaway:prerun-hefe85dda $TMPDIR/thunderjar/builds/prerun-hefe85dda",
+    ]);
+  });
+
+  test("build with no test case, or --image-prefix without a name, prints its usage", async () => {
+    for (const args of [["build"], ["build", "two-pairs", "--image-prefix"], ["build", "--image-prefix", "two-pairs"]]) {
+      const { stderr, exitCode } = await thunderjar(fixtures, args);
+      expect(stderr).toBe("usage: thunderjar build <test case> [--image-prefix <name>]\n");
+      expect(exitCode).toBe(1);
+    }
   });
 });
 

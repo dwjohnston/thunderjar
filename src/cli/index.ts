@@ -9,6 +9,19 @@ import { show } from "../commands/show/show.ts";
 
 const [command, ...args] = process.argv.slice(2);
 
+/**
+ * `args` without `--image-prefix <name>`, and the name, or `"invalid"` if the flag is given
+ * without a name or more than once.
+ */
+function takeImagePrefix(args: string[]): { rest: string[]; imagePrefix?: string } | "invalid" {
+  const at = args.indexOf("--image-prefix");
+  if (at === -1) return { rest: args };
+  const imagePrefix = args[at + 1];
+  const rest = args.toSpliced(at, 2);
+  if (!imagePrefix || imagePrefix.startsWith("-") || rest.includes("--image-prefix")) return "invalid";
+  return { rest, imagePrefix };
+}
+
 try {
   if (command === "init") {
     const { created, skipped } = await init(process.cwd());
@@ -18,28 +31,31 @@ try {
     const { path } = await generate();
     console.log(`generated ${path}`);
   } else if (command === "plan") {
-    const [name] = args;
-    if (!name) {
-      console.error("usage: thunderjar plan <test case>");
+    const parsed = takeImagePrefix(args);
+    if (parsed === "invalid" || parsed.rest.length !== 1 || parsed.rest[0]!.startsWith("-")) {
+      console.error("usage: thunderjar plan <test case> [--image-prefix <name>]");
       process.exitCode = 1;
     } else {
-      console.log(await plan(name));
+      console.log(await plan(parsed.rest[0]!, process.cwd(), { repository: parsed.imagePrefix }));
     }
   } else if (command === "run") {
-    const flags = args.filter((a) => a.startsWith("-"));
-    const [name, ...extra] = args.filter((a) => !a.startsWith("-"));
-    if (!name || extra.length > 0 || flags.some((f) => f !== "--dry-run")) {
-      console.error("usage: thunderjar run <test case> [--dry-run]");
+    const parsed = takeImagePrefix(args);
+    const rest = parsed === "invalid" ? [] : parsed.rest;
+    const flags = rest.filter((a) => a.startsWith("-"));
+    const [name, ...extra] = rest.filter((a) => !a.startsWith("-"));
+    if (parsed === "invalid" || !name || extra.length > 0 || flags.some((f) => f !== "--dry-run")) {
+      console.error("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>]");
       process.exitCode = 1;
     } else {
-      await run(name, { dryRun: flags.includes("--dry-run") });
+      await run(name, { dryRun: flags.includes("--dry-run"), repository: parsed.imagePrefix });
     }
   } else if (command === "build") {
-    if (args.length !== 1 || args[0]!.startsWith("-")) {
-      console.error("usage: thunderjar build <test case>");
+    const parsed = takeImagePrefix(args);
+    if (parsed === "invalid" || parsed.rest.length !== 1 || parsed.rest[0]!.startsWith("-")) {
+      console.error("usage: thunderjar build <test case> [--image-prefix <name>]");
       process.exitCode = 1;
     } else {
-      await build(args[0]!);
+      await build(parsed.rest[0]!, { repository: parsed.imagePrefix });
     }
   } else if (command === "executions") {
     if (args.length > 1 || args.some((a) => a.startsWith("-"))) {
