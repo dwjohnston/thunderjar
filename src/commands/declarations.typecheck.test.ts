@@ -1,315 +1,173 @@
-// Confirms the mechanism described in
-// spec/055-declaring-test-cases.md#typed-names actually works: a test case naming a
-// parameter absent from the generated types is a compile error, and one naming only
-// generated names compiles cleanly. Runs real `tsc` against a throwaway project, so
-// each case gets its own process.
+// spec/055-declaring-test-cases.md#typed-names: a declaration naming a parameter absent from the
+// generated types, or whose config or aggregate doesn't fit its instrument, is a compile error,
+// and one that fits compiles cleanly.
+//
+// In the checked-in fixtureTests/scenario_11_type_errors, in place: `thunderjar generate` writes
+// its gitignored types, then real `tsc` checks the project with its own tsconfig, once. Each test
+// asserts on what `tsc` reported for one declaration. By hand:
+//
+//   bun run fixture 11 generate
+//   cd fixtureTests/scenario_11_type_errors/fixtures && bunx tsc -p .thunderjar
 
-import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { beforeAll, describe, expect, test } from "bun:test";
 import { join, resolve } from "node:path";
-import { generate } from "./generate/generate.ts";
-import { createFixtureProject, linkThunderjar } from "../testing/fixture-project.ts";
+import { scenario, thunderjar } from "../testing/cli.ts";
 
-const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-typecheck-"));
 const tsc = resolve(import.meta.dir, "..", "..", "node_modules", ".bin", "tsc");
+const fixtures = scenario("scenario_11_type_errors");
 
-const TSCONFIG = JSON.stringify(
-  {
-    compilerOptions: {
-      target: "ESNext",
-      module: "ESNext",
-      moduleResolution: "bundler",
-      strict: true,
-      noEmit: true,
-      skipLibCheck: true,
-      verbatimModuleSyntax: true,
-      allowImportingTsExtensions: true,
-    },
-    include: [".thunderjar/**/*.ts"],
-    // Templates aren't TypeScript until rendered, as in the tsconfig `init` scaffolds.
-    exclude: [".thunderjar/**/*.template.ts"],
-  },
-  null,
-  2,
-);
+let exitCode: number;
+/** Each diagnostic `tsc` printed, with its indented elaboration, keyed by its file. */
+const reported = new Map<string, string[]>();
 
-async function setUp(testCase: string): Promise<string> {
-  const dir = await tmp();
-  await createFixtureProject(dir);
-  await linkThunderjar(dir);
-  await generate(dir);
-  await writeFile(join(dir, ".thunderjar", "test-cases", "bad.ts"), testCase);
-  await writeFile(join(dir, "tsconfig.json"), TSCONFIG);
-  return dir;
-}
+beforeAll(async () => {
+  const generated = await thunderjar(fixtures, ["generate"]);
+  expect(generated.exitCode).toBe(0);
 
-async function runTsc(dir: string): Promise<{ exitCode: number; output: string }> {
-  const proc = Bun.spawn([tsc, "--noEmit", "-p", join(dir, "tsconfig.json")], {
-    cwd: dir,
+  const proc = Bun.spawn([tsc, "--noEmit", "-p", join(fixtures, ".thunderjar")], {
+    cwd: fixtures,
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [stdout, stderr, exitCode] = await Promise.all([proc.stdout.text(), proc.stderr.text(), proc.exited]);
-  return { exitCode, output: stdout + stderr };
-}
+  const [stdout, stderr] = await Promise.all([proc.stdout.text(), proc.stderr.text()]);
+  exitCode = await proc.exited;
+  for (const diagnostic of (stdout + stderr).trimEnd().split(/\n(?=\S)/)) {
+    const file = diagnostic.slice(0, diagnostic.indexOf("("));
+    reported.set(file, [...(reported.get(file) ?? []), diagnostic.slice(file.length)]);
+  }
+}, 30000);
 
-test(
-  "a test case naming only generated names compiles cleanly",
-  async () => {
-    const dir = await setUp(`import { declareTestCase } from "thunderjar";
+/** What `tsc` reported in `.thunderjar/<file>`, each diagnostic without its file name. */
+const errorsIn = (file: string) => reported.get(`.thunderjar/${file}`);
 
-export default declareTestCase({
-  baseImage: ["node20"],
-  codeState: ["baseline"],
-  promptSet: ["snerk"],
-  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
-  task: "is-prime",
-  initialPrompt: ["plain"],
-  iterations: 1,
-});
-`);
-
-    const { exitCode, output } = await runTsc(dir);
-    expect(output).toBe("");
-    expect(exitCode).toBe(0);
-  },
-  30000,
-);
-
-test(
-  "a test case naming an unknown prompt set fails to compile",
-  async () => {
-    const dir = await setUp(`import { declareTestCase } from "thunderjar";
-
-export default declareTestCase({
-  baseImage: ["node20"],
-  codeState: ["baseline"],
-  promptSet: ["totally-unknown-prompt-set"],
-  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
-  task: "is-prime",
-  initialPrompt: ["plain"],
-  iterations: 1,
-});
-`);
-
-    const { exitCode, output } = await runTsc(dir);
-    expect(exitCode).not.toBe(0);
-    expect(output).toContain("totally-unknown-prompt-set");
-  },
-  30000,
-);
-
-test(
-  "a test case naming a model absent from its family fails to compile",
-  async () => {
-    const dir = await setUp(`import { declareTestCase } from "thunderjar";
-
-export default declareTestCase({
-  baseImage: ["node20"],
-  codeState: ["baseline"],
-  promptSet: ["snerk"],
-  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-huge"],
-  task: "is-prime",
-  initialPrompt: ["plain"],
-  iterations: 1,
-});
-`);
-
-    const { exitCode, output } = await runTsc(dir);
-    expect(exitCode).not.toBe(0);
-    expect(output).toContain("fake-harness-alpha@1.0.0/fake-model-huge");
-  },
-  30000,
-);
-
-test(
-  "an initial prompt belonging to a different task fails to compile",
-  async () => {
-    const dir = await setUp(`import { declareTestCase } from "thunderjar";
-
-export default declareTestCase({
-  baseImage: ["node20"],
-  codeState: ["baseline"],
-  promptSet: ["snerk"],
-  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
-  task: "is-prime",
-  initialPrompt: ["basic"],
-  iterations: 1,
-});
-`);
-    const basicPromptDir = join(dir, ".thunderjar", "test-case-parameters", "tasks", "add-function", "initial-prompts");
-    await mkdir(basicPromptDir, { recursive: true });
-    await writeFile(
-      join(basicPromptDir, "basic.ts"),
-      `import { declareInitialPrompt } from "thunderjar";
-
-export default declareInitialPrompt({
-  prompt: "Write a function called add.",
-  timeoutSeconds: 600,
-  applyParameter: () => \`\`,
-});
-`,
-    );
-    await generate(dir); // "basic" now belongs only to add-function, not is-prime
-
-    const { exitCode, output } = await runTsc(dir);
-    expect(exitCode).not.toBe(0);
-    expect(output).toContain("basic");
-  },
-  30000,
-);
-
-/** The fixture project with one more measurement on is-prime, `bad.ts`, whose body is `body`. */
-async function setUpMeasurement(body: string): Promise<string> {
-  const dir = await setUp(`export {};\n`);
-  const measurements = join(dir, ".thunderjar", "test-case-parameters", "tasks", "is-prime", "measurements");
-  await mkdir(measurements, { recursive: true });
-  await writeFile(
-    join(measurements, "bad.ts"),
-    `import { declareMeasurement } from "thunderjar";\n\nexport default declareMeasurement(${body});\n`,
+test("only the declarations that don't fit fail to compile", () => {
+  expect(exitCode).not.toBe(0);
+  expect([...reported.keys()].sort()).toEqual(
+    [
+      "test-cases/prompt-of-another-task.ts",
+      "test-cases/unknown-model.ts",
+      "test-cases/unknown-prompt-set.ts",
+      "test-case-parameters/codeStates/reads-missing-config/index.ts",
+      "test-case-parameters/codeStates/top-level-commit/index.ts",
+      ...[
+        "fileCreatedByMean",
+        "grepByRate",
+        "grepWithoutPattern",
+        "misfitConfig",
+        "templateTestByMax",
+        "templateTestWithoutTemplate",
+        "unknownInstrument",
+        "withoutAggregate",
+      ].map((name) => `test-case-parameters/tasks/badly-measured/measurements/${name}.ts`),
+    ]
+      .map((file) => `.thunderjar/${file}`)
+      .sort(),
   );
-  return dir;
-}
-
-test(
-  "a measurement whose config fits its instrument compiles cleanly",
-  async () => {
-    const dir = await setUpMeasurement(`{ instrument: "fileCreated", config: { glob: "src/**/*.ts" }, aggregate: ["rate", "count"] }`);
-    const { exitCode, output } = await runTsc(dir);
-    expect(output).toBe("");
-    expect(exitCode).toBe(0);
-  },
-  30000,
-);
-
-test(
-  "a measurement whose config doesn't fit its instrument fails to compile",
-  async () => {
-    const dir = await setUpMeasurement(`{ instrument: "fileCreated", config: { path: "isPrime.ts" }, aggregate: ["rate"] }`);
-    const { exitCode, output } = await runTsc(dir);
-    expect(exitCode).not.toBe(0);
-    expect(output).toContain("bad.ts");
-    expect(output).toContain("path");
-  },
-  30000,
-);
-
-test(
-  "a measurement naming an unknown instrument fails to compile",
-  async () => {
-    const dir = await setUpMeasurement(`{ instrument: "fileCraeted", config: { glob: "isPrime.ts" }, aggregate: ["rate"] }`);
-    const { exitCode, output } = await runTsc(dir);
-    expect(exitCode).not.toBe(0);
-    expect(output).toContain("fileCraeted");
-  },
-  30000,
-);
-
-test(
-  "grep and templateTest measurements whose config and aggregate fit compile cleanly",
-  async () => {
-    const dir = await setUpMeasurement(`{ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, aggregate: ["mean", "max"] }`);
-    await writeFile(
-      join(dir, ".thunderjar", "test-case-parameters", "tasks", "is-prime", "measurements", "good.ts"),
-      `import { declareMeasurement } from "thunderjar";\n\nexport default declareMeasurement({ instrument: "templateTest", config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" }, aggregate: ["sum", "mean"] });\n`,
-    );
-    const { exitCode, output } = await runTsc(dir);
-    expect(output).toBe("");
-    expect(exitCode).toBe(0);
-  },
-  30000,
-);
-
-test(
-  "an aggregate that doesn't fit grep's or templateTest's value type, or a config missing a field, fails to compile",
-  async () => {
-    for (const body of [
-      `{ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, aggregate: ["rate"] }`,
-      `{ instrument: "grep", config: { glob: "**/*.ts" }, aggregate: ["max"] }`,
-      `{ instrument: "templateTest", config: { subject: "**/isPrime.ts", template: "./t.ts" }, aggregate: ["max"] }`,
-      `{ instrument: "templateTest", config: { subject: "**/isPrime.ts" }, aggregate: ["sum"] }`,
-    ]) {
-      const dir = await setUpMeasurement(body);
-      const { exitCode, output } = await runTsc(dir);
-      expect(exitCode).not.toBe(0);
-      expect(output).toContain("bad.ts");
-    }
-  },
-  60000,
-);
-
-test(
-  "a measurement without an aggregate, or with one that doesn't fit its value type, fails to compile",
-  async () => {
-    for (const body of [
-      `{ instrument: "fileCreated", config: { glob: "isPrime.ts" } }`,
-      `{ instrument: "fileCreated", config: { glob: "isPrime.ts" }, aggregate: ["mean"] }`,
-    ]) {
-      const dir = await setUpMeasurement(body);
-      const { exitCode, output } = await runTsc(dir);
-      expect(exitCode).not.toBe(0);
-      expect(output).toContain("bad.ts");
-    }
-  },
-  30000,
-);
-
-/** The fixture project with its baseline code state's declaration replaced by `source`. */
-async function setUpCodeState(source: string): Promise<string> {
-  const dir = await setUp(`export {};\n`);
-  await writeFile(join(dir, ".thunderjar", "test-case-parameters", "codeStates", "baseline", "index.ts"), source);
-  return dir;
-}
-
-test(
-  "a parameter's config reaches its applyParameter typed, and checkoutCommit takes its ctx",
-  async () => {
-    const dir = await setUpCodeState(`import { checkoutCommit, declareCodeState } from "thunderjar";
-
-export default declareCodeState({
-  config: { commit: "a1b2c3", install: "npm ci" },
-  applyParameter: (config, ctx) => \`\${checkoutCommit(ctx, config.commit)}\\nRUN \${config.install}\`,
 });
-`);
-    const { exitCode, output } = await runTsc(dir);
-    expect(output).toBe("");
-    expect(exitCode).toBe(0);
-  },
-  30000,
-);
 
-test(
-  "reading a property the config doesn't have fails to compile",
-  async () => {
-    const dir = await setUpCodeState(`import { declareCodeState } from "thunderjar";
+describe("a test case", () => {
+  test("naming only generated names compiles cleanly", () => {
+    expect(errorsIn("test-cases/sound.ts")).toBeUndefined();
+  });
 
-export default declareCodeState({
-  config: { commit: "a1b2c3" },
-  applyParameter: (config) => \`RUN git checkout \${config.sha}\`,
+  test("naming an unknown prompt set fails to compile", () => {
+    expect(errorsIn("test-cases/unknown-prompt-set.ts")).toEqual([
+      `(6,15): error TS2322: Type '"snirk"' is not assignable to type '"snerk"'.`,
+    ]);
+  });
+
+  test("naming a model absent from its family fails to compile", () => {
+    expect(errorsIn("test-cases/unknown-model.ts")).toEqual([
+      `(7,18): error TS2322: Type '"fake-harness-alpha@1.0.0/fake-model-huge"' is not assignable to type '"fake-harness-alpha@1.0.0/fake-model-small"'.`,
+    ]);
+  });
+
+  test("naming an initial prompt that belongs to a different task fails to compile", () => {
+    expect(errorsIn("test-cases/prompt-of-another-task.ts")).toEqual([
+      `(9,19): error TS2322: Type '"fizzy"' is not assignable to type '"plain"'.`,
+    ]);
+  });
 });
-`);
-    const { exitCode, output } = await runTsc(dir);
-    expect(exitCode).not.toBe(0);
-    expect(output).toContain("codeStates/baseline/index.ts");
-    expect(output).toContain("'sha' does not exist");
-  },
-  30000,
-);
 
-test(
-  "a code state's old top-level commit fails to compile: it belongs in config",
-  async () => {
-    const dir = await setUpCodeState(`import { declareCodeState } from "thunderjar";
+describe("a measurement", () => {
+  const measurement = (task: string, name: string) => errorsIn(`test-case-parameters/tasks/${task}/measurements/${name}.ts`);
+  const bad = (name: string) => measurement("badly-measured", name);
 
-export default declareCodeState({
-  commit: "a1b2c3",
-  applyParameter: () => \`RUN npm ci\`,
+  test("whose config and aggregate fit fileCreated, grep or templateTest compiles cleanly", () => {
+    expect(measurement("is-prime", "isPrimeTsExists")).toBeUndefined();
+    expect(measurement("is-prime", "tsIgnoreCount")).toBeUndefined();
+    expect(measurement("is-prime", "isPrimeTemplateTest")).toBeUndefined();
+  });
+
+  test("whose config doesn't fit its instrument fails to compile", () => {
+    expect(bad("misfitConfig")).toEqual([
+      `(3,74): error TS2353: Object literal may only specify known properties, and 'path' does not exist in type '{ glob: string; } | { glob: string; pattern: string; } | { subject: string; template: string; }'.`,
+    ]);
+  });
+
+  test("naming an unknown instrument fails to compile", () => {
+    expect(bad("unknownInstrument")).toEqual([
+      `(3,37): error TS2820: Type '"fileCraeted"' is not assignable to type '"fileCreated" | "grep" | "templateTest"'. Did you mean '"fileCreated"'?`,
+    ]);
+  });
+
+  test("without an aggregate fails to compile", () => {
+    expect(bad("withoutAggregate")).toEqual([
+      `(3,35): error TS2345: Argument of type '{ instrument: "fileCreated"; config: { glob: string; }; }' is not assignable to parameter of type 'MeasurementDeclaration'.
+  Property 'aggregate' is missing in type '{ instrument: "fileCreated"; config: { glob: string; }; }' but required in type '{ instrument: "fileCreated"; config: { glob: string; }; aggregate: ("count" | "rate")[]; }'.`,
+    ]);
+  });
+
+  test("with an aggregate that doesn't fit its instrument's value type fails to compile", () => {
+    expect(bad("fileCreatedByMean")).toEqual([
+      `(3,35): error TS2345: Argument of type '{ instrument: "fileCreated"; config: { glob: string; }; aggregate: "mean"[]; }' is not assignable to parameter of type 'MeasurementDeclaration'.
+  Types of property 'aggregate' are incompatible.
+    Type '"mean"[]' is not assignable to type '("count" | "rate")[]'.
+      Type '"mean"' is not assignable to type '"count" | "rate"'.`,
+    ]);
+    expect(bad("grepByRate")).toEqual([
+      `(3,35): error TS2345: Argument of type '{ instrument: "grep"; config: { glob: string; pattern: string; }; aggregate: "rate"[]; }' is not assignable to parameter of type 'MeasurementDeclaration'.
+  Types of property 'aggregate' are incompatible.
+    Type '"rate"[]' is not assignable to type '("max" | "mean" | "median" | "min" | "sum")[]'.
+      Type '"rate"' is not assignable to type '"max" | "mean" | "median" | "min" | "sum"'.`,
+    ]);
+    expect(bad("templateTestByMax")).toEqual([
+      `(3,35): error TS2345: Argument of type '{ instrument: "templateTest"; config: { subject: string; template: string; }; aggregate: "max"[]; }' is not assignable to parameter of type 'MeasurementDeclaration'.
+  Types of property 'aggregate' are incompatible.
+    Type '"max"[]' is not assignable to type '("mean" | "sum")[]'.
+      Type '"max"' is not assignable to type '"mean" | "sum"'.`,
+    ]);
+  });
+
+  test("whose config is missing a field fails to compile", () => {
+    expect(bad("grepWithoutPattern")).toEqual([
+      `(3,35): error TS2345: Argument of type '{ instrument: "grep"; config: { glob: string; }; aggregate: "max"[]; }' is not assignable to parameter of type 'MeasurementDeclaration'.
+  Types of property 'config' are incompatible.
+    Property 'pattern' is missing in type '{ glob: string; }' but required in type '{ glob: string; pattern: string; }'.`,
+    ]);
+    expect(bad("templateTestWithoutTemplate")).toEqual([
+      `(3,65): error TS2322: Type '{ subject: string; }' is not assignable to type '{ glob: string; } | { glob: string; pattern: string; } | { subject: string; template: string; }'.
+  Property 'template' is missing in type '{ subject: string; }' but required in type '{ subject: string; template: string; }'.`,
+    ]);
+  });
 });
-`);
-    const { exitCode, output } = await runTsc(dir);
-    expect(exitCode).not.toBe(0);
-    expect(output).toContain("'commit' does not exist");
-  },
-  30000,
-);
+
+describe("a code state", () => {
+  const codeState = (name: string) => errorsIn(`test-case-parameters/codeStates/${name}/index.ts`);
+
+  test("whose config reaches its applyParameter typed, and whose checkoutCommit takes its ctx, compiles cleanly", () => {
+    expect(codeState("pinned")).toBeUndefined();
+  });
+
+  test("reading a property its config doesn't have fails to compile", () => {
+    expect(codeState("reads-missing-config")).toEqual([
+      `(5,58): error TS2339: Property 'sha' does not exist on type '{ commit: string; }'.`,
+    ]);
+  });
+
+  test("with the old top-level commit fails to compile: it belongs in config", () => {
+    expect(codeState("top-level-commit")).toEqual([
+      `(4,3): error TS2353: Object literal may only specify known properties, and 'commit' does not exist in type 'CodeStateDeclaration<undefined>'.`,
+    ]);
+  });
+});

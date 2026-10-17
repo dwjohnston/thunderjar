@@ -41,6 +41,7 @@ bun run fixture 1 build example
 | 8 recorded executions | 📁 copied files | 📁 copied files |
 | 9 broken declarations | 📁 copied files | 📁 copied files |
 | 10 broken harness family | 📁 copied files | 📁 copied files |
+| 11 type errors | 📁 copied files | 📁 copied files |
 
 - 📁 **Copied files**
   - The parameter copies files kept beside its declaration, through `ctx.dir`. It reads no commits, so it builds anywhere, even outside a repository, and editing one of those files changes its hash.
@@ -188,6 +189,21 @@ Unless its entry says otherwise, scenarios 1–3 and 8 use these:
   - Test cases
     - `example`: as in scenario 1.
     - `beta`: `fake-harness-beta@1.0.0/fake-model-large`.
+
+- `scenario_11_type_errors`
+  - A project whose declarations don't type-check, beside sound ones. Each broken one is a type error only, so `tsc` reports it in its own file.
+  - It has no `tsconfig.json` beside `fixtures/`, so `typecheck.test.ts` skips it. Its `.thunderjar/tsconfig.json` is the one `init` scaffolds, checked in, so the errors can be reproduced by hand: `bun run fixture 11 generate`, then `bunx tsc -p .thunderjar` in `fixtures/`.
+  - Sound declarations, as in scenario 1
+    - Base image `node20`, code state `baseline`, prompt set `snerk` and `fake-harness-alpha@1.0.0/fake-model-small`.
+    - Code state `pinned`, whose typed `config` reaches its `applyParameter`, which calls `checkoutCommit`.
+    - Task `is-prime`, with prompt `plain` and a measurement of each instrument whose config and aggregate fit: `isPrimeTsExists` (`fileCreated`), `tsIgnoreCount` (`grep`) and `isPrimeTemplateTest` (`templateTest`).
+    - Task `fizz-buzz`, whose only prompt is `fizzy`.
+  - Broken parameters
+    - Code states `reads-missing-config` (reads `config.sha`) and `top-level-commit` (`commit` outside `config`).
+    - Task `badly-measured`, with prompt `plain` and only broken measurements: `misfitConfig`, `unknownInstrument`, `withoutAggregate`, `fileCreatedByMean`, `grepByRate`, `grepWithoutPattern`, `templateTestByMax` and `templateTestWithoutTemplate`.
+  - Test cases
+    - `sound`: only sound declarations.
+    - `unknown-prompt-set` (`snirk`), `unknown-model` (`fake-model-huge`) and `prompt-of-another-task` (`fizzy`).
 
 ### Changing scenario 4's commits
 
