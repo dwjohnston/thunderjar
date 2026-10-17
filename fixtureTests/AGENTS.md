@@ -2,7 +2,7 @@
 
 Each `scenario_<n>_<what the project is>/` folder is a checked-in Thunderjar project, which the CLI is run against the way a user would. See the fixture test rules in the repo's root `AGENTS.md`.
 
-A scenario is a project and the state it starts in, nothing more. Command tests run against it unchanged, from beside each command in `src/commands/`, and keep every expected result to themselves. `init` and a real `run` work on a copy; everything else runs in place.
+A scenario is a project and the state it starts in, nothing more. Command tests run against it unchanged, from beside each command in `src/commands/`, and keep every expected result to themselves. Only `init` works on a copy; everything else runs in place. A real `run` sends its run data store to a temp folder with `--data-dir`, and never runs in a scenario with a checked-in store.
 
 ## Add a variation as a scenario
 
@@ -166,7 +166,7 @@ Unless its entry says otherwise, scenarios 1–3 and 8 use these:
     - `01k4x9j2e8mqz3abcdefghjkmn`, `fails`, 2026-09-29 14:30: with `readmeExists` (count and rate), whose instrument threw `disk on fire` in each permutation's first iteration.
     - `01k4xb7q0c2tnvabcdefghjkmn`, `times-out`, 2026-09-29 15:02: no measurements, each run exited 124.
     - `01k4xc0000000000000000000a`, `fails`, 2026-09-30 08:00: the latest, without `readmeExists`.
-  - A real `run` here adds to the store, so run one only in a copy.
+  - Don't run a real `run` here: this scenario's store is its starting state. Use `--data-dir` to send a by-hand run's store elsewhere.
 
 - `scenario_9_broken_declarations`
   - A project with configuration errors beside sound declarations. Only the declarations a test case names are loaded, so each broken one stops only the test cases naming it. A task's measurements all load with it, so each broken measurement has a task of its own.

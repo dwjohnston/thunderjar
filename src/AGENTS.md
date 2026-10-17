@@ -92,7 +92,7 @@ src/
   - The real Docker, behind the seam tests swap out. It imports nothing else from `src/`.
 - `testing/`
   - Test helpers, shared by tests in every layer.
-  - `cli.ts`: runs the CLI in a `fixtureTests/` scenario, the way `bun run fixture` does. `scenario()` names a scenario's project; `copyOfFixtures()` copies it for a command that writes into the project.
+  - `cli.ts`: runs the CLI in a `fixtureTests/` scenario, the way `bun run fixture` does. `scenario()` names a scenario's project; `copyOfFixtures()` copies it for `init` only, the one command that writes into the project; a real `run` passes `--data-dir` instead.
   - `fake-docker.ts`: the recording fake Docker, so a test can say which images exist.
   - `measurement-context.ts`: the host measurement context, for instrument tests.
   - `test-setup.ts`, which every `bun test` preloads.

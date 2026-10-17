@@ -15,7 +15,7 @@ const cli = join(repoRoot, "src", "cli", "index.ts");
 export const scenario = (name: string) => join(repoRoot, "fixtureTests", name, "fixtures");
 
 /**
- * A copy of `fixtures`, for `init` or a real run to write to, as a fresh clone has it: without
+ * A copy of `fixtures`, for `init` to write to, as a fresh clone has it: without
  * anything a manual run left behind, or the tsconfig fixtureTests/typecheck.test.ts writes.
  */
 export async function copyOfFixtures(fixtures: string) {
