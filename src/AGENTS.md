@@ -95,7 +95,7 @@ src/
 - `testing/`
   - Test helpers, shared by tests in every layer.
   - `cli.ts`: runs the CLI in a `fixtureTests/` scenario, the way `bun run fixture` does. `scenario()` names a scenario's project; `copyOfFixtures()` copies it for `init` only, the one command that writes into the project; a real `run` passes `--data-dir` instead.
-  - `fake-docker.ts`: the recording fake Docker, so a test can say which images exist.
+  - `fake-docker.ts`: the recording fake Docker, so a test can say which images exist, and which postrun images' saved files `docker create` and `docker cp` read. It never runs a container.
   - `measurement-context.ts`: the host measurement context, for instrument tests.
   - `test-setup.ts`, which every `bun test` preloads.
   - NOT ENDORSED: `fixture-project.ts` and `seed-repo.ts` generate throwaway projects. Older tests still use them while they move to scenarios; new tests don't.

@@ -172,6 +172,10 @@ Unless its entry says otherwise, scenarios 1–3 and 8 use these:
       test("7 is prime", () => expect({{defaultExport}}(7)).toBe(true));
       ```
     - Its full content hash, `bb51049d…`, is stored only in that one measure. To check it, put that template beside a copy of the measurement and hash it with `hashMeasurement`.
+  - Saved postrun files, beside `fixtures/` in `postrun-files/<execution ID>/<postrun tag>/`
+    - What two recorded runs' postrun images held, laid out as a kept run is: `workspace/`, and `thunderjar/result.json` if there were one. Neither saves a result file.
+    - `postrun-e01k4x9j2e8mqz3abcdefghjkmn-h8ffdda6e-i00` and `postrun-e01k4tq3h8r0000000000000000-h8ffdda6e-i01`, the behaving agent's, each hold only the buggy `isPrime.ts` that `fake-harness-alpha@1.0.0`'s cli writes for `plain`, `@ts-ignore` included.
+    - They're preserved artifacts, not expected results. A test hands them to the recording fake Docker, mapping each full image ref, e.g. `thunderjar:postrun-e01k4x9j2e8mqz3abcdefghjkmn-h8ffdda6e-i00`, to its folder, and the fake's `docker cp` copies them out. No other recorded run has saved files.
   - Don't run a real `run` here: this scenario's store is its starting state. Use `--data-dir` to send a by-hand run's store elsewhere. `remeasure` writes aggregation results to the store, so give it `--data-dir` holding a copy of `runs.json`.
 
 - `scenario_9_broken_declarations`

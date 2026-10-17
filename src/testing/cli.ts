@@ -3,7 +3,7 @@
 // every CLI a test starts inherits from test-setup.ts. `fakeDocker` gives it a state of its own.
 
 import { existsSync, readFileSync } from "node:fs";
-import { cp, mkdtemp, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { linkThunderjar } from "./fixture-project.ts";
@@ -29,12 +29,19 @@ export async function copyOfFixtures(fixtures: string) {
 }
 
 /**
- * A fresh state for the fake Docker, in which `images` exist. Pass `env` to `thunderjar`; read
+ * A fresh state for the fake Docker, in which `images` exist, and each image ref in `postruns`
+ * is a postrun image whose files are saved in the directory it maps to, as a scenario's
+ * `postrun-files/<execution ID>/<postrun tag>/` saves them. Pass `env` to `thunderjar`; read
  * back the commands it was given.
  */
-export async function fakeDocker(images: string[] = [], flags: ("unreachable" | "fail-build")[] = []) {
+export async function fakeDocker(
+  images: string[] = [],
+  flags: ("unreachable" | "fail-build")[] = [],
+  postruns: Record<string, string> = {},
+) {
   const dir = await mkdtemp(join(tmpdir(), "thunderjar-fake-docker-"));
   await writeFile(join(dir, "images"), images.map((ref) => `${ref}\n`).join(""));
+  await writeFile(join(dir, "postruns"), Object.entries(postruns).map(([ref, saved]) => `${ref}\t${saved}\n`).join(""));
   for (const flag of flags) await writeFile(join(dir, flag), "");
   const read = (name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "");
   return {
@@ -42,6 +49,10 @@ export async function fakeDocker(images: string[] = [], flags: ("unreachable" | 
     /** Each command run, `docker <args…>`. */
     commands: () => read("commands").split("\n").filter(Boolean),
     images: () => read("images").split("\n").filter(Boolean),
+    /** The names of the containers that exist. */
+    containers: () => read("containers").split("\n").filter(Boolean).map((line) => line.split("\t")[0]!),
+    /** Deletes this state. */
+    remove: () => rm(dir, { recursive: true, force: true }),
   };
 }
 
