@@ -1,8 +1,8 @@
 // `thunderjar build` in a typical project, against the recording fake Docker: which Docker
 // commands are issued, in what order, and what lands in each build context
-// (spec/120-test-boundaries.md#2-cli-with-recording-adapters). The project is a copy of
-// fixtures/ that is also the seed repository, whose commits its code state and prompt sets pin.
-// By hand, against real Docker:
+// (spec/120-test-boundaries.md#2-cli-with-recording-adapters). Its parameters copy the files
+// beside their declarations, so it builds in place, with no commits to read. By hand, against
+// real Docker:
 //
 //   bun run fixture scenario_2 build two-pairs
 
@@ -11,14 +11,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SEED_COMMITS } from "../../src/testing/seed-repo.ts";
-import { copyOfFixtures, fakeDocker, scenarioFixtures, seededCopyOfFixtures, thunderjar } from "../helpers.ts";
+import { copyOfFixtures, fakeDocker, scenarioFixtures, thunderjar } from "../helpers.ts";
 
 const fixtures = scenarioFixtures(import.meta.dir);
 
-/** Builds in a seeded copy, keeping build contexts under a fresh $TMPDIR. */
-async function build(testCase: string, docker: Awaited<ReturnType<typeof fakeDocker>>, dir?: string) {
-  const project = dir ?? (await seededCopyOfFixtures(fixtures));
+/** Builds in `project`, fixtures/ by default, keeping build contexts under a fresh $TMPDIR. */
+async function build(testCase: string, docker: Awaited<ReturnType<typeof fakeDocker>>, project = fixtures) {
   const tmpDir = await mkdtemp(join(tmpdir(), "thunderjar-fixture-tmp-"));
   const result = await thunderjar(project, ["build", testCase], { ...docker.env, TMPDIR: tmpDir });
   const normalise = (text: string) => text.replaceAll(tmpDir, "$TMPDIR").replace(/ built \(\d+\.\d\ds\)$/gm, " built (<t>s)");
@@ -31,8 +29,8 @@ async function build(testCase: string, docker: Awaited<ReturnType<typeof fakeDoc
   };
 }
 
-const ALPHA = "thunderjar:prerun-h2123ef92";
-const BETA = "thunderjar:prerun-h3d8b805c";
+const ALPHA = "thunderjar:prerun-hefe85dda";
+const BETA = "thunderjar:prerun-h56ea4852";
 
 test("build two-pairs: builds each missing prerun image, and stops", async () => {
   const docker = await fakeDocker();
@@ -57,46 +55,52 @@ Build contexts in $TMPDIR/thunderjar/builds
     "docker version --format {{.Server.Version}}",
     `docker image inspect --format {{.Id}} ${ALPHA}`,
     `docker image inspect --format {{.Id}} ${BETA}`,
-    `docker build --tag ${ALPHA} $TMPDIR/thunderjar/builds/prerun-h2123ef92`,
-    `docker build --tag ${BETA} $TMPDIR/thunderjar/builds/prerun-h3d8b805c`,
+    `docker build --tag ${ALPHA} $TMPDIR/thunderjar/builds/prerun-hefe85dda`,
+    `docker build --tag ${BETA} $TMPDIR/thunderjar/builds/prerun-h56ea4852`,
   ]);
 });
 
-test("each build context holds the permutation's Dockerfile, the code state's bundle and the prompt files", async () => {
+test("each build context holds the permutation's Dockerfile and each parameter's folder", async () => {
   const { builds } = await build("two-pairs", await fakeDocker());
 
-  const context = join(builds, "prerun-h2123ef92");
-  expect(readdirSync(context, { recursive: true }).map(String).toSorted()).toEqual([
-    "Dockerfile",
-    "code.bundle",
-    "prompt-set",
-    join("prompt-set", "FAKE_INSTRUCTIONS.md"),
-  ]);
+  const context = join(builds, "prerun-hefe85dda");
+  expect(readdirSync(context, { recursive: true }).map(String).toSorted()).toEqual(
+    [
+      "Dockerfile",
+      "parameters",
+      join("parameters", "baseImage"),
+      join("parameters", "baseImage", "index.ts"),
+      join("parameters", "codeState"),
+      join("parameters", "codeState", "files"),
+      join("parameters", "codeState", "files", "package-lock.json"),
+      join("parameters", "codeState", "files", "package.json"),
+      join("parameters", "codeState", "index.ts"),
+      // The family folder, less models.ts, versions.ts and collectTokenCosts.ts: not part of its hash.
+      join("parameters", "harnessModel"),
+      join("parameters", "harnessModel", "index.ts"),
+      join("parameters", "promptSet"),
+      join("parameters", "promptSet", "FAKE_INSTRUCTIONS.md"),
+      join("parameters", "promptSet", "index.ts"),
+    ].toSorted(),
+  );
+  // Each fragment in order, with Thunderjar's WORKDIR before the code state: nothing else is Thunderjar's.
   expect(readFileSync(join(context, "Dockerfile"), "utf8")).toBe(`FROM node:20-bookworm
-COPY code.bundle /tmp/code.bundle
-RUN git clone --quiet /tmp/code.bundle /workspace \\
-  && git -C /workspace checkout --quiet --detach ${SEED_COMMITS.baseline} \\
-  && git -C /workspace remote remove origin \\
-  && git -C /workspace config user.name "Thunderjar agent" \\
-  && git -C /workspace config user.email agent@thunderjar.invalid \\
-  && rm /tmp/code.bundle
-WORKDIR /workspace
-RUN npm ci
-COPY prompt-set/FAKE_INSTRUCTIONS.md /workspace/FAKE_INSTRUCTIONS.md
 RUN echo "install fake-harness-alpha@1.0.0"
+WORKDIR /workspace
+COPY parameters/codeState/files/ /workspace/
+RUN npm ci
+COPY parameters/promptSet/FAKE_INSTRUCTIONS.md /workspace/FAKE_INSTRUCTIONS.md
 `);
-  // The prompt file, read at the prompt set's commit rather than from the worktree.
-  expect(readFileSync(join(context, "prompt-set", "FAKE_INSTRUCTIONS.md"), "utf8")).toStartWith("# Snerk\n");
+  expect(readFileSync(join(context, "parameters", "promptSet", "FAKE_INSTRUCTIONS.md"), "utf8")).toStartWith("# Snerk\n");
   // The other permutation installs the other harness.
-  expect(readFileSync(join(builds, "prerun-h3d8b805c", "Dockerfile"), "utf8")).toContain(
+  expect(readFileSync(join(builds, "prerun-h56ea4852", "Dockerfile"), "utf8")).toContain(
     `RUN echo "install fake-harness-beta@1.0.0"\n`,
   );
 });
 
-test("build again: every image exists, so nothing is built and no commit is read", async () => {
+test("build again: every image exists, so nothing is built", async () => {
   const docker = await fakeDocker([ALPHA, BETA]);
-  // Not a git repository at all: an existing image needs no commit.
-  const { stdout, exitCode, commands } = await build("two-pairs", docker, await copyOfFixtures(fixtures));
+  const { stdout, exitCode, commands } = await build("two-pairs", docker);
 
   expect(exitCode).toBe(0);
   expect(stdout).toBe(`Every prerun image for two-pairs exists (2 permutations)
@@ -114,42 +118,27 @@ test("build again: every image exists, so nothing is built and no commit is read
 
 test("only the missing images are built; plan then shows every image as reused", async () => {
   const docker = await fakeDocker([BETA]);
-  const project = await seededCopyOfFixtures(fixtures);
-  const { stdout, commands } = await build("two-pairs", docker, project);
+  const { stdout, commands } = await build("two-pairs", docker);
 
   expect(stdout).toContain(`    ${ALPHA}  built (<t>s)\n`);
   expect(stdout).toContain(`    ${BETA}  reused\n`);
   expect(stdout).toEndWith("2 prerun images: 1 built, 1 reused\n");
   expect(commands.filter((c) => c.startsWith("docker build"))).toEqual([
-    `docker build --tag ${ALPHA} $TMPDIR/thunderjar/builds/prerun-h2123ef92`,
+    `docker build --tag ${ALPHA} $TMPDIR/thunderjar/builds/prerun-hefe85dda`,
   ]);
 
-  const plan = await thunderjar(project, ["plan", "two-pairs"], docker.env);
-  expect(plan.stdout).toContain("    prerun-h2123ef92 (exists, reused)\n");
-  expect(plan.stdout).toContain("    prerun-h3d8b805c (exists, reused)\n");
+  const plan = await thunderjar(fixtures, ["plan", "two-pairs"], docker.env);
+  expect(plan.stdout).toContain("    prerun-hefe85dda (exists, reused)\n");
+  expect(plan.stdout).toContain("    prerun-h56ea4852 (exists, reused)\n");
 });
 
-test("a commit that isn't in the repository stops the build before anything is built", async () => {
-  const docker = await fakeDocker();
-  const { stdout, stderr, exitCode, commands } = await build("unpushed-commit", docker);
-
-  expect(exitCode).toBe(1);
-  expect(stdout).toBe("");
-  expect(stderr).toBe(`error: commit a1b2c3 (code state "unpushed") is not in this repository.
-Fetch it, or check that it has been pushed.
-`);
-  expect(commands.filter((c) => c.startsWith("docker build"))).toEqual([]);
-});
-
-test("a project outside any git repository can't be built", async () => {
+test("a project outside any git repository builds: its parameters read no commits", async () => {
   const project = await copyOfFixtures(fixtures);
-  const { stderr, exitCode, commands } = await build("two-pairs", await fakeDocker(), project);
+  const { stdout, stderr, exitCode } = await build("two-pairs", await fakeDocker(), project);
 
-  expect(exitCode).toBe(1);
-  expect(stderr).toBe(
-    `error: ${project} is not in a git repository. Prerun images are built from code state and prompt set commits in it.\n`,
-  );
-  expect(commands.filter((c) => c.startsWith("docker build"))).toEqual([]);
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+  expect(stdout).toEndWith("2 prerun images: 2 built, 0 reused\n");
 });
 
 test("without Docker, build stops before reading anything", async () => {
@@ -173,10 +162,10 @@ test("a failed build stops, and keeps its build context for inspection", async (
   expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse\n");
   expect(stderr).toBe(`fake docker: the build failed
 error: building ${ALPHA} failed (docker build exited 1).
-Its build context is kept in $TMPDIR/thunderjar/builds/prerun-h2123ef92
+Its build context is kept in $TMPDIR/thunderjar/builds/prerun-hefe85dda
 `);
   expect(commands.filter((c) => c.startsWith("docker build"))).toHaveLength(1);
-  expect(readdirSync(join(builds, "prerun-h2123ef92"))).toContain("Dockerfile");
+  expect(readdirSync(join(builds, "prerun-hefe85dda"))).toContain("Dockerfile");
 });
 
 test("build with no test case prints its usage", async () => {

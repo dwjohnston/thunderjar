@@ -5,10 +5,10 @@
 //   SEED_COMMITS.baseline   package.json and an empty package-lock.json, so `npm ci` works offline
 //   SEED_COMMITS.prompts    adds prompts/snerk.md and prompts/glurk.md, on top of baseline
 //
-// The code state pins baseline and the prompt sets pin prompts, so a prerun image built from
-// them has a commit after its code state's in the repository it was built from: the one it
-// must never show the agent. Nothing here writes a README or a @ts-ignore, so the fake agents'
-// measures are what they wrote.
+// Tests of parameters that read commits (gitParameters in fixture-project.ts) check out baseline
+// and read prompt files at prompts, so a prerun image built from them has a commit after its
+// code state's in the repository it was built from: the one it must never show the agent.
+// Nothing here writes a README or a @ts-ignore, so the fake agents' measures are what they wrote.
 
 import { spawnSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -19,8 +19,8 @@ export const SEED_COMMITS = {
   prompts: "91ab1db384146db3f605113ab297cf4469a60c9a",
 };
 
-const PACKAGE = { name: "is-prime", version: "1.0.0", private: true };
-const LOCK = {
+export const PACKAGE = { name: "is-prime", version: "1.0.0", private: true };
+export const LOCK = {
   name: "is-prime",
   version: "1.0.0",
   lockfileVersion: 3,
@@ -28,7 +28,7 @@ const LOCK = {
   packages: { "": { name: "is-prime", version: "1.0.0" } },
 };
 
-const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
+export const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 
 const COMMITS: { message: string; date: string; files: Record<string, string> }[] = [
   {

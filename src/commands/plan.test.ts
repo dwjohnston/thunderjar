@@ -15,37 +15,37 @@ const cli = resolve(import.meta.dir, "..", "cli", "index.ts");
 // tripwire to investigate rather than loosen (spec/120-test-boundaries.md). Regenerate them
 // deliberately, in the change that alters the fixture or the hashing.
 const EXPECTED = `baseImage:     node20 (26d9745f)
-codeState:     baseline (f8347787)
-promptSet:     snerk (cd75eb5f), glurk (10059fa1)
-harnessModel:  fake-harness-alpha@1.0.0/fake-model-small (1cfded20), fake-harness-beta@1.0.0/fake-model-large (fde31306)
+codeState:     baseline (bb1584cd)
+promptSet:     snerk (827aa0ce), glurk (a4ecb061)
+harnessModel:  fake-harness-alpha@1.0.0/fake-model-small (b81a20ff), fake-harness-beta@1.0.0/fake-model-large (90b04061)
 task:          is-prime
 initialPrompt: plain (9e30b385), terse (7bb8874f)
 
 Matrix shape: 1/1/2/2/2 (8 permutations × 5 iterations = 40 container runs)
 
  1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
-    prerun-h3ae8d594 (will build)
+    prerun-hcb08a2eb (will build)
 
  2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
-    prerun-h402eac7c (will build)
+    prerun-h25cb39de (will build)
 
  3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain
-    prerun-h89ce6d87 (will build)
+    prerun-h6f09569c (will build)
 
  4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
-    prerun-haf29f0fa (will build)
+    prerun-h65c7b4e2 (will build)
 
  5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain
-    prerun-h257bdc02 (will build)
+    prerun-hcdb7fd67 (will build)
 
  6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse
-    prerun-h9d8d12ed (will build)
+    prerun-hfb5aa5e7 (will build)
 
  7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain
-    prerun-h97455516 (will build)
+    prerun-h6dd40da0 (will build)
 
  8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse
-    prerun-h4ca35225 (will build)`;
+    prerun-h88709bd5 (will build)`;
 
 test("`thunderjar plan` prints the parameters with their hashes, and each permutation's prerun image", async () => {
   const dir = await tmp();
@@ -88,22 +88,18 @@ test("renaming a parameter keeps its hash and every prerun image", async () => {
   expect(output.match(/prerun-h[0-9a-f]{8}/g)).toEqual(EXPECTED.match(/prerun-h[0-9a-f]{8}/g));
 });
 
-test("editing a parameter changes its hash and the prerun image of every permutation using it", async () => {
+test("editing a file beside a parameter's declaration changes its hash and the prerun image of every permutation using it", async () => {
   const dir = await tmp();
   await createFixtureProject(dir, {
-    "test-case-parameters/promptSets/glurk/index.ts": stub("declarePromptSet", `{
-  commit: "f0f0f0",
-  files: { "prompts/glurk.md": "FAKE_INSTRUCTIONS.md" },
-  applyParameter: () => \`\`,
-}`),
+    "test-case-parameters/promptSets/glurk/FAKE_INSTRUCTIONS.md": "# Glurk\n\nPrefer two clear expressions to a loop.\n",
   });
   await linkThunderjar(dir);
 
   const output = await plan("is-prime-baseline", dir);
   const tags = output.match(/prerun-h[0-9a-f]{8}/g)!;
   const expectedTags = EXPECTED.match(/prerun-h[0-9a-f]{8}/g)!;
-  expect(output).toContain("promptSet:     snerk (cd75eb5f), glurk (");
-  expect(output).not.toContain("glurk (10059fa1)");
+  expect(output).toContain("promptSet:     snerk (827aa0ce), glurk (");
+  expect(output).not.toContain("glurk (a4ecb061)");
   expect(tags.slice(0, 4)).toEqual(expectedTags.slice(0, 4)); // snerk
   for (let i = 4; i < 8; i++) expect(expectedTags).not.toContain(tags[i]!); // glurk
 });
@@ -126,16 +122,16 @@ test("a 1/1/1/1/1 test case has one permutation", async () => {
   expect(await plan("single", dir)).toBe(
     [
       "baseImage:     node20 (26d9745f)",
-      "codeState:     baseline (f8347787)",
-      "promptSet:     snerk (cd75eb5f)",
-      "harnessModel:  fake-harness-beta@1.0.0/fake-model-large (fde31306)",
+      "codeState:     baseline (bb1584cd)",
+      "promptSet:     snerk (827aa0ce)",
+      "harnessModel:  fake-harness-beta@1.0.0/fake-model-large (90b04061)",
       "task:          is-prime",
       "initialPrompt: terse (7bb8874f)",
       "",
       "Matrix shape: 1/1/1/1/1 (1 permutation × 1 iteration = 1 container run)",
       "",
       " 1  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large | terse",
-      "    prerun-haf29f0fa (will build)", // the same permutation as entry 4 of the larger test case
+      "    prerun-h65c7b4e2 (will build)", // the same permutation as entry 4 of the larger test case
     ].join("\n"),
   );
 });
@@ -153,17 +149,17 @@ test("a prerun image that already exists is shown as reused; the rest as built",
   await createFixtureProject(dir);
   await linkThunderjar(dir);
 
-  const docker = memoryDocker(["thunderjar:prerun-h3ae8d594", "thunderjar:prerun-h4ca35225"]);
+  const docker = memoryDocker(["thunderjar:prerun-hcb08a2eb", "thunderjar:prerun-h88709bd5"]);
   const output = await plan("is-prime-baseline", dir, { docker });
   expect(output.split("\n").filter((line) => line.includes("prerun-h"))).toEqual([
-    "    prerun-h3ae8d594 (exists, reused)",
-    "    prerun-h402eac7c (will build)",
-    "    prerun-h89ce6d87 (will build)",
-    "    prerun-haf29f0fa (will build)",
-    "    prerun-h257bdc02 (will build)",
-    "    prerun-h9d8d12ed (will build)",
-    "    prerun-h97455516 (will build)",
-    "    prerun-h4ca35225 (exists, reused)",
+    "    prerun-hcb08a2eb (exists, reused)",
+    "    prerun-h25cb39de (will build)",
+    "    prerun-h6f09569c (will build)",
+    "    prerun-h65c7b4e2 (will build)",
+    "    prerun-hcdb7fd67 (will build)",
+    "    prerun-hfb5aa5e7 (will build)",
+    "    prerun-h6dd40da0 (will build)",
+    "    prerun-h88709bd5 (exists, reused)",
   ]);
   // An image is looked for in the repository it is tagged in.
   const elsewhere = await plan("is-prime-baseline", dir, { docker, repository: "somewhere-else" });

@@ -254,3 +254,62 @@ test(
   },
   30000,
 );
+
+/** The fixture project with its baseline code state's declaration replaced by `source`. */
+async function setUpCodeState(source: string): Promise<string> {
+  const dir = await setUp(`export {};\n`);
+  await writeFile(join(dir, ".thunderjar", "test-case-parameters", "codeStates", "baseline", "index.ts"), source);
+  return dir;
+}
+
+test(
+  "a parameter's config reaches its applyParameter typed, and checkoutCommit takes its ctx",
+  async () => {
+    const dir = await setUpCodeState(`import { checkoutCommit, declareCodeState } from "thunderjar";
+
+export default declareCodeState({
+  config: { commit: "a1b2c3", install: "npm ci" },
+  applyParameter: (config, ctx) => \`\${checkoutCommit(ctx, config.commit)}\\nRUN \${config.install}\`,
+});
+`);
+    const { exitCode, output } = await runTsc(dir);
+    expect(output).toBe("");
+    expect(exitCode).toBe(0);
+  },
+  30000,
+);
+
+test(
+  "reading a property the config doesn't have fails to compile",
+  async () => {
+    const dir = await setUpCodeState(`import { declareCodeState } from "thunderjar";
+
+export default declareCodeState({
+  config: { commit: "a1b2c3" },
+  applyParameter: (config) => \`RUN git checkout \${config.sha}\`,
+});
+`);
+    const { exitCode, output } = await runTsc(dir);
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain("codeStates/baseline/index.ts");
+    expect(output).toContain("'sha' does not exist");
+  },
+  30000,
+);
+
+test(
+  "a code state's old top-level commit fails to compile: it belongs in config",
+  async () => {
+    const dir = await setUpCodeState(`import { declareCodeState } from "thunderjar";
+
+export default declareCodeState({
+  commit: "a1b2c3",
+  applyParameter: () => \`RUN npm ci\`,
+});
+`);
+    const { exitCode, output } = await runTsc(dir);
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain("'commit' does not exist");
+  },
+  30000,
+);

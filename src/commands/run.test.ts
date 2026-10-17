@@ -43,17 +43,17 @@ const PLAIN = "Create a file isPrime.ts exporting a function that tests for prim
 const TWO_PAIRS_EXPECTED = `Execution ${ID} (dry run, 2 permutations × 2 iterations)
 
 Permutation 1/2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
-  prerun-h402eac7c (will build)
-  iteration 1/2  postrun-e${ID}-h402eac7c-i00
+  prerun-h25cb39de (will build)
+  iteration 1/2  postrun-e${ID}-h25cb39de-i00
     ${ALPHA_CLI(TERSE, "fake-model-small-001")}
-  iteration 2/2  postrun-e${ID}-h402eac7c-i01
+  iteration 2/2  postrun-e${ID}-h25cb39de-i01
     ${ALPHA_CLI(TERSE, "fake-model-small-001")}
 
 Permutation 2/2  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
-  prerun-haf29f0fa (will build)
-  iteration 1/2  postrun-e${ID}-haf29f0fa-i00
+  prerun-h65c7b4e2 (will build)
+  iteration 1/2  postrun-e${ID}-h65c7b4e2-i00
     ${BETA_CLI(TERSE, "fake-model-large-001")}
-  iteration 2/2  postrun-e${ID}-haf29f0fa-i01
+  iteration 2/2  postrun-e${ID}-h65c7b4e2-i01
     ${BETA_CLI(TERSE, "fake-model-large-001")}`;
 
 /** Everything `run` prints, as one string. */
@@ -135,8 +135,8 @@ test("walks permutations in plan's order, with every iteration inside each", asy
   });
 
   expect(lines.slice(2, 6).join("\n")).toBe(`Permutation 1/8  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
-  prerun-h3ae8d594 (will build)
-  iteration 1/5  postrun-e${ID}-h3ae8d594-i00
+  prerun-hcb08a2eb (will build)
+  iteration 1/5  postrun-e${ID}-hcb08a2eb-i00
     ${ALPHA_CLI(PLAIN, "fake-model-small-001")}`);
 });
 

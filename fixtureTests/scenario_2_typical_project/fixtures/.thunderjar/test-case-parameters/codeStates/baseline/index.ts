@@ -1,8 +1,7 @@
 import { declareCodeState } from "thunderjar";
 
-// The seed repository's first commit (src/testing/seed-repo.ts): package.json and an empty
-// lockfile, so `npm ci` needs no network.
+// Copies files/ beside this declaration into /workspace: package.json and an empty lockfile, so
+// `npm ci` needs no network. No git: editing a file here changes the parameter hash.
 export default declareCodeState({
-  commit: "089b6a7a1688798c917f0b78535b0c8348a1dbae",
-  applyParameter: () => `RUN npm ci`,
+  applyParameter: (_config, ctx) => `COPY ${ctx.dir}/files/ /workspace/\nRUN npm ci`,
 });

@@ -2,15 +2,18 @@
 // yet, then stops: nothing is run and nothing is recorded. spec/080-docker-execution.md#process,
 // as far as "Prerun image ready".
 //
-// Before the first build it checks that Docker can be reached, and that the repository has
-// every commit the builds need (spec/062-code-state.md#where-the-commit-comes-from), so a
-// missing commit fails before anything is built. An image that already exists is reused, and
-// its commits aren't read. Each build context is kept, so a failed build can be inspected:
+// Before the first build it checks that Docker can be reached, and, if any fragment reads
+// commits through ctx.git, that the repository has every one of them
+// (spec/062-code-state.md#where-the-commit-comes-from), so a missing commit fails before
+// anything is built. A project whose fragments read no commits needs no repository at all. An
+// image that already exists is reused, and its commits aren't read. Each build context is
+// kept, so a failed build can be inspected:
 //
 //   <root dir>/builds/prerun-h4f9a21c8/
 //     Dockerfile
-//     code.bundle
-//     prompt-set/<dest>
+//     parameters/<role>/          each folder parameter, as its ctx.dir
+//     git/<commit>.bundle         what ctx.git asked for
+//     git/<commit>/<path>
 
 import { dirname, join } from "node:path";
 import { dockerCli, DockerBuildError, type Docker } from "../adapters/docker/docker.ts";
@@ -23,6 +26,7 @@ import {
   loadPrerunParameters,
   prerunImageRef,
   prerunStatuses,
+  renderPrerun,
   type PrerunParameters,
 } from "../prerun.ts";
 import { findRepository, type Repository } from "../repository.ts";
@@ -75,17 +79,19 @@ export async function build(name: string, options: BuildOptions = {}): Promise<v
     parameters.set(permutation.hash, await loadPrerunParameters(root, testCase.task, permutation));
   }
 
+  // Rendering every Dockerfile first finds the commits the builds read, so they're checked before any build.
+  const gitNeeds = [...parameters.values()].flatMap((p) => renderPrerun(p).git);
   let repo: Repository | undefined;
-  let commits = new Map<string, string>();
-  if (toBuild.length > 0) {
+  if (gitNeeds.length > 0) {
     const projectDir = dirname(root);
     repo = await findRepository(projectDir);
     if (!repo) {
-      throw new Error(
-        `error: ${projectDir} is not in a git repository. Prerun images are built from code state and prompt set commits in it.`,
-      );
+      const [{ owner, commit }] = gitNeeds as [(typeof gitNeeds)[number]];
+      throw new Error(`error: ${projectDir} is not in a git repository, but ${owner} reads commit ${commit} from it.`);
     }
-    commits = await checkCommits([...parameters.values()], repo);
+    await checkCommits(gitNeeds, repo);
+  }
+  if (toBuild.length > 0) {
     log(`Building ${count(toBuild.length, "prerun image")} for ${name} (${count(permutations.length, "permutation")})`);
     log(`Build contexts in ${join(rootDir, "builds")}`);
   } else {
@@ -106,11 +112,7 @@ export async function build(name: string, options: BuildOptions = {}): Promise<v
     }
     const contextDir = buildContextDir(rootDir, permutation.hash);
     const started = now();
-    await assembleBuildContext(
-      { ...declared, codeState: { ...declared.codeState, commit: commits.get(declared.codeState.commit)! } },
-      repo!,
-      contextDir,
-    );
+    await assembleBuildContext(declared, repo, contextDir);
     try {
       await docker.build(contextDir, ref);
     } catch (error) {

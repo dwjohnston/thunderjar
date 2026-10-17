@@ -3,8 +3,7 @@
 //
 // What varies from run to run (the execution ID, $TMPDIR and durations) is replaced with
 // placeholders, so expected output reads like what is printed. Real runs work on a copy of
-// fixtures/, because they write .thunderjar/.data/; dry runs run in fixtures/ itself. `build`
-// works on a copy that is also the seed repository, because it reads commits.
+// fixtures/, because they write .thunderjar/.data/; dry runs and builds run in fixtures/ itself.
 //
 // Docker is the recording fake (src/testing/fake-docker.ts), which every CLI a test starts
 // inherits from src/testing/test-setup.ts; `fakeDocker` gives it a state of its own to read.
@@ -16,7 +15,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { AggregationResult, ContainerRunRecord } from "../src/run-data-store.ts";
 import { linkThunderjar } from "../src/testing/fixture-project.ts";
-import { seedRepo } from "../src/testing/seed-repo.ts";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const cli = join(repoRoot, "src", "cli", "index.ts");
@@ -34,16 +32,6 @@ export async function copyOfFixtures(fixtures: string) {
     filter: (src) => !/[/\\]\.thunderjar[/\\](\.data|_generated)$/.test(src),
   });
   await linkThunderjar(dir);
-  return dir;
-}
-
-/**
- * A copy of `fixtures` that is also the seed repository (src/testing/seed-repo.ts), whose
- * commits the scenarios' code states and prompt sets pin, for commands that read them.
- */
-export async function seededCopyOfFixtures(fixtures: string) {
-  const dir = await copyOfFixtures(fixtures);
-  await seedRepo(dir);
   return dir;
 }
 

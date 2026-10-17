@@ -12,7 +12,11 @@ export {
   declareTokenCostCollector,
   sqliteStore,
 } from "./declarations.ts";
+export { checkoutCommit } from "./fragments.ts";
 export type {
+  ApplyParameterCtx,
+  GitBuildContext,
+  HarnessApplyCtx,
   MeasurementContext,
   MeasurementDeclaration,
   MeasurementResult,

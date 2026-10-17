@@ -1,8 +1,6 @@
 import { declarePromptSet } from "thunderjar";
 
-// The seed repository's second commit, which adds prompts/ after the code state's commit.
+// Copies the prompt file beside this declaration into /workspace.
 export default declarePromptSet({
-  commit: "91ab1db384146db3f605113ab297cf4469a60c9a",
-  files: { "prompts/glurk.md": "FAKE_INSTRUCTIONS.md" },
-  applyParameter: () => ``,
+  applyParameter: (_config, ctx) => `COPY ${ctx.dir}/FAKE_INSTRUCTIONS.md /workspace/FAKE_INSTRUCTIONS.md`,
 });

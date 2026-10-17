@@ -112,7 +112,7 @@ test("a declaration file with no default export", async () => {
 test("a declaration not wrapped in its declareX", async () => {
   const { stderr, exitCode } = await plan(
     await project({
-      "test-case-parameters/codeStates/baseline/index.ts": `export default { commit: "a1b2c3", applyParameter: () => "" };\n`,
+      "test-case-parameters/codeStates/baseline/index.ts": `export default { applyParameter: () => "" };\n`,
     }),
   );
   expect(stderr).toBe(

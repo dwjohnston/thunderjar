@@ -25,8 +25,38 @@ export function declaredBy(value: unknown): string | undefined {
   return typeof mark === "string" ? mark : undefined;
 }
 
-interface ApplyParameterCtx {
+// --- applyParameter: spec/060-test-case-parameters.md#declarations-and-applyparameter ---
+//
+// Each parameter's `applyParameter(config, ctx)` returns the Dockerfile fragment that applies
+// it. `config` is the declaration's own `config`, as written (undefined if it has none); the
+// declaration file is hashed, so it is part of the parameter hash.
+
+/**
+ * Puts things from the repository Thunderjar is run in into the build context, and returns
+ * the path to COPY them from. A commit named here must be in that repository: it is checked
+ * before anything is built.
+ */
+export interface GitBuildContext {
+  /** A git bundle holding `commit` and its ancestors, and nothing else, with one branch, `code-state`. */
+  bundle(commit: string): string;
+  /** The file at `path` in `commit`. */
+  show(commit: string, path: string): string;
+}
+
+/** What every fragment gets. */
+interface FragmentCtx {
   resolvedHash?: string;
+  git: GitBuildContext;
+}
+
+/**
+ * What a fragment gets when its parameter is a folder: `dir` is that folder's path in the
+ * build context, so files bundled beside the declaration can be copied in —
+ * `COPY ${ctx.dir}/files/ /workspace/`. It names the parameter's role, not its folder, so
+ * renaming the folder changes nothing.
+ */
+export interface ApplyParameterCtx extends FragmentCtx {
+  dir: string;
 }
 
 // spec/060-test-case-parameters.md#controlling-the-parameter-hash
@@ -35,44 +65,41 @@ interface HashOverrides {
   determineHash?: () => string;
 }
 
-// --- Base image: spec/061-base-image.md ---
-
-interface BaseImageDeclaration extends HashOverrides {
-  applyParameter: (ctx: ApplyParameterCtx) => string;
+/** A parameter declaration's `config`, and the `applyParameter` that receives it. */
+interface Applies<C, Ctx> {
+  config?: C;
+  applyParameter: (config: C, ctx: Ctx) => string;
 }
 
-export function declareBaseImage(declaration: BaseImageDeclaration): BaseImageDeclaration {
+// --- Base image: spec/061-base-image.md ---
+
+interface BaseImageDeclaration<C> extends HashOverrides, Applies<C, ApplyParameterCtx> {}
+
+export function declareBaseImage<C = undefined>(declaration: BaseImageDeclaration<C>): BaseImageDeclaration<C> {
   return declared("declareBaseImage", declaration);
 }
 
 // --- Code state: spec/062-code-state.md ---
 
-interface CodeStateDeclaration extends HashOverrides {
-  commit: string | ((ctx: ApplyParameterCtx) => string);
-  applyParameter: (ctx: ApplyParameterCtx) => string;
-}
+interface CodeStateDeclaration<C> extends HashOverrides, Applies<C, ApplyParameterCtx> {}
 
-export function declareCodeState(declaration: CodeStateDeclaration): CodeStateDeclaration {
+export function declareCodeState<C = undefined>(declaration: CodeStateDeclaration<C>): CodeStateDeclaration<C> {
   return declared("declareCodeState", declaration);
 }
 
 // --- Prompt set: spec/063-prompt-set.md ---
 
-interface PromptSetDeclaration extends HashOverrides {
-  commit: string | ((ctx: ApplyParameterCtx) => string);
-  files: Record<string, string>;
-  applyParameter: (ctx: ApplyParameterCtx) => string;
-}
+interface PromptSetDeclaration<C> extends HashOverrides, Applies<C, ApplyParameterCtx> {}
 
-export function declarePromptSet(declaration: PromptSetDeclaration): PromptSetDeclaration {
+export function declarePromptSet<C = undefined>(declaration: PromptSetDeclaration<C>): PromptSetDeclaration<C> {
   return declared("declarePromptSet", declaration);
 }
 
 // --- Harness/model pair: spec/064-harness.md ---
 
-interface HarnessApplyCtx {
+/** `dir` is the family folder, less models.ts, versions.ts and collectTokenCosts.ts. */
+export interface HarnessApplyCtx extends ApplyParameterCtx {
   version: string;
-  resolvedHash?: string;
 }
 
 export interface HarnessCliCtx {
@@ -83,18 +110,18 @@ export interface HarnessCliCtx {
 }
 
 interface HarnessExecutionOverrides {
-  applyParameter?: (ctx: HarnessApplyCtx) => string;
+  /** Replaces the family's for this version. Gets the family's `config`, which versions.ts can't type. */
+  applyParameter?: (config: unknown, ctx: HarnessApplyCtx) => string;
   cli?: (ctx: HarnessCliCtx) => string;
   requiredEnv?: string[];
 }
 
-export interface HarnessDeclaration {
-  applyParameter: (ctx: HarnessApplyCtx) => string;
+export interface HarnessDeclaration<C = unknown> extends Applies<C, HarnessApplyCtx> {
   cli: (ctx: HarnessCliCtx) => string;
   requiredEnv?: string[];
 }
 
-export function declareHarness(declaration: HarnessDeclaration): HarnessDeclaration {
+export function declareHarness<C = undefined>(declaration: HarnessDeclaration<C>): HarnessDeclaration<C> {
   return declared("declareHarness", declaration);
 }
 
@@ -138,13 +165,16 @@ export function declareTokenCostCollector(collector: TokenCostCollector): TokenC
 
 // --- Initial prompt: spec/066-task.md#initial-prompts ---
 
-export interface InitialPromptDeclaration extends HashOverrides {
+/**
+ * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`: nothing beside
+ * it is part of its hash.
+ */
+export interface InitialPromptDeclaration<C = unknown> extends HashOverrides, Applies<C, FragmentCtx> {
   prompt: string;
   timeoutSeconds: number;
-  applyParameter: (ctx: ApplyParameterCtx) => string;
 }
 
-export function declareInitialPrompt(declaration: InitialPromptDeclaration): InitialPromptDeclaration {
+export function declareInitialPrompt<C = undefined>(declaration: InitialPromptDeclaration<C>): InitialPromptDeclaration<C> {
   return declared("declareInitialPrompt", declaration);
 }
 

@@ -69,7 +69,7 @@ export const hashInitialPrompt = (path: string) => sha256(readFileSync(path));
  * The family files Thunderjar loads separately. They are excluded from the shared execution
  * content by location; only the selected entries' resolved values contribute.
  */
-const FAMILY_MAP_FILES = ["models.ts", "versions.ts", "collectTokenCosts.ts"];
+export const FAMILY_MAP_FILES = ["models.ts", "versions.ts", "collectTokenCosts.ts"];
 
 const EXECUTION_OVERRIDES = ["applyParameter", "cli", "requiredEnv"] as const;
 

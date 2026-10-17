@@ -19,27 +19,29 @@ const baseImage = stub(
 }`,
 );
 
-const codeState = stub(
-  "declareCodeState",
-  `{
-  commit: "a1b2c3",
-  applyParameter: () => \`RUN npm ci\`,
-}`,
-);
+// Applying a parameter is up to its applyParameter. These read commits from the repository
+// Thunderjar is run in: checkoutCommit clones the code state's commit, with no later history,
+// into /workspace, and ctx.git.show reads one file at a commit into the build context.
+const codeState = `import { checkoutCommit, declareCodeState } from "thunderjar";
+
+export default declareCodeState({
+  config: { commit: "a1b2c3" },
+  applyParameter: (config, ctx) => \`\${checkoutCommit(ctx, config.commit)}\\nRUN npm ci\`,
+});
+`;
 
 const promptSet = stub(
   "declarePromptSet",
   `{
-  commit: "e4f5a6",
-  files: { "prompts/snerk.md": "CLAUDE.md" },
-  applyParameter: () => \`\`,
+  config: { commit: "e4f5a6" },
+  applyParameter: (config, ctx) => \`COPY \${ctx.git.show(config.commit, "prompts/snerk.md")} /workspace/CLAUDE.md\`,
 }`,
 );
 
 const harnessIndex = stub(
   "declareHarness",
   `{
-  applyParameter: (ctx) => \`RUN npm install -g @anthropic-ai/claude-code@\${ctx.version}\`,
+  applyParameter: (_config, ctx) => \`RUN npm install -g @anthropic-ai/claude-code@\${ctx.version}\`,
   cli: (ctx) => \`claude -p "\${ctx.initialPrompt}" --model \${ctx.modelId} > \${ctx.resultPath}\`,
   requiredEnv: ["ANTHROPIC_API_KEY"],
 }`,
