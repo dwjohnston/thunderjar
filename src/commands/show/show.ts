@@ -7,7 +7,8 @@
 // many iterations it was measured in and its combined value by each chosen method, then the
 // iterations' exit codes and durations. Its per-iteration values are in each container run's
 // view, which prints its parameters, measures, duration and exit code. A measure there is marked
-// `(stale)` when its task's measurement of that name, as declared today, has another content hash.
+// `(stale)` when its task's measurement of that name, as declared today, has another content hash;
+// a row of an execution is marked "stale, run `remeasure`" when any value it combines is.
 //
 // `--data-dir` reads a store kept outside the project.
 
@@ -22,6 +23,7 @@ import {
   type AggregationMethod,
   type AggregationResult,
   type ContainerRunRecord,
+  type RecordedMeasure,
   type RecordedOutcome,
 } from "../../store/run-data-store.ts";
 import { count, duration, minute, seconds, showValue } from "../format.ts";
@@ -84,13 +86,42 @@ function exits(runs: ContainerRunRecord[]): string {
 /** A summary line below a permutation's table, its value in a column of its own. */
 const summary = (label: string, value: string) => `  ${label.padEnd(11)}${value}`;
 
-/** One permutation's aggregation result: a row per measure, sorted by name. */
-function aggregationTable({ iterations, measures }: AggregationResult): string[] {
+/**
+ * Whether a stored measure is stale against `measurements`, its task's today: the measurement of
+ * its name hashes differently now (spec/085-test-case-results.md#name-is-identity-hash-is-version).
+ * A name no longer declared was deleted, which doesn't make its measure stale.
+ */
+function staleness(measurements: Measurement[]): (name: string, measure: RecordedMeasure) => boolean {
+  const currentHashes = new Map(measurements.map((measurement) => [measurement.name, hashMeasurement(measurement)]));
+  return (name, { contentHash }) => {
+    const current = currentHashes.get(name);
+    return current !== undefined && current !== contentHash;
+  };
+}
+
+/**
+ * One permutation's aggregation result: a row per measure, sorted by name. A row is marked stale
+ * if any of `runs`' values it combines is; a run's measure that isn't a value doesn't count.
+ */
+function aggregationTable(
+  { iterations, measures }: AggregationResult,
+  runs: ContainerRunRecord[],
+  isStale: (name: string, measure: RecordedMeasure) => boolean,
+): string[] {
   const names = Object.keys(measures).toSorted();
   if (names.length === 0) return ["  no measures"];
+  const staleRow = (name: string) =>
+    runs.some(({ result }) => {
+      const measure = result[name];
+      return measure?.outcome.outcome === "measured" && isStale(name, measure);
+    });
   return table([
     ["MEASURE", "MEASURED", "AGGREGATE"],
-    ...names.map((name) => [name, `${measures[name]!.measured}/${iterations}`, aggregateCell(measures[name]!)]),
+    ...names.map((name) => [
+      name,
+      `${measures[name]!.measured}/${iterations}`,
+      `${aggregateCell(measures[name]!)}${staleRow(name) ? "  stale, run `remeasure`" : ""}`,
+    ]),
   ]);
 }
 
@@ -115,9 +146,14 @@ function byPermutation(records: ContainerRunRecord[]): ContainerRunRecord[][] {
 
 /**
  * One execution: its header, then a block per permutation, from its aggregation result.
- * `latestOf` is the test case it was found by.
+ * `measurements` are its task's today. `latestOf` is the test case it was found by.
  */
-function showExecution(records: ContainerRunRecord[], aggregations: AggregationResult[], latestOf?: string): string {
+function showExecution(
+  records: ContainerRunRecord[],
+  aggregations: AggregationResult[],
+  measurements: Measurement[],
+  latestOf?: string,
+): string {
   const [{ executionId, testCase, task }] = records as [ContainerRunRecord];
   const ranAt = records.map((r) => r.ranAt).toSorted()[0]!;
   const lines = labelled([
@@ -130,6 +166,7 @@ function showExecution(records: ContainerRunRecord[], aggregations: AggregationR
   const permutations = byPermutation(records);
   const rows = permutationRows(permutations.map(([first]) => permutationOf(first!)));
   const byHash = new Map(aggregations.map((a) => [a.permutationHash, a]));
+  const isStale = staleness(measurements);
   permutations.forEach((runs, n) => {
     const aggregation = byHash.get(runs[0]!.permutationHash);
     lines.push(
@@ -138,7 +175,7 @@ function showExecution(records: ContainerRunRecord[], aggregations: AggregationR
       `  ${rows[n]}`,
       "",
       // Only for runs recorded before aggregation results were stored.
-      ...(aggregation ? aggregationTable(aggregation) : ["  no aggregation result recorded"]),
+      ...(aggregation ? aggregationTable(aggregation, runs, isStale) : ["  no aggregation result recorded"]),
       "",
       summary("exit", exits(runs)),
       ...(aggregation
@@ -151,19 +188,13 @@ function showExecution(records: ContainerRunRecord[], aggregations: AggregationR
 
 /**
  * One container run: where it sits, its parameters, its measures, and how the agent ran.
- * `measurements` are its task's today. A measure is stale if the measurement of its name hashes
- * differently now (spec/085-test-case-results.md#name-is-identity-hash-is-version); a name no
- * longer declared was deleted, which doesn't make its measure stale.
+ * `measurements` are its task's today, against which a measure may be stale.
  */
 function showContainerRun(record: ContainerRunRecord, measurements: Measurement[]): string {
   const { postrunImage, executionId, testCase, permutationHash, iteration, ranAt, parameters, result, execution } = record;
   const names = Object.keys(result).toSorted();
-  const currentHashes = new Map(measurements.map((measurement) => [measurement.name, hashMeasurement(measurement)]));
-  const cell = (name: string) => {
-    const { contentHash, outcome } = result[name]!;
-    const current = currentHashes.get(name);
-    return `${detailed(outcome)}${current !== undefined && current !== contentHash ? " (stale)" : ""}`;
-  };
+  const isStale = staleness(measurements);
+  const cell = (name: string) => `${detailed(result[name]!.outcome)}${isStale(name, result[name]!) ? " (stale)" : ""}`;
   return [
     ...labelled([
       ["Container run", postrunImage],
@@ -187,17 +218,22 @@ export async function show(
   { cwd = process.cwd(), dataDir }: { cwd?: string; dataDir?: string } = {},
 ): Promise<string> {
   const store = jsonFileStore(runDataStorePath(cwd, dataDir));
+  /** A task's measurements as declared today, which a stored measure may be stale against. */
+  const todays = (task: string) => loadMeasurements(findThunderjarRoot(cwd), task);
 
   const containerRun = await store.getContainerRun(target);
-  if (containerRun) return showContainerRun(containerRun, await loadMeasurements(findThunderjarRoot(cwd), containerRun.task));
+  if (containerRun) return showContainerRun(containerRun, await todays(containerRun.task));
 
   const execution = await store.getExecution(target);
-  if (execution.length > 0) return showExecution(execution, await store.getAggregationResults(target));
+  if (execution.length > 0) {
+    return showExecution(execution, await store.getAggregationResults(target), await todays(execution[0]!.task));
+  }
 
   const [latest] = await store.listExecutions(target);
   if (latest) {
     const { executionId } = latest;
-    return showExecution(await store.getExecution(executionId), await store.getAggregationResults(executionId), target);
+    const records = await store.getExecution(executionId);
+    return showExecution(records, await store.getAggregationResults(executionId), await todays(records[0]!.task), target);
   }
 
   throw new Error(`${target} is not a recorded container run, execution or test case`);
