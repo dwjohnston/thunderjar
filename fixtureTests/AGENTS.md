@@ -172,7 +172,7 @@ Unless its entry says otherwise, scenarios 1–3 and 8 use these:
       test("7 is prime", () => expect({{defaultExport}}(7)).toBe(true));
       ```
     - Its full content hash, `bb51049d…`, is stored only in that one measure. To check it, put that template beside a copy of the measurement and hash it with `hashMeasurement`.
-  - Don't run a real `run` here: this scenario's store is its starting state. Use `--data-dir` to send a by-hand run's store elsewhere.
+  - Don't run a real `run` here: this scenario's store is its starting state. Use `--data-dir` to send a by-hand run's store elsewhere. `remeasure` writes aggregation results to the store, so give it `--data-dir` holding a copy of `runs.json`.
 
 - `scenario_9_broken_declarations`
   - A project with configuration errors beside sound declarations. Only the declarations a test case names are loaded, so each broken one stops only the test cases naming it. A task's measurements all load with it, so each broken measurement has a task of its own.

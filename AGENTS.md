@@ -53,7 +53,7 @@ bun run fixture scenario_2 run two-pairs --dry-run   # or just: bun run fixture 
 
 #### Copy only for commands that write into the project
 
-✅ **Do** run in place, in the scenario's `fixtures/`. Only `init`, which writes into the project, works on a copy (`copyOfFixtures()` in `src/testing/cli.ts`). A real `run` runs in place too, with `--data-dir` set to a temp folder, and never in a scenario with a checked-in run data store. `generate` writes only the gitignored `.thunderjar/_generated/`, so it runs in place, and its test deletes that file first.
+✅ **Do** run in place, in the scenario's `fixtures/`. Only `init`, which writes into the project, works on a copy (`copyOfFixtures()` in `src/testing/cli.ts`). A real `run` runs in place too, with `--data-dir` set to a temp folder, and never in a scenario with a checked-in run data store. `remeasure` writes into that store, so it runs in place with `--data-dir` set to a temp folder holding an unmodified copy of the scenario's `runs.json`. `generate` writes only the gitignored `.thunderjar/_generated/`, so it runs in place, and its test deletes that file first.
 
 ❌ **Don't** copy a scenario for a command that only reads it, such as `plan`, `show` or a dry run.
 
