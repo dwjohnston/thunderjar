@@ -138,9 +138,9 @@ describe("planRemeasure", () => {
       containerRun(EXECUTION, 0, resultOf(isPrimeTsExists, staleTsconfig)),
       containerRun(EXECUTION, 1, resultOf(isPrimeTsExists, readmeExists, tsconfigExists)),
     ];
-    expect(planRemeasure(records, measurements)).toEqual({
-      runs: [{ executionId: EXECUTION, postrunImage: postrun(0), measurementNames: ["readmeExists", "tsconfigExists"] }],
-    });
+    expect(planRemeasure(records, measurements).runs).toEqual([
+      { executionId: EXECUTION, postrunImage: postrun(0), measurementNames: ["readmeExists", "tsconfigExists"] },
+    ]);
   });
 
   test("omits a current skipped measure, and schedules an errored one even when its hash matches", () => {
@@ -151,14 +151,14 @@ describe("planRemeasure", () => {
         isPrimeTsExists: recorded(hash, { outcome: "erroredWhileMeasuring", error: { message: "glob exploded" } }),
       }),
     ];
-    expect(planRemeasure(records, [isPrimeTsExists])).toEqual({
-      runs: [{ executionId: EXECUTION, postrunImage: postrun(1), measurementNames: ["isPrimeTsExists"] }],
-    });
+    expect(planRemeasure(records, [isPrimeTsExists]).runs).toEqual([
+      { executionId: EXECUTION, postrunImage: postrun(1), measurementNames: ["isPrimeTsExists"] },
+    ]);
   });
 
   test("never schedules a measurement deleted from the task", () => {
     const records = [containerRun(EXECUTION, 0, resultOf(isPrimeTsExists, readmeExists))];
-    expect(planRemeasure(records, [isPrimeTsExists])).toEqual({ runs: [] });
+    expect(planRemeasure(records, [isPrimeTsExists]).runs).toEqual([]);
   });
 
   test("a rename schedules the new name and leaves the old one stored, even when both hash identically", () => {
@@ -167,21 +167,21 @@ describe("planRemeasure", () => {
     const records = [containerRun(EXECUTION, 0, resultOf(readmeExists))];
     const before = structuredClone(records);
 
-    expect(planRemeasure(records, [renamed])).toEqual({
-      runs: [{ executionId: EXECUTION, postrunImage: postrun(0), measurementNames: ["readmePresent"] }],
-    });
+    expect(planRemeasure(records, [renamed]).runs).toEqual([
+      { executionId: EXECUTION, postrunImage: postrun(0), measurementNames: ["readmePresent"] },
+    ]);
     expect(records).toEqual(before);
   });
 
   test("an edit to aggregate alone schedules nothing", () => {
     const records = [containerRun(EXECUTION, 0, resultOf(isPrimeTsExists))];
     const reaggregated: Measurement = { ...isPrimeTsExists, aggregate: ["count"] };
-    expect(planRemeasure(records, [reaggregated])).toEqual({ runs: [] });
+    expect(planRemeasure(records, [reaggregated]).runs).toEqual([]);
   });
 
   test("no records, or no current measurements, give no run work", () => {
-    expect(planRemeasure([], [isPrimeTsExists, readmeExists])).toEqual({ runs: [] });
-    expect(planRemeasure([containerRun(EXECUTION, 0, resultOf(readmeExists))], [])).toEqual({ runs: [] });
+    expect(planRemeasure([], [isPrimeTsExists, readmeExists]).runs).toEqual([]);
+    expect(planRemeasure([containerRun(EXECUTION, 0, resultOf(readmeExists))], []).runs).toEqual([]);
   });
 
   test("keeps each run's execution and the input order, with the same rules for non-zero exits", () => {
@@ -195,16 +195,158 @@ describe("planRemeasure", () => {
     ];
     const before = structuredClone(records);
 
-    expect(planRemeasure(records, [readmeExists, isPrimeTsExists])).toEqual({
-      runs: [
-        { executionId: LATER, postrunImage: postrun(0, LATER), measurementNames: ["readmeExists"] },
-        { executionId: EXECUTION, postrunImage: postrun(0), measurementNames: ["isPrimeTsExists", "readmeExists"] },
-        { executionId: EXECUTION, postrunImage: postrun(1), measurementNames: ["isPrimeTsExists"] },
-      ],
-    });
+    expect(planRemeasure(records, [readmeExists, isPrimeTsExists]).runs).toEqual([
+      { executionId: LATER, postrunImage: postrun(0, LATER), measurementNames: ["readmeExists"] },
+      { executionId: EXECUTION, postrunImage: postrun(0), measurementNames: ["isPrimeTsExists", "readmeExists"] },
+      { executionId: EXECUTION, postrunImage: postrun(1), measurementNames: ["isPrimeTsExists"] },
+    ]);
     expect(records).toEqual(before);
     expect(records.flatMap((r) => Object.values(r.result).map((m) => m.measuredAt))).toEqual(
       Array(4).fill("2026-09-29T14:31:03.000Z"),
     );
+  });
+
+  describe("executions", () => {
+    const LATER = "01k4xc5w7r1ta6";
+    const errored = (measurement: Measurement) =>
+      recorded(hashMeasurement(measurement), { outcome: "erroredWhileMeasuring", error: { message: "glob exploded" } });
+    const skipped = (measurement: Measurement) =>
+      recorded(hashMeasurement(measurement), { outcome: "skipped", reason: "nothing to look in" });
+
+    test("a measurement current in one execution and stale in another, and a new one missing from both", () => {
+      const staleIsPrime = fileCreated("isPrimeTsExists", "src/isPrime.ts");
+      const records = [
+        containerRun(EXECUTION, 0, resultOf(isPrimeTsExists)),
+        containerRun(EXECUTION, 1, resultOf(isPrimeTsExists)),
+        containerRun(LATER, 0, resultOf(staleIsPrime)),
+        containerRun(LATER, 1, resultOf(staleIsPrime)),
+      ];
+
+      expect(planRemeasure(records, [readmeExists, isPrimeTsExists])).toEqual({
+        runs: [
+          { executionId: EXECUTION, postrunImage: postrun(0), measurementNames: ["readmeExists"] },
+          { executionId: EXECUTION, postrunImage: postrun(1), measurementNames: ["readmeExists"] },
+          { executionId: LATER, postrunImage: postrun(0, LATER), measurementNames: ["isPrimeTsExists", "readmeExists"] },
+          { executionId: LATER, postrunImage: postrun(1, LATER), measurementNames: ["isPrimeTsExists", "readmeExists"] },
+        ],
+        executions: [
+          {
+            executionId: EXECUTION,
+            measurements: [
+              { name: "isPrimeTsExists", contentHash: hashMeasurement(isPrimeTsExists), status: "current" },
+              { name: "readmeExists", contentHash: hashMeasurement(readmeExists), status: "missing" },
+            ],
+            deleted: [],
+          },
+          {
+            executionId: LATER,
+            measurements: [
+              { name: "isPrimeTsExists", contentHash: hashMeasurement(isPrimeTsExists), status: "stale" },
+              { name: "readmeExists", contentHash: hashMeasurement(readmeExists), status: "missing" },
+            ],
+            deleted: [],
+          },
+        ],
+      });
+    });
+
+    test("counts each execution's stored measures of a deleted name, whatever their outcome, in first-seen order", () => {
+      // Two names deleted from the task, the later name first in the Result, so the order comes from sorting.
+      const records = [
+        containerRun(LATER, 0, { tsconfigExists: skipped(tsconfigExists), readmeExists: errored(readmeExists) }),
+        containerRun(EXECUTION, 0, resultOf(isPrimeTsExists, readmeExists)),
+        containerRun(LATER, 1, resultOf(isPrimeTsExists)),
+        containerRun(EXECUTION, 1, { ...resultOf(isPrimeTsExists), readmeExists: skipped(readmeExists) }),
+        containerRun(EXECUTION, 2, resultOf(isPrimeTsExists)),
+      ];
+
+      expect(planRemeasure(records, [isPrimeTsExists]).executions).toEqual([
+        {
+          executionId: LATER,
+          measurements: [{ name: "isPrimeTsExists", contentHash: hashMeasurement(isPrimeTsExists), status: "missing" }],
+          deleted: [
+            { name: "readmeExists", storedMeasures: 1 },
+            { name: "tsconfigExists", storedMeasures: 1 },
+          ],
+        },
+        {
+          executionId: EXECUTION,
+          measurements: [{ name: "isPrimeTsExists", contentHash: hashMeasurement(isPrimeTsExists), status: "current" }],
+          deleted: [{ name: "readmeExists", storedMeasures: 2 }],
+        },
+      ]);
+    });
+
+    test("a rename deletes the old name, with its stored count, and the new name is missing despite an equal hash", () => {
+      const renamed: Measurement = { ...readmeExists, name: "readmePresent" };
+      expect(hashMeasurement(renamed)).toBe(hashMeasurement(readmeExists));
+      const records = [
+        containerRun(EXECUTION, 0, resultOf(readmeExists)),
+        containerRun(EXECUTION, 1, resultOf(readmeExists)),
+      ];
+      const before = structuredClone(records);
+
+      expect(planRemeasure(records, [renamed]).executions).toEqual([
+        {
+          executionId: EXECUTION,
+          measurements: [{ name: "readmePresent", contentHash: hashMeasurement(readmeExists), status: "missing" }],
+          deleted: [{ name: "readmeExists", storedMeasures: 2 }],
+        },
+      ]);
+      expect(records).toEqual(before);
+    });
+
+    test("missing, or errored, in any run outranks stale, which outranks current, whatever the run order", () => {
+      const staleIsPrime = fileCreated("isPrimeTsExists", "src/isPrime.ts");
+      const staleReadme = fileCreated("readmeExists", "docs/README.md");
+      const staleTsconfig = fileCreated("tsconfigExists", "old/tsconfig.json");
+      const records = [
+        // isPrimeTsExists: missing, stale, current. readmeExists: current, stale, current.
+        // tsconfigExists: stale, current, errored.
+        containerRun(EXECUTION, 0, resultOf(readmeExists, staleTsconfig)),
+        containerRun(EXECUTION, 1, resultOf(staleIsPrime, staleReadme, tsconfigExists)),
+        containerRun(EXECUTION, 2, { ...resultOf(isPrimeTsExists, readmeExists), tsconfigExists: errored(tsconfigExists) }),
+      ];
+
+      expect(planRemeasure(records, [tsconfigExists, readmeExists, isPrimeTsExists]).executions).toEqual([
+        {
+          executionId: EXECUTION,
+          measurements: [
+            { name: "isPrimeTsExists", contentHash: hashMeasurement(isPrimeTsExists), status: "missing" },
+            { name: "readmeExists", contentHash: hashMeasurement(readmeExists), status: "stale" },
+            { name: "tsconfigExists", contentHash: hashMeasurement(tsconfigExists), status: "missing" },
+          ],
+          deleted: [],
+        },
+      ]);
+    });
+
+    test("an execution with no run work still has a summary", () => {
+      const fullyCurrent = [
+        containerRun(EXECUTION, 0, resultOf(isPrimeTsExists)),
+        containerRun(EXECUTION, 1, resultOf(isPrimeTsExists)),
+      ];
+      expect(planRemeasure(fullyCurrent, [isPrimeTsExists])).toEqual({
+        runs: [],
+        executions: [
+          {
+            executionId: EXECUTION,
+            measurements: [{ name: "isPrimeTsExists", contentHash: hashMeasurement(isPrimeTsExists), status: "current" }],
+            deleted: [],
+          },
+        ],
+      });
+
+      // The task now declares no measurements, so everything stored is deleted.
+      const nothingDeclared = [containerRun(LATER, 0, resultOf(readmeExists)), containerRun(LATER, 1, {})];
+      expect(planRemeasure(nothingDeclared, [])).toEqual({
+        runs: [],
+        executions: [{ executionId: LATER, measurements: [], deleted: [{ name: "readmeExists", storedMeasures: 1 }] }],
+      });
+    });
+
+    test("no records give no execution summaries", () => {
+      expect(planRemeasure([], [isPrimeTsExists, readmeExists])).toEqual({ runs: [], executions: [] });
+    });
   });
 });
