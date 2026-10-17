@@ -14,6 +14,10 @@
 //     parameters/<role>/          each folder parameter, as its ctx.dir
 //     git/<commit>.bundle         what ctx.git asked for
 //     git/<commit>/<path>
+//
+// `--dry-run` prints the Dockerfile each permutation's prerun image would be built from, for
+// every permutation, whether or not its image exists. It builds nothing, writes nothing, and
+// doesn't ask Docker anything, nor read any commit, so what it prints doesn't depend on either.
 
 import { dirname, join } from "node:path";
 import { dockerCli, DockerBuildError, type Docker } from "../../adapters/docker/docker.ts";
@@ -40,6 +44,8 @@ export interface BuildOptions {
   /** Receives the output a block at a time, as it is produced. */
   log?: (text: string) => void;
   docker?: Docker;
+  /** Print each permutation's Dockerfile instead of building, `--dry-run`. */
+  dryRun?: boolean;
   /** The image repository prerun images are tagged in, `--image-prefix`. Tests use a throwaway one. */
   repository?: string;
   /** Build contexts are kept under `<rootDir>/builds/`. Defaults to `$TMPDIR/thunderjar`. */
@@ -57,6 +63,7 @@ export async function build(name: string, options: BuildOptions = {}): Promise<v
     cwd = process.cwd(),
     log = (text) => console.log(text),
     docker = dockerCli(),
+    dryRun = false,
     repository = LOCAL_REPOSITORY,
     rootDir = defaultRootDir(),
     now = Date.now,
@@ -65,6 +72,22 @@ export async function build(name: string, options: BuildOptions = {}): Promise<v
   const root = findThunderjarRoot(cwd);
   const testCase = await loadTestCase(root, name);
   const { permutations } = await resolveTestCase(root, testCase);
+  const rows = permutationRows(permutations);
+  const numberWidth = Math.max(2, String(permutations.length).length);
+  const pad = " ".repeat(numberWidth + 2);
+
+  if (dryRun) {
+    log(`Dockerfiles for ${name} (${count(permutations.length, "permutation")}). Nothing is built.`);
+    for (const [n, permutation] of permutations.entries()) {
+      const { dockerfile } = renderPrerun(await loadPrerunParameters(root, testCase.task, permutation));
+      log("");
+      log(`${String(n + 1).padStart(numberWidth)}  ${rows[n]}`);
+      log(`${pad}${prerunImageRef(repository, permutation.hash)}`);
+      log("");
+      log(dockerfile.trimEnd().replace(/^(?=.)/gm, pad));
+    }
+    return;
+  }
 
   const found = await prerunStatuses(docker, repository, permutations);
   if ("unreachable" in found) {
@@ -97,9 +120,6 @@ export async function build(name: string, options: BuildOptions = {}): Promise<v
     log(`Every prerun image for ${name} exists (${count(permutations.length, "permutation")})`);
   }
 
-  const rows = permutationRows(permutations);
-  const numberWidth = Math.max(2, String(permutations.length).length);
-  const pad = " ".repeat(numberWidth + 2);
   for (const [n, permutation] of permutations.entries()) {
     const ref = prerunImageRef(repository, permutation.hash);
     log("");

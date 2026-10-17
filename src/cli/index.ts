@@ -51,11 +51,14 @@ try {
     }
   } else if (command === "build") {
     const parsed = takeImagePrefix(args);
-    if (parsed === "invalid" || parsed.rest.length !== 1 || parsed.rest[0]!.startsWith("-")) {
-      console.error("usage: thunderjar build <test case> [--image-prefix <name>]");
+    const rest = parsed === "invalid" ? [] : parsed.rest;
+    const flags = rest.filter((a) => a.startsWith("-"));
+    const [name, ...extra] = rest.filter((a) => !a.startsWith("-"));
+    if (parsed === "invalid" || !name || extra.length > 0 || flags.some((f) => f !== "--dry-run")) {
+      console.error("usage: thunderjar build <test case> [--dry-run] [--image-prefix <name>]");
       process.exitCode = 1;
     } else {
-      await build(parsed.rest[0]!, { repository: parsed.imagePrefix });
+      await build(name, { dryRun: flags.includes("--dry-run"), repository: parsed.imagePrefix });
     }
   } else if (command === "executions") {
     if (args.length > 1 || args.some((a) => a.startsWith("-"))) {
