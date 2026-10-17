@@ -3,7 +3,9 @@
 //
 //   01k4tq3h…  fails      recorded before aggregation results were stored; one run exited 3
 //                         and was never measured
-//   01k4x9j2…  fails      readmeExists, since deleted, errored in each permutation's first iteration
+//   01k4x9j2…  fails      readmeExists, since deleted, errored in each permutation's first iteration;
+//                         the behaving agent's first iteration took isPrimeTemplateTest with an
+//                         older template, so that one measure is stale
 //   01k4xb7q…  times-out  a task without measurements
 //   01k4xc00…  fails      the latest, after readmeExists was deleted
 //
@@ -13,6 +15,7 @@
 //   bun run fixture 8 show fails
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scenario, thunderjar } from "../../testing/cli.ts";
 
@@ -99,6 +102,34 @@ Permutation ${BEHAVES}  (2 iterations)
     });
   });
 
+  test("show <container run> measured with an older template: (stale) after that measure's value only, beside a current and a deleted measurement", async () => {
+    const tag = `postrun-e${ERRORED}-h${BEHAVES}-i00`;
+    expect(await show(tag)).toEqual({
+      stdout: `Container run  ${tag}
+Execution      ${ERRORED}  (fails)
+Permutation    ${BEHAVES}, iteration 1
+Ran at         2026-09-29 14:30
+
+Parameters
+  baseImage      node20                                     26d9
+  codeState      baseline                                   bb15
+  promptSet      snerk                                      827a
+  harnessModel   fake-harness-alpha@1.0.0/fake-model-small  da28
+  initialPrompt  plain                                      9e30
+
+Measures
+  isPrimeTemplateTest  {passed: 3, failed: 2} (stale)
+  isPrimeTsExists      true
+  readmeExists         error  (disk on fire)
+  tsIgnoreCount        1
+
+Duration  0.04s   exit code 0
+`,
+      stderr: "",
+      exitCode: 0,
+    });
+  });
+
   test("show <container run>: its parameters, measures, duration and exit code", async () => {
     const tag = `postrun-e${ERRORED}-h${BEHAVES}-i01`;
     expect(await show(tag)).toEqual({
@@ -179,6 +210,13 @@ Permutation ${BEHAVES}  (2 iterations)
       stderr: "",
       exitCode: 0,
     });
+  });
+
+  test("show <container run> leaves the checked-in store byte for byte as it was", async () => {
+    const store = join(fixtures, ".thunderjar", ".data", "runs.json");
+    const before = readFileSync(store);
+    for (const iteration of ["i00", "i01"]) expect((await show(`postrun-e${ERRORED}-h${BEHAVES}-${iteration}`)).exitCode).toBe(0);
+    expect(readFileSync(store).equals(before)).toBe(true);
   });
 
   test("a container run with no measures shows none", async () => {

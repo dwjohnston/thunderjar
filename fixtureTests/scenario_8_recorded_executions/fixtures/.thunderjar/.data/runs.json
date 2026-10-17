@@ -480,7 +480,7 @@
       "result": {
         "isPrimeTemplateTest": {
           "instrument": "templateTest",
-          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "contentHash": "bb51049de512668d086c029a9ba6e3a18c47eb23f88ab72a66e95ae74d6f8f03",
           "measuredAt": "2026-09-29T14:30:55.760Z",
           "outcome": {
             "outcome": "measured",

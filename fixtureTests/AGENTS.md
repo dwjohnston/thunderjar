@@ -163,9 +163,15 @@ Unless its entry says otherwise, scenarios 1–3 and 8 use these:
     - Measurements choose several aggregate methods: `isPrimeTemplateTest` mean and sum, `tsIgnoreCount` median, min and sum.
   - The store, oldest first
     - `01k4tq3h8r0000000000000000`, `fails`, 2026-09-28 09:15: recorded before aggregation results were stored. The behaving agent's second run exited 3 and was never measured.
-    - `01k4x9j2e8mqz3abcdefghjkmn`, `fails`, 2026-09-29 14:30: with `readmeExists` (count and rate), whose instrument threw `disk on fire` in each permutation's first iteration.
+    - `01k4x9j2e8mqz3abcdefghjkmn`, `fails`, 2026-09-29 14:30: with `readmeExists` (count and rate), whose instrument threw `disk on fire` in each permutation's first iteration. The behaving agent's first iteration (`h8ffdda6e-i00`) took `isPrimeTemplateTest` with an older template, so that one measure is stale; every other measure in the store is current.
     - `01k4xb7q0c2tnvabcdefghjkmn`, `times-out`, 2026-09-29 15:02: no measurements, each run exited 124.
     - `01k4xc0000000000000000000a`, `fails`, 2026-09-30 08:00: the latest, without `readmeExists`.
+  - The older `isPrimeTemplateTest` template
+    - It's today's `isPrime.test.template.ts` testing `7` where today's tests `17`, so both still give the buggy agent `{passed: 3, failed: 2}`:
+      ```ts
+      test("7 is prime", () => expect({{defaultExport}}(7)).toBe(true));
+      ```
+    - Its full content hash, `bb51049d…`, is stored only in that one measure. To check it, put that template beside a copy of the measurement and hash it with `hashMeasurement`.
   - Don't run a real `run` here: this scenario's store is its starting state. Use `--data-dir` to send a by-hand run's store elsewhere.
 
 - `scenario_9_broken_declarations`
