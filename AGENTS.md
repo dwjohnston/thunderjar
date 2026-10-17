@@ -51,7 +51,7 @@ Fixtures and `src/` unit tests never name a real agent: no real harness (claude-
 
 Both harnesses' `cli` really run, so any test case can be run for real by hand, and the two give different measures. Misbehaving agents (failing, hanging) are further versions of `fake-harness-alpha`; see `fixtureTests/scenario_3_misbehaving_agents`.
 
-The one exception is `src/commands/init.ts` and its test: `init` scaffolds claude-code for real users, and the test checks exactly that.
+The one exception is `src/commands/init/init.ts` and its test: `init` scaffolds claude-code for real users, and the test checks exactly that.
 
 
 #### Annotated tags 

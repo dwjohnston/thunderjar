@@ -17,11 +17,47 @@ export type LayoutEntry = {
 
 export type Layout = Record<string, LayoutEntry>;
 
+/**
+ * src/'s layers, lowest first. Each may import any layer before it, never one after: see
+ * src/AGENTS.md.
+ */
+export const LAYERS = [
+  "src/api",
+  "src/instruments",
+  "src/project",
+  "src/matrix",
+  "src/store",
+  "src/running",
+  "src/images",
+  "src/measuring",
+] as const;
+
+/** One folder per command under src/commands/, holding the command and its tests. */
+export const COMMANDS = ["build", "executions", "generate", "init", "plan", "run", "show"] as const;
+
+/** What every layer may use besides the layers below it: the real seams, and test helpers. */
+const SHARED = ["src/adapters/docker", "src/testing"];
+
+const commandFolders = COMMANDS.map((command) => `src/commands/${command}`);
+
 export const layout: Layout = {
-  src: { allowedFiles: ["*.ts"], mayImport: ["src/adapters/docker", "src/commands", "src/testing"] },
+  // The package entry: re-exports src/api.
+  src: { allowedFiles: ["*.ts", "AGENTS.md"], mayImport: ["src/api"] },
+  ...Object.fromEntries(
+    LAYERS.map((layer, i) => [layer, { allowedFiles: ["*.ts"], mayImport: [...LAYERS.slice(0, i), ...SHARED] }]),
+  ),
+  // format.ts, shared by the commands, and tests across commands. Commands' tests may use
+  // another command to produce data, so command folders may import each other.
+  "src/commands": { allowedFiles: ["*.ts"], mayImport: [...LAYERS, ...SHARED, ...commandFolders] },
+  ...Object.fromEntries(
+    commandFolders.map((folder) => [
+      folder,
+      { allowedFiles: ["*.ts"], mayImport: [...LAYERS, ...SHARED, "src/commands", ...commandFolders] },
+    ]),
+  ),
+  "src/cli": { allowedFiles: ["*.ts"], mayImport: commandFolders },
   // The real implementations of the seams tests swap out. They depend on nothing else in src.
   "src/adapters/docker": { allowedFiles: ["*.ts"] },
-  "src/cli": { allowedFiles: ["*.ts"], mayImport: ["src/commands"] },
-  "src/commands": { allowedFiles: ["*.ts"], mayImport: ["src", "src/adapters/docker", "src/testing"] },
-  "src/testing": { allowedFiles: ["*.ts"], mayImport: ["src", "src/adapters/docker"] },
+  // Test helpers: fixture projects, the seed repository, the fake docker.
+  "src/testing": { allowedFiles: ["*.ts"], mayImport: [...LAYERS, "src/adapters/docker"] },
 };

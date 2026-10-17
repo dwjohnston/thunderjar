@@ -11,8 +11,8 @@ export {
   declareTestCase,
   declareTokenCostCollector,
   sqliteStore,
-} from "./declarations.ts";
-export { checkoutCommit } from "./fragments.ts";
+} from "./api/declarations.ts";
+export { checkoutCommit } from "./api/fragments.ts";
 export type {
   ApplyParameterCtx,
   GitBuildContext,
@@ -21,4 +21,4 @@ export type {
   MeasurementDeclaration,
   MeasurementResult,
   TestCaseDeclaration,
-} from "./declarations.ts";
+} from "./api/declarations.ts";

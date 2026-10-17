@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
-import { build } from "../commands/build.ts";
-import { executions } from "../commands/executions.ts";
-import { generate } from "../commands/generate.ts";
-import { init } from "../commands/init.ts";
-import { plan } from "../commands/plan.ts";
-import { run } from "../commands/run.ts";
-import { show } from "../commands/show.ts";
+import { build } from "../commands/build/build.ts";
+import { executions } from "../commands/executions/executions.ts";
+import { generate } from "../commands/generate/generate.ts";
+import { init } from "../commands/init/init.ts";
+import { plan } from "../commands/plan/plan.ts";
+import { run } from "../commands/run/run.ts";
+import { show } from "../commands/show/show.ts";
 
 const [command, ...args] = process.argv.slice(2);
 

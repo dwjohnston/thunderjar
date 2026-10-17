@@ -8,7 +8,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dockerCli } from "../../src/adapters/docker/docker.ts";
-import { build } from "../../src/commands/build.ts";
+import { build } from "../../src/commands/build/build.ts";
 import { scenarioFixtures } from "../helpers.ts";
 
 const fixtures = scenarioFixtures(import.meta.dir);

@@ -13,7 +13,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { cp, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { AggregationResult, ContainerRunRecord } from "../src/run-data-store.ts";
+import type { AggregationResult, ContainerRunRecord } from "../src/store/run-data-store.ts";
 import { linkThunderjar } from "../src/testing/fixture-project.ts";
 
 const repoRoot = resolve(import.meta.dir, "..");

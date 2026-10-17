@@ -27,8 +27,8 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { generate } from "../src/commands/generate.ts";
-import { init } from "../src/commands/init.ts";
+import { generate } from "../src/commands/generate/generate.ts";
+import { init } from "../src/commands/init/init.ts";
 
 const here = import.meta.dir;
 const repoRoot = resolve(here, "..");
