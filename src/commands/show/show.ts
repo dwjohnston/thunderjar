@@ -6,12 +6,14 @@
 // An execution prints each permutation's stored aggregation result: a row per measure, with how
 // many iterations it was measured in and its combined value by each chosen method, then the
 // iterations' exit codes and durations. Its per-iteration values are in each container run's
-// view, which prints its parameters, measures, duration and exit code.
+// view, which prints its parameters, measures, duration and exit code. A measure there is marked
+// `(stale)` when its task's measurement of that name, as declared today, has another content hash.
 //
 // `--data-dir` reads a store kept outside the project.
 
-import { abbreviateHash } from "../../matrix/hashing.ts";
+import { abbreviateHash, hashMeasurement } from "../../matrix/hashing.ts";
 import { AXES, permutationRows, type Permutation } from "../../matrix/permutations.ts";
+import { findThunderjarRoot, loadMeasurements, type Measurement } from "../../project/config.ts";
 import {
   jsonFileStore,
   runDataStorePath,
@@ -147,10 +149,21 @@ function showExecution(records: ContainerRunRecord[], aggregations: AggregationR
   return lines.join("\n");
 }
 
-/** One container run: where it sits, its parameters, its measures, and how the agent ran. */
-function showContainerRun(record: ContainerRunRecord): string {
+/**
+ * One container run: where it sits, its parameters, its measures, and how the agent ran.
+ * `measurements` are its task's today. A measure is stale if the measurement of its name hashes
+ * differently now (spec/085-test-case-results.md#name-is-identity-hash-is-version); a name no
+ * longer declared was deleted, which doesn't make its measure stale.
+ */
+function showContainerRun(record: ContainerRunRecord, measurements: Measurement[]): string {
   const { postrunImage, executionId, testCase, permutationHash, iteration, ranAt, parameters, result, execution } = record;
   const names = Object.keys(result).toSorted();
+  const currentHashes = new Map(measurements.map((measurement) => [measurement.name, hashMeasurement(measurement)]));
+  const cell = (name: string) => {
+    const { contentHash, outcome } = result[name]!;
+    const current = currentHashes.get(name);
+    return `${detailed(outcome)}${current !== undefined && current !== contentHash ? " (stale)" : ""}`;
+  };
   return [
     ...labelled([
       ["Container run", postrunImage],
@@ -163,7 +176,7 @@ function showContainerRun(record: ContainerRunRecord): string {
     ...table(AXES.map((axis) => [axis, parameters[axis].name, parameters[axis].parameterHash.slice(0, 4)])),
     "",
     "Measures",
-    ...(names.length === 0 ? ["  none"] : table(names.map((name) => [name, detailed(result[name]!.outcome)]))),
+    ...(names.length === 0 ? ["  none"] : table(names.map((name) => [name, cell(name)]))),
     "",
     `Duration  ${duration(execution)}   exit code ${execution.exitCode}`,
   ].join("\n");
@@ -176,7 +189,7 @@ export async function show(
   const store = jsonFileStore(runDataStorePath(cwd, dataDir));
 
   const containerRun = await store.getContainerRun(target);
-  if (containerRun) return showContainerRun(containerRun);
+  if (containerRun) return showContainerRun(containerRun, await loadMeasurements(findThunderjarRoot(cwd), containerRun.task));
 
   const execution = await store.getExecution(target);
   if (execution.length > 0) return showExecution(execution, await store.getAggregationResults(target));
