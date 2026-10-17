@@ -176,7 +176,7 @@ Unless its entry says otherwise, scenarios 1–3 and 8 use these:
     - What two recorded runs' postrun images held, laid out as a kept run is: `workspace/`, and `thunderjar/result.json` if there were one. Neither saves a result file.
     - `postrun-e01k4x9j2e8mqz3abcdefghjkmn-h8ffdda6e-i00` and `postrun-e01k4tq3h8r0000000000000000-h8ffdda6e-i01`, the behaving agent's, each hold only the buggy `isPrime.ts` that `fake-harness-alpha@1.0.0`'s cli writes for `plain`, `@ts-ignore` included.
     - They're preserved artifacts, not expected results. A test hands them to the recording fake Docker, mapping each full image ref, e.g. `thunderjar:postrun-e01k4x9j2e8mqz3abcdefghjkmn-h8ffdda6e-i00`, to its folder, and the fake's `docker cp` copies them out. No other recorded run has saved files.
-  - Don't run a real `run` here: this scenario's store is its starting state. Use `--data-dir` to send a by-hand run's store elsewhere. `remeasure` writes aggregation results to the store, so give it `--data-dir` holding a copy of `runs.json`.
+  - Don't run a real `run` here: this scenario's store is its starting state. Use `--data-dir` to send a by-hand run's store elsewhere. `remeasure` writes backfilled measures and aggregation results to the store, so give it `--data-dir` holding a copy of `runs.json`. It also measures from postrun images: a test hands the fake Docker the saved postrun files; by hand, the images must exist.
 
 - `scenario_9_broken_declarations`
   - A project with configuration errors beside sound declarations. Only the declarations a test case names are loaded, so each broken one stops only the test cases naming it. A task's measurements all load with it, so each broken measurement has a task of its own.

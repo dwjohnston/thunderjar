@@ -24,7 +24,7 @@ import { measureContainerRun } from "../../measuring/measure.ts";
 import { permutationRows } from "../../matrix/permutations.ts";
 import { LOCAL_REPOSITORY, prerunStatuses, showPrerunStatus, unreachableNote } from "../../images/prerun.ts";
 import { preparePrerunBuilds } from "../../images/prerun-builds.ts";
-import { jsonFileStore, runDataStorePath, type RecordedOutcome } from "../../store/run-data-store.ts";
+import { jsonFileStore, runDataStorePath } from "../../store/run-data-store.ts";
 import {
   createDockerMeasurementOpener,
   createDockerRunner,
@@ -33,7 +33,7 @@ import {
   type MeasurementOpener,
 } from "../../running/runner.ts";
 import { ulid } from "../../matrix/ulid.ts";
-import { count, duration, seconds, showValue } from "../format.ts";
+import { count, duration, seconds, showOutcome } from "../format.ts";
 
 export interface RunOptions {
   dryRun: boolean;
@@ -66,14 +66,6 @@ const indent = (text: string, spaces: number) =>
 
 /** `n/total`, with `n` padded to the width of `total` so the lines line up. */
 const ordinal = (n: number, total: number) => `${String(n).padStart(String(total).length)}/${total}`;
-
-/** A measure as `run` prints it: its value, or what kept it from having one. */
-const showOutcome = (outcome: RecordedOutcome) =>
-  outcome.outcome === "measured"
-    ? showValue(outcome.data)
-    : outcome.outcome === "skipped"
-      ? "skipped"
-      : `erroredWhileMeasuring: ${outcome.error.message}`;
 
 const shape = ({ permutations, iterations }: PlannedExecution) =>
   `${count(permutations.length, "permutation")} × ${count(iterations, "iteration")}`;
