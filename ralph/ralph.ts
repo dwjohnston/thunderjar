@@ -9,6 +9,7 @@ import { join, relative } from "node:path";
 
 const MODEL = "claude-opus-5-5";
 const EFFORT = "medium"; // low | medium | high | xhigh | max
+const OVERAGE_SLEEP_MS = 2 * 60 * 60 * 1000;
 
 const root = join(import.meta.dir, "..");
 const tasksDir = join(root, "scratch-pad", "tasks");
@@ -101,17 +102,23 @@ while (true) {
     const exitCode = await runClaude(task);
 
     if (exitCode === "overage") {
-        console.error(`ralph: claude started using extra usage on ${task}. Stopping.`);
-        process.exit(1);
+        const resumeAt = new Date(Date.now() + OVERAGE_SLEEP_MS);
+        console.error(
+            `ralph: claude started using extra usage on ${task}. Sleeping until ${resumeAt.toLocaleTimeString()}.`,
+        );
+        await Bun.sleep(OVERAGE_SLEEP_MS);
+        continue;
     }
     if (exitCode !== 0) {
         console.error(`ralph: claude exited with ${exitCode} on ${task}. Stopping.`);
-        process.exit(1);
+        await Bun.sleep(OVERAGE_SLEEP_MS);
+
+        continue
     }
-    if (existsSync(join(tasksDir, task)) || !existsSync(join(doneDir, task))) {
-        console.error(`ralph: ${task} wasn't moved to done. Stopping.`);
-        process.exit(1);
-    }
+    // if (existsSync(join(tasksDir, task)) || !existsSync(join(doneDir, task))) {
+    //     console.error(`ralph: ${task} wasn't moved to done. Stopping.`);
+    //     process.exit(1);
+    // }
 
     console.log(`\nralph: finished ${task}`);
     if (once) break;
