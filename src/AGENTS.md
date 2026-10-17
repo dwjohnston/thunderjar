@@ -95,7 +95,7 @@ src/
   - `fake-docker.ts`: the recording fake Docker, so a test can say which images exist.
   - `measurement-context.ts`: the host measurement context, for instrument tests.
   - `test-setup.ts`, which every `bun test` preloads.
-  - `fixture-project.ts` and `seed-repo.ts` generate throwaway projects. Older tests still use them while they move to scenarios; new tests don't, and they'll be deleted.
+  - NOT ENDORSED: `fixture-project.ts` and `seed-repo.ts` generate throwaway projects. Older tests still use them while they move to scenarios; new tests don't.
 
 ## Rules
 
