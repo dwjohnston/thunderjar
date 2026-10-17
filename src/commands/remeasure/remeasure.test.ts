@@ -1,10 +1,11 @@
 // `thunderjar remeasure`, through the CLI, in place in fixtureTests/scenario_8_recorded_executions,
 // which starts with a run data store of four executions. For now an execution prints only its
-// plan: each current measurement's status, and each deleted name with its stored measures. It
-// measures nothing and recomputes nothing, so the store is left as it was and Docker is never
+// plan: each current measurement's status, and each deleted name with its stored measures. A test
+// case lists every execution of it, and which have nothing to do. It measures nothing and recomputes nothing, so the store is left as it was and Docker is never
 // used. Each asserts on stdout, stderr and the exit code. Any of these can be run by hand:
 //
 //   bun run fixture 8 remeasure 01k4x9j2e8mqz3abcdefghjkmn
+//   bun run fixture 8 remeasure fails
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -15,10 +16,14 @@ import { fakeDocker, scenario, thunderjar } from "../../testing/cli.ts";
 
 const USAGE = "usage: thunderjar remeasure <test case | execution> [--data-dir <dir>]\n";
 
+/** Recorded before aggregation results were stored; one run exited 3 and was never measured. */
+const OLDEST = "01k4tq3h8r0000000000000000";
 /** readmeExists, since deleted, errored in each permutation's first iteration; one isPrimeTemplateTest is stale. */
 const ERRORED = "01k4x9j2e8mqz3abcdefghjkmn";
 /** The latest execution of `fails`, after readmeExists was deleted. */
 const LATEST = "01k4xc0000000000000000000a";
+/** The only execution of `times-out`, whose task has no measurements; each run exited 124. */
+const TIMED_OUT = "01k4xb7q0c2tnvabcdefghjkmn";
 
 const NOT_APPLIED = "Not implemented: applying measurements and recomputing aggregation results.";
 
@@ -73,11 +78,33 @@ ${NOT_APPLIED}
     expect(docker.commands()).toEqual([]);
   });
 
-  test("remeasure <test case> prints that it isn't implemented, and touches nothing", async () => {
+  test("remeasure <test case> reports every execution of it, newest first, and only the latest as already current", async () => {
     const before = readFileSync(store);
     const docker = await fakeDocker();
     expect(await thunderjar(fixtures, ["remeasure", "fails"], docker.env)).toEqual({
-      stdout: "Not implemented: remeasure by test case.\n",
+      stdout: `fails has 3 executions (12 container runs)
+  ${LATEST}  4 runs  2026-09-30  (already current, nothing to do)
+  ${ERRORED}  4 runs  2026-09-29
+  ${OLDEST}  4 runs  2026-09-28
+
+${NOT_APPLIED}
+`,
+      stderr: "",
+      exitCode: 0,
+    });
+    expect(readFileSync(store).equals(before)).toBe(true);
+    expect(docker.commands()).toEqual([]);
+  });
+
+  test("remeasure <test case> keeps runs whose agent exited non-zero: times-out's has nothing to measure", async () => {
+    const before = readFileSync(store);
+    const docker = await fakeDocker();
+    expect(await thunderjar(fixtures, ["remeasure", "times-out"], docker.env)).toEqual({
+      stdout: `times-out has 1 execution (2 container runs)
+  ${TIMED_OUT}  2 runs  2026-09-29  (already current, nothing to do)
+
+${NOT_APPLIED}
+`,
       stderr: "",
       exitCode: 0,
     });
