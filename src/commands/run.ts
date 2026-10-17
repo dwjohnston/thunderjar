@@ -28,7 +28,7 @@ import {
   type MeasurementOpener,
 } from "../runner.ts";
 import { ulid } from "../ulid.ts";
-import { count } from "./plan.ts";
+import { count, duration, showValue } from "./format.ts";
 
 export interface RunOptions {
   dryRun: boolean;
@@ -59,21 +59,6 @@ const indent = (text: string, spaces: number) =>
 
 /** `n/total`, with `n` padded to the width of `total` so the lines line up. */
 const ordinal = (n: number, total: number) => `${String(n).padStart(String(total).length)}/${total}`;
-
-/** A measured value as `run` prints it: JSON, but with an object's keys unquoted, `{passed: 4, failed: 1}`. */
-export const showValue = (value: unknown): string =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? `{${Object.entries(value)
-        .map(([key, v]) => `${key}: ${showValue(v)}`)
-        .join(", ")}}`
-    : (JSON.stringify(value) ?? String(value));
-
-/** How long a container run took, as `run` prints it: `0.04s`. */
-export const duration = ({ startedAt, finishedAt }: { startedAt: number; finishedAt: number }) =>
-  seconds(finishedAt - startedAt);
-
-/** Milliseconds as `run` prints a duration: `0.04s`. */
-export const seconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`;
 
 /** A measure as `run` prints it: its value, or what kept it from having one. */
 const showOutcome = (outcome: RecordedOutcome) =>

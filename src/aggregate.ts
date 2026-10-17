@@ -8,7 +8,7 @@
 // A stored measure the task no longer declares is left out entirely. A stale one is still
 // combined; marking it is for `remeasure`.
 
-import type { AggregateFor, InstrumentName, InstrumentTypes } from "./declarations.ts";
+import type { AggregateFor } from "./declarations.ts";
 import type {
   AggregatedMeasure,
   AggregatedValue,
@@ -17,16 +17,6 @@ import type {
   ContainerRunRecord,
   RunDataStore,
 } from "./run-data-store.ts";
-
-/**
- * The methods each instrument's values can combine by — AggregateFor, at runtime, for the
- * config loader to check a measurement that the type checker may not have seen.
- */
-export const aggregateMethods: { [I in InstrumentName]: readonly AggregateFor<InstrumentTypes[I]["value"]>[] } = {
-  fileCreated: ["rate", "count"],
-  grep: ["mean", "median", "min", "max", "sum"],
-  templateTest: ["sum", "mean"],
-};
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const mean = (xs: number[]) => sum(xs) / xs.length;

@@ -7,9 +7,8 @@
 
 import { existsSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { aggregateMethods } from "./aggregate.ts";
 import { declaredBy, type MeasurementDeclaration, type TestCaseDeclaration } from "./declarations.ts";
-import { instruments, isInstrumentName } from "./instruments.ts";
+import { aggregateMethods, instruments, isInstrumentName } from "./instruments.ts";
 
 /** A problem in the user's `.thunderjar/` folder. The CLI prints the message and exits 1. */
 export class ConfigError extends Error {}

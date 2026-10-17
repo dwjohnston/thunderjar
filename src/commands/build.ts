@@ -33,8 +33,7 @@ import { findRepository, type Repository } from "../repository.ts";
 import { resolveTestCase } from "../resolve.ts";
 import { defaultRootDir } from "../runner.ts";
 import { prerunTag } from "../tags.ts";
-import { count } from "./plan.ts";
-import { seconds } from "./run.ts";
+import { count, seconds } from "./format.ts";
 
 export interface BuildOptions {
   cwd?: string;

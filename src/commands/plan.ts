@@ -11,6 +11,7 @@ import { matrixShape, permutationRows } from "../permutations.ts";
 import { LOCAL_REPOSITORY, prerunStatuses, showPrerunStatus, unreachableNote } from "../prerun.ts";
 import { resolveTestCase } from "../resolve.ts";
 import { prerunTag } from "../tags.ts";
+import { count } from "./format.ts";
 
 export interface PlanOptions {
   docker?: Docker;
@@ -22,8 +23,6 @@ export interface PlanOptions {
 const LABELS = ["baseImage", "codeState", "promptSet", "harnessModel", "task", "initialPrompt"] as const;
 
 const LABEL_WIDTH = Math.max(...LABELS.map((label) => label.length)) + 2; // + ":" + one space
-
-export const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 export async function plan(name: string, cwd: string = process.cwd(), options: PlanOptions = {}): Promise<string> {
   const { docker = dockerCli(), repository = LOCAL_REPOSITORY } = options;

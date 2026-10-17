@@ -21,9 +21,7 @@ import {
   type ContainerRunRecord,
   type RecordedOutcome,
 } from "../run-data-store.ts";
-import { minute } from "./executions.ts";
-import { count } from "./plan.ts";
-import { duration, seconds, showValue } from "./run.ts";
+import { count, duration, minute, seconds, showValue } from "./format.ts";
 
 /** `label  value` lines, with the labels padded to the widest so the values line up. */
 const labelled = (lines: [label: string, value: string][]) => {

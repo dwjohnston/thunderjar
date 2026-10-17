@@ -4,7 +4,17 @@
 
 import { readFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
-import type { InstrumentName, InstrumentTypes, MeasurementContext, MeasurementResult } from "./declarations.ts";
+import type { AggregateFor, InstrumentName, InstrumentTypes, MeasurementContext, MeasurementResult } from "./declarations.ts";
+
+/**
+ * The methods each instrument's values can combine by — AggregateFor, at runtime, for the
+ * config loader to check a measurement that the type checker may not have seen.
+ */
+export const aggregateMethods: { [I in InstrumentName]: readonly AggregateFor<InstrumentTypes[I]["value"]>[] } = {
+  fileCreated: ["rate", "count"],
+  grep: ["mean", "median", "min", "max", "sum"],
+  templateTest: ["sum", "mean"],
+};
 
 export interface Instrument<Config, Value> {
   evaluate(config: Config, ctx: MeasurementContext): Promise<MeasurementResult<Value>>;
