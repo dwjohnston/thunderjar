@@ -5,7 +5,7 @@
 //                         and was never measured
 //   01k4x9j2…  fails      readmeExists, since deleted, errored in each permutation's first iteration;
 //                         the behaving agent's first iteration took isPrimeTemplateTest with an
-//                         older template, so that one measure is stale
+//                         older template, so that one measure, and its permutation's row, is stale
 //   01k4xb7q…  times-out  a task without measurements
 //   01k4xc00…  fails      the latest, after readmeExists was deleted
 //
@@ -66,7 +66,7 @@ Permutation ${BEHAVES}  (2 iterations)
     });
   });
 
-  test("show <execution ID>: that execution, even when it isn't the latest, keeping a measurement deleted since and leaving an errored iteration out of the aggregate", async () => {
+  test("show <execution ID>: that execution, even when it isn't the latest, keeping a measurement deleted since, leaving an errored iteration out of the aggregate, and marking only the row one of whose values is stale", async () => {
     expect(await show(ERRORED)).toEqual({
       stdout: `Execution  ${ERRORED}
 Test case  fails
@@ -89,7 +89,7 @@ Permutation ${BEHAVES}  (2 iterations)
   node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
 
   MEASURE              MEASURED  AGGREGATE
-  isPrimeTemplateTest  2/2       mean {passed: 3.0, failed: 2.0}, sum {passed: 6, failed: 4}
+  isPrimeTemplateTest  2/2       mean {passed: 3.0, failed: 2.0}, sum {passed: 6, failed: 4}  stale, run \`remeasure\`
   isPrimeTsExists      2/2       rate 1.00
   readmeExists         1/2       count 0, rate 0.00
   tsIgnoreCount        2/2       median 1.0, min 1, sum 2
@@ -216,6 +216,13 @@ Permutation ${BEHAVES}  (2 iterations)
     const store = join(fixtures, ".thunderjar", ".data", "runs.json");
     const before = readFileSync(store);
     for (const iteration of ["i00", "i01"]) expect((await show(`postrun-e${ERRORED}-h${BEHAVES}-${iteration}`)).exitCode).toBe(0);
+    expect(readFileSync(store).equals(before)).toBe(true);
+  });
+
+  test("show <execution> leaves the checked-in store byte for byte as it was, even with a stale value", async () => {
+    const store = join(fixtures, ".thunderjar", ".data", "runs.json");
+    const before = readFileSync(store);
+    for (const target of [ERRORED, "fails"]) expect((await show(target)).exitCode).toBe(0);
     expect(readFileSync(store).equals(before)).toBe(true);
   });
 
