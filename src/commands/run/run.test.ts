@@ -1,36 +1,38 @@
-import { expect, test } from "bun:test";
+// `thunderjar run --dry-run`, through the CLI, in the checked-in fixtureTests/ scenarios, in place.
+// Each asserts on stdout, with the new execution ID replaced by ID. Any of these can be run by hand:
+//
+//   bun run fixture scenario_2 run two-pairs --dry-run
+//
+// Below them, the real-run tests still work on generated projects, in process.
+
+import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { hashMeasurement } from "../../matrix/hashing.ts";
 import type { AggregationResult, ContainerRunRecord } from "../../store/run-data-store.ts";
 import { createHostMeasurementOpener, createHostRunner, type ContainerRunner } from "../../running/runner.ts";
 import { fakeDocker, scenario, thunderjar } from "../../testing/cli.ts";
 import { memoryDocker } from "../../testing/fake-docker.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../../testing/fixture-project.ts";
-import { plan } from "../plan/plan.ts";
 import { run, type RunOptions } from "./run.ts";
 
 const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-run-"));
-
-const cli = resolve(import.meta.dir, "..", "..", "cli", "index.ts");
 
 const ID = "01k4x9j2e8mqz3abcdefghjkmn";
 const newExecutionId = () => ID;
 
 const ULID = /^[0-9a-hjkmnp-tv-z]{26}$/;
 
-// One prompt set and both harness/model pairs, two iterations: small enough to assert whole.
-const TWO_PAIRS = stub("declareTestCase", `{
-  baseImage: ["node20"],
-  codeState: ["baseline"],
-  promptSet: ["snerk"],
-  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small", "fake-harness-beta@1.0.0/fake-model-large"],
-  task: "is-prime",
-  initialPrompt: ["terse"],
-  iterations: 2,
-}`);
+const idOf = (stdout: string) => /^Execution (\S+) /.exec(stdout)?.[1];
+
+/** `thunderjar run <args…>` in `fixtures`, with the execution ID it printed, and stdout with that ID replaced by ID. */
+async function runCli(fixtures: string, args: string[], env: Record<string, string> = {}) {
+  const result = await thunderjar(fixtures, ["run", ...args], env);
+  const id = idOf(result.stdout);
+  return { ...result, id, stdout: id ? result.stdout.replaceAll(id, ID) : result.stdout };
+}
 
 /** Each fake harness's cli, as the dry run prints it. */
 const ALPHA_CLI = (prompt: string, model: string) =>
@@ -41,22 +43,137 @@ const BETA_CLI = (prompt: string, model: string) =>
 const TERSE = "isPrime.ts: export a primality test.";
 const PLAIN = "Create a file isPrime.ts exporting a function that tests for primality.";
 
-// The prerun hashes are those `plan` shows for the same permutations (src/commands/plan/plan.test.ts).
-const TWO_PAIRS_EXPECTED = `Execution ${ID} (dry run, 2 permutations × 2 iterations)
+/** The top level of `dir` and everything under `.thunderjar/`, so a test can show nothing was written. */
+const listTree = (dir: string) => [
+  ...readdirSync(dir),
+  ...readdirSync(join(dir, ".thunderjar"), { recursive: true }).map(String),
+].toSorted();
+
+describe("scenario_2_typical_project", () => {
+  const fixtures = scenario("scenario_2_typical_project");
+
+  test("run two-pairs --dry-run prints each permutation's prerun image, then each iteration's postrun image and harness command, and writes nothing", async () => {
+    const before = listTree(fixtures);
+
+    const { stdout, stderr, exitCode, id } = await runCli(fixtures, ["two-pairs", "--dry-run"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(id).toMatch(ULID);
+    // The prerun hashes are those `plan` shows for the same permutations (src/commands/plan/plan.test.ts).
+    expect(stdout).toBe(`Execution ${ID} (dry run, 2 permutations × 2 iterations)
 
 Permutation 1/2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
-  prerun-h25cb39de (will build)
-  iteration 1/2  postrun-e${ID}-h25cb39de-i00
+  prerun-hefe85dda (will build)
+  iteration 1/2  postrun-e${ID}-hefe85dda-i00
     ${ALPHA_CLI(TERSE, "fake-model-small-001")}
-  iteration 2/2  postrun-e${ID}-h25cb39de-i01
+  iteration 2/2  postrun-e${ID}-hefe85dda-i01
     ${ALPHA_CLI(TERSE, "fake-model-small-001")}
 
 Permutation 2/2  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
-  prerun-h65c7b4e2 (will build)
-  iteration 1/2  postrun-e${ID}-h65c7b4e2-i00
+  prerun-h56ea4852 (will build)
+  iteration 1/2  postrun-e${ID}-h56ea4852-i00
     ${BETA_CLI(TERSE, "fake-model-large-001")}
-  iteration 2/2  postrun-e${ID}-h65c7b4e2-i01
-    ${BETA_CLI(TERSE, "fake-model-large-001")}`;
+  iteration 2/2  postrun-e${ID}-h56ea4852-i01
+    ${BETA_CLI(TERSE, "fake-model-large-001")}
+`);
+    expect(listTree(fixtures)).toEqual(before);
+  });
+
+  test("each invocation gets its own execution ID", async () => {
+    const first = await runCli(fixtures, ["two-pairs", "--dry-run"]);
+    const second = await runCli(fixtures, ["two-pairs", "--dry-run"]);
+    expect(first.id).toMatch(ULID);
+    expect(second.id).toMatch(ULID);
+    expect(first.id).not.toBe(second.id);
+  });
+
+  test("run is-prime-baseline --dry-run walks permutations in plan's order, with every iteration inside each", async () => {
+    const { stdout, exitCode } = await runCli(fixtures, ["is-prime-baseline", "--dry-run"]);
+    const lines = stdout.split("\n");
+
+    expect(exitCode).toBe(0);
+    expect(lines[0]).toBe(`Execution ${ID} (dry run, 8 permutations × 5 iterations)`);
+    // The prerun images, in the order `plan is-prime-baseline` lists them (src/commands/plan/plan.test.ts).
+    expect(stdout.match(/prerun-h[0-9a-f]{8}/g)).toEqual([
+      "prerun-h8ffdda6e",
+      "prerun-hefe85dda",
+      "prerun-h8baa2cff",
+      "prerun-h56ea4852",
+      "prerun-hfaa55eaf",
+      "prerun-h3e2038b8",
+      "prerun-h09fa95b9",
+      "prerun-he7379c79",
+    ]);
+
+    // Each permutation header is followed by its prerun image and five iterations, i00 to i04.
+    const permutationLines = lines.filter((line) => line.startsWith("Permutation "));
+    expect(permutationLines.map((line) => line.split("  ")[0])).toEqual(
+      [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `Permutation ${n}/8`),
+    );
+    const iterationLines = lines.filter((line) => line.startsWith("  iteration "));
+    expect(iterationLines).toHaveLength(40);
+    iterationLines.forEach((line, i) => {
+      expect(line).toContain(`iteration ${(i % 5) + 1}/5  postrun-e${ID}-h`);
+      expect(line).toEndWith(`-i0${i % 5}`);
+    });
+
+    expect(lines.slice(2, 6).join("\n")).toBe(`Permutation 1/8  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
+  prerun-h8ffdda6e (will build)
+  iteration 1/5  postrun-e${ID}-h8ffdda6e-i00
+    ${ALPHA_CLI(PLAIN, "fake-model-small-001")}`);
+  });
+
+  test("run version-cli-override --dry-run uses the selected version's cli override, and indents every line of a multi-line command", async () => {
+    const { stdout, stderr, exitCode } = await runCli(fixtures, ["version-cli-override", "--dry-run"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Execution ${ID} (dry run, 1 permutation × 1 iteration)
+
+Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.1.0/fake-model-large | terse
+  prerun-h1fef9cf7 (will build)
+  iteration 1/1  postrun-e${ID}-h1fef9cf7-i00
+    echo "fake-harness-alpha@1.1.0" > version.txt
+    ${ALPHA_CLI(TERSE, "fake-model-large-001")}
+`);
+  });
+
+  test("prints usage for a missing test case name or an unknown flag", async () => {
+    for (const args of [
+      [],
+      ["--dry-run"],
+      ["is-prime-baseline", "--dry-run", "--json"],
+      ["is-prime-baseline", "--dry-run", "--image-prefix"],
+    ]) {
+      const { stderr, exitCode } = await runCli(fixtures, args);
+      expect(stderr).toBe("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>]\n");
+      expect(exitCode).toBe(1);
+    }
+  });
+
+  test("run two-pairs --dry-run --image-prefix looks up each prerun image under the prefix", async () => {
+    const docker = await fakeDocker(["throwaway:prerun-hefe85dda"]);
+
+    const { stdout, stderr, exitCode } = await runCli(fixtures, ["two-pairs", "--dry-run", "--image-prefix", "throwaway"], docker.env);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("  prerun-hefe85dda (exists, reused)\n");
+    expect(stdout).toContain("  prerun-h56ea4852 (will build)\n");
+    expect(docker.commands()).toEqual([
+      "docker version --format {{.Server.Version}}",
+      "docker image inspect --format {{.Id}} throwaway:prerun-hefe85dda",
+      "docker image inspect --format {{.Id}} throwaway:prerun-h56ea4852",
+    ]);
+  });
+
+  test("reports an unknown test case as a configuration error", async () => {
+    const { stderr, exitCode } = await runCli(fixtures, ["no-such-test-case", "--dry-run"]);
+    expect(stderr).toContain(`no test case named "no-such-test-case"`);
+    expect(exitCode).toBe(1);
+  });
+});
 
 /** Everything `run` prints, as one string. */
 async function printed(name: string, options: RunOptions) {
@@ -71,142 +188,6 @@ async function fixture(changes: Record<string, string | null> = {}) {
   await linkThunderjar(dir);
   return dir;
 }
-
-async function spawnCli(dir: string, ...args: string[]) {
-  const proc = Bun.spawn(["bun", cli, ...args], { cwd: dir, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
-}
-
-/** The top level of `dir` and everything under `.thunderjar/`, so a test can show nothing was written. */
-const listTree = (dir: string) => [
-  ...readdirSync(dir),
-  ...readdirSync(join(dir, ".thunderjar"), { recursive: true }).map(String),
-].toSorted();
-
-test("prints each permutation's prerun image, then each iteration's postrun image and harness command", async () => {
-  const dir = await fixture({ "test-cases/two-pairs.ts": TWO_PAIRS });
-  expect(await printed("two-pairs", { dryRun: true, cwd: dir, newExecutionId })).toBe(TWO_PAIRS_EXPECTED);
-});
-
-test("`thunderjar run --dry-run` prints the same, under a new ULID, and writes nothing", async () => {
-  const dir = await fixture({ "test-cases/two-pairs.ts": TWO_PAIRS });
-  const before = listTree(dir);
-
-  const { stdout, stderr, exitCode } = await spawnCli(dir, "run", "two-pairs", "--dry-run");
-
-  expect(stderr).toBe("");
-  expect(exitCode).toBe(0);
-  const id = /^Execution (\S+) /.exec(stdout)![1]!;
-  expect(id).toMatch(ULID);
-  expect(stdout).toBe(`${TWO_PAIRS_EXPECTED.replaceAll(ID, id)}\n`);
-  expect(listTree(dir)).toEqual(before);
-});
-
-test("each invocation gets its own execution ID", async () => {
-  const dir = await fixture();
-  const first = await printed("is-prime-baseline", { dryRun: true, cwd: dir });
-  const second = await printed("is-prime-baseline", { dryRun: true, cwd: dir });
-  const idOf = (output: string) => /^Execution (\S+) /.exec(output)![1]!;
-  expect(idOf(first)).toMatch(ULID);
-  expect(idOf(first)).not.toBe(idOf(second));
-});
-
-test("walks permutations in plan's order, with every iteration inside each", async () => {
-  const dir = await fixture();
-  const output = await printed("is-prime-baseline", { dryRun: true, cwd: dir, newExecutionId });
-  const lines = output.split("\n");
-
-  expect(lines[0]).toBe(`Execution ${ID} (dry run, 8 permutations × 5 iterations)`);
-  expect(output.match(/prerun-h[0-9a-f]{8}/g)).toEqual((await plan("is-prime-baseline", dir)).match(/prerun-h[0-9a-f]{8}/g));
-
-  // Each permutation header is followed by its prerun image and five iterations, i00 to i04.
-  const permutationLines = lines.filter((line) => line.startsWith("Permutation "));
-  expect(permutationLines.map((line) => line.split("  ")[0])).toEqual(
-    [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `Permutation ${n}/8`),
-  );
-  const iterationLines = lines.filter((line) => line.startsWith("  iteration "));
-  expect(iterationLines).toHaveLength(40);
-  iterationLines.forEach((line, i) => {
-    expect(line).toContain(`iteration ${(i % 5) + 1}/5  postrun-e${ID}-h`);
-    expect(line).toEndWith(`-i0${i % 5}`);
-  });
-
-  expect(lines.slice(2, 6).join("\n")).toBe(`Permutation 1/8  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
-  prerun-hcb08a2eb (will build)
-  iteration 1/5  postrun-e${ID}-hcb08a2eb-i00
-    ${ALPHA_CLI(PLAIN, "fake-model-small-001")}`);
-});
-
-test("uses the selected version's cli override, and indents every line of a multi-line command", async () => {
-  const dir = await fixture({
-    "test-case-parameters/harnessModels/fake-harness-alpha/versions.ts": stub("declareHarnessVersions", `{
-  "1.0.0": { version: "1.0.0" },
-  "1.1.0": {
-    version: "1.1.0",
-    cli: (ctx) => \`echo "fake-harness-alpha@\${ctx.version}" > version.txt\\nfake-harness-alpha -p "\${ctx.initialPrompt}" --model \${ctx.modelId} > \${ctx.resultPath}\`,
-  },
-}`),
-    "test-cases/override.ts": stub("declareTestCase", `{
-  baseImage: ["node20"],
-  codeState: ["baseline"],
-  promptSet: ["snerk"],
-  harnessModel: ["fake-harness-alpha@1.1.0/fake-model-large"],
-  task: "is-prime",
-  initialPrompt: ["terse"],
-  iterations: 1,
-}`),
-  });
-
-  const output = await printed("override", { dryRun: true, cwd: dir, newExecutionId });
-  expect(output.split("\n").slice(5).join("\n")).toBe(
-    `    echo "fake-harness-alpha@1.1.0" > version.txt
-    fake-harness-alpha -p "isPrime.ts: export a primality test." --model fake-model-large-001 > /thunderjar/result.json`,
-  );
-  expect(output).toStartWith(`Execution ${ID} (dry run, 1 permutation × 1 iteration)`);
-});
-
-test("prints usage for a missing test case name or an unknown flag", async () => {
-  const dir = await fixture();
-  for (const args of [
-    ["run"],
-    ["run", "--dry-run"],
-    ["run", "is-prime-baseline", "--dry-run", "--json"],
-    ["run", "is-prime-baseline", "--dry-run", "--image-prefix"],
-  ]) {
-    const { stderr, exitCode } = await spawnCli(dir, ...args);
-    expect(stderr).toBe("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>]\n");
-    expect(exitCode).toBe(1);
-  }
-});
-
-test("`thunderjar run --dry-run --image-prefix` looks up each prerun image under the prefix", async () => {
-  const fixtures = scenario("scenario_2_typical_project");
-  const docker = await fakeDocker(["throwaway:prerun-hefe85dda"]);
-
-  const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["run", "two-pairs", "--dry-run", "--image-prefix", "throwaway"], docker.env);
-
-  expect(stderr).toBe("");
-  expect(exitCode).toBe(0);
-  expect(stdout).toContain("  prerun-hefe85dda (exists, reused)\n");
-  expect(stdout).toContain("  prerun-h56ea4852 (will build)\n");
-  expect(docker.commands()).toEqual([
-    "docker version --format {{.Server.Version}}",
-    "docker image inspect --format {{.Id}} throwaway:prerun-hefe85dda",
-    "docker image inspect --format {{.Id}} throwaway:prerun-h56ea4852",
-  ]);
-});
-
-test("reports an unknown test case as a configuration error", async () => {
-  const dir = await fixture();
-  const { stderr, exitCode } = await spawnCli(dir, "run", "no-such-test-case", "--dry-run");
-  expect(stderr).toContain(`no test case named "no-such-test-case"`);
-  expect(exitCode).toBe(1);
-});
 
 // --- Running for real, with the fake agent (fake-harness-alpha@1.0.0/fake-model-small) ---
 // In a container on the host in place of Docker, with prerun images "built" by an in-memory
