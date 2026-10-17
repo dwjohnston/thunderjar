@@ -75,6 +75,8 @@ src/
 - `measuring/`
   - `measure.ts`: applies a task's measurements to one container run.
   - `aggregate.ts`: combines a permutation's iterations into its aggregation result.
+  - `remeasure.ts`: whether a stored measure is missing, stale or current, for a backfill.
+  - `remeasure-templates/`: two versions of a bundled template, static test data for `remeasure.test.ts`.
 - `commands/`
   - One folder per command, holding the command and its tests, e.g.
     ```
