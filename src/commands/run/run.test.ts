@@ -312,7 +312,7 @@ test("records a failing cli's exit code, and still runs the remaining iterations
   const lines = stdout.split("\n");
   const exits = lines.filter((line) => line.startsWith("  iteration ")).map((line) => / exit (\d+) /.exec(line)![1]);
   const failing = lines.findIndex((line) => line.includes("fake-harness-alpha@1.0.1/fake-model-small"));
-  expect(exits).toEqual(failing === 3 ? ["3", "3", "0", "0"] : ["0", "0", "3", "3"]);
+  expect(exits).toEqual(failing === 4 ? ["3", "3", "0", "0"] : ["0", "0", "3", "3"]);
   expect(lines.at(-2)).toBe("4 container runs: 2 exited 0, 2 exited 3");
 
   const runs = readdirSync(executionDir).map((tag) => containerRun(executionDir, tag));

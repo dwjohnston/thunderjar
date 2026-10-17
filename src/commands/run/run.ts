@@ -1,16 +1,21 @@
-// `thunderjar run <test case>` — spec/100-cli-reference.md#run. Creates an execution ID, then
-// walks every permutation and iteration in order and hands each container run to a
-// ContainerRunner, printing its exit code and duration as it finishes, then a summary. Each
+// `thunderjar run <test case>` — spec/100-cli-reference.md#run and spec/080-docker-execution.md#process.
+// Creates an execution ID, checks that Docker can be reached and that every commit a missing
+// prerun image reads is there, then walks every permutation in order. A permutation's prerun
+// image is built first if it doesn't exist, the way `build` builds it
+// (src/images/prerun-builds.ts). Then each iteration's container run goes to a
+// ContainerRunner, by default one that runs it in a container from the prerun image and
+// commits it into its postrun image, both under `--image-prefix`. Each prints its exit code
+// and duration as it finishes, then a summary. Each
 // container run is recorded in the run data store as soon as it finishes, so the runs that
 // finished before a crash are kept. Then the task's measurements are taken against it, through
 // a MeasurementOpener, printed, and merged into its record — so a crash while measuring leaves
 // it recorded with an empty Result. After each, its permutation's aggregation result is
 // recomputed and stored, though not printed. Runs that exit non-zero are measured too, for now.
 // `--dry-run` prints the container run each would be instead — its prerun image and whether
-// it exists or would be built, its postrun image and the harness command — without running
-// anything. `run` itself doesn't build prerun images yet; `build` does.
+// it exists or would be built, its postrun image and the harness command — without building or
+// running anything.
 
-import { relative } from "node:path";
+import { join, relative } from "node:path";
 import { dockerCli, type Docker } from "../../adapters/docker/docker.ts";
 import { recomputeAggregationResult } from "../../measuring/aggregate.ts";
 import { findThunderjarRoot, loadMeasurements, loadTestCase } from "../../project/config.ts";
@@ -18,17 +23,17 @@ import { planExecution, type PlannedExecution } from "../../matrix/execution.ts"
 import { measureContainerRun } from "../../measuring/measure.ts";
 import { permutationRows } from "../../matrix/permutations.ts";
 import { LOCAL_REPOSITORY, prerunStatuses, showPrerunStatus, unreachableNote } from "../../images/prerun.ts";
+import { preparePrerunBuilds } from "../../images/prerun-builds.ts";
 import { defaultRunDataStorePath, jsonFileStore, type RecordedOutcome } from "../../store/run-data-store.ts";
 import {
-  createHostMeasurementOpener,
-  createHostRunner,
+  createDockerMeasurementOpener,
+  createDockerRunner,
   defaultRootDir,
-  executionDir,
   type ContainerRunner,
   type MeasurementOpener,
 } from "../../running/runner.ts";
 import { ulid } from "../../matrix/ulid.ts";
-import { count, duration, showValue } from "../format.ts";
+import { count, duration, seconds, showValue } from "../format.ts";
 
 export interface RunOptions {
   dryRun: boolean;
@@ -39,15 +44,15 @@ export interface RunOptions {
   newExecutionId?: () => string;
   /** The clock for timing container runs; stubbed in tests so output is deterministic. */
   now?: () => number;
-  /** Where the host runner keeps container runs. Defaults to `$TMPDIR/thunderjar`. */
+  /** Prerun build contexts are kept under `<rootDir>/builds/`. Defaults to `$TMPDIR/thunderjar`. */
   rootDir?: string;
-  /** Runs each container run. Defaults to the host runner under `rootDir`. */
+  /** Runs each container run. Defaults to one in a container from its prerun image, through `docker`. */
   runner?: ContainerRunner;
-  /** Gives each container run's measurement context. Defaults to the host one under `rootDir`. */
+  /** Gives each container run's measurement context. Defaults to one over its postrun image, through `docker`. */
   measurementOpener?: MeasurementOpener;
-  /** Asked, on a dry run, whether each prerun image exists. */
+  /** Builds missing prerun images, and is asked, on a dry run, whether each exists. */
   docker?: Docker;
-  /** The image repository prerun images are looked up in, `--image-prefix`. */
+  /** The image repository prerun and postrun images are tagged in, `--image-prefix`. */
   repository?: string;
 }
 
@@ -79,10 +84,10 @@ export async function run(name: string, options: RunOptions): Promise<void> {
     now = Date.now,
     newExecutionId = () => ulid(now()),
     rootDir = defaultRootDir(),
-    runner = createHostRunner(rootDir, now),
-    measurementOpener = createHostMeasurementOpener(rootDir),
     docker = dockerCli(),
     repository = LOCAL_REPOSITORY,
+    runner = createDockerRunner(docker, repository),
+    measurementOpener = createDockerMeasurementOpener(docker, repository),
   } = options;
 
   const root = findThunderjarRoot(cwd);
@@ -118,16 +123,33 @@ export async function run(name: string, options: RunOptions): Promise<void> {
   const nameWidth = Math.max(0, ...measurements.map((m) => m.name.length));
   const storePath = defaultRunDataStorePath(root);
   const store = jsonFileStore(storePath);
+  const builds = await preparePrerunBuilds({
+    root,
+    task: testCase.task,
+    permutations: permutations.map((p) => p.permutation),
+    docker,
+    repository,
+    rootDir,
+    purpose: "Running a test case",
+  });
 
   log(`Execution ${executionId} (${shape(execution)})`);
-  log(`Output in ${executionDir(rootDir, executionId)}`);
+  log(`Images in ${repository}`);
+  if (builds.missing.size > 0) log(`Build contexts in ${join(rootDir, "builds")}`);
 
   // How many container runs exited with each code. A failing agent is a result, not an error:
   // the remaining runs still run, and every run is recorded.
   const exitCodes = new Map<number, number>();
-  for (const [n, { permutation, parameters, harnessModel, runs }] of permutations.entries()) {
+  for (const [n, { permutation, parameters, harnessModel, prerunTag, runs }] of permutations.entries()) {
     log("");
     log(permutationLine(n));
+    if (builds.missing.has(permutation.hash)) {
+      const started = now();
+      await builds.build(permutation.hash);
+      log(`  ${prerunTag}  built (${seconds(now() - started)})`);
+    } else {
+      log(`  ${prerunTag}  reused`);
+    }
     for (const containerRun of runs) {
       const { startedAt, finishedAt, exitCode } = await runner.runContainer(containerRun);
       await store.recordContainerRun({

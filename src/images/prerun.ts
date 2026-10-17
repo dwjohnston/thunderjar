@@ -36,14 +36,14 @@ import type {
 import { FAMILY_MAP_FILES } from "../matrix/hashing.ts";
 import type { Repository } from "./repository.ts";
 import type { ResolvedPermutation } from "../matrix/resolve.ts";
-import { prerunTag } from "../matrix/tags.ts";
+import { imageRef, prerunTag } from "../matrix/tags.ts";
 
 /** Where prerun images are tagged until the image store (spec/081-docker-tagging.md) arrives. */
 export const LOCAL_REPOSITORY = "thunderjar";
 
 /** A permutation's prerun image reference: `thunderjar:prerun-h4f9a21c8`. */
 export const prerunImageRef = (repository: string, permutationHash: string) =>
-  `${repository}:${prerunTag(permutationHash)}`;
+  imageRef(repository, prerunTag(permutationHash));
 
 /** One parameter's fragment, as loaded. */
 interface Parameter<Ctx> {

@@ -67,9 +67,10 @@ src/
 - `store/`
   - `run-data-store.ts`: where executions, container runs and aggregation results are kept. It's an interface; for now the only store is a JSON file.
 - `running/`
-  - `runner.ts`: runs one container run, for now on the host, and opens the measurement context that instruments read a run through.
+  - `runner.ts`: runs one container run in a container from its prerun image, committing it into its postrun image, and opens the measurement context that instruments read a run through. A host runner stands in for Docker in tests of `run`.
 - `images/`
   - `prerun.ts`: renders a permutation's prerun Dockerfile from its parameters' fragments, checks the commits it reads, and writes its build context.
+  - `prerun-builds.ts`: builds a test case's missing prerun images, for both `build` and `run`, after checking everything the builds need.
   - `repository.ts`: read-only access to the user's git repository.
 - `measuring/`
   - `measure.ts`: applies a task's measurements to one container run.

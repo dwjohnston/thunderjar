@@ -17,3 +17,6 @@ const POSTRUN = /^postrun-e([0-9a-z]+)-h[0-9a-f]{8}-i\d+$/;
 
 /** The execution ID a postrun tag carries, or undefined if `tag` isn't a postrun tag. */
 export const postrunTagExecutionId = (tag: string) => POSTRUN.exec(tag)?.[1];
+
+/** An image's reference, its tag in `repository` (`--image-prefix`): `thunderjar:prerun-h4f9a21c8`. */
+export const imageRef = (repository: string, tag: string) => `${repository}:${tag}`;

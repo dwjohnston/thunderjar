@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createHostMeasurementOpener, createHostRunner } from "../../running/runner.ts";
+import { memoryDocker } from "../../testing/fake-docker.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../../testing/fixture-project.ts";
 import { executions } from "./executions.ts";
 import { run } from "../run/run.ts";
@@ -27,15 +29,20 @@ async function fixture() {
   return dir;
 }
 
-/** Runs `name` for real, quietly, as execution `id` with a clock starting at `startedAt`. */
+/** Runs `name` for real, quietly, on the host, as execution `id` with a clock starting at `startedAt`. */
 async function runAt(dir: string, name: string, id: string, startedAt: string) {
   let t = Date.parse(startedAt);
+  const now = () => (t += 40);
+  const rootDir = await tmp();
   await run(name, {
     dryRun: false,
     cwd: dir,
     newExecutionId: () => id,
-    now: () => (t += 40),
-    rootDir: await tmp(),
+    now,
+    rootDir,
+    docker: memoryDocker(),
+    runner: createHostRunner(rootDir, now),
+    measurementOpener: createHostMeasurementOpener(rootDir),
     log: () => {},
   });
 }

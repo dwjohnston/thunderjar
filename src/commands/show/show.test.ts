@@ -4,7 +4,8 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { ContainerRunRecord } from "../../store/run-data-store.ts";
-import { createHostMeasurementOpener, type MeasurementOpener } from "../../running/runner.ts";
+import { createHostMeasurementOpener, createHostRunner, type MeasurementOpener } from "../../running/runner.ts";
+import { memoryDocker } from "../../testing/fake-docker.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../../testing/fixture-project.ts";
 import { run } from "../run/run.ts";
 import { show } from "./show.ts";
@@ -21,8 +22,8 @@ async function fixture(changes: Record<string, string | null> = {}) {
 }
 
 /**
- * Runs `name` for real, quietly, as execution `id` with a clock starting at `startedAt` that
- * moves 40 ms each read, so every container run takes 0.04s.
+ * Runs `name` for real, quietly, on the host, as execution `id` with a clock starting at
+ * `startedAt` that moves 40 ms each read, so every container run takes 0.04s.
  */
 async function runAt(
   dir: string,
@@ -32,14 +33,17 @@ async function runAt(
   measurementOpener?: (rootDir: string) => MeasurementOpener,
 ) {
   let t = Date.parse(startedAt);
+  const now = () => (t += 40);
   const rootDir = await tmp();
   await run(name, {
     dryRun: false,
     cwd: dir,
     newExecutionId: () => id,
-    now: () => (t += 40),
+    now,
     rootDir,
-    measurementOpener: measurementOpener?.(rootDir),
+    docker: memoryDocker(),
+    runner: createHostRunner(rootDir, now),
+    measurementOpener: measurementOpener?.(rootDir) ?? createHostMeasurementOpener(rootDir),
     log: () => {},
   });
 }

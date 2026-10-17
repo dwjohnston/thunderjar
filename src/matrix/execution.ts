@@ -24,6 +24,8 @@ export interface PlannedContainerRun {
   executionId: string;
   /** Counts from 0, as in the postrun tag. */
   iterationIndex: number;
+  /** The tag of the prerun image it runs from. */
+  prerunTag: string;
   postrunTag: string;
   /** The harness's `cli` command, rendered for this permutation with ctx.resultPath = RESULT_PATH. */
   command: string;
@@ -108,6 +110,7 @@ export async function planExecution(
       runs: Array.from({ length: testCase.iterations }, (_, iterationIndex) => ({
         executionId,
         iterationIndex,
+        prerunTag: prerunTag(permutation.hash),
         postrunTag: postrunTag(executionId, permutation.hash, iterationIndex),
         command,
         renderCommand: render,

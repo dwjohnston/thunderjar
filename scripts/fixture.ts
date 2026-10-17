@@ -5,7 +5,7 @@
 //   bun run fixture 2 run two-pairs --dry-run
 //
 // <scenario> is a folder under fixtureTests/, or the start of one's name, with or without
-// `scenario_`. `build` runs against real Docker:
+// `scenario_`. `build` and a real `run` use real Docker:
 //
 //   bun run fixture 2 build two-pairs
 import { readdirSync } from "node:fs";

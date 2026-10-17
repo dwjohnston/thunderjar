@@ -19,9 +19,13 @@ import type { Docker } from "../adapters/docker/docker.ts";
 /** This file's path: set THUNDERJAR_DOCKER to it. */
 export const FAKE_DOCKER = import.meta.path;
 
-/** The same, in-process, for tests that call a command directly: `images` exist, builds add theirs. */
+/**
+ * The same, in-process, for tests that call a command directly: `images` exist, builds add
+ * theirs. It runs no containers: a test of `run` gives it a host runner.
+ */
 export function memoryDocker(images: string[] = []): Docker & { builds: string[] } {
   const builds: string[] = [];
+  const noContainers = () => Promise.reject(new Error("memoryDocker runs no containers"));
   return {
     builds,
     unreachable: async () => undefined,
@@ -29,6 +33,11 @@ export function memoryDocker(images: string[] = []): Docker & { builds: string[]
     async build(_contextDir, ref) {
       builds.push(ref);
     },
+    run: noContainers,
+    commit: noContainers,
+    create: noContainers,
+    copyFrom: noContainers,
+    removeContainer: noContainers,
   };
 }
 

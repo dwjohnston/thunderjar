@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["bun"]
   },
-  "files": ["run.test.ts"]
+  "files": ["run.test.ts", "run.docker.test.ts"]
 }
