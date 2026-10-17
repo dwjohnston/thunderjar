@@ -13,7 +13,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -181,6 +181,57 @@ COPY parameters/promptSet/FAKE_INSTRUCTIONS.md /workspace/FAKE_INSTRUCTIONS.md
     expect(stdout).toEndWith("2 prerun images: 2 built, 0 reused\n");
   });
 
+  test("build two-pairs --dry-run: prints each permutation's Dockerfile, without Docker, and writes nothing", async () => {
+    const { stdout, stderr, exitCode, commands, builds } = await cliBuild(
+      fixtures,
+      "two-pairs",
+      await fakeDocker([], ["unreachable"]),
+      ["--dry-run"],
+    );
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Dockerfiles for two-pairs (2 permutations). Nothing is built.
+
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse
+    ${ALPHA}
+
+    FROM node:20-bookworm
+    RUN echo "install fake-harness-alpha@1.0.0"
+    WORKDIR /workspace
+    COPY parameters/codeState/files/ /workspace/
+    RUN npm ci
+    COPY parameters/promptSet/FAKE_INSTRUCTIONS.md /workspace/FAKE_INSTRUCTIONS.md
+
+ 2  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse
+    ${BETA}
+
+    FROM node:20-bookworm
+    RUN echo "install fake-harness-beta@1.0.0"
+    WORKDIR /workspace
+    COPY parameters/codeState/files/ /workspace/
+    RUN npm ci
+    COPY parameters/promptSet/FAKE_INSTRUCTIONS.md /workspace/FAKE_INSTRUCTIONS.md
+`);
+    expect(commands).toEqual([]);
+    expect(existsSync(builds)).toBe(false);
+  });
+
+  test("--dry-run prints every permutation's Dockerfile, even when its image exists", async () => {
+    const { stdout, commands } = await cliBuild(fixtures, "two-pairs", await fakeDocker([ALPHA, BETA]), ["--dry-run"]);
+
+    expect(stdout).toContain(`RUN echo "install fake-harness-alpha@1.0.0"\n`);
+    expect(stdout).toContain(`RUN echo "install fake-harness-beta@1.0.0"\n`);
+    expect(commands).toEqual([]);
+  });
+
+  test("--dry-run tags with --image-prefix", async () => {
+    const { stdout } = await cliBuild(fixtures, "two-pairs", undefined, ["--dry-run", "--image-prefix", "throwaway"]);
+
+    expect(stdout).toContain("    throwaway:prerun-hefe85dda\n");
+    expect(stdout).toContain("    throwaway:prerun-h56ea4852\n");
+  });
+
   test("without Docker, build stops before reading anything", async () => {
     const { stdout, stderr, exitCode, commands } = await cliBuild(fixtures, "two-pairs", await fakeDocker([], ["unreachable"]));
 
@@ -222,10 +273,15 @@ Its build context is kept in $TMPDIR/thunderjar/builds/prerun-hefe85dda
     ]);
   });
 
-  test("build with no test case, or --image-prefix without a name, prints its usage", async () => {
-    for (const args of [["build"], ["build", "two-pairs", "--image-prefix"], ["build", "--image-prefix", "two-pairs"]]) {
+  test("build with no test case, an unknown flag, or --image-prefix without a name, prints its usage", async () => {
+    for (const args of [
+      ["build"],
+      ["build", "two-pairs", "--dry"],
+      ["build", "two-pairs", "--image-prefix"],
+      ["build", "--image-prefix", "two-pairs"],
+    ]) {
       const { stderr, exitCode } = await thunderjar(fixtures, args);
-      expect(stderr).toBe("usage: thunderjar build <test case> [--image-prefix <name>]\n");
+      expect(stderr).toBe("usage: thunderjar build <test case> [--dry-run] [--image-prefix <name>]\n");
       expect(exitCode).toBe(1);
     }
   });
