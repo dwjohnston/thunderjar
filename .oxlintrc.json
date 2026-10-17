@@ -302,10 +302,6 @@
                 "message": "src/cli may not import from src. See scripts/layout.ts."
               },
               {
-                "regex": "^\\.\\./adapters/docker(/[^/]+)?$",
-                "message": "src/cli may not import from src/adapters/docker. See scripts/layout.ts."
-              },
-              {
                 "regex": "^\\.\\./api(/[^/]+)?$",
                 "message": "src/cli may not import from src/api. See scripts/layout.ts."
               },
@@ -340,10 +336,6 @@
               {
                 "regex": "^\\.\\./store(/[^/]+)?$",
                 "message": "src/cli may not import from src/store. See scripts/layout.ts."
-              },
-              {
-                "regex": "^\\.\\./testing(/[^/]+)?$",
-                "message": "src/cli may not import from src/testing. See scripts/layout.ts."
               }
             ]
           }

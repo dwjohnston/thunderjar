@@ -55,7 +55,7 @@ export const layout: Layout = {
       { allowedFiles: ["*.ts"], mayImport: [...LAYERS, ...SHARED, "src/commands", ...commandFolders] },
     ]),
   ),
-  "src/cli": { allowedFiles: ["*.ts"], mayImport: commandFolders },
+  "src/cli": { allowedFiles: ["*.ts"], mayImport: [...commandFolders, ...SHARED] },
   // The real implementations of the seams tests swap out. They depend on nothing else in src.
   "src/adapters/docker": { allowedFiles: ["*.ts"] },
   // Test helpers: fixture projects, the seed repository, the fake docker.

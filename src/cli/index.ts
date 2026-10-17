@@ -9,6 +9,17 @@ import { show } from "../commands/show/show.ts";
 
 const [command, ...args] = process.argv.slice(2);
 
+const USAGE = `usage: thunderjar <command> [<args>]
+
+commands:
+  init                                  create .thunderjar/ in this project
+  generate                              write the parameter-name types for this project
+  plan <test case>                      print what a run of a test case would do
+  build <test case>                     build a test case's prerun images
+  run <test case>                       run a test case
+  executions [<test case>]              list recorded executions
+  show <test case | execution | run>    show a test case, an execution or a container run`;
+
 /**
  * `args` without `--image-prefix <name>`, and the name, or `"invalid"` if the flag is given
  * without a name or more than once.
@@ -75,7 +86,9 @@ try {
       console.log(await show(args[0]!));
     }
   } else {
-    console.log("hello world!");
+    if (command !== undefined) console.error(`unknown command: ${command}`);
+    console.error(USAGE);
+    process.exitCode = 1;
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
