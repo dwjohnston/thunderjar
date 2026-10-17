@@ -35,6 +35,7 @@ bun run fixture 1 build example
 | 2 typical project | 📁 copied files | 📁 copied files |
 | 3 misbehaving agents | 📁 copied files | 📁 copied files |
 | 4 git project | 🌿 **real git** | 🌿 **real git** |
+| 5 empty parameter folders | none | none |
 
 - 📁 **Copied files**
   - The parameter copies files kept beside its declaration, through `ctx.dir`. It reads no commits, so it builds anywhere, even outside a repository, and editing one of those files changes its hash.
@@ -133,6 +134,13 @@ Unless its entry says otherwise, scenarios 1–3 use these:
   - Test cases
     - `two-commits`: both code states × both prompt sets, 4 permutations.
     - `unpushed-commit`: the missing commit, which stops the build before anything is built.
+
+- `scenario_5_empty_parameter_folders`
+  - A project whose parameter folders are there but empty, as if every declaration had been deleted.
+  - Parameter folders
+    - `baseImages`, `codeStates`, `promptSets`, `tasks` and `harnessModels`, each holding only a `.gitkeep`.
+  - Test cases
+    - None.
 
 ### Changing scenario 4's commits
 
