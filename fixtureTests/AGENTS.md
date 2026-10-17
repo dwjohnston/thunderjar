@@ -38,15 +38,16 @@ bun run fixture 1 build example
 | 5 empty parameter folders | none | none |
 | 6 uninitialised project | none | none |
 | 7 uninitialised JS project | none | none |
+| 8 recorded executions | 📁 copied files | 📁 copied files |
 
 - 📁 **Copied files**
   - The parameter copies files kept beside its declaration, through `ctx.dir`. It reads no commits, so it builds anywhere, even outside a repository, and editing one of those files changes its hash.
 - 🌿 **Real git**
   - The parameter reads real commits of *this* repository through `ctx.git`. It only builds where those commits are, so CI checks out with full history.
 
-## What scenarios 1–3 share
+## What scenarios 1–3 and 8 share
 
-Unless its entry says otherwise, scenarios 1–3 use these:
+Unless its entry says otherwise, scenarios 1–3 and 8 use these:
 
 - **Base image**
   - `node20`, which is `FROM node:20-bookworm`.
@@ -151,6 +152,18 @@ Unless its entry says otherwise, scenarios 1–3 use these:
 - `scenario_7_uninitialised_js_project`
   - A JavaScript project before `init`: only a root `package.json`, with no `.thunderjar/`.
   - Run `init` by hand in a copy, as for scenario 6.
+
+- `scenario_8_recorded_executions`
+  - A project with history: scenario 3's agents and test cases, and a run data store checked in at `fixtures/.thunderjar/.data/runs.json` as its starting state. The root `.gitignore` un-ignores that `.data/`; it's recorded, with fixed execution IDs and a clock that moves 40 ms each read, so every container run takes 0.04s.
+  - Differences from scenario 3
+    - `is-prime` has no `readmeExists`: it was deleted after the second execution, so earlier executions still hold it.
+    - Measurements choose several aggregate methods: `isPrimeTemplateTest` mean and sum, `tsIgnoreCount` median, min and sum.
+  - The store, oldest first
+    - `01k4tq3h8r0000000000000000`, `fails`, 2026-09-28 09:15: recorded before aggregation results were stored. The behaving agent's second run exited 3 and was never measured.
+    - `01k4x9j2e8mqz3abcdefghjkmn`, `fails`, 2026-09-29 14:30: with `readmeExists` (count and rate), whose instrument threw `disk on fire` in each permutation's first iteration.
+    - `01k4xb7q0c2tnvabcdefghjkmn`, `times-out`, 2026-09-29 15:02: no measurements, each run exited 124.
+    - `01k4xc0000000000000000000a`, `fails`, 2026-09-30 08:00: the latest, without `readmeExists`.
+  - A real `run` here adds to the store, so run one only in a copy.
 
 ### Changing scenario 4's commits
 

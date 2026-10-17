@@ -1,147 +1,117 @@
-import { expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import type { ContainerRunRecord } from "../../store/run-data-store.ts";
-import { createHostMeasurementOpener, createHostRunner, type MeasurementOpener } from "../../running/runner.ts";
-import { memoryDocker } from "../../testing/fake-docker.ts";
-import { createFixtureProject, linkThunderjar, stub } from "../../testing/fixture-project.ts";
-import { run } from "../run/run.ts";
-import { show } from "./show.ts";
+// `thunderjar show`, through the CLI, in place in fixtureTests/scenario_8_recorded_executions,
+// which starts with a run data store of four executions:
+//
+//   01k4tq3h…  fails      recorded before aggregation results were stored; one run exited 3
+//                         and was never measured
+//   01k4x9j2…  fails      readmeExists, since deleted, errored in each permutation's first iteration
+//   01k4xb7q…  times-out  a task without measurements
+//   01k4xc00…  fails      the latest, after readmeExists was deleted
+//
+// In `fails`, fake-harness-alpha@1.0.1 exits 3 and 1.0.0 behaves. Each asserts on stdout. Any of
+// these can be run by hand:
+//
+//   bun run fixture 8 show fails
 
-const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-show-"));
+import { describe, expect, test } from "bun:test";
+import { scenario, thunderjar } from "../../testing/cli.ts";
 
-const cli = resolve(import.meta.dir, "..", "..", "cli", "index.ts");
+const OLDEST = "01k4tq3h8r0000000000000000";
+const ERRORED = "01k4x9j2e8mqz3abcdefghjkmn";
+const TIMES_OUT = "01k4xb7q0c2tnvabcdefghjkmn";
+const LATEST = "01k4xc0000000000000000000a";
 
-async function fixture(changes: Record<string, string | null> = {}) {
-  const dir = await tmp();
-  await createFixtureProject(dir, changes);
-  await linkThunderjar(dir);
-  return dir;
-}
+/** The permutations of `fails`: the failing agent, then the one that behaves. */
+const FAILING = "42440c48";
+const BEHAVES = "8ffdda6e";
 
-/**
- * Runs `name` for real, quietly, on the host, as execution `id` with a clock starting at
- * `startedAt` that moves 40 ms each read, so every container run takes 0.04s.
- */
-async function runAt(
-  dir: string,
-  name: string,
-  id: string,
-  startedAt: string,
-  measurementOpener?: (rootDir: string) => MeasurementOpener,
-) {
-  let t = Date.parse(startedAt);
-  const now = () => (t += 40);
-  const rootDir = await tmp();
-  await run(name, {
-    dryRun: false,
-    cwd: dir,
-    newExecutionId: () => id,
-    now,
-    rootDir,
-    docker: memoryDocker(),
-    runner: createHostRunner(rootDir, now),
-    measurementOpener: measurementOpener?.(rootDir) ?? createHostMeasurementOpener(rootDir),
-    log: () => {},
-  });
-}
+describe("scenario_8_recorded_executions", () => {
+  const fixtures = scenario("scenario_8_recorded_executions");
+  const show = (target: string) => thunderjar(fixtures, ["show", target]);
 
-async function spawnCli(dir: string, ...args: string[]) {
-  const proc = Bun.spawn(["bun", cli, ...args], { cwd: dir, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, exitCode };
-}
-
-const storePath = (dir: string) => join(dir, ".thunderjar", ".data", "runs.json");
-
-/** Every container run recorded in the fixture project's run data store. */
-const recordedRuns = (dir: string) =>
-  (JSON.parse(readFileSync(storePath(dir), "utf8")) as { containerRuns: ContainerRunRecord[] }).containerRuns;
-
-/** The abbreviated permutation hash and each parameter's shown hash, from the first run recorded for `id`. */
-const hashesOf = (dir: string, id: string) => {
-  const { permutationHash, parameters } = recordedRuns(dir).find((r) => r.executionId === id)!;
-  return {
-    hash: permutationHash.slice(0, 8),
-    p: Object.fromEntries(Object.entries(parameters).map(([axis, { parameterHash }]) => [axis, parameterHash.slice(0, 4)])),
-  };
-};
-
-const FIRST = "01k4x9j2e8mqz3abcdefghjkmn";
-const SECOND = "01k4xb7q0c2tnvabcdefghjkmn";
-
-const MEASURES_TABLE = `  MEASURE              MEASURED  AGGREGATE
-  isPrimeTemplateTest  2/2       sum {passed: 6, failed: 4}
-  isPrimeTsExists      2/2       rate 1.00
-  readmeExists         2/2       rate 0.00
-  tsIgnoreCount        2/2       mean 1.0, max 1
-
-  exit       2/2 exited 0
-  duration   mean 0.04s, max 0.04s`;
-
-test("`show <test case>` shows its latest execution, each permutation's aggregation result", async () => {
-  const dir = await fixture();
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-  await runAt(dir, "fake-is-prime", SECOND, "2026-09-29T15:02:10Z");
-  const { hash } = hashesOf(dir, SECOND);
-
-  expect(await show("fake-is-prime", dir)).toBe(`Execution  ${SECOND}  (latest of fake-is-prime)
-Test case  fake-is-prime
+  test("show <test case>: its latest execution, each permutation's aggregation result in the order its methods were chosen", async () => {
+    expect(await show("fails")).toEqual({
+      stdout: `Execution  ${LATEST}  (latest of fails)
+Test case  fails
 Task       is-prime
-Date       2026-09-29 15:02
+Date       2026-09-30 08:00
 
-Permutation ${hash}  (2 iterations)
+Permutation ${FAILING}  (2 iterations)
+  node20 | baseline | snerk | fake-harness-alpha@1.0.1/fake-model-small | plain
+
+  MEASURE              MEASURED  AGGREGATE
+  isPrimeTemplateTest  0/2       —
+  isPrimeTsExists      2/2       rate 0.00
+  tsIgnoreCount        0/2       —
+
+  exit       2/2 exited 3
+  duration   mean 0.04s, max 0.04s
+
+Permutation ${BEHAVES}  (2 iterations)
   node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
 
-${MEASURES_TABLE}`);
-});
+  MEASURE              MEASURED  AGGREGATE
+  isPrimeTemplateTest  2/2       mean {passed: 3.0, failed: 2.0}, sum {passed: 6, failed: 4}
+  isPrimeTsExists      2/2       rate 1.00
+  tsIgnoreCount        2/2       median 1.0, min 1, sum 2
 
-test("`thunderjar show <execution ID>` shows that execution, even when it isn't the latest", async () => {
-  const dir = await fixture();
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-  await runAt(dir, "fake-is-prime", SECOND, "2026-09-29T15:02:10Z");
-  const { hash } = hashesOf(dir, FIRST);
+  exit       2/2 exited 0
+  duration   mean 0.04s, max 0.04s
+`,
+      stderr: "",
+      exitCode: 0,
+    });
+  });
 
-  expect(await spawnCli(dir, "show", FIRST)).toEqual({
-    stdout: `Execution  ${FIRST}
-Test case  fake-is-prime
+  test("show <execution ID>: that execution, even when it isn't the latest, keeping a measurement deleted since and leaving an errored iteration out of the aggregate", async () => {
+    expect(await show(ERRORED)).toEqual({
+      stdout: `Execution  ${ERRORED}
+Test case  fails
 Task       is-prime
 Date       2026-09-29 14:30
 
-Permutation ${hash}  (2 iterations)
+Permutation ${FAILING}  (2 iterations)
+  node20 | baseline | snerk | fake-harness-alpha@1.0.1/fake-model-small | plain
+
+  MEASURE              MEASURED  AGGREGATE
+  isPrimeTemplateTest  0/2       —
+  isPrimeTsExists      2/2       rate 0.00
+  readmeExists         1/2       count 1, rate 1.00
+  tsIgnoreCount        0/2       —
+
+  exit       2/2 exited 3
+  duration   mean 0.04s, max 0.04s
+
+Permutation ${BEHAVES}  (2 iterations)
   node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
 
-${MEASURES_TABLE}
+  MEASURE              MEASURED  AGGREGATE
+  isPrimeTemplateTest  2/2       mean {passed: 3.0, failed: 2.0}, sum {passed: 6, failed: 4}
+  isPrimeTsExists      2/2       rate 1.00
+  readmeExists         1/2       count 0, rate 0.00
+  tsIgnoreCount        2/2       median 1.0, min 1, sum 2
+
+  exit       2/2 exited 0
+  duration   mean 0.04s, max 0.04s
 `,
-    stderr: "",
-    exitCode: 0,
+      stderr: "",
+      exitCode: 0,
+    });
   });
-});
 
-test("`thunderjar show <container run>` shows its parameters, measures, duration and exit code", async () => {
-  const dir = await fixture();
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-  const { hash, p } = hashesOf(dir, FIRST);
-  const tag = `postrun-e${FIRST}-h${hash}-i01`;
-
-  expect(await spawnCli(dir, "show", tag)).toEqual({
-    stdout: `Container run  ${tag}
-Execution      ${FIRST}  (fake-is-prime)
-Permutation    ${hash}, iteration 2
+  test("show <container run>: its parameters, measures, duration and exit code", async () => {
+    const tag = `postrun-e${ERRORED}-h${BEHAVES}-i01`;
+    expect(await show(tag)).toEqual({
+      stdout: `Container run  ${tag}
+Execution      ${ERRORED}  (fails)
+Permutation    ${BEHAVES}, iteration 2
 Ran at         2026-09-29 14:30
 
 Parameters
-  baseImage      node20                                     ${p.baseImage}
-  codeState      baseline                                   ${p.codeState}
-  promptSet      snerk                                      ${p.promptSet}
-  harnessModel   fake-harness-alpha@1.0.0/fake-model-small  ${p.harnessModel}
-  initialPrompt  plain                                      ${p.initialPrompt}
+  baseImage      node20                                     26d9
+  codeState      baseline                                   bb15
+  promptSet      snerk                                      827a
+  harnessModel   fake-harness-alpha@1.0.0/fake-model-small  da28
+  initialPrompt  plain                                      9e30
 
 Measures
   isPrimeTemplateTest  {passed: 3, failed: 2}
@@ -151,210 +121,105 @@ Measures
 
 Duration  0.04s   exit code 0
 `,
-    stderr: "",
-    exitCode: 0,
+      stderr: "",
+      exitCode: 0,
+    });
   });
-});
 
-test("a run whose cli exits 3 shows its exit codes, measures measured in no iteration, and why each was skipped", async () => {
-  const dir = await fixture({
-    "test-case-parameters/harnessModels/fake-harness-alpha/index.ts": stub("declareHarness", `{
-  applyParameter: () => \`\`,
-  cli: () => \`touch README.md && exit 3\`,
-}`),
-  });
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-  const { hash, p } = hashesOf(dir, FIRST);
-
-  expect(await show(FIRST, dir)).toBe(`Execution  ${FIRST}
-Test case  fake-is-prime
-Task       is-prime
-Date       2026-09-29 14:30
-
-Permutation ${hash}  (2 iterations)
-  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
-
-  MEASURE              MEASURED  AGGREGATE
-  isPrimeTemplateTest  0/2       —
-  isPrimeTsExists      2/2       rate 0.00
-  readmeExists         2/2       rate 1.00
-  tsIgnoreCount        0/2       —
-
-  exit       2/2 exited 3
-  duration   mean 0.04s, max 0.04s`);
-
-  expect(await show(`postrun-e${FIRST}-h${hash}-i00`, dir)).toBe(`Container run  postrun-e${FIRST}-h${hash}-i00
-Execution      ${FIRST}  (fake-is-prime)
-Permutation    ${hash}, iteration 1
+  test("show <container run> that failed: why each measure was skipped, and an instrument's error", async () => {
+    const tag = `postrun-e${ERRORED}-h${FAILING}-i00`;
+    expect(await show(tag)).toEqual({
+      stdout: `Container run  ${tag}
+Execution      ${ERRORED}  (fails)
+Permutation    ${FAILING}, iteration 1
 Ran at         2026-09-29 14:30
 
 Parameters
-  baseImage      node20                                     ${p.baseImage}
-  codeState      baseline                                   ${p.codeState}
-  promptSet      snerk                                      ${p.promptSet}
-  harnessModel   fake-harness-alpha@1.0.0/fake-model-small  ${p.harnessModel}
-  initialPrompt  plain                                      ${p.initialPrompt}
+  baseImage      node20                                     26d9
+  codeState      baseline                                   bb15
+  promptSet      snerk                                      827a
+  harnessModel   fake-harness-alpha@1.0.1/fake-model-small  c0b2
+  initialPrompt  plain                                      9e30
 
 Measures
   isPrimeTemplateTest  skipped  (no file matches **/isPrime.ts)
   isPrimeTsExists      false
-  readmeExists         true
+  readmeExists         error  (disk on fire)
   tsIgnoreCount        skipped  (no file matches **/*.ts)
 
-Duration  0.04s   exit code 3`);
-});
-
-test("an instrument that throws in one iteration leaves it out of the aggregate, and shows its message in the container run view", async () => {
-  const dir = await fixture();
-  // A context whose glob throws for one pattern, in the first iteration only.
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z", (rootDir) => {
-    const host = createHostMeasurementOpener(rootDir);
-    return {
-      async openMeasurementContext(tag) {
-        const ctx = await host.openMeasurementContext(tag);
-        const throws = (pattern: string) => tag.endsWith("-i00") && pattern.includes("README");
-        return {
-          ...ctx,
-          glob: (pattern) => (throws(pattern) ? Promise.reject(new Error("disk on fire")) : ctx.glob(pattern)),
-        };
-      },
-    };
-  });
-  const { hash } = hashesOf(dir, FIRST);
-
-  expect((await show(FIRST, dir)).split("\n").slice(8)).toEqual([
-    "  MEASURE              MEASURED  AGGREGATE",
-    "  isPrimeTemplateTest  2/2       sum {passed: 6, failed: 4}",
-    "  isPrimeTsExists      2/2       rate 1.00",
-    "  readmeExists         1/2       rate 0.00",
-    "  tsIgnoreCount        2/2       mean 1.0, max 1",
-    "",
-    "  exit       2/2 exited 0",
-    "  duration   mean 0.04s, max 0.04s",
-  ]);
-  expect((await show(`postrun-e${FIRST}-h${hash}-i00`, dir)).split("\n").slice(12, 17)).toEqual([
-    "Measures",
-    "  isPrimeTemplateTest  {passed: 3, failed: 2}",
-    "  isPrimeTsExists      true",
-    "  readmeExists         error  (disk on fire)",
-    "  tsIgnoreCount        1",
-  ]);
-});
-
-test("each chosen method shows in the order chosen: a rate to two places, a mean or median to one, the rest as they are", async () => {
-  const measurements = "test-case-parameters/tasks/is-prime/measurements";
-  const dir = await fixture({
-    [`${measurements}/isPrimeTemplateTest.ts`]: stub("declareMeasurement", `{
-  instrument: "templateTest",
-  config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
-  aggregate: ["mean", "sum"],
-}`),
-    [`${measurements}/readmeExists.ts`]: stub("declareMeasurement", `{
-  instrument: "fileCreated",
-  config: { glob: "**/README.md" },
-  aggregate: ["count", "rate"],
-}`),
-    [`${measurements}/tsIgnoreCount.ts`]: stub("declareMeasurement", `{
-  instrument: "grep",
-  config: { glob: "**/*.ts", pattern: "@ts-ignore" },
-  aggregate: ["median", "min", "sum"],
-}`),
-  });
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-
-  expect((await show(FIRST, dir)).split("\n").slice(8, 13)).toEqual([
-    "  MEASURE              MEASURED  AGGREGATE",
-    "  isPrimeTemplateTest  2/2       mean {passed: 3.0, failed: 2.0}, sum {passed: 6, failed: 4}",
-    "  isPrimeTsExists      2/2       rate 1.00",
-    "  readmeExists         2/2       count 0, rate 0.00",
-    "  tsIgnoreCount        2/2       median 1.0, min 1, sum 2",
-  ]);
-});
-
-test("a deleted measurement is left out of later executions' aggregation results, and kept in earlier ones", async () => {
-  const dir = await fixture();
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-  rmSync(join(dir, ".thunderjar", "test-case-parameters", "tasks", "is-prime", "measurements", "readmeExists.ts"));
-  await runAt(dir, "fake-is-prime", SECOND, "2026-09-29T15:02:10Z");
-
-  // The rows between the table's heading and the blank line before exit and duration.
-  const measureRows = async (id: string) => (await show(id, dir)).split("\n").slice(9, -3);
-  expect(await measureRows(FIRST)).toEqual([
-    "  isPrimeTemplateTest  2/2       sum {passed: 6, failed: 4}",
-    "  isPrimeTsExists      2/2       rate 1.00",
-    "  readmeExists         2/2       rate 0.00",
-    "  tsIgnoreCount        2/2       mean 1.0, max 1",
-  ]);
-  expect(await measureRows(SECOND)).toEqual([
-    "  isPrimeTemplateTest  2/2       sum {passed: 6, failed: 4}",
-    "  isPrimeTsExists      2/2       rate 1.00",
-    "  tsIgnoreCount        2/2       mean 1.0, max 1",
-  ]);
-});
-
-test("a task without measurements shows none, with its exit codes and durations", async () => {
-  const measurements = "test-case-parameters/tasks/is-prime/measurements";
-  const dir = await fixture(
-    Object.fromEntries(
-      ["isPrimeTsExists", "readmeExists", "tsIgnoreCount", "isPrimeTemplateTest"].map((name) => [`${measurements}/${name}.ts`, null]),
-    ),
-  );
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-
-  expect((await show(FIRST, dir)).split("\n").slice(8)).toEqual([
-    "  no measures",
-    "",
-    "  exit       2/2 exited 0",
-    "  duration   mean 0.04s, max 0.04s",
-  ]);
-});
-
-test("an execution recorded without aggregation results says so, and runs with different exit codes are counted by code", async () => {
-  const dir = await fixture();
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-  // As if recorded before aggregation results were stored, with the second run exiting 3.
-  const containerRuns = recordedRuns(dir);
-  containerRuns[1]!.execution.exitCode = 3;
-  writeFileSync(storePath(dir), JSON.stringify({ containerRuns }));
-
-  expect((await show(FIRST, dir)).split("\n").slice(8)).toEqual([
-    "  no aggregation result recorded",
-    "",
-    "  exit       1/2 exited 0, 1/2 exited 3",
-  ]);
-});
-
-test("a container run with no measures shows none", async () => {
-  const dir = await fixture();
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-  const containerRuns = recordedRuns(dir);
-  containerRuns[1]!.result = {};
-  writeFileSync(storePath(dir), JSON.stringify({ containerRuns }));
-  expect((await show(containerRuns[1]!.postrunImage, dir)).split("\n").slice(12)).toEqual([
-    "Measures",
-    "  none",
-    "",
-    "Duration  0.04s   exit code 0",
-  ]);
-});
-
-test("an unknown argument is an error that names it, with a non-zero exit", async () => {
-  const dir = await fixture();
-  await runAt(dir, "fake-is-prime", FIRST, "2026-09-29T14:30:55Z");
-  for (const target of ["nope", "fake-twice", `postrun-e${FIRST}-h00000000-i00`]) {
-    expect(await spawnCli(dir, "show", target)).toEqual({
-      stdout: "",
-      stderr: `${target} is not a recorded container run, execution or test case\n`,
-      exitCode: 1,
+Duration  0.04s   exit code 3
+`,
+      stderr: "",
+      exitCode: 0,
     });
-  }
-});
+  });
 
-test("prints usage for no argument, extra arguments or a flag", async () => {
-  const dir = await fixture();
-  for (const args of [["show"], ["show", "a", "b"], ["show", "--json"]]) {
-    const { stderr, exitCode } = await spawnCli(dir, ...args);
-    expect(stderr).toBe("usage: thunderjar show <test case | execution | container run>\n");
-    expect(exitCode).toBe(1);
-  }
+  test("an execution recorded without aggregation results says so, and runs with different exit codes are counted by code", async () => {
+    expect(await show(OLDEST)).toEqual({
+      stdout: `Execution  ${OLDEST}
+Test case  fails
+Task       is-prime
+Date       2026-09-28 09:15
+
+Permutation ${FAILING}  (2 iterations)
+  node20 | baseline | snerk | fake-harness-alpha@1.0.1/fake-model-small | plain
+
+  no aggregation result recorded
+
+  exit       2/2 exited 3
+
+Permutation ${BEHAVES}  (2 iterations)
+  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain
+
+  no aggregation result recorded
+
+  exit       1/2 exited 0, 1/2 exited 3
+`,
+      stderr: "",
+      exitCode: 0,
+    });
+  });
+
+  test("a container run with no measures shows none", async () => {
+    const { stdout } = await show(`postrun-e${OLDEST}-h${BEHAVES}-i01`);
+    expect(stdout.split("\n").slice(11)).toEqual(["", "Measures", "  none", "", "Duration  0.04s   exit code 3", ""]);
+  });
+
+  test("a task without measurements shows none, with its exit codes and durations", async () => {
+    expect(await show("times-out")).toEqual({
+      stdout: `Execution  ${TIMES_OUT}  (latest of times-out)
+Test case  times-out
+Task       wait
+Date       2026-09-29 15:02
+
+Permutation 389190d4  (2 iterations)
+  node20 | baseline | snerk | fake-harness-alpha@1.0.2/fake-model-small | impatient
+
+  no measures
+
+  exit       2/2 exited 124
+  duration   mean 0.04s, max 0.04s
+`,
+      stderr: "",
+      exitCode: 0,
+    });
+  });
+
+  test("an unknown argument is an error that names it, with a non-zero exit", async () => {
+    for (const target of ["nope", `postrun-e${LATEST}-h00000000-i00`]) {
+      expect(await show(target)).toEqual({
+        stdout: "",
+        stderr: `${target} is not a recorded container run, execution or test case\n`,
+        exitCode: 1,
+      });
+    }
+  });
+
+  test("prints usage for no argument, extra arguments or a flag", async () => {
+    for (const args of [["show"], ["show", "a", "b"], ["show", "--json"]]) {
+      const { stderr, exitCode } = await thunderjar(fixtures, args);
+      expect(stderr).toBe("usage: thunderjar show <test case | execution | container run>\n");
+      expect(exitCode).toBe(1);
+    }
+  });
 });

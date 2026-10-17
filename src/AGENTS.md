@@ -136,7 +136,7 @@ A test of a lower layer that needs something from a higher one gets it through `
 
 **Why:** commands are siblings. If one imports another, changing how `run` prints breaks `show`.
 
-The lint can't tell a command's code from its tests, so it allows command folders to import each other. That's for tests, such as `show.test.ts` running `run` to have something to show.
+The lint can't tell a command's code from its tests, so it allows command folders to import each other. A test shouldn't need to: one that needs, say, a recorded execution to `show` starts from a scenario with a checked-in run data store instead of running `run`.
 
 ### Adding a layer or a command
 

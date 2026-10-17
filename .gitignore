@@ -3,3 +3,6 @@ dist
 docs/.vitepress/dist
 docs/.vitepress/cache
 .env
+
+# A run data store checked in as a scenario's starting state.
+!fixtureTests/scenario_8_recorded_executions/fixtures/.thunderjar/.data/
