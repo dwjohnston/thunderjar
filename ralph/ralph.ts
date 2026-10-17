@@ -4,7 +4,7 @@
 //   bun ralph/ralph.ts          # work through every task
 //   bun ralph/ralph.ts --once   # do just the first task
 
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const MODEL = "claude-opus-5-5";
