@@ -39,6 +39,8 @@ bun run fixture 1 build example
 | 6 uninitialised project | none | none |
 | 7 uninitialised JS project | none | none |
 | 8 recorded executions | 📁 copied files | 📁 copied files |
+| 9 broken declarations | 📁 copied files | 📁 copied files |
+| 10 broken harness family | 📁 copied files | 📁 copied files |
 
 - 📁 **Copied files**
   - The parameter copies files kept beside its declaration, through `ctx.dir`. It reads no commits, so it builds anywhere, even outside a repository, and editing one of those files changes its hash.
@@ -164,6 +166,28 @@ Unless its entry says otherwise, scenarios 1–3 and 8 use these:
     - `01k4xb7q0c2tnvabcdefghjkmn`, `times-out`, 2026-09-29 15:02: no measurements, each run exited 124.
     - `01k4xc0000000000000000000a`, `fails`, 2026-09-30 08:00: the latest, without `readmeExists`.
   - A real `run` here adds to the store, so run one only in a copy.
+
+- `scenario_9_broken_declarations`
+  - A project with configuration errors beside sound declarations. Only the declarations a test case names are loaded, so each broken one stops only the test cases naming it. A task's measurements all load with it, so each broken measurement has a task of its own.
+  - It has no `tsconfig.json`: its declarations don't type-check.
+  - Sound declarations, as in scenario 1
+    - Base image `node20`, code state `baseline`, prompt set `snerk`, `fake-harness-alpha@1.0.0/fake-model-small`, and task `is-prime` with prompt `plain` and measurement `isPrimeTsExists`.
+  - Broken parameters
+    - Base image `no-default-export`, which exports its value under a name.
+    - Code states `unwrapped`, a plain object, and `wrongly-wrapped`, wrapped in `declareBaseImage`.
+  - Tasks
+    - `fizz-buzz`, whose only prompt is `fizzy`.
+    - Each with prompt `plain` and one broken measurement: `unknown-instrument` (`fileCraeted`), `misfit-config` (a `fileCreated` with `path` for `glob`, and no `aggregate`), `unwrapped-measurement`, `missing-template` (a misspelt template path), `unfit-aggregate` (`fileCreated` aggregated by `mean` and `avg`) and `invalid-pattern` (a `grep` whose pattern isn't a valid regex).
+  - Test cases
+    - `sound`: only sound declarations, 1 permutation.
+    - Each of the others is `sound` with one thing wrong: `unknown-prompt-set` (`snirk`), `unknown-task` (`is-even`), `prompt-of-another-task` (`fizzy`), `unexported-base-image`, `unwrapped-code-state`, `wrongly-wrapped-code-state`, `unknown-harness-models` (an absent version, an absent model, and a pair not of the form `family@version/model`), `empty-code-states` (`[]`, with 2.5 iterations), `zero-iterations`, and one named after each broken measurement's task.
+
+- `scenario_10_broken_harness_family`
+  - Scenario 1 with a second family, `fake-harness-beta`, whose `versions.ts` isn't wrapped in `declareHarnessVersions`. `generate` loads every family's maps, so it fails for the whole project; `plan` fails only for a test case naming that family.
+  - It has no `tsconfig.json`: `generate` fails, so it can't be type-checked.
+  - Test cases
+    - `example`: as in scenario 1.
+    - `beta`: `fake-harness-beta@1.0.0/fake-model-large`.
 
 ### Changing scenario 4's commits
 

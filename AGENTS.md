@@ -62,7 +62,7 @@ bun run fixture scenario_2 run two-pairs --dry-run   # or just: bun run fixture 
 #### Other rules
 
 - **Each folder is a scenario, not a feature.** Name it `scenario_<n>_<what the project is>`, e.g. `scenario_2_typical_project`, not `run`. A scenario is a kind of project, and tests of any command can use it.
-- **Each scenario has `fixtures/.thunderjar/`** (the project) and a `tsconfig.json`, so `fixtureTests/typecheck.test.ts` type-checks it too. The exception is a project before `init`, which has neither. `thunderjar` resolves from every scenario through the checked-in link `fixtureTests/node_modules/thunderjar`.
+- **Each scenario has `fixtures/.thunderjar/`** (the project) and a `tsconfig.json`, so `fixtureTests/typecheck.test.ts` type-checks it too. The exceptions are a project before `init`, which has neither, and a project broken on purpose, which has no `tsconfig.json`: its declarations don't type-check, or `generate` fails. `thunderjar` resolves from every scenario through the checked-in link `fixtureTests/node_modules/thunderjar`.
 - **A command's tests sit beside the command**, e.g. `build`'s are in `src/commands/build/build.test.ts`. They reach a scenario through `scenario()` in `src/testing/cli.ts`. See [src/AGENTS.md](src/AGENTS.md).
 - **Tests drive the CLI**, not internal functions, using `src/testing/cli.ts`. They normalise only what changes between runs (execution ID, `$TMPDIR`, durations), so expected output reads like what's printed.
 - **Real-Docker tests tag their images with a throwaway prefix** and delete every image under it afterwards. They sit in `<command>.docker.test.ts` and run under `bun run test:docker` only.
