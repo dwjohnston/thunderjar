@@ -17,9 +17,23 @@ bun run fixture 1 build example
 
 **Why:** this listing is how you pick a scenario for a new test without reading every fixture file. A stale entry sends a test to the wrong project.
 
-## What every scenario shares
+## Real git or not
 
-Unless its entry says otherwise, a scenario uses these:
+| Scenario | Code states | Prompt sets |
+|---|---|---|
+| 1 minimal initial setup | 📁 copied files | 📁 copied files |
+| 2 typical project | 📁 copied files | 📁 copied files |
+| 3 misbehaving agents | 📁 copied files | 📁 copied files |
+| 4 git project | 🌿 **real git** | 🌿 **real git** |
+
+- 📁 **Copied files**
+  - The parameter copies files kept beside its declaration, through `ctx.dir`. It reads no commits, so it builds anywhere, even outside a repository, and editing one of those files changes its hash.
+- 🌿 **Real git**
+  - The parameter reads real commits of *this* repository through `ctx.git`. It only builds where those commits are, so CI checks out with full history.
+
+## What scenarios 1–3 share
+
+Unless its entry says otherwise, scenarios 1–3 use these:
 
 - **Base image**
   - `node20`, which is `FROM node:20-bookworm`.
@@ -36,7 +50,7 @@ Unless its entry says otherwise, a scenario uses these:
   - `fake-harness-beta` writes a correct `isPrime.ts`.
   - Both also write a result file naming the model.
 
-**Why no git:** editing a file beside a declaration changes its parameter hash, so the scenarios show hashing behaviour directly. They also build in place, without a repository. Tests of parameters that read commits through `ctx.git` live in `src/`, against the seed repository.
+**Why no git:** editing a file beside a declaration changes its parameter hash, so these scenarios show hashing behaviour directly. They also build in place, without a repository. Real git is scenario 4's job.
 
 ## Scenarios
 
@@ -89,3 +103,30 @@ Unless its entry says otherwise, a scenario uses these:
   - Test cases
     - `fails`: the failing agent beside one that behaves.
     - `times-out`: the sleeping agent, which the 1-second timeout kills.
+
+- `scenario_4_git_project` 🌿 **real git**
+  - A project whose code states and prompt sets read real commits, the way `init` scaffolds them. Its code is `fixtures/project/`, committed twice in this repository.
+  - The commits
+    - The first adds `project/` with `greet.js` and `prompts/house-style.md`. It's tagged `fixture-scenario-4-first`.
+    - The second changes both, and adds `farewell.js`. It's tagged `fixture-scenario-4-second`.
+    - The worktree's `house-style.md` has moved on from both, so tests can show a prompt file is read at its commit, not from the worktree.
+  - Fake agent
+    - `fake-harness-alpha@1.0.0`
+  - Code states
+    - `first` and `second` check out each commit with `checkoutCommit`, so `/workspace` is this whole repository at that commit, then run `npm ci` in the project.
+    - `unpushed` names a commit this repository doesn't have.
+  - Prompt sets
+    - `house-style-first` and `house-style-second` read `prompts/house-style.md` at each commit with `ctx.git.show`.
+  - Task
+    - `is-prime`, as in scenario 1.
+  - Test cases
+    - `two-commits`: both code states × both prompt sets, 4 permutations.
+    - `unpushed-commit`: the missing commit, which stops the build before anything is built.
+
+### Changing scenario 4's commits
+
+✅ **Do** add a new commit, tag it `fixture-scenario-4-<name>`, and push the tag, when scenario 4 needs another state of its project.
+
+❌ **Don't** amend, squash or rebase away a commit a scenario 4 declaration pins.
+
+**Why:** the declarations pin commits by hash, so a commit that stops being reachable breaks the scenario on every fresh clone, CI included. The tag keeps it reachable even if the branch is squash-merged.

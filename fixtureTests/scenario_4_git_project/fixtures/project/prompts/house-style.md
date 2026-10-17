@@ -1,3 +1,3 @@
-# House style (second commit)
+# House style (worktree, after both commits)
 
-Write small functions, and name every parameter.
+No prompt set reads this version: each reads the file at its own commit.
