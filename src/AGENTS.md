@@ -82,6 +82,7 @@ src/
       build.test.ts
       build.docker.test.ts
     ```
+  - A command's tests drive the CLI against a checked-in `fixtureTests/` scenario, unchanged, and assert only on what the command produced. Every expected result lives in the test. See "Fixture tests" in the root `AGENTS.md`.
   - `format.ts`: how commands print what they share, such as counts and durations.
   - Tests that cut across commands sit directly in `commands/`: configuration errors (`validation.test.ts`) and typed parameter names (`declarations.typecheck.test.ts`).
 - `cli/`
@@ -89,7 +90,12 @@ src/
 - `adapters/docker/`
   - The real Docker, behind the seam tests swap out. It imports nothing else from `src/`.
 - `testing/`
-  - Test helpers: the in-memory fixture project, the seed repository, the recording fake Docker, running the CLI in a fixtureTests/ scenario (`cli.ts`), and `test-setup.ts`, which every `bun test` preloads.
+  - Test helpers, shared by tests in every layer.
+  - `cli.ts`: runs the CLI in a `fixtureTests/` scenario, the way `bun run fixture` does. `scenario()` names a scenario's project; `copyOfFixtures()` copies it for a command that writes into the project.
+  - `fake-docker.ts`: the recording fake Docker, so a test can say which images exist.
+  - `measurement-context.ts`: the host measurement context, for instrument tests.
+  - `test-setup.ts`, which every `bun test` preloads.
+  - `fixture-project.ts` and `seed-repo.ts` generate throwaway projects. Older tests still use them while they move to scenarios; new tests don't, and they'll be deleted.
 
 ## Rules
 

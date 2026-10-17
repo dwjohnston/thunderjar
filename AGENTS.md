@@ -27,20 +27,45 @@ If being provided feedback for behaviour to change:
 
 Each scenario is described in [fixtureTests/AGENTS.md](fixtureTests/AGENTS.md).
 
-`fixtureTests/` holds checked-in Thunderjar projects that the CLI is run against, the way a user would run it.
+`fixtureTests/` holds checked-in Thunderjar projects that the CLI is run against, the way a user would run it. Every command test runs against one of these scenarios.
 
-**Why:** a unit test that builds its project in a temp folder can't be checked by hand. With a real project on disk, a developer can run the same command the test runs and see the same output:
+**Why:** a test that builds its project in a temp folder can't be checked by hand. With a real project on disk, a developer can run the same command the test runs and see the same output:
 
 ```sh
 bun run fixture scenario_2 run two-pairs --dry-run   # or just: bun run fixture 2 …
 ```
 
-Rules:
+#### Run against a scenario, unchanged
 
-- **Each folder is a scenario, not a feature.** Name it `scenario_<n>_<what the project is>`, e.g. `scenario_2_typical_project`, not `run`. A scenario is a kind of project, and tests of any command can use it. Inside, name test files after the command they drive: `run.test.ts`, `plan.test.ts`.
+✅ **Do** run the command against a checked-in scenario as it is, and assert only on what the command produced: its output, its exit code, and the files or images it wrote.
+
+❌ **Don't** generate a project or patch a scenario's files in a test. Any variation a test needs, such as an empty parameter folder or a store with a failed run, belongs in a scenario: add it to one that fits, or add a scenario.
+
+**Why:** a project made or changed by a test only exists while the test runs, so nobody can run the command against it by hand.
+
+#### Scenarios don't know about their tests
+
+✅ **Do** keep every expected result in the test. A scenario is a project and the state it starts in: its declarations, and anything already on disk, such as a checked-in run data store.
+
+❌ **Don't** name anything in a scenario after a test, or keep expected output in it.
+
+**Why:** tests of many commands share a scenario. One that holds a test's expectations can't be read as a plain project, or changed for another test without breaking the first.
+
+#### Copy only for commands that write into the project
+
+✅ **Do** run in place, in the scenario's `fixtures/`. Only `init` and a real `run`, which write into the project, work on a copy (`copyOfFixtures()` in `src/testing/cli.ts`). `generate` writes only the gitignored `.thunderjar/_generated/`, so it runs in place, and its test deletes that file first.
+
+❌ **Don't** copy a scenario for a command that only reads it, such as `plan`, `show` or a dry run.
+
+**Why:** in place, a test runs exactly what `bun run fixture` runs. The copy is only there so no test changes a checked-in scenario: `git status` is clean after the full suite.
+
+#### Other rules
+
+- **Each folder is a scenario, not a feature.** Name it `scenario_<n>_<what the project is>`, e.g. `scenario_2_typical_project`, not `run`. A scenario is a kind of project, and tests of any command can use it.
 - **Each scenario has `fixtures/.thunderjar/`** (the project) and a `tsconfig.json`, so `fixtureTests/typecheck.test.ts` type-checks it too. `thunderjar` resolves from every scenario through the checked-in link `fixtureTests/node_modules/thunderjar`.
-- **A command's scenario tests can sit beside the command**, e.g. `build`'s are in `src/commands/build/build.test.ts`. They reach a scenario through `scenario()` in `src/testing/cli.ts`, and are still reproducible with `bun run fixture`.
-- **Tests drive the CLI**, not internal functions, using `src/testing/cli.ts` (re-exported, with the `run` helpers, by `fixtureTests/helpers.ts`). They normalise only what changes between runs (execution ID, `$TMPDIR`, durations), so expected output reads like what's printed. Real runs work on a copy of `fixtures/`; dry runs run in place.
+- **A command's tests sit beside the command**, e.g. `build`'s are in `src/commands/build/build.test.ts`. They reach a scenario through `scenario()` in `src/testing/cli.ts`. See [src/AGENTS.md](src/AGENTS.md).
+- **Tests drive the CLI**, not internal functions, using `src/testing/cli.ts`. They normalise only what changes between runs (execution ID, `$TMPDIR`, durations), so expected output reads like what's printed.
+- **Real-Docker tests tag their images with a throwaway prefix** and delete every image under it afterwards. They sit in `<command>.docker.test.ts` and run under `bun run test:docker` only.
 - **Behaviour the CLI can't trigger** (e.g. a crash injected through a runner) stays in `src/` unit tests.
 
 ### Never refer to real agents in tests

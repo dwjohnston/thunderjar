@@ -2,6 +2,16 @@
 
 Each `scenario_<n>_<what the project is>/` folder is a checked-in Thunderjar project, which the CLI is run against the way a user would. See the fixture test rules in the repo's root `AGENTS.md`.
 
+A scenario is a project and the state it starts in, nothing more. Command tests run against it unchanged, from beside each command in `src/commands/`, and keep every expected result to themselves. `init` and a real `run` work on a copy; everything else runs in place.
+
+## Add a variation as a scenario
+
+✅ **Do** put any variation a test needs, such as an empty parameter folder or a run data store with a failed run, into a scenario: one that fits, or a new one.
+
+❌ **Don't** generate a project, or patch a scenario's files, in a test. And don't name anything in a scenario after a test, or keep expected output in it.
+
+**Why:** a variation made in a test can't be run by hand, and a scenario that knows about one test can't be shared by others.
+
 Run any test case by hand, using the scenario's number:
 
 ```sh
@@ -66,9 +76,6 @@ Unless its entry says otherwise, scenarios 1–3 use these:
     - `is-prime`, with one prompt and one measurement: whether `isPrime.ts` exists.
   - Test case
     - `example`: 1 permutation, 1 iteration.
-  - Tests
-    - Type-level assertions on the generated parameter names.
-    - `build` in place, from `src/commands/build/build.test.ts`.
 
 - `scenario_2_typical_project`
   - A typical project: two agents that behave, two prompt sets, two wordings of the task, and a task with no measurements.
@@ -83,7 +90,7 @@ Unless its entry says otherwise, scenarios 1–3 use these:
     - `is-prime`, with the prompts `plain` and `terse` and four measurements: whether `isPrime.ts` exists, whether a README exists, the number of `@ts-ignore`s, and a template test of `isPrime`.
     - `no-measures`, with one prompt and no measurements.
   - Test cases
-    - `two-pairs`: both agents, 2 permutations. Most `run` and `build` tests use this one; `build`'s are in `src/commands/build/build.test.ts`.
+    - `two-pairs`: both agents, 2 permutations.
     - `is-prime-baseline`: the full matrix, 8 permutations × 5 iterations.
     - `alpha-is-prime`, `version-cli-override`, `without-measurements`: one permutation each.
 
@@ -122,8 +129,6 @@ Unless its entry says otherwise, scenarios 1–3 use these:
   - Test cases
     - `two-commits`: both code states × both prompt sets, 4 permutations.
     - `unpushed-commit`: the missing commit, which stops the build before anything is built.
-  - Tests
-    - `build`, with and without real Docker, from `src/commands/build/`.
 
 ### Changing scenario 4's commits
 
