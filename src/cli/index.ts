@@ -4,6 +4,7 @@ import { executions } from "../commands/executions/executions.ts";
 import { generate } from "../commands/generate/generate.ts";
 import { init } from "../commands/init/init.ts";
 import { plan } from "../commands/plan/plan.ts";
+import { remeasure } from "../commands/remeasure/remeasure.ts";
 import { run } from "../commands/run/run.ts";
 import { show } from "../commands/show/show.ts";
 
@@ -18,7 +19,8 @@ commands:
   build <test case>                     build a test case's prerun images
   run <test case>                       run a test case
   executions [<test case>]              list recorded executions
-  show <test case | execution | run>    show a test case, an execution or a container run`;
+  show <test case | execution | run>    show a test case, an execution or a container run
+  remeasure <test case | execution>     apply the current measurements to past runs`;
 
 /**
  * `args` without `<flag> <value>`, and the value, or `"invalid"` if the flag is given without a
@@ -106,6 +108,14 @@ try {
       process.exitCode = 1;
     } else {
       console.log(await show(parsed.rest[0]!, { dataDir: parsed.values["--data-dir"] }));
+    }
+  } else if (command === "remeasure") {
+    const parsed = takeOptions(args, ["--data-dir"]);
+    if (parsed === "invalid" || parsed.rest.length !== 1 || parsed.rest[0]!.startsWith("-")) {
+      console.error("usage: thunderjar remeasure <test case | execution> [--data-dir <dir>]");
+      process.exitCode = 1;
+    } else {
+      console.log(await remeasure(parsed.rest[0]!, { dataDir: parsed.values["--data-dir"] }));
     }
   } else {
     if (command !== undefined) console.error(`unknown command: ${command}`);
