@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { build } from "../commands/build.ts";
 import { executions } from "../commands/executions.ts";
 import { generate } from "../commands/generate.ts";
 import { init } from "../commands/init.ts";
@@ -32,6 +33,13 @@ try {
       process.exitCode = 1;
     } else {
       await run(name, { dryRun: flags.includes("--dry-run") });
+    }
+  } else if (command === "build") {
+    if (args.length !== 1 || args[0]!.startsWith("-")) {
+      console.error("usage: thunderjar build <test case>");
+      process.exitCode = 1;
+    } else {
+      await build(args[0]!);
     }
   } else if (command === "executions") {
     if (args.length > 1 || args.some((a) => a.startsWith("-"))) {

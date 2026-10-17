@@ -25,6 +25,8 @@
     "lint": "bun scripts/sync-oxlint-layout.ts && bun scripts/sync-oxlint-layout.ts --check && oxlint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "test:prepare": "bun scripts/prepare-tests.ts",
+    "test:docker": "THUNDERJAR_TEST_DOCKER=1 bun test docker",
     "fixture": "bun scripts/fixture.ts",
     "dev:link": "bun scripts/dev-link.ts",
     "docs:dev": "vitepress dev docs",

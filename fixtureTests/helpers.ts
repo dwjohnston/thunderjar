@@ -3,15 +3,20 @@
 //
 // What varies from run to run (the execution ID, $TMPDIR and durations) is replaced with
 // placeholders, so expected output reads like what is printed. Real runs work on a copy of
-// fixtures/, because they write .thunderjar/.data/; dry runs run in fixtures/ itself.
+// fixtures/, because they write .thunderjar/.data/; dry runs run in fixtures/ itself. `build`
+// works on a copy that is also the seed repository, because it reads commits.
+//
+// Docker is the recording fake (src/testing/fake-docker.ts), which every CLI a test starts
+// inherits from src/testing/test-setup.ts; `fakeDocker` gives it a state of its own to read.
 
 import { expect } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { cp, mkdtemp } from "node:fs/promises";
+import { cp, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { AggregationResult, ContainerRunRecord } from "../src/run-data-store.ts";
 import { linkThunderjar } from "../src/testing/fixture-project.ts";
+import { seedRepo } from "../src/testing/seed-repo.ts";
 
 const repoRoot = resolve(import.meta.dir, "..");
 const cli = join(repoRoot, "src", "cli", "index.ts");
@@ -30,6 +35,33 @@ export async function copyOfFixtures(fixtures: string) {
   });
   await linkThunderjar(dir);
   return dir;
+}
+
+/**
+ * A copy of `fixtures` that is also the seed repository (src/testing/seed-repo.ts), whose
+ * commits the scenarios' code states and prompt sets pin, for commands that read them.
+ */
+export async function seededCopyOfFixtures(fixtures: string) {
+  const dir = await copyOfFixtures(fixtures);
+  await seedRepo(dir);
+  return dir;
+}
+
+/**
+ * A fresh state for the fake Docker, in which `images` exist. Pass `env` to `thunderjar`; read
+ * back the commands it was given.
+ */
+export async function fakeDocker(images: string[] = [], flags: ("unreachable" | "fail-build")[] = []) {
+  const dir = await mkdtemp(join(tmpdir(), "thunderjar-fake-docker-"));
+  await writeFile(join(dir, "images"), images.map((ref) => `${ref}\n`).join(""));
+  for (const flag of flags) await writeFile(join(dir, flag), "");
+  const read = (name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "");
+  return {
+    env: { FAKE_DOCKER_DIR: dir },
+    /** Each command run, `docker <args…>`. */
+    commands: () => read("commands").split("\n").filter(Boolean),
+    images: () => read("images").split("\n").filter(Boolean),
+  };
 }
 
 export async function thunderjar(cwd: string, args: string[], env: Record<string, string> = {}) {

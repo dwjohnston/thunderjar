@@ -19,6 +19,8 @@ jobs:
         run: git diff --exit-code .oxlintrc.json
       - run: bun run typecheck
       - run: bun test
+      - name: Docker image tests (GitHub's Ubuntu runners have Docker)
+        run: bun run test:prepare && bun run test:docker
 
   build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
