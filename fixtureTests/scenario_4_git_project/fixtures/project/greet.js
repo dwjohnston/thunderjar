@@ -1,2 +1,2 @@
-// The project scenario_4's code states check out. This is its first commit.
-export const greet = () => "Hello!";
+// The project scenario_4's code states check out. This is its second commit.
+export const greet = (name) => `Hello, ${name}!`;
