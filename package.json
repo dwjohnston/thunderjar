@@ -11,17 +11,24 @@
   "bin": {
     "thunderjar": "./dist/cli.js"
   },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
     "build": "bun build src/cli/index.ts --target bun --outfile dist/cli.js",
-    "lint": "oxlint",
+    "lint": "bun scripts/sync-oxlint-layout.ts && bun scripts/sync-oxlint-layout.ts --check && oxlint",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "test:prepare": "bun scripts/prepare-tests.ts",
+    "test:docker": "THUNDERJAR_TEST_DOCKER=1 bun test docker",
+    "fixture": "bun scripts/fixture.ts",
+    "dev:link": "bun scripts/dev-link.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",

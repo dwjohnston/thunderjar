@@ -12,5 +12,6 @@
     "allowImportingTsExtensions": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "test", "scripts"]
+  // Only the harness: each fixtureTests/ scenario is its own program (see its tsconfig.json).
+  "include": ["src", "scripts", "ralph", "fixtureTests/typecheck.test.ts"]
 }
