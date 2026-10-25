@@ -1,10 +1,8 @@
-name: Deploy docs to GitHub Pages
+name: Deploy stable versioned docs
 
 on:
-  pull_request_target:
-    types: [closed]
-    branches: [main]
-  workflow_dispatch: {}
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,33 +15,17 @@ concurrency:
 
 jobs:
   build:
-    # Deploy when manually triggered, or when a merged PR into main carries
-    # the `update-docs` label (added by hand for docs-only fixes, or
-    # automatically to the changesets Version Packages PR on release).
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'update-docs'))
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install docs dependencies
-        run: bun install
-
-      - name: Build docs
-        run: bun run docs:build
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+          ref: main
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run docs:build:versions
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/.vitepress/dist
 

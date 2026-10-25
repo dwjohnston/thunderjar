@@ -24,6 +24,7 @@
     "test": "bun test",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
+    "docs:build:versions": "bun scripts/release/build-versioned-docs.ts",
     "docs:preview": "vitepress preview docs",
     "changeset": "changeset",
     "version": "changeset version",
@@ -34,6 +35,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
+    "@changesets/get-release-plan": "^4.0.16",
     "@types/bun": "^1.4.3",
     "oxlint": "^1.88.0",
     "typescript": "^7.0.2",
