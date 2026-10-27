@@ -1,14 +1,8 @@
-# Use Bun
+## Use Bun
 
-## Runtime APIs
+The `node` APIs are banned. 
 
-✅ **Do** use Bun APIs and imports from `bun`.
-
-❌ **Don't** import built-in APIs from `node:` modules.
-
-**Why:** Keeping runtime-specific code on Bun avoids mixing incompatible APIs.
-
-e.g.
+Use Bun's APIs instead.
 
 ```ts
 // ✅ Do
@@ -20,15 +14,7 @@ import { readFile } from "node:fs/promises";
 const config = JSON.parse(await readFile("config.json", "utf8"));
 ```
 
-## CLI commands
-
-✅ **Do** execute CLI commands with Bun's `$` shell.
-
-❌ **Don't** use Node subprocess APIs.
-
-**Why:** Bun's shell is the project's standard command runner.
-
-e.g.
+If needing to execute shell commands, use bun's `$` command.
 
 ```ts
 // ✅ Do
