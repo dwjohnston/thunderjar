@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "git-always-commit": {
+      "source": "dwjohnston/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/git-always-commit/SKILL.md",
+      "computedHash": "736ed905e11fa1033a02296b03b2f551081c5bb63083f19533c98c0956a90bd4"
+    },
     "github-actions-docs-and-changesets": {
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
@@ -11,7 +17,7 @@
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/markdown-general/SKILL.md",
-      "computedHash": "aeb9a0334d81cd29c36884ef615a0cf09783aa0949433542011f09bde566fc71"
+      "computedHash": "ea3667dd47f057d4cce05908339be404e58887f6f5002d51d4ca126d17b3a841"
     },
     "markdown-writing-markdown-blocks": {
       "source": "dwjohnston/agent-skills",
@@ -23,7 +29,25 @@
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/markdown-writing-prompts/SKILL.md",
-      "computedHash": "596f6ed7f78c1d5234e9881a61a6b9b1a8e80c8f27749c785cefb8866e10ed7a"
+      "computedHash": "a97e774af98d3bdd2506914a1245d3e2913e52daa9abb7e966cdfdae2484db5d"
+    },
+    "ponytail": {
+      "source": "dietrichgebert/ponytail",
+      "sourceType": "github",
+      "skillPath": "skills/ponytail/SKILL.md",
+      "computedHash": "061f887d9e3e735f85db3be3655a8936a00f24d5fb65ac4ab74a968a770fe342"
+    },
+    "user-get-attention": {
+      "source": "dwjohnston/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/user-get-attention/SKILL.md",
+      "computedHash": "204f79c3501a736c5a7942cfbf7be20fa31d2a6107b9234105ee922fd4bde1ae"
+    },
+    "write-for-the-human": {
+      "source": "dwjohnston/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/write-for-the-human/SKILL.md",
+      "computedHash": "e5b6f14e64b3dcdaf0c914bd4a6bf38822713017794cd2e3a804a641a87959cd"
     }
   }
 }

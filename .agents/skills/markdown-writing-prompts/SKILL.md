@@ -28,3 +28,8 @@ ts-testing
 
 **Rationale:** Lexicographic ordering means related skills all exist in the same place, allows user muscle memory to bring up related skills. 
 
+
+### Prompt format
+
+- Give each instruction a ✅ **Do this** and a ❌ **Don't do that** block, where it helps.
+- Give each instruction a rationale. It helps the human reader understand why the instruction is there, and so judge when it no longer applies.
