@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "git-always-commit": {
+      "source": "dwjohnston/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/git-always-commit/SKILL.md",
+      "computedHash": "7e6f80ac1e336ef4e05011f48ce2c91125d7612cd95a49a3411fa5bb772cbf26"
+    },
     "github-actions-docs-and-changesets": {
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
@@ -11,7 +17,7 @@
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/markdown-general/SKILL.md",
-      "computedHash": "aeb9a0334d81cd29c36884ef615a0cf09783aa0949433542011f09bde566fc71"
+      "computedHash": "ea3667dd47f057d4cce05908339be404e58887f6f5002d51d4ca126d17b3a841"
     },
     "markdown-writing-markdown-blocks": {
       "source": "dwjohnston/agent-skills",
@@ -23,7 +29,25 @@
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/markdown-writing-prompts/SKILL.md",
-      "computedHash": "596f6ed7f78c1d5234e9881a61a6b9b1a8e80c8f27749c785cefb8866e10ed7a"
+      "computedHash": "1061a85467be303d902e4de25680d3642abd531e9a1f5baa91b8eef4ea63e2dc"
+    },
+    "ts-write-script": {
+      "source": "dwjohnston/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ts-write-script/SKILL.md",
+      "computedHash": "fe890506ae0f51084b7f293037f94e0bee80d0f3485712fb3cc9b2b905ebe4a6"
+    },
+    "user-get-attention": {
+      "source": "dwjohnston/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/user-get-attention/SKILL.md",
+      "computedHash": "204f79c3501a736c5a7942cfbf7be20fa31d2a6107b9234105ee922fd4bde1ae"
+    },
+    "write-for-the-human": {
+      "source": "dwjohnston/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/write-for-the-human/SKILL.md",
+      "computedHash": "319058eba84c3fa632e16f9a6ad250789dd9b59ea68a1f42a8555e72cc2ad798"
     }
   }
 }
