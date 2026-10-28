@@ -33,3 +33,22 @@ ts-testing
 
 - Give each instruction a ✅ **Do this** and a ❌ **Don't do that** block, where it helps.
 - Give each instruction a rationale. It helps the human reader understand why the instruction is there, and so judge when it no longer applies.
+
+
+## Example blocks
+
+Include `Good 👍` and `Bad 👍` in the example blocks themselves
+
+`````markdown
+```js
+// 👍 Good
+let i = 0; 
+```
+
+```js
+//  👎 Bad
+var i = 0; 
+```
+`````
+
+**Rationale:** Putting the indicator in the block makes it clear which block it belongs to. 

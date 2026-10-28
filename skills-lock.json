@@ -5,7 +5,7 @@
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/git-always-commit/SKILL.md",
-      "computedHash": "736ed905e11fa1033a02296b03b2f551081c5bb63083f19533c98c0956a90bd4"
+      "computedHash": "7e6f80ac1e336ef4e05011f48ce2c91125d7612cd95a49a3411fa5bb772cbf26"
     },
     "github-actions-docs-and-changesets": {
       "source": "dwjohnston/agent-skills",
@@ -29,13 +29,13 @@
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/markdown-writing-prompts/SKILL.md",
-      "computedHash": "a97e774af98d3bdd2506914a1245d3e2913e52daa9abb7e966cdfdae2484db5d"
+      "computedHash": "1061a85467be303d902e4de25680d3642abd531e9a1f5baa91b8eef4ea63e2dc"
     },
-    "ponytail": {
-      "source": "dietrichgebert/ponytail",
+    "ts-write-script": {
+      "source": "dwjohnston/agent-skills",
       "sourceType": "github",
-      "skillPath": "skills/ponytail/SKILL.md",
-      "computedHash": "061f887d9e3e735f85db3be3655a8936a00f24d5fb65ac4ab74a968a770fe342"
+      "skillPath": "skills/ts-write-script/SKILL.md",
+      "computedHash": "fe890506ae0f51084b7f293037f94e0bee80d0f3485712fb3cc9b2b905ebe4a6"
     },
     "user-get-attention": {
       "source": "dwjohnston/agent-skills",
@@ -47,7 +47,7 @@
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/write-for-the-human/SKILL.md",
-      "computedHash": "e5b6f14e64b3dcdaf0c914bd4a6bf38822713017794cd2e3a804a641a87959cd"
+      "computedHash": "319058eba84c3fa632e16f9a6ad250789dd9b59ea68a1f42a8555e72cc2ad798"
     }
   }
 }

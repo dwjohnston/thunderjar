@@ -9,23 +9,22 @@ AIs often have a hard-to-pinpoint style of writing that humans find exhausting.
 
 The following are guidelines to improve AI output.
 
-Markdown prompts (SKILL.md and AGENTS.md files, for example) are written for human consumption. The human reads them, reviews them and maintains them, so they should read well.
+Markdown prompts are written for human consumption. 
+
+The human reads them, reviews them and maintains them, so they should read well.
 
 
 ### Use inline code sparingly
 
-✅ **Do** use inline code only for literals the reader would type or search for verbatim: file paths, commands, identifiers, flags.
+A page where every second phrase is highlighted is exhausting to read, and the highlighting stops meaning anything. When everything stands out, nothing does.
 
-❌ **Don't** use it for concepts, emphasis or general terms.
-
-**Why:** A page where every second phrase is highlighted is exhausting to read, and the highlighting stops meaning anything. When everything stands out, nothing does.
-
-Bad:
+👎 Bad:
 
 ```md
 fails on any file under `src/` or `test/` that matches no entry's `allowedFiles`
 ```
 
+👍
 Good:
 
 ```md
@@ -37,12 +36,28 @@ Fails on any linted file that matches no entry's `allowedFiles`.
 ### Don't name detail the reader doesn't need
 
 ✅ **Do** use a general term when the specifics aren't the point.
-
+`
 ❌ **Don't** list every folder, file or value just because you know them.
 
 **Why:** Specifics invite the reader to check them, and make the sentence go stale when they change.
 
 ### Use lists
+
+Prefer structured lists rather than listing items in a single sentence. 
+
+
+👎 Bad
+```
+Two live threads, one parked, and one newly captured project idea. Meta-repo: five items left, and the first of them — the versioned spin-up — is the December presentation. Three closed on 2026-10-26: the commit-as-you-go rule, agent-skills, dotfiles.
+```
+
+👍 Good
+```
+Three things: 
+
+- Meta repo 
+- 
+```
 
 #### Use numbered lists
 
