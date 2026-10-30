@@ -1,2 +1,4 @@
 #!/usr/bin/env bun
-console.log("hello world!");
+import { createProgram } from "./program.ts";
+
+await createProgram().parseAsync();
