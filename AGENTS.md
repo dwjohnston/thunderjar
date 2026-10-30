@@ -25,3 +25,13 @@ await $`git status --short`;
 import { execSync } from "node:child_process";
 execSync("git status --short");
 ```
+
+## Docs are versioned
+
+The docs site publishes the docs of every stable release, not of main.
+
+- A docs change only goes live with a release.
+  - To fix the published docs, add a patch changeset to the PR.
+- Releases with identical docs share one build, and one entry in the version switcher.
+- Build the whole site locally with `bun run docs:build:versions`.
+  - Output goes to `.versioned-docs/dist`.

@@ -11,6 +11,8 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
     permissions:
       contents: write
       pull-requests: write
@@ -50,12 +52,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Version PRs are opened by GITHUB_TOKEN, which doesn't trigger other
-      # workflows, so docs.yml keys off this label when the PR is merged.
-      - name: Label version PR for docs deploy
-        if: steps.changesets.outputs.pullRequestNumber != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh label create update-docs --color 0e8a16 --force
-          gh pr edit "${{ steps.changesets.outputs.pullRequestNumber }}" --add-label update-docs
+  # Tags pushed with GITHUB_TOKEN don't trigger other workflows, so the docs
+  # deploy is called directly once a release is published.
+  docs:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
