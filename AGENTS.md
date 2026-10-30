@@ -69,3 +69,33 @@ The docs site publishes the docs of every stable release, not of main.
 - Releases with identical docs share one build, and one entry in the version switcher.
 - Build the whole site locally with `bun run docs:build:versions`.
   - Output goes to `.versioned-docs/dist`.
+
+## Releases
+
+Every release is published to npm from [release.yml](.github/workflows/release.yml). npm trusted publishing trusts only that one workflow file, so don't move publishing into another workflow.
+
+| Release | How it's made | Version | npm tag |
+|---|---|---|---|
+| Stable | Merge the "Version Packages" PR | `0.2.0` | `latest` |
+| Release candidate | Merge the "Release candidate" PR | `0.2.0-rc.0`, `0.2.0-rc.1`, … | `rc` |
+| Preview | Comment `/preview` on an open PR (write access only) | `0.2.0-preview-abc1234` | `preview` |
+
+```mermaid
+flowchart LR
+    A[PR with changesets merged] --> B[Version Packages PR]
+    A --> C[Release candidate PR]
+    B -- merge --> D[0.2.0 on latest]
+    C -- merge --> E[0.2.0-rc.N on rc]
+    D --> F[RC PR closes]
+```
+
+- The base version (`0.2.0` above) is what the pending changesets would release. For a preview, these are the PR's changesets. With none, it's a patch bump.
+- The RC PR only changes `.release/rc.json`. Versions in `package.json` and the changelog on `main` are only changed by the stable release.
+- The RC PR reopens when a PR with new changesets is merged, and its number goes up from the last `-rc.N` tag.
+- RCs get a git tag and a GitHub pre-release. Previews get neither, just a comment on the PR.
+- `/preview` builds the PR head as it is when the workflow runs. To be sure a later push isn't built, comment `/preview <sha>`, and it fails unless that's still the head.
+- Only stable tags get docs. RC tags are skipped.
+
+The version logic is in [release-versions.ts](scripts/release-versions.ts).
+
+**Rationale:** RCs and stable releases come from the same changesets, but RC PRs never touch `main`'s versions. This keeps the stable Version Packages PR working as before.
