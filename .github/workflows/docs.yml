@@ -1,9 +1,9 @@
 name: Deploy docs to GitHub Pages
 
+# Publishes the docs for every stable release tag (see scripts/build-versioned-docs.ts).
+# Runs after each release (called from release.yml), or manually.
 on:
-  pull_request_target:
-    types: [closed]
-    branches: [main]
+  workflow_call: {}
   workflow_dispatch: {}
 
 permissions:
@@ -11,22 +11,16 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   build:
-    # Deploy when manually triggered, or when a merged PR into main carries
-    # the `update-docs` label (added by hand for docs-only fixes, or
-    # automatically to the changesets Version Packages PR on release).
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'update-docs'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          # Every release tag is needed to build its docs.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -34,10 +28,10 @@ jobs:
           bun-version: latest
 
       - name: Install docs dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
-      - name: Build docs
-        run: bun run docs:build
+      - name: Build versioned docs
+        run: bun run docs:build:versions
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -45,11 +39,14 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/.vitepress/dist
+          path: .versioned-docs/dist
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
