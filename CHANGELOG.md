@@ -1,5 +1,11 @@
 # thunderjar
 
+## 0.1.2
+
+### Patch Changes
+
+- 4d96a4d: Add a `generate` command.
+
 ## 0.1.1
 
 ### Patch Changes
