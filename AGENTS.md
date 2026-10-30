@@ -59,3 +59,13 @@ Add an `init` command.
 ```
 
 **Rationale:** Changesets applies bump types literally. It has no setting for 0.x, so a `minor` changeset for a new feature releases 0.2.0, and a `major` one releases 1.0.0. Under the 0.x convention, a minor version bump means a breaking change, so you have to choose the shifted type yourself.
+
+## Docs are versioned
+
+The docs site publishes the docs of every stable release, not of main.
+
+- A docs change only goes live with a release.
+  - To fix the published docs, add a patch changeset to the PR.
+- Releases with identical docs share one build, and one entry in the version switcher.
+- Build the whole site locally with `bun run docs:build:versions`.
+  - Output goes to `.versioned-docs/dist`.
