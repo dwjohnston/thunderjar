@@ -21,7 +21,8 @@ flowchart TD
     S["780903c · 14 Oct 11:31 UTC<br/>PR's first commit"] -->|"32 commits · 2d 10h 56m"| A
     A["fa62bdd · 16 Oct 22:27 UTC<br/>Fixture tests for run, against a checked-in project"] -->|"1 commit · 57m"| B
     B["deccebb<br/>fixture:run script"] -->|"1 commit · 17m"| C
-    C["bea690c<br/>Reorganise into scenarios; bun run fixture"] -->|"9 commits · 4h 04m"| D
+    C["bea690c<br/>Reorganise into scenarios; bun run fixture"] -->|"6 commits · 2h 03m"| C2
+    C2["6fabd64<br/>Add thunderjar build: first build tests, with a recording fake Docker<br/>and the first real-Docker test, run in CI with test:docker"] -->|"3 commits · 2h 01m"| D
     D["544d59e<br/>Scenario catalogue in fixtureTests/AGENTS.md"] -->|"5 commits · 3h 05m"| E1
     E1["0993e6e<br/>One folder per command"] -->|"3 commits · 2h 18m"| E2
     E2["822a898<br/>Build tests move beside the build command"] -->|"5 commits · 1h 30m"| F
