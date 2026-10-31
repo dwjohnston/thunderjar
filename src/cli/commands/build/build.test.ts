@@ -172,8 +172,8 @@ describe("scenario_4_git_project", () => {
   // Its code states and prompt sets read two real commits of this repository, the ones that added
   // and changed fixtures/project/ (tags fixture-scenario-4-first and fixture-scenario-4-second).
   const fixtures = scenario("scenario_4_git_project");
-  const FIRST = "65bcb92cc069821e4695433b11582962ee6d68bd";
-  const SECOND = "5f52f9e08051a67c5ca0d630e2ce586a62819778";
+  const FIRST = "523984c7fd72f047265ab89ce5901605af6acb2b";
+  const SECOND = "952687db16b373d58f79f46690f9c5b0aa1aa141";
   const PROJECT = "fixtureTests/scenario_4_git_project/fixtures/project";
 
   test("build two-commits --dry-run: each code state checks out its own commit, each prompt set copies its file at its own", async () => {

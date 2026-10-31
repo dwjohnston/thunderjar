@@ -130,8 +130,8 @@ Build contexts in $TMPDIR/thunderjar/builds
   // the copied files can: a prompt file read at its commit, and a bundle with nothing after its commit.
   describe("scenario_4_git_project", () => {
     const fixtures = scenario("scenario_4_git_project");
-    const FIRST = "65bcb92cc069821e4695433b11582962ee6d68bd";
-    const SECOND = "5f52f9e08051a67c5ca0d630e2ce586a62819778";
+    const FIRST = "523984c7fd72f047265ab89ce5901605af6acb2b";
+    const SECOND = "952687db16b373d58f79f46690f9c5b0aa1aa141";
     const PROJECT = "fixtureTests/scenario_4_git_project/fixtures/project";
     const refs = new Map<string, string>();
 

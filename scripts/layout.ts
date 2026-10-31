@@ -32,13 +32,16 @@ export const LAYERS = [
   "src/measuring",
 ] as const;
 
-/** One folder per command under src/commands/, holding the command and its tests. */
+/** One folder per command under src/cli/commands/, holding the command and its tests. */
 export const COMMANDS = ["build", "executions", "generate", "init", "plan", "remeasure", "run", "show"] as const;
 
-/** What every layer may use besides the layers below it: the real seams, and test helpers. */
-const SHARED = ["src/adapters/docker", "src/testing"];
+/**
+ * What every layer may use besides the layers below it: the Bun-backed path and file helpers,
+ * the real seams, and test helpers.
+ */
+const SHARED = ["src/platform", "src/adapters/docker", "src/testing"];
 
-const commandFolders = COMMANDS.map((command) => `src/commands/${command}`);
+const commandFolders = COMMANDS.map((command) => `src/cli/commands/${command}`);
 
 export const layout: Layout = {
   // The package entry: re-exports src/api.
@@ -48,18 +51,22 @@ export const layout: Layout = {
   ),
   // format.ts, shared by the commands, and tests across commands. Commands' tests may use
   // another command to produce data, so command folders may import each other.
-  "src/commands": { allowedFiles: ["*.ts"], mayImport: [...LAYERS, ...SHARED, ...commandFolders] },
+  "src/cli/commands": { allowedFiles: ["*.ts"], mayImport: [...LAYERS, ...SHARED, ...commandFolders] },
   ...Object.fromEntries(
     commandFolders.map((folder) => [
       folder,
-      { allowedFiles: ["*.ts"], mayImport: [...LAYERS, ...SHARED, "src/commands", ...commandFolders] },
+      { allowedFiles: ["*.ts"], mayImport: [...LAYERS, ...SHARED, "src/cli/commands", ...commandFolders] },
     ]),
   ),
+  // The Commander program and the `thunderjar` entry point.
   "src/cli": { allowedFiles: ["*.ts"], mayImport: [...commandFolders, ...SHARED] },
-  // The real implementations of the seams tests swap out. They depend on nothing else in src.
-  "src/adapters/docker": { allowedFiles: ["*.ts"] },
+  // POSIX paths and file helpers on Bun's APIs, in place of node:path, node:fs and node:os.
+  "src/platform": { allowedFiles: ["*.ts"] },
+  // The real implementations of the seams tests swap out. They depend on nothing else in src
+  // but src/platform.
+  "src/adapters/docker": { allowedFiles: ["*.ts"], mayImport: ["src/platform"] },
   // Test helpers: fixture projects, the seed repository, the fake docker.
-  "src/testing": { allowedFiles: ["*.ts"], mayImport: [...LAYERS, "src/adapters/docker"] },
+  "src/testing": { allowedFiles: ["*.ts"], mayImport: [...LAYERS, "src/platform", "src/adapters/docker"] },
   // Two versions of one bundled template, for remeasure.test.ts. Not code, so not .ts.
   "src/measuring/remeasure-templates/v1": { allowedFiles: ["*.template.txt"] },
   "src/measuring/remeasure-templates/v2": { allowedFiles: ["*.template.txt"] },
