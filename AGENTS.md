@@ -3,20 +3,26 @@
 ## Folder structure
 
 - `src/`: the implementation.
-  - `cli/`: the CLI. `program.ts` builds it, `index.ts` is the entry point.
-    - `commands/`: one folder per command (`generate`, `init`, `plan`).
-  - `smoke.ts`, `smoke.test.ts`: smoke check and its test.
+  - `cli/`: 
+    - `index.ts`:" the entry point.
+    - `program.ts`: builds it
+    - `commands/`: one folder per command
+      - `<command>/`
+        - `<command>.ts`
+        - `<command>.test.ts`  
 - `docs/`: the VitePress docs site.
   - `.vitepress/`: site config.
   - `cli/`: CLI reference pages, generated per command.
   - `index.md`: landing page.
-- `project/`: internal notes on testing.
+- `project/`: markdown files live here
+  - `candidates`: tracking various commits points across varios projects that will make good thunderjar test cases
+  - `research`: preserved unstructured investigations
+  - `prd` - product requirements docs
 - `scripts/`: release and versioned-docs build tooling.
-- `.changeset/`: pending changesets. See "Versioning while in 0.x".
+- `.changeset/`: pending changesets. 
 - `.release/`: release candidate state (`rc.json`).
 - `.github/`: CI workflows.
 - `.agents/`: agent skills.
-- `dist/`: build output. Don't edit.
 
 ## Use Bun
 
