@@ -6,7 +6,9 @@ name: Release
 # - Stable: the changesets "Version Packages" PR. Merging it publishes to `latest`.
 # - Release candidate: the "Release candidate" PR. Merging it publishes x.y.z-rc.N to `rc`.
 # - Preview: a `/preview` comment on an open PR, by someone with write access.
-#   Publishes x.y.z-preview-<short sha> to `preview`.
+#   Publishes x.y.z-preview-<short sha> to `preview`. npm won't exchange an OIDC
+#   token from an `issue_comment` run, so the comment run dispatches this
+#   workflow, and the `workflow_dispatch` run publishes.
 # See AGENTS.md, "Releases".
 on:
   push:
@@ -14,11 +16,22 @@ on:
       - main
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to publish a preview of
+        required: true
+      sha:
+        description: Commit to publish. It must be the PR head. Defaults to the PR head.
+        required: false
+      comment_id:
+        description: The /preview comment to react to, if any
+        required: false
 
 concurrency:
-  # Pushes to main run one at a time. Each comment gets its own group, so an
-  # unrelated comment can't replace a pending release run.
-  group: ${{ github.workflow }}-${{ github.event_name == 'issue_comment' && format('comment-{0}', github.event.comment.id) || github.ref }}
+  # Pushes to main run one at a time. Each comment and each dispatch gets its
+  # own group, so a preview can't replace a pending release run.
+  group: ${{ github.workflow }}-${{ github.event_name == 'issue_comment' && format('comment-{0}', github.event.comment.id) || github.event_name == 'workflow_dispatch' && format('dispatch-{0}', github.run_id) || github.ref }}
 
 permissions: {}
 
@@ -168,17 +181,16 @@ jobs:
 
   # Previews run in separate jobs, so the PR's code never runs alongside a token
   # that can write to the repo or publish to npm.
-  preview-authorize:
-    name: Preview / authorize
+  preview-request:
+    name: Preview / request
     if: >-
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request &&
       startsWith(github.event.comment.body, '/preview')
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       pull-requests: write
-    outputs:
-      sha: ${{ steps.pr.outputs.sha }}
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       COMMENT_BODY: ${{ github.event.comment.body }}
@@ -221,7 +233,56 @@ jobs:
             exit 1
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      # Runs created by GITHUB_TOKEN are skipped, except for workflow_dispatch.
+      - name: Dispatch the preview publish
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$DEFAULT_BRANCH" \
+            -f pr="$PR_NUMBER" -f sha="$SHA" -f comment_id="$COMMENT_ID"
           gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes > /dev/null
+
+  # Only people with write access can dispatch a workflow, so this checks the
+  # inputs and the PR rather than who asked.
+  preview-authorize:
+    name: Preview / authorize
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      pr: ${{ steps.pr.outputs.pr }}
+      sha: ${{ steps.pr.outputs.sha }}
+      comment_id: ${{ steps.pr.outputs.comment_id }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ inputs.pr }}
+      REQUESTED: ${{ inputs.sha }}
+      COMMENT_ID: ${{ inputs.comment_id }}
+    steps:
+      - name: Resolve the PR head commit
+        id: pr
+        run: |
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || ! [[ "$REQUESTED" =~ ^([0-9a-f]{7,40})?$ ]] || ! [[ "$COMMENT_ID" =~ ^[0-9]*$ ]]; then
+            echo "pr and comment_id must be numbers, and sha a commit sha."
+            exit 1
+          fi
+          read -r state sha < <(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,headRefOid --jq '"\(.state) \(.headRefOid)"')
+          if [ "$state" != OPEN ]; then
+            echo "PR #$PR_NUMBER is $state, not open."
+            exit 1
+          fi
+          if [ -n "$REQUESTED" ] && [[ "$sha" != "$REQUESTED"* ]]; then
+            echo "The PR head is $sha, not $REQUESTED. Comment /preview again for the current commit."
+            exit 1
+          fi
+          {
+            echo "pr=$PR_NUMBER"
+            echo "sha=$sha"
+            echo "comment_id=$COMMENT_ID"
+          } >> "$GITHUB_OUTPUT"
 
   preview-build:
     name: Preview / build
@@ -353,26 +414,28 @@ jobs:
       - name: Comment on the PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMMENT_ID: ${{ github.event.comment.id }}
-          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ needs.preview-authorize.outputs.comment_id }}
+          PR_NUMBER: ${{ needs.preview-authorize.outputs.pr }}
         run: |
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Published preview \`thunderjar@$VERSION\` from $SHA.
 
           \`\`\`sh
           npm install thunderjar@$VERSION
           \`\`\`"
-          gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=rocket > /dev/null
+          if [ -n "$COMMENT_ID" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=rocket > /dev/null
+          fi
 
   preview-failed:
     name: Preview / report failure
-    needs: [preview-authorize, preview-build, preview-publish]
-    if: failure() && github.event_name == 'issue_comment'
+    needs: [preview-request, preview-authorize, preview-build, preview-publish]
+    if: failure() && (github.event_name == 'issue_comment' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      PR_NUMBER: ${{ github.event.issue.number }}
+      PR_NUMBER: ${{ github.event.issue.number || inputs.pr }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Comment on the PR

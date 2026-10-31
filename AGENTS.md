@@ -94,6 +94,7 @@ flowchart LR
 - The RC PR reopens when a PR with new changesets is merged, and its number goes up from the last `-rc.N` tag.
 - RCs get a git tag and a GitHub pre-release. Previews get neither, just a comment on the PR.
 - `/preview` builds the PR head as it is when the workflow runs. To be sure a later push isn't built, comment `/preview <sha>`, and it fails unless that's still the head.
+- The `/preview` comment run doesn't publish. npm rejects OIDC tokens from `issue_comment` runs, so the comment run dispatches `release.yml` on `main`, and that `workflow_dispatch` run builds and publishes. You can also start it by hand with `gh workflow run release.yml -f pr=<number>`.
 - Only stable tags get docs. RC tags are skipped.
 
 The version logic is in [release-versions.ts](scripts/release-versions.ts).
