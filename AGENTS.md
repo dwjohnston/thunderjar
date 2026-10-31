@@ -133,15 +133,36 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
 | `remeasure`  | Apply the current measurements to past runs.                                       |
 | `restore`    | Bring a container run's end state into the current repository.                     |
 
-## Test types 
+## Test types
 
-The application is tested using the following 
+Most tests run the CLI against a scenario: a checked-in Thunderjar project in `fixtureTests/`. A scenario knows nothing about the tests that use it.
 
-- real file creating tests
-- fixture + stdout tests
-- create docker image tests
-- read from docker image tests
-- run on docker container tests
-- regular unit tests
+e.g.
 
-### Real file creating tests
+```sh
+bun run fixture 2 plan two-pairs
+```
+
+**Rationale:** A developer can cd into the scenario and get the same output by hand.
+
+1. Real file creating tests
+   - For commands that write into the project, e.g. `init`.
+   - Run on a copy of the scenario, then check the files written.
+2. Fixture + stdout tests
+   - For commands that only read the project, e.g. `plan` or `show`.
+   - Run on the scenario unchanged, then check stdout.
+3. Create docker image tests
+   - For `build`. Run real Docker, then check the images created.
+4. Read from docker image tests
+   - For commands that read from an existing image, e.g. `remeasure`.
+   - The image is a precondition, not built by the test.
+5. Run on docker container tests
+   - For `run`. Start containers from an existing image, then check the results recorded.
+6. Regular unit tests
+   - For behaviour the CLI can't trigger, e.g. a crash mid-run.
+
+✅ **Do** put a variation a test needs into a scenario.
+
+❌ **Don't** patch the scenario from inside the test.
+
+**Rationale:** A variation in a scenario can be seen and run by hand, and other tests can reuse it.
