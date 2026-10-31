@@ -1,6 +1,6 @@
 # Fixture test patterns from PR #25
 
-[PR #25](https://github.com/dwjohnston/thunderjar/pull/25) (branch `ralph-2026-10-17`) was an unmonitored Ralph loop session of about 100 commits. Two ideas in it are worth keeping:
+[PR #25](https://github.com/dwjohnston/thunderjar/pull/25) (branch `ralph-2026-10-17`) was an unmonitored Ralph loop session of 139 commits, over three days. Two ideas in it are worth keeping:
 
 - **Fixture tests**
   - Checked-in Thunderjar projects that the CLI runs against, plus a `fixture` script to run any command against them by hand.
@@ -14,15 +14,23 @@
 
 ## Key commits
 
+Each arrow shows how many commits later the next key point lands, and the time elapsed.
+
 ```mermaid
 flowchart TD
-    A["fa62bdd<br/>Fixture tests for run, against a checked-in project"] --> B["deccebb<br/>fixture:run script"]
-    B --> C["bea690c<br/>Reorganise into scenarios; bun run fixture"]
-    C --> D["544d59e<br/>Scenario catalogue in fixtureTests/AGENTS.md"]
-    D --> E["0993e6e, 822a898<br/>Tests move beside each command"]
-    E --> F["eef5fe6<br/>Testing philosophy written down"]
-    F --> G["🧪 series<br/>Every command's tests move to scenarios"]
+    S["780903c · 14 Oct 11:31 UTC<br/>PR's first commit"] -->|"32 commits · 2d 10h 56m"| A
+    A["fa62bdd · 16 Oct 22:27 UTC<br/>Fixture tests for run, against a checked-in project"] -->|"1 commit · 57m"| B
+    B["deccebb<br/>fixture:run script"] -->|"1 commit · 17m"| C
+    C["bea690c<br/>Reorganise into scenarios; bun run fixture"] -->|"9 commits · 4h 04m"| D
+    D["544d59e<br/>Scenario catalogue in fixtureTests/AGENTS.md"] -->|"5 commits · 3h 05m"| E1
+    E1["0993e6e<br/>One folder per command"] -->|"3 commits · 2h 18m"| E2
+    E2["822a898<br/>Build tests move beside the build command"] -->|"5 commits · 1h 30m"| F
+    F["eef5fe6<br/>Testing philosophy written down"] -->|"11 commits · 33m"| G
+    G["d7704bd → 1beb543 · 17 Oct 11:32 UTC<br/>🧪 series: every command's tests move to scenarios<br/>15 commits over 18m"] -->|"57 commits · 2h 14m"| T
+    T["cb935ba · 17 Oct 13:46 UTC<br/>PR's last commit"]
 ```
+
+From the first fixture test to the end of the 🧪 series took 49 commits and about 13 hours.
 
 1. [fa62bdd](https://github.com/dwjohnston/thunderjar/commit/fa62bdd583a84050068eb96ebb9f7b747b0127bb): Add fixture tests for `thunderjar run` against a checked-in project
    - Where it starts. `fixtureTests/run/fixtures/` is a real `.thunderjar/` project, and the tests run the CLI against it.
@@ -45,7 +53,9 @@ flowchart TD
    - Scenarios know nothing about the tests that use them.
    - Only `init` and a real `run` work on a copy.
 7. The 🧪 "Move the … tests to scenarios" series
+   - [d7704bd](https://github.com/dwjohnston/thunderjar/commit/d7704bd) build
    - [ae12a8c](https://github.com/dwjohnston/thunderjar/commit/ae12a8c824e60d4d9919ed94688223e853164421) plan
+   - [7190590](https://github.com/dwjohnston/thunderjar/commit/7190590) run --dry-run
    - [84d6843](https://github.com/dwjohnston/thunderjar/commit/84d684388aa8d3afa0cc123f8e4885969b40aa68) generate
    - [e159820](https://github.com/dwjohnston/thunderjar/commit/e15982023f0a2b70ff97aa3bd96e0abfae4c6c9f) init
    - [7d1f6a2](https://github.com/dwjohnston/thunderjar/commit/7d1f6a23bfa737f450832856a1e570d366b76778) executions and show
