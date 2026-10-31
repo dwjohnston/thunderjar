@@ -1,3 +1,23 @@
+# Thunderjar 
+
+## Folder structure
+
+- `src/`: the implementation.
+  - `cli/`: the CLI. `program.ts` builds it, `index.ts` is the entry point.
+    - `commands/`: one folder per command (`generate`, `init`, `plan`).
+  - `smoke.ts`, `smoke.test.ts`: smoke check and its test.
+- `docs/`: the VitePress docs site.
+  - `.vitepress/`: site config.
+  - `cli/`: CLI reference pages, generated per command.
+  - `index.md`: landing page.
+- `project/`: internal notes on testing.
+- `scripts/`: release and versioned-docs build tooling.
+- `.changeset/`: pending changesets. See "Versioning while in 0.x".
+- `.release/`: release candidate state (`rc.json`).
+- `.github/`: CI workflows.
+- `.agents/`: agent skills.
+- `dist/`: build output. Don't edit.
+
 ## Use Bun
 
 The `node` APIs are banned. 
