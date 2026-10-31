@@ -1,0 +1,3 @@
+[test]
+# Points THUNDERJAR_DOCKER at the recording fake, so no test reaches the real daemon by accident.
+preload = ["./src/testing/test-setup.ts"]
