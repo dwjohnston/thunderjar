@@ -15,6 +15,7 @@ Thunderjar is a TypeScript/Bun CLI for
 
 ## Folder structure 
 
+- `fixtures`: Fixtures - see below for details. 
 - `src/`: the implementation.
   - `cli/`: 
     - `index.ts`:" the entry point.
@@ -145,29 +146,153 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
    - For commands that only read the project
      -`plan` or `show`, or commands with a `--dry-run`
    - Run on the scenario unchanged, and assert on stdout. 
-3. Create docker image tests
+3. Real git tests 
+   - For parameters that read real commits: code states that use `checkoutCommit`, and prompt sets that use `ctx.git.show`.
+     - eg. `build`, `build --dry-run`
+   - The scenarios live in `03_real_git/`. Each one's project is committed to this repository several times, and its declarations pin those commits by hash.
+     - e.g.
+       ```ts
+       export default declareCodeState({
+         config: { commit: "65bcb92cc069821e4695433b11582962ee6d68bd" },
+         applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),
+       });
+       ```
+   - Run on the scenario unchanged, and assert that each file comes from its own commit, not from the worktree.
+     - The worktree's copy of each file has moved on from every pinned commit, so a file read from the worktree fails the test.
+     - With real Docker, also assert that `/workspace` is detached at the commit, with no remote and nothing after it.
+   - Include a commit this repository doesn't have, and assert that the build stops before anything is built.
+   - Pinned commits must stay reachable:
+     - ✅ Add a new commit for a new state, tag it `fixture-<scenario>-<name>`, and push the tag.
+     - ❌ Don't amend, squash or rebase away a pinned commit, or move its tag.
+     - CI checks out with full history and tags (`fetch-depth: 0`).
+     - **Why:** a commit that's only on a branch disappears when the branch is squash-merged or deleted. Then the scenario breaks on every fresh clone, CI included.
+4. Create docker image tests
     - eg. `build`
    - Uses real docker 
    - Run the command, assert on the created docker image, then clean up docker image.
-4. Read from docker image tests
+5. Read from docker image tests
    - For commands that read from an existing image, but do not need to act on it 
     - e.g. `remeasure`, 
    - The image is presumed to already exist 
-5. Run on docker container tests
+6. Run on docker container tests
    - eg. `run`. Start
    -  containers from an existing image, execute some behaviour, then assert on effects both inside the container and out.
-6. Regular unit tests
+7. Regular unit tests
    - For comprehensive business logic
 
 ## Fixtures 
 
 Fixtures are example projects with sample thunderjar configurations. 
 
+### Folder structure
+
+```
+fixtures/
+  01_unitialised/
+    0101_javascript_project/
+      project/
+    0102_bash_project/
+      project/
+  02_regular/
+    0101_minimal_existing_setup/
+      tsconfig.json 
+      project/
+  03_real_git/
+  04_unhappy/ 
+```
+
+#### Why a scenario has its own `tsconfig.json`
+
+The `tsconfig.json` beside `project/` lets a scenario be type-checked the way a user's editor would check it.
+
+- e.g.
+  ```jsonc
+  {
+    "extends": "./project/.thunderjar/tsconfig.json", // the tsconfig init scaffolds
+    "compilerOptions": { "types": ["bun"] },
+    "files": ["parameterNames.test.ts"]               // the scenario's type tests
+  }
+  ```
+
+- **Each scenario is its own TypeScript program.**
+  - `generate` writes the parameter names as global types, e.g. `type TaskName = "is-prime" | "wait"`. Two scenarios in one program would each declare `TaskName`, and the check would fail on the duplicates.
+- **It sits outside `project/`.**
+  - It adds the type tests and Bun's types, which a user's project wouldn't have.
+- **Not every scenario has one.**
+  - Uninitialised projects have nothing to check yet. Scenarios broken on purpose would fail the check, and their tests expect that.
+
 The fixtures represent _scenarios_. 
 
 Tests for the individual commands are then run against one or more scenarios. 
 
 Tests should never modify the scenarios. 
+
+### Where tests live
+
+#### Tests of a command go beside the command
+
+✅ **Do** put a command's tests next to its code, and have them run against whichever scenarios they need.
+
+```
+// 👍 Good
+src/cli/commands/
+  plan/
+    plan.ts
+    plan.test.ts        runs against 0201, 0202, 0401
+fixtures/
+  02_regular/
+    0201_minimal_existing_setup/
+      project/
+```
+
+❌ **Don't** put a command's tests in the scenario folders.
+
+```
+// 👎 Bad
+fixtures/
+  02_regular/
+    0201_minimal_existing_setup/
+      plan.test.ts
+      project/
+    0202_typical_project/
+      plan.test.ts
+      project/
+```
+
+#### Refer to a scenario by its ID, through one helper
+
+✅ **Do** reach a scenario through a single helper, by its ID.
+
+```ts
+// 👍 Good
+const dir = scenario("0201");
+```
+
+❌ **Don't** hard-code a scenario's path in a test, or keep a list in a scenario of the tests that use it.
+
+```ts
+// 👎 Bad
+const dir = "fixtures/02_regular/0201_minimal_existing_setup/project";
+```
+
+**Why:** the helper fails loudly for an unknown ID, so renaming a scenario folder breaks no tests. To find what uses a scenario, search for its ID. A "used by" list goes stale.
+
+
+#### Escape hatch: Specific scenario tests 
+
+There are some scenarios where a scenario specific test is warranted. 
+
+```
+0201_minimal_existing_setup/
+  tsconfig.json
+  config-typings.test.ts
+  project/
+    .thunderjar/
+```
+
+In this case it's tests that checking the behaviour of the typings. These tests _need_ to be located beside the tsconfig for that scenario. 
+
+### Helper `fixture` script 
 
 A helper script `fixture` should exist. This allows the human developer to run arbitrary thunderjar commands against a given scenario and observe its effects. 
 
