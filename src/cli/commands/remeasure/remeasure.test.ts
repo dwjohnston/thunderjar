@@ -15,14 +15,11 @@
 //   bun run fixture 8 remeasure fails --data-dir <dir>
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { copy, existsSync, listEntries, makeTempDir, readTextSync, remove, tmpdir } from "../../../platform/fs.ts";
+import { join } from "../../../platform/path.ts";
 import { fakeDocker, scenario, thunderjar } from "../../../testing/cli.ts";
 import type { AggregationResult, ContainerRunRecord, RecordedMeasure, Result } from "../../../store/run-data-store.ts";
 
-const USAGE = "usage: thunderjar remeasure <test case | execution> [--data-dir <dir>]\n";
 
 /** Recorded before aggregation results were stored; one run exited 3 and was never measured. */
 const OLDEST = "01k4tq3h8r0000000000000000";
@@ -92,7 +89,7 @@ interface StoreFile {
   aggregationResults?: AggregationResult[];
 }
 
-const read = (path: string) => JSON.parse(readFileSync(path, "utf8")) as StoreFile;
+const read = (path: string) => JSON.parse(readTextSync(path)) as StoreFile;
 
 /** `executionId`'s stored aggregation results, by permutation hash. */
 const aggregatesOf = (file: StoreFile, executionId: string) =>
@@ -153,17 +150,16 @@ const opened = (n: number, tag: string) => [
 /** Every file's bytes under `dir`, by relative path. */
 const snapshot = (dir: string) =>
   Object.fromEntries(
-    (readdirSync(dir, { recursive: true }) as string[])
-      .filter((path) => statSync(join(dir, path)).isFile())
-      .toSorted()
-      .map((path) => [path, readFileSync(join(dir, path), "utf8")]),
+    listEntries(dir, { recursive: true })
+      .filter((entry) => !entry.isDirectory)
+      .map(({ path }) => [path, readTextSync(join(dir, path))]),
   );
 
 describe("scenario_8_recorded_executions", () => {
   const fixtures = scenario("scenario_8_recorded_executions");
   const dataDir = join(fixtures, ".thunderjar", ".data");
   const store = join(dataDir, "runs.json");
-  const checkedIn = readFileSync(store);
+  const checkedIn = readTextSync(store);
   const starting = read(store);
   const saved = join(fixtures, "..", "postrun-files");
   const savedFiles = snapshot(saved);
@@ -171,9 +167,9 @@ describe("scenario_8_recorded_executions", () => {
   const disposable: string[] = [];
   /** A disposable data directory, holding an exact copy of the checked-in store. */
   const seededDataDir = async () => {
-    const dir = await mkdtemp(join(tmpdir(), "thunderjar-remeasure-"));
+    const dir = await makeTempDir("thunderjar-remeasure-");
     disposable.push(dir);
-    await copyFile(store, join(dir, "runs.json"));
+    await copy(store, join(dir, "runs.json"));
     return { dir, store: join(dir, "runs.json") };
   };
 
@@ -189,14 +185,14 @@ describe("scenario_8_recorded_executions", () => {
   };
 
   afterEach(async () => {
-    expect(readFileSync(store).equals(checkedIn)).toBe(true);
+    expect(readTextSync(store)).toBe(checkedIn);
     expect(snapshot(saved)).toEqual(savedFiles);
     for (const docker of fakes.splice(0)) {
       // Every measurement container is removed once its files are copied out.
       expect(docker.containers()).toEqual([]);
       await docker.remove();
     }
-    for (const dir of disposable.splice(0)) await rm(dir, { recursive: true, force: true });
+    for (const dir of disposable.splice(0)) await remove(dir);
   });
 
   test("remeasure <execution> retakes only its stale isPrimeTemplateTest, keeps the deleted readmeExists, and recomputes both its aggregates without readmeExists", async () => {
@@ -448,7 +444,7 @@ ${FOOTER}
       const docker = await savedPostruns();
       const args = ["remeasure", target, "--data-dir", seeded.dir];
       expect((await thunderjar(fixtures, args, docker.env)).exitCode).toBe(0);
-      const once = readFileSync(seeded.store);
+      const once = readTextSync(seeded.store);
       const commands = docker.commands();
 
       expect({ target, ...(await thunderjar(fixtures, args, docker.env)) }).toEqual({
@@ -457,7 +453,7 @@ ${FOOTER}
         stderr: "",
         exitCode: 0,
       });
-      expect(readFileSync(seeded.store).equals(once)).toBe(true);
+      expect(readTextSync(seeded.store)).toBe(once);
       expect(docker.commands()).toEqual(commands);
     }
   });
@@ -478,7 +474,7 @@ ${FOOTER}
     };
     const args = ["remeasure", "times-out", "--data-dir", seeded.dir];
     expect(await thunderjar(fixtures, args, docker.env)).toEqual(expected);
-    const once = readFileSync(seeded.store);
+    const once = readTextSync(seeded.store);
     const after = read(seeded.store);
     expect(aggregatesOf(after, TIMED_OUT)).toEqual([
       { executionId: TIMED_OUT, permutationHash: WAITING, iterations: 2, measures: {}, duration: DURATION },
@@ -486,7 +482,7 @@ ${FOOTER}
     expect(after.containerRuns).toEqual(starting.containerRuns);
 
     expect(await thunderjar(fixtures, args, docker.env)).toEqual(expected);
-    expect(readFileSync(seeded.store).equals(once)).toBe(true);
+    expect(readTextSync(seeded.store)).toBe(once);
     expect(docker.commands()).toEqual([]);
   });
 
@@ -503,7 +499,7 @@ ${FOOTER}
   });
 
   test("remeasure --data-dir reads only the store there: an empty one has no executions, and isn't written", async () => {
-    const empty = await mkdtemp(join(tmpdir(), "thunderjar-remeasure-"));
+    const empty = await makeTempDir("thunderjar-remeasure-");
     disposable.push(empty);
     const docker = await savedPostruns();
     expect(await thunderjar(fixtures, ["remeasure", ERRORED, "--data-dir", empty], docker.env)).toEqual({
@@ -515,28 +511,26 @@ ${FOOTER}
     expect(docker.commands()).toEqual([]);
   });
 
-  test("prints usage for a missing target, extra arguments, an unknown flag, or a bad --data-dir", async () => {
+  test("says what's wrong, then its usage, for a missing target, extra arguments, an unknown flag, or a bad --data-dir", async () => {
     const seeded = await seededDataDir();
-    const before = readFileSync(seeded.store);
+    const before = readTextSync(seeded.store);
     const docker = await savedPostruns();
-    for (const args of [
-      ["remeasure"],
-      ["remeasure", ERRORED, "fails"],
-      ["remeasure", ERRORED, "--force"],
-      ["remeasure", "--json", ERRORED],
-      ["remeasure", ERRORED, "--data-dir"],
-      ["remeasure", "--data-dir", ERRORED],
-      ["remeasure", ERRORED, "--data-dir", dataDir, "--data-dir", dataDir],
-      ["remeasure", ERRORED, "--data-dir", seeded.dir, "--force"],
-    ]) {
-      expect({ args, ...(await thunderjar(fixtures, args, docker.env)) }).toEqual({
-        args,
-        stdout: "",
-        stderr: USAGE,
-        exitCode: 1,
-      });
+    for (const [args, error] of [
+      [["remeasure"], "error: missing required argument 'target'"],
+      [["remeasure", ERRORED, "fails"], "error: too many arguments for 'remeasure'"],
+      [["remeasure", ERRORED, "--force"], "error: unknown option '--force'"],
+      [["remeasure", "--json", ERRORED], "error: unknown option '--json'"],
+      [["remeasure", ERRORED, "--data-dir"], "error: option '--data-dir <dir>' argument missing"],
+      [["remeasure", "--data-dir", ERRORED], "error: missing required argument 'target'"],
+      [["remeasure", ERRORED, "--data-dir", dataDir, "--data-dir", dataDir], "It may only be given once."],
+      [["remeasure", ERRORED, "--data-dir", seeded.dir, "--force"], "error: unknown option '--force'"],
+    ] as const) {
+      const result = await thunderjar(fixtures, [...args], docker.env);
+      expect({ args, stdout: result.stdout, exitCode: result.exitCode }).toEqual({ args, stdout: "", exitCode: 1 });
+      expect(result.stderr).toContain(error);
+      expect(result.stderr).toContain("Usage: thunderjar remeasure [options] <target>");
     }
-    expect(readFileSync(seeded.store).equals(before)).toBe(true);
+    expect(readTextSync(seeded.store)).toBe(before);
     expect(docker.commands()).toEqual([]);
   });
 });

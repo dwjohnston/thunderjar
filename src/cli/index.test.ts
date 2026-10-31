@@ -1,4 +1,5 @@
-// With no command, or one it doesn't know, `thunderjar` prints its usage and exits non-zero:
+// With no command, `thunderjar` prints its help and exits non-zero; with one it doesn't know, it
+// names it, then prints its help:
 //
 //   bun run fixture 1
 //   bun run fixture 1 frobnicate
@@ -6,33 +7,41 @@
 import { describe, expect, test } from "bun:test";
 import { scenario, thunderjar } from "../testing/cli.ts";
 
-const usage = `usage: thunderjar <command> [<args>]
+const COMMANDS = ["init", "generate", "plan", "build", "run", "executions", "show", "remeasure"];
 
-commands:
-  init                                  create .thunderjar/ in this project
-  generate                              write the parameter-name types for this project
-  plan <test case>                      print what a run of a test case would do
-  build <test case>                     build a test case's prerun images
-  run <test case>                       run a test case
-  executions [<test case>]              list recorded executions
-  show <test case | execution | run>    show a test case, an execution or a container run
-  remeasure <test case | execution>     apply the current measurements to past runs
-`;
+/** The command names the help lists, in order. */
+const listed = (help: string) =>
+  help
+    .slice(help.indexOf("Commands:"))
+    .split("\n")
+    .slice(1)
+    .map((line) => /^ {2}(\S+)/.exec(line)?.[1])
+    .filter((name) => name !== undefined && name !== "help");
 
 describe("scenario_1_minimal_initial_setup", () => {
   const fixtures = scenario("scenario_1_minimal_initial_setup");
 
-  test("no command prints the usage", async () => {
+  test("no command prints the help", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(fixtures, []);
     expect(stdout).toBe("");
-    expect(stderr).toBe(usage);
+    expect(stderr).toStartWith("Usage: thunderjar [options] [command]\n");
+    expect(listed(stderr)).toEqual(COMMANDS);
     expect(exitCode).toBe(1);
   });
 
-  test("an unknown command is named, then the usage", async () => {
+  test("an unknown command is named, then the help", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["frobnicate"]);
     expect(stdout).toBe("");
-    expect(stderr).toBe(`unknown command: frobnicate\n${usage}`);
+    expect(stderr).toStartWith("error: unknown command 'frobnicate'\n");
+    expect(listed(stderr)).toEqual(COMMANDS);
+    expect(exitCode).toBe(1);
+  });
+
+  test("an error a command throws is printed on its own, without a stack trace", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(fixtures, ["plan", "no-such-test-case"]);
+    expect(stdout).toBe("");
+    expect(stderr).toContain(`no test case named "no-such-test-case"`);
+    expect(stderr).not.toContain("    at ");
     expect(exitCode).toBe(1);
   });
 });

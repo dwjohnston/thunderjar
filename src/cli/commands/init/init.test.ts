@@ -5,19 +5,18 @@
 //   cp -r fixtureTests/scenario_6_uninitialised_project/fixtures /tmp/s6 && cd /tmp/s6 && thunderjar init
 
 import { describe, expect, test } from "bun:test";
-import { readdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { listEntries } from "../../../platform/fs.ts";
+import { join } from "../../../platform/path.ts";
 import { copyOfFixtures, scenario, thunderjar } from "../../../testing/cli.ts";
 
 /** Every file under `.thunderjar/` in `dir`, sorted. */
 const filesIn = (dir: string) =>
-  readdirSync(join(dir, ".thunderjar"), { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => join(entry.parentPath, entry.name).slice(join(dir, ".thunderjar").length + 1))
+  listEntries(join(dir, ".thunderjar"), { recursive: true })
+    .filter((entry) => !entry.isDirectory)
+    .map((entry) => entry.path)
     .toSorted();
 
-const read = (dir: string, rel: string) => readFile(join(dir, ".thunderjar", rel), "utf8");
+const read = (dir: string, rel: string) => Bun.file(join(dir, ".thunderjar", rel)).text();
 
 /** What `init` scaffolds in any project, in the order it prints them. */
 const SCAFFOLD = [

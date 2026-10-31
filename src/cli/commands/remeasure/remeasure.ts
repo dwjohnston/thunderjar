@@ -18,6 +18,7 @@
 // stored task's measurements, not today's test case declaration. `--data-dir` reads and writes a
 // store kept outside the project.
 
+import { Command } from "commander";
 import { dockerCli } from "../../../adapters/docker/docker.ts";
 import { LOCAL_REPOSITORY } from "../../../images/prerun.ts";
 import { abbreviateHash } from "../../../matrix/hashing.ts";
@@ -35,6 +36,7 @@ import {
   type RunDataStore,
 } from "../../../store/run-data-store.ts";
 import { count, showOutcome } from "../format.ts";
+import { dataDirOption } from "../options.ts";
 
 /** A run that was measured, and the measures it took. */
 interface Measured {
@@ -179,4 +181,14 @@ export async function remeasure(
   }
 
   throw new Error(`${target} is not a recorded execution or test case`);
+}
+
+export function createRemeasureCommand(): Command {
+  return new Command("remeasure")
+    .description("Apply the current measurements to past runs.")
+    .argument("<target>", "an execution ID, or a test case, meaning every execution of it")
+    .addOption(dataDirOption())
+    .action(async (target: string, options: { dataDir?: string }) => {
+      console.log(await remeasure(target, { dataDir: options.dataDir }));
+    });
 }

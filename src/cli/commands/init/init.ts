@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { Command } from "commander";
+import { existsSync } from "../../../platform/fs.ts";
+import { join } from "../../../platform/path.ts";
 
 const config = `import { declareConfig, sqliteStore } from "thunderjar";
 
@@ -174,9 +174,16 @@ export async function init(projectRoot: string): Promise<InitResult> {
       result.skipped.push(rel);
       continue;
     }
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, content);
+    await Bun.write(path, content);
     result.created.push(rel);
   }
   return result;
+}
+
+export function createInitCommand(): Command {
+  return new Command("init").description("Create .thunderjar/ in this project.").action(async () => {
+    const { created, skipped } = await init(process.cwd());
+    for (const f of created) console.log(`created  .thunderjar/${f}`);
+    for (const f of skipped) console.log(`exists   .thunderjar/${f}`);
+  });
 }

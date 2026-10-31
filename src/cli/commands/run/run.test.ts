@@ -6,10 +6,8 @@
 // Below them, the real-run tests still work on generated projects, in process.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, listDir, makeTempDir, readTextSync } from "../../../platform/fs.ts";
+import { join } from "../../../platform/path.ts";
 import { hashMeasurement } from "../../../matrix/hashing.ts";
 import type { AggregationResult, ContainerRunRecord } from "../../../store/run-data-store.ts";
 import { createHostMeasurementOpener, createHostRunner, type ContainerRunner } from "../../../running/runner.ts";
@@ -18,7 +16,7 @@ import { memoryDocker } from "../../../testing/fake-docker.ts";
 import { createFixtureProject, linkThunderjar, stub } from "../../../testing/fixture-project.ts";
 import { run, type RunOptions } from "./run.ts";
 
-const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-run-"));
+const tmp = () => makeTempDir("thunderjar-run-");
 
 const ID = "01k4x9j2e8mqz3abcdefghjkmn";
 const newExecutionId = () => ID;
@@ -45,8 +43,8 @@ const PLAIN = "Create a file isPrime.ts exporting a function that tests for prim
 
 /** The top level of `dir` and everything under `.thunderjar/`, so a test can show nothing was written. */
 const listTree = (dir: string) => [
-  ...readdirSync(dir),
-  ...readdirSync(join(dir, ".thunderjar"), { recursive: true }).map(String),
+  ...listDir(dir),
+  ...listDir(join(dir, ".thunderjar"), { recursive: true }),
 ].toSorted();
 
 describe("scenario_2_typical_project", () => {
@@ -139,17 +137,20 @@ Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.1.0/fake-model
 `);
   });
 
-  test("prints usage for a missing test case name or an unknown flag", async () => {
-    for (const args of [
-      [],
-      ["--dry-run"],
-      ["is-prime-baseline", "--dry-run", "--json"],
-      ["is-prime-baseline", "--dry-run", "--image-prefix"],
-      ["is-prime-baseline", "--dry-run", "--data-dir"],
-      ["is-prime-baseline", "--data-dir", "a", "--data-dir", "b"],
-    ]) {
-      const { stderr, exitCode } = await runCli(fixtures, args);
-      expect(stderr).toBe("usage: thunderjar run <test case> [--dry-run] [--image-prefix <name>] [--data-dir <dir>]\n");
+  test("says what's wrong, then its usage, for a missing test case name, an unknown flag, or a bad option", async () => {
+    for (const [args, error] of [
+      [[], "error: missing required argument 'test case'"],
+      [["--dry-run"], "error: missing required argument 'test case'"],
+      [["is-prime-baseline", "--dry-run", "--json"], "error: unknown option '--json'"],
+      [["is-prime-baseline", "--dry-run", "--image-prefix"], "error: option '--image-prefix <name>' argument missing"],
+      [["is-prime-baseline", "--dry-run", "--data-dir"], "error: option '--data-dir <dir>' argument missing"],
+      [["is-prime-baseline", "--data-dir", "a", "--data-dir", "b"], "It may only be given once."],
+      [["is-prime-baseline", "--image-prefix", "--dry-run"], "It needs a value, not another flag."],
+    ] as const) {
+      const { stdout, stderr, exitCode } = await runCli(fixtures, [...args]);
+      expect(stdout).toBe("");
+      expect(stderr).toContain(error);
+      expect(stderr).toContain("Usage: thunderjar run [options] <test case>");
       expect(exitCode).toBe(1);
     }
   });
@@ -177,8 +178,8 @@ Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.1.0/fake-model
     const stdout = await printed("two-pairs", { dryRun: false, cwd: fixtures, newExecutionId, dataDir, ...onHost(await tmp()) });
 
     expect(stdout).toContain(`Execution ${ID} (2 permutations × 2 iterations)`);
-    expect(readdirSync(dataDir)).toEqual(["runs.json"]);
-    const { containerRuns } = JSON.parse(readFileSync(join(dataDir, "runs.json"), "utf8")) as { containerRuns: ContainerRunRecord[] };
+    expect(listDir(dataDir)).toEqual(["runs.json"]);
+    const { containerRuns } = JSON.parse(readTextSync(join(dataDir, "runs.json"))) as { containerRuns: ContainerRunRecord[] };
     expect(containerRuns.map((r) => r.executionId)).toEqual([ID, ID, ID, ID]);
     expect(listTree(fixtures)).toEqual(before);
   });
@@ -234,9 +235,9 @@ async function runForReal(dir: string, name: string) {
 /** The host's stand-in for one postrun image: what the fake agent left, and run.json. */
 const containerRun = (executionDir: string, tag: string) => {
   const dir = join(executionDir, tag);
-  const read = (rel: string) => (existsSync(join(dir, rel)) ? readFileSync(join(dir, rel), "utf8") : undefined);
+  const read = (rel: string) => (existsSync(join(dir, rel)) ? readTextSync(join(dir, rel)) : undefined);
   return {
-    workspace: readdirSync(join(dir, "workspace")).toSorted(),
+    workspace: listDir(join(dir, "workspace")).toSorted(),
     fakeAgentFile: read("workspace/isPrime.ts"),
     result: read("thunderjar/result.json"),
     run: JSON.parse(read("thunderjar/run.json")!) as { startedAt: number; finishedAt: number; exitCode: number },
@@ -271,8 +272,8 @@ Permutation 1/1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model
 2 container runs: 2 exited 0
 Recorded in .thunderjar/.data/runs.json`);
 
-  expect(readdirSync(executionDir).toSorted()).toEqual([`${FAKE}${hash}-i00`, `${FAKE}${hash}-i01`]);
-  for (const tag of readdirSync(executionDir)) {
+  expect(listDir(executionDir).toSorted()).toEqual([`${FAKE}${hash}-i00`, `${FAKE}${hash}-i01`]);
+  for (const tag of listDir(executionDir)) {
     const { workspace, fakeAgentFile, result, run } = containerRun(executionDir, tag);
     // Only what the agent left: no test rendered while measuring.
     expect(workspace).toEqual(["isPrime.ts"]);
@@ -311,7 +312,7 @@ test("records a failing cli's exit code, and still runs the remaining iterations
   expect(exits).toEqual(failing === 4 ? ["3", "3", "0", "0"] : ["0", "0", "3", "3"]);
   expect(lines.at(-2)).toBe("4 container runs: 2 exited 0, 2 exited 3");
 
-  const runs = readdirSync(executionDir).map((tag) => containerRun(executionDir, tag));
+  const runs = listDir(executionDir).map((tag) => containerRun(executionDir, tag));
   expect(runs).toHaveLength(4);
   expect(runs.map(({ run }) => run.exitCode).toSorted()).toEqual([0, 0, 3, 3]);
   // Every run left its file, including those after the failures.
@@ -327,7 +328,7 @@ test("records a failing cli's exit code, and still runs the remaining iterations
 
 /** Every container run recorded in the fixture project's run data store. */
 const recordedRuns = (dir: string) =>
-  (JSON.parse(readFileSync(join(dir, ".thunderjar", ".data", "runs.json"), "utf8")) as {
+  (JSON.parse(readTextSync(join(dir, ".thunderjar", ".data", "runs.json"))) as {
     containerRuns: ContainerRunRecord[];
   }).containerRuns;
 
@@ -342,7 +343,7 @@ test("records each container run, with its execution as in its run.json and ever
   const { executionDir } = await runForReal(dir, "fake-is-prime");
 
   const recorded = recordedRuns(dir);
-  expect(recorded.map((r) => r.postrunImage)).toEqual(readdirSync(executionDir).toSorted());
+  expect(recorded.map((r) => r.postrunImage)).toEqual(listDir(executionDir).toSorted());
   recorded.forEach((record, iteration) => {
     const { permutationHash, parameters } = record;
     expect(permutationHash).toMatch(HASH);
@@ -521,7 +522,7 @@ test("kills a cli that runs past the initial prompt's timeoutSeconds, recording 
   expect(stdout.split("\n").at(-2)).toBe("2 container runs: 2 exited 124");
   await Bun.sleep(1500); // past when `sleep 2` would have finished
   const executionDir = join(rootDir, ID);
-  for (const tag of readdirSync(executionDir)) {
+  for (const tag of listDir(executionDir)) {
     const { workspace, run } = containerRun(executionDir, tag);
     expect(workspace).toEqual(["started.txt"]);
     expect(run.exitCode).toBe(124);
@@ -532,7 +533,7 @@ test("kills a cli that runs past the initial prompt's timeoutSeconds, recording 
 
 /** Every aggregation result stored in the fixture project's run data store. */
 const storedAggregations = (dir: string) =>
-  (JSON.parse(readFileSync(join(dir, ".thunderjar", ".data", "runs.json"), "utf8")) as {
+  (JSON.parse(readTextSync(join(dir, ".thunderjar", ".data", "runs.json"))) as {
     aggregationResults?: AggregationResult[];
   }).aggregationResults;
 

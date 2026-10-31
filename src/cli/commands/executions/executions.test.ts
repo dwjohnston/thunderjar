@@ -5,7 +5,7 @@
 //   bun run fixture 8 executions fails
 
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { join } from "../../../platform/path.ts";
 import { scenario, thunderjar } from "../../../testing/cli.ts";
 
 describe("scenario_5_empty_parameter_folders", () => {
@@ -68,10 +68,16 @@ describe("scenario_8_recorded_executions", () => {
     });
   });
 
-  test("prints usage for extra arguments or a flag", async () => {
-    for (const args of [["executions", "a", "b"], ["executions", "--json"], ["executions", "--data-dir"]]) {
-      const { stderr, exitCode } = await thunderjar(fixtures, args);
-      expect(stderr).toBe("usage: thunderjar executions [<test case>] [--data-dir <dir>]\n");
+  test("says what's wrong, then its usage, for extra arguments or a flag", async () => {
+    for (const [args, error] of [
+      [["executions", "a", "b"], "error: too many arguments for 'executions'"],
+      [["executions", "--json"], "error: unknown option '--json'"],
+      [["executions", "--data-dir"], "error: option '--data-dir <dir>' argument missing"],
+    ] as const) {
+      const { stdout, stderr, exitCode } = await thunderjar(fixtures, [...args]);
+      expect(stdout).toBe("");
+      expect(stderr).toStartWith(error);
+      expect(stderr).toContain("Usage: thunderjar executions [options] [test case]");
       expect(exitCode).toBe(1);
     }
   });

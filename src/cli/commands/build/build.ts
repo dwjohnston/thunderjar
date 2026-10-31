@@ -9,7 +9,8 @@
 // every permutation, whether or not its image exists. It builds nothing, writes nothing, and
 // doesn't ask Docker anything, nor read any commit, so what it prints doesn't depend on either.
 
-import { join } from "node:path";
+import { Command } from "commander";
+import { join } from "../../../platform/path.ts";
 import { dockerCli, type Docker } from "../../../adapters/docker/docker.ts";
 import { findThunderjarRoot, loadTestCase } from "../../../project/config.ts";
 import { permutationRows } from "../../../matrix/permutations.ts";
@@ -18,6 +19,7 @@ import { preparePrerunBuilds } from "../../../images/prerun-builds.ts";
 import { resolveTestCase } from "../../../matrix/resolve.ts";
 import { defaultRootDir } from "../../../running/runner.ts";
 import { count, seconds } from "../format.ts";
+import { imagePrefixOption } from "../options.ts";
 
 export interface BuildOptions {
   cwd?: string;
@@ -99,4 +101,15 @@ export async function build(name: string, options: BuildOptions = {}): Promise<v
   log(
     `${count(permutations.length, "prerun image")}: ${toBuild} built, ${permutations.length - toBuild} reused`,
   );
+}
+
+export function createBuildCommand(): Command {
+  return new Command("build")
+    .description("Build a test case's prerun images.")
+    .argument("<test case>", "the test case whose prerun images to build")
+    .option("--dry-run", "print each permutation's Dockerfile instead of building")
+    .addOption(imagePrefixOption("the image repository prerun images are tagged in"))
+    .action(async (name: string, options: { dryRun?: boolean; imagePrefix?: string }) => {
+      await build(name, { dryRun: options.dryRun ?? false, repository: options.imagePrefix });
+    });
 }

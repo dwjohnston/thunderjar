@@ -10,7 +10,7 @@
 //   cd fixtureTests/scenario_11_type_errors/fixtures && bunx tsc -p .thunderjar
 
 import { beforeAll, describe, expect, test } from "bun:test";
-import { join, resolve } from "node:path";
+import { join, resolve } from "../../platform/path.ts";
 import { scenario, thunderjar } from "../../testing/cli.ts";
 
 const tsc = resolve(import.meta.dir, "..", "..", "..", "node_modules", ".bin", "tsc");

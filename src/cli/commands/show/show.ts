@@ -12,6 +12,7 @@
 //
 // `--data-dir` reads a store kept outside the project.
 
+import { Command } from "commander";
 import { abbreviateHash, hashMeasurement } from "../../../matrix/hashing.ts";
 import { AXES, permutationRows, type Permutation } from "../../../matrix/permutations.ts";
 import { findThunderjarRoot, loadMeasurements, type Measurement } from "../../../project/config.ts";
@@ -27,6 +28,7 @@ import {
   type RecordedOutcome,
 } from "../../../store/run-data-store.ts";
 import { count, duration, minute, seconds, showValue } from "../format.ts";
+import { dataDirOption } from "../options.ts";
 
 /** `label  value` lines, with the labels padded to the widest so the values line up. */
 const labelled = (lines: [label: string, value: string][]) => {
@@ -237,4 +239,14 @@ export async function show(
   }
 
   throw new Error(`${target} is not a recorded container run, execution or test case`);
+}
+
+export function createShowCommand(): Command {
+  return new Command("show")
+    .description("Show a test case, an execution or a container run.")
+    .argument("<target>", "a container run's postrun tag, an execution ID, or a test case, meaning its latest execution")
+    .addOption(dataDirOption())
+    .action(async (target: string, options: { dataDir?: string }) => {
+      console.log(await show(target, { dataDir: options.dataDir }));
+    });
 }

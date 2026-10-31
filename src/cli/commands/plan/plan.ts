@@ -4,6 +4,7 @@
 // with its prerun image and whether that image exists (and would be reused) or would be built.
 // Without Docker, plan still works, and says the images' status is unknown.
 
+import { Command } from "commander";
 import { dockerCli, type Docker } from "../../../adapters/docker/docker.ts";
 import { findThunderjarRoot, loadTestCase } from "../../../project/config.ts";
 import { abbreviateHash } from "../../../matrix/hashing.ts";
@@ -12,6 +13,7 @@ import { LOCAL_REPOSITORY, prerunStatuses, showPrerunStatus, unreachableNote } f
 import { resolveTestCase } from "../../../matrix/resolve.ts";
 import { prerunTag } from "../../../matrix/tags.ts";
 import { count } from "../format.ts";
+import { imagePrefixOption } from "../options.ts";
 
 export interface PlanOptions {
   docker?: Docker;
@@ -57,4 +59,14 @@ export async function plan(name: string, cwd: string = process.cwd(), options: P
 
   const note = "unreachable" in found ? ["", unreachableNote(found.unreachable)] : [];
   return [...parameterLines, "", summary, "", entries.join("\n\n"), ...note].join("\n");
+}
+
+export function createPlanCommand(): Command {
+  return new Command("plan")
+    .description("Print what a run of a test case would do.")
+    .argument("<test case>", "the test case to plan")
+    .addOption(imagePrefixOption("the image repository prerun images are looked up in"))
+    .action(async (name: string, options: { imagePrefix?: string }) => {
+      console.log(await plan(name, process.cwd(), { repository: options.imagePrefix }));
+    });
 }

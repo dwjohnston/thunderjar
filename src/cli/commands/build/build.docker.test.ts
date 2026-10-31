@@ -8,15 +8,12 @@
 //     bun run fixture scenario_4 build two-commits
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { makeTempDir, readTextSync } from "../../../platform/fs.ts";
+import { dirname, join } from "../../../platform/path.ts";
 import { dockerCli } from "../../../adapters/docker/docker.ts";
 import { scenario, thunderjar } from "../../../testing/cli.ts";
 
-const BASE_IMAGE = "node:20-bookworm";
+const BASE_IMAGE = `node:20-bookworm`;
 const docker = dockerCli("docker");
 const prefix = `thunderjar-test-${process.pid}-${Date.now()}`;
 
@@ -25,7 +22,7 @@ const prefix = `thunderjar-test-${process.pid}-${Date.now()}`;
  * with build contexts under a fresh $TMPDIR, and durations replaced by a placeholder.
  */
 async function cli(project: string, command: string, testCase: string, env: Record<string, string> = {}) {
-  const tmpDir = await mkdtemp(join(tmpdir(), "thunderjar-build-docker-"));
+  const tmpDir = await makeTempDir("thunderjar-build-docker-");
   const result = await thunderjar(project, [command, testCase, "--image-prefix", prefix], {
     THUNDERJAR_DOCKER: "docker",
     TMPDIR: tmpDir,
@@ -38,9 +35,9 @@ async function cli(project: string, command: string, testCase: string, env: Reco
 
 /** Runs `script` with sh in a throwaway container from `ref`. */
 function inImage(ref: string, script: string) {
-  const result = spawnSync("docker", ["run", "--rm", ref, "sh", "-c", script], { encoding: "utf8" });
-  expect(result.stderr).toBe("");
-  return result.stdout.trim();
+  const result = Bun.spawnSync(["docker", "run", "--rm", ref, "sh", "-c", script], { stdout: "pipe", stderr: "pipe" });
+  expect(result.stderr.toString()).toBe("");
+  return result.stdout.toString().trim();
 }
 
 const prefixed = (tag: string) => `${prefix}:${tag}`;
@@ -55,10 +52,11 @@ describe.skipIf(!process.env.THUNDERJAR_TEST_DOCKER)("build, against real Docker
   });
 
   afterAll(() => {
-    const images = spawnSync("docker", ["image", "ls", "--format", "{{.Repository}}:{{.Tag}}", prefix], {
-      encoding: "utf8",
-    }).stdout.split("\n").filter(Boolean);
-    if (images.length > 0) spawnSync("docker", ["image", "rm", "--force", ...images]);
+    const images = Bun.spawnSync(["docker", "image", "ls", "--format", "{{.Repository}}:{{.Tag}}", prefix], { stdout: "pipe" })
+      .stdout.toString()
+      .split("\n")
+      .filter(Boolean);
+    if (images.length > 0) Bun.spawnSync(["docker", "image", "rm", "--force", ...images]);
   });
 
   describe("scenario_1_minimal_initial_setup", () => {
@@ -114,7 +112,7 @@ Build contexts in $TMPDIR/thunderjar/builds
 2 prerun images: 2 built, 0 reused
 `);
 
-      spawnSync("docker", ["image", "rm", "--force", ALPHA]);
+      Bun.spawnSync(["docker", "image", "rm", "--force", ALPHA]);
       const again = await cli(fixtures, "build", "two-pairs");
       expect(again.stdout).toContain("    <prefix>:prerun-hefe85dda  built (<t>s)\n");
       expect(again.stdout).toContain("    <prefix>:prerun-h56ea4852  reused\n");
@@ -169,7 +167,7 @@ Build contexts in $TMPDIR/thunderjar/builds
       expect(inImage(refs.get("first/house-style-second")!, "head -1 HOUSE_STYLE.md")).toBe("# House style (second commit)");
       expect(inImage(refs.get("second/house-style-first")!, "head -1 HOUSE_STYLE.md")).toBe("# House style (first commit)");
       // The worktree's copy has moved on from both.
-      expect(readFileSync(join(fixtures, "project", "prompts", "house-style.md"), "utf8")).toStartWith("# House style (worktree");
+      expect(readTextSync(join(fixtures, "project", "prompts", "house-style.md"))).toStartWith("# House style (worktree");
     });
   });
 });

@@ -7,8 +7,8 @@
 //   bun run fixture 9 plan unknown-prompt-set
 
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "../../platform/fs.ts";
+import { join } from "../../platform/path.ts";
 import { copyOfFixtures, scenario, thunderjar } from "../../testing/cli.ts";
 
 // Only the declarations a test case names are loaded, so each broken one here stops only the test

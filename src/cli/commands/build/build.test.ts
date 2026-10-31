@@ -12,10 +12,8 @@
 // What a real build makes, and which images it reuses, is in build.docker.test.ts.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { existsSync, listDir, makeTempDir } from "../../../platform/fs.ts";
+import { dirname, join } from "../../../platform/path.ts";
 import { fakeDocker, scenario, thunderjar } from "../../../testing/cli.ts";
 
 type FakeDocker = Awaited<ReturnType<typeof fakeDocker>>;
@@ -30,7 +28,7 @@ async function cliBuild(
   { docker, flags = [], env = {} }: { docker?: FakeDocker; flags?: string[]; env?: Record<string, string> } = {},
 ) {
   docker ??= await fakeDocker();
-  const tmpDir = await mkdtemp(join(tmpdir(), "thunderjar-fixture-tmp-"));
+  const tmpDir = await makeTempDir("thunderjar-fixture-tmp-");
   const result = await thunderjar(project, ["build", testCase, ...flags], { ...docker.env, TMPDIR: tmpDir, ...env });
   const normalise = (text: string) => text.replaceAll(tmpDir, "$TMPDIR");
   return {
@@ -151,18 +149,20 @@ error: building ${ALPHA} failed (docker build exited 1).
 Its build context is kept in $TMPDIR/thunderjar/builds/prerun-hefe85dda
 `);
     expect(commands.filter((c) => c.startsWith("docker build"))).toHaveLength(1);
-    expect(readdirSync(join(builds, "prerun-hefe85dda"))).toContain("Dockerfile");
+    expect(listDir(join(builds, "prerun-hefe85dda"))).toContain("Dockerfile");
   });
 
-  test("build with no test case, an unknown flag, or --image-prefix without a name, prints its usage", async () => {
-    for (const args of [
-      ["build"],
-      ["build", "two-pairs", "--dry"],
-      ["build", "two-pairs", "--image-prefix"],
-      ["build", "--image-prefix", "two-pairs"],
-    ]) {
-      const { stderr, exitCode } = await thunderjar(fixtures, args);
-      expect(stderr).toBe("usage: thunderjar build <test case> [--dry-run] [--image-prefix <name>]\n");
+  test("build with no test case, an unknown flag, or --image-prefix without a name, says what's wrong, then its usage", async () => {
+    for (const [args, error] of [
+      [["build"], "error: missing required argument 'test case'"],
+      [["build", "two-pairs", "--dry"], "error: unknown option '--dry'"],
+      [["build", "two-pairs", "--image-prefix"], "error: option '--image-prefix <name>' argument missing"],
+      [["build", "--image-prefix", "two-pairs"], "error: missing required argument 'test case'"],
+    ] as const) {
+      const { stdout, stderr, exitCode } = await thunderjar(fixtures, [...args]);
+      expect(stdout).toBe("");
+      expect(stderr).toStartWith(error);
+      expect(stderr).toContain("Usage: thunderjar build [options] <test case>");
       expect(exitCode).toBe(1);
     }
   });
@@ -202,10 +202,10 @@ ${row} | fake-harness-alpha@1.0.0/fake-model-small | plain
 `;
     expect(stdout).toBe(
       "Dockerfiles for two-commits (4 permutations). Nothing is built.\n" +
-        permutation(" 1  node20 | first  | house-style-first ", "prerun-h4423094f", FIRST, FIRST) +
-        permutation(" 2  node20 | first  | house-style-second", "prerun-hcab9b5fc", FIRST, SECOND) +
-        permutation(" 3  node20 | second | house-style-first ", "prerun-h3e3ca2a8", SECOND, FIRST) +
-        permutation(" 4  node20 | second | house-style-second", "prerun-hf696eb12", SECOND, SECOND),
+        permutation(" 1  node20 | first  | house-style-first ", "prerun-hf803f77d", FIRST, FIRST) +
+        permutation(" 2  node20 | first  | house-style-second", "prerun-h85c50e99", FIRST, SECOND) +
+        permutation(" 3  node20 | second | house-style-first ", "prerun-hc7fcb855", SECOND, FIRST) +
+        permutation(" 4  node20 | second | house-style-second", "prerun-h51cb391f", SECOND, SECOND),
     );
   });
 

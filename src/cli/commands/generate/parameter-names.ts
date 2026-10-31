@@ -2,8 +2,8 @@
 // `test-case-parameters/` and renders `_generated/parameter-names.d.ts` —
 // spec/055-declaring-test-cases.md#typed-names.
 
-import { mkdir, readdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { listEntries } from "../../../platform/fs.ts";
+import { join } from "../../../platform/path.ts";
 import { InvalidConfigError, loadDeclaration, type Problem } from "../../../project/config.ts";
 
 interface HarnessFamilyNames {
@@ -21,10 +21,9 @@ export interface ParameterNames {
 
 async function listDirNames(dir: string): Promise<string[]> {
   try {
-    const entries = await readdir(dir, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
+    return listEntries(dir)
+      .filter((entry) => entry.isDirectory)
+      .map((entry) => entry.path)
       .sort();
   } catch {
     return [];
@@ -33,10 +32,9 @@ async function listDirNames(dir: string): Promise<string[]> {
 
 async function listFileStems(dir: string): Promise<string[]> {
   try {
-    const entries = await readdir(dir, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
-      .map((entry) => entry.name.slice(0, -".ts".length))
+    return listEntries(dir)
+      .filter((entry) => !entry.isDirectory && entry.path.endsWith(".ts"))
+      .map((entry) => entry.path.slice(0, -".ts".length))
       .sort();
   } catch {
     return [];
@@ -128,7 +126,6 @@ export async function writeGeneratedTypes(root: string): Promise<{ path: string;
   const names = await collectParameterNames(root);
   const content = renderParameterNames(names);
   const path = join(root, "_generated", "parameter-names.d.ts");
-  await mkdir(join(root, "_generated"), { recursive: true });
-  await writeFile(path, content);
+  await Bun.write(path, content);
   return { path, content };
 }

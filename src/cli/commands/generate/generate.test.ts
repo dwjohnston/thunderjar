@@ -5,16 +5,16 @@
 //   bun run fixture scenario_2 generate
 
 import { describe, expect, test } from "bun:test";
-import { readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { remove } from "../../../platform/fs.ts";
+import { join } from "../../../platform/path.ts";
 import { scenario, thunderjar } from "../../../testing/cli.ts";
 
 /** Runs `generate` in `fixtures` with no earlier output left, returning its output and the file. */
 async function generateIn(fixtures: string) {
   const path = join(fixtures, ".thunderjar", "_generated", "parameter-names.d.ts");
-  await rm(path, { force: true });
+  await remove(path);
   const result = await thunderjar(fixtures, ["generate"]);
-  return { ...result, path, content: await readFile(path, "utf8") };
+  return { ...result, path, content: await Bun.file(path).text() };
 }
 
 describe("scenario_1_minimal_initial_setup", () => {
@@ -68,14 +68,14 @@ type HarnessModelName =
   test("generate: from a folder below the project, writes into the project's .thunderjar/", async () => {
     const below = join(fixtures, ".thunderjar", "test-cases");
     const path = join(fixtures, ".thunderjar", "_generated", "parameter-names.d.ts");
-    await rm(path, { force: true });
+    await remove(path);
 
     const { stdout, stderr, exitCode } = await thunderjar(below, ["generate"]);
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`generated ${path}\n`);
-    expect(await readFile(path, "utf8")).toContain('type CodeStateName = "baseline";');
+    expect(await Bun.file(path).text()).toContain('type CodeStateName = "baseline";');
   });
 });
 

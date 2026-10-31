@@ -15,7 +15,8 @@
 // it exists or would be built, its postrun image and the harness command — without building or
 // running anything.
 
-import { join, relative } from "node:path";
+import { Command } from "commander";
+import { join, relative } from "../../../platform/path.ts";
 import { dockerCli, type Docker } from "../../../adapters/docker/docker.ts";
 import { recomputeAggregationResult } from "../../../measuring/aggregate.ts";
 import { findThunderjarRoot, loadMeasurements, loadTestCase } from "../../../project/config.ts";
@@ -34,6 +35,7 @@ import {
 } from "../../../running/runner.ts";
 import { ulid } from "../../../matrix/ulid.ts";
 import { count, duration, seconds, showOutcome } from "../format.ts";
+import { dataDirOption, imagePrefixOption } from "../options.ts";
 
 export interface RunOptions {
   dryRun: boolean;
@@ -186,4 +188,16 @@ export async function run(name: string, options: RunOptions): Promise<void> {
   log("");
   log(`${count(total, "container run")}: ${byCode.join(", ")}`);
   log(`Recorded in ${relative(cwd, storePath)}`);
+}
+
+export function createRunCommand(): Command {
+  return new Command("run")
+    .description("Run a test case.")
+    .argument("<test case>", "the test case to run")
+    .option("--dry-run", "print each container run instead of building or running anything")
+    .addOption(imagePrefixOption("the image repository prerun and postrun images are tagged in"))
+    .addOption(dataDirOption())
+    .action(async (name: string, options: { dryRun?: boolean; imagePrefix?: string; dataDir?: string }) => {
+      await run(name, { dryRun: options.dryRun ?? false, repository: options.imagePrefix, dataDir: options.dataDir });
+    });
 }

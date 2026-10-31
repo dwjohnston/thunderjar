@@ -152,10 +152,16 @@ Matrix shape: 1/1/2/2/2 (8 permutations × 5 iterations = 40 container runs)
     ]);
   });
 
-  test("plan with no test case, or --image-prefix without a name, prints its usage", async () => {
-    for (const args of [["plan"], ["plan", "two-pairs", "--image-prefix"], ["plan", "two-pairs", "extra"]]) {
-      const { stderr, exitCode } = await thunderjar(fixtures, args);
-      expect(stderr).toBe("usage: thunderjar plan <test case> [--image-prefix <name>]\n");
+  test("plan with no test case, --image-prefix without a name, or an extra argument, says what's wrong, then its usage", async () => {
+    for (const [args, error] of [
+      [["plan"], "error: missing required argument 'test case'"],
+      [["plan", "two-pairs", "--image-prefix"], "error: option '--image-prefix <name>' argument missing"],
+      [["plan", "two-pairs", "extra"], "error: too many arguments for 'plan'"],
+    ] as const) {
+      const { stdout, stderr, exitCode } = await thunderjar(fixtures, [...args]);
+      expect(stdout).toBe("");
+      expect(stderr).toStartWith(error);
+      expect(stderr).toContain("Usage: thunderjar plan [options] <test case>");
       expect(exitCode).toBe(1);
     }
   });

@@ -15,8 +15,8 @@
 //   bun run fixture 8 show fails
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readTextSync } from "../../../platform/fs.ts";
+import { join } from "../../../platform/path.ts";
 import { scenario, thunderjar } from "../../../testing/cli.ts";
 
 const OLDEST = "01k4tq3h8r0000000000000000";
@@ -214,16 +214,16 @@ Permutation ${BEHAVES}  (2 iterations)
 
   test("show <container run> leaves the checked-in store byte for byte as it was", async () => {
     const store = join(fixtures, ".thunderjar", ".data", "runs.json");
-    const before = readFileSync(store);
+    const before = readTextSync(store);
     for (const iteration of ["i00", "i01"]) expect((await show(`postrun-e${ERRORED}-h${BEHAVES}-${iteration}`)).exitCode).toBe(0);
-    expect(readFileSync(store).equals(before)).toBe(true);
+    expect(readTextSync(store)).toBe(before);
   });
 
   test("show <execution> leaves the checked-in store byte for byte as it was, even with a stale value", async () => {
     const store = join(fixtures, ".thunderjar", ".data", "runs.json");
-    const before = readFileSync(store);
+    const before = readTextSync(store);
     for (const target of [ERRORED, "fails"]) expect((await show(target)).exitCode).toBe(0);
-    expect(readFileSync(store).equals(before)).toBe(true);
+    expect(readTextSync(store)).toBe(before);
   });
 
   test("a container run with no measures shows none", async () => {
@@ -261,10 +261,17 @@ Permutation 389190d4  (2 iterations)
     }
   });
 
-  test("prints usage for no argument, extra arguments or a flag", async () => {
-    for (const args of [["show"], ["show", "a", "b"], ["show", "--json"], ["show", "fails", "--data-dir"]]) {
-      const { stderr, exitCode } = await thunderjar(fixtures, args);
-      expect(stderr).toBe("usage: thunderjar show <test case | execution | container run> [--data-dir <dir>]\n");
+  test("says what's wrong, then its usage, for no argument, extra arguments or a flag", async () => {
+    for (const [args, error] of [
+      [["show"], "error: missing required argument 'target'"],
+      [["show", "a", "b"], "error: too many arguments for 'show'"],
+      [["show", "--json"], "error: unknown option '--json'"],
+      [["show", "fails", "--data-dir"], "error: option '--data-dir <dir>' argument missing"],
+    ] as const) {
+      const { stdout, stderr, exitCode } = await thunderjar(fixtures, [...args]);
+      expect(stdout).toBe("");
+      expect(stderr).toStartWith(error);
+      expect(stderr).toContain("Usage: thunderjar show [options] <target>");
       expect(exitCode).toBe(1);
     }
   });
