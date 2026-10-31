@@ -26,12 +26,9 @@
 // it out of the postrun image, the host one out of the kept directory. Measuring on the host
 // means instruments run with the host's tools (templateTest's `bun test`), not the image's.
 
-import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { constants, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { copy, exists, makeDir, makeTempDir, remove, tmpdir } from "../platform/fs.ts";
+import { join, resolve } from "../platform/path.ts";
+import { signalNumber } from "../platform/signals.ts";
 import type { Docker } from "../adapters/docker/docker.ts";
 import type { MeasurementContext } from "../api/declarations.ts";
 import type { PlannedContainerRun } from "../matrix/execution.ts";
@@ -88,32 +85,30 @@ interface WrapperOptions {
  */
 export async function runWrapped(command: string, { cwd, timeoutSeconds, runPath, now }: WrapperOptions) {
   const startedAt = now();
-  const exitCode = await new Promise<number>((resolve, reject) => {
-    // Its own process group, so the timeout can kill the command's children too.
-    const child = spawn("sh", ["-c", command], { cwd, detached: true, stdio: ["ignore", 2, 2] });
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        process.kill(-child.pid!, "SIGKILL");
-      } catch {
-        // Already gone.
-      }
-    }, timeoutSeconds * 1000);
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("exit", (code, signal) => {
-      clearTimeout(timer);
-      // A shell reports death by signal N as 128 + N.
-      resolve(timedOut ? TIMEOUT_EXIT_CODE : (code ?? 128 + constants.signals[signal!]));
-    });
-  });
+  // Its own process group, so the timeout can kill the command's children too.
+  const child = Bun.spawn(["sh", "-c", command], { cwd, detached: true, stdio: ["ignore", 2, 2] });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      // Already gone.
+    }
+  }, timeoutSeconds * 1000);
+  try {
+    await child.exited;
+  } finally {
+    clearTimeout(timer);
+  }
+  const exitCode = timedOut ? TIMEOUT_EXIT_CODE : exitCodeOf(child);
   const execution: ExecutionFile = { startedAt, finishedAt: now(), exitCode };
-  await writeFile(runPath, `${JSON.stringify(execution)}\n`);
+  await Bun.write(runPath, `${JSON.stringify(execution)}\n`);
   return execution;
 }
+
+/** A finished process's exit code; a shell reports death by signal N as 128 + N. */
+const exitCodeOf = (proc: Bun.Subprocess) => proc.exitCode ?? 128 + signalNumber(proc.signalCode!);
 
 /** Runs each container run on the host, in its own directory under `rootDir`. */
 export function createHostRunner(rootDir: string, now: () => number = Date.now): ContainerRunner {
@@ -122,8 +117,8 @@ export function createHostRunner(rootDir: string, now: () => number = Date.now):
       const dir = join(executionDir(rootDir, run.executionId), run.postrunTag);
       const workspace = join(dir, "workspace");
       const thunderjar = join(dir, "thunderjar");
-      await mkdir(workspace, { recursive: true });
-      await mkdir(thunderjar, { recursive: true });
+      await makeDir(workspace);
+      await makeDir(thunderjar);
       return runWrapped(run.renderCommand(join(thunderjar, "result.json")), {
         cwd: workspace,
         timeoutSeconds: run.timeoutSeconds,
@@ -162,7 +157,7 @@ export function createDockerRunner(docker: Docker, repository: string): Containe
   return {
     async runContainer(run) {
       const prerun = imageRef(repository, run.prerunTag);
-      const name = `thunderjar-${run.postrunTag}-${randomUUID().slice(0, 8)}`;
+      const name = `thunderjar-${run.postrunTag}-${crypto.randomUUID().slice(0, 8)}`;
       try {
         const { exitCode, stdout } = await docker.run(prerun, name, containerWrapper(run.command, run.timeoutSeconds));
         const runJson = stdout.trim().split("\n").at(-1) ?? "";
@@ -179,16 +174,10 @@ export function createDockerRunner(docker: Docker, repository: string): Containe
 }
 
 /** Runs `command` with `sh -c` in `cwd`, collecting its output. */
-function exec(command: string, cwd: string) {
-  return new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve, reject) => {
-    const child = spawn("sh", ["-c", command], { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
-    child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
-    child.on("error", reject);
-    child.on("close", (code, signal) => resolve({ stdout, stderr, exitCode: code ?? 128 + constants.signals[signal!] }));
-  });
+async function exec(command: string, cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const child = Bun.spawn(["sh", "-c", command], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+  const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+  return { stdout, stderr, exitCode: exitCodeOf(child) };
 }
 
 /**
@@ -204,12 +193,12 @@ export function createHostMeasurementOpener(rootDir: string): MeasurementOpener 
       if (!executionId) throw new Error(`not a postrun tag: ${postrunTag}`);
       const dir = join(executionDir(rootDir, executionId), postrunTag);
       const kept = join(dir, "workspace");
-      if (!existsSync(kept)) throw new Error(`no container run kept for ${postrunTag} (expected ${kept})`);
+      if (!(await exists(kept))) throw new Error(`no container run kept for ${postrunTag} (expected ${kept})`);
       const resultPath = join(dir, "thunderjar", "result.json");
-      const harnessResult = existsSync(resultPath) ? await readFile(resultPath, "utf8") : "";
-      const workdir = await mkdtemp(join(tmpdir(), "thunderjar-measure-"));
-      await cp(kept, workdir, { recursive: true, verbatimSymlinks: true }).catch(async (error: unknown) => {
-        await rm(workdir, { recursive: true, force: true });
+      const harnessResult = (await exists(resultPath)) ? await Bun.file(resultPath).text() : "";
+      const workdir = await makeTempDir("thunderjar-measure-");
+      await copy(kept, workdir).catch(async (error: unknown) => {
+        await remove(workdir);
         throw error;
       });
       return scratchContext(workdir, harnessResult, workdir);
@@ -225,20 +214,20 @@ export function createHostMeasurementOpener(rootDir: string): MeasurementOpener 
 export function createDockerMeasurementOpener(docker: Docker, repository: string): MeasurementOpener {
   return {
     async openMeasurementContext(postrunTag) {
-      const scratch = await mkdtemp(join(tmpdir(), "thunderjar-measure-"));
+      const scratch = await makeTempDir("thunderjar-measure-");
       const workdir = join(scratch, "workspace");
-      const name = `thunderjar-measure-${randomUUID().slice(0, 8)}`;
+      const name = `thunderjar-measure-${crypto.randomUUID().slice(0, 8)}`;
       try {
-        await mkdir(workdir);
+        await makeDir(workdir);
         await docker.create(imageRef(repository, postrunTag), name);
         await docker.copyFrom(name, "/workspace/.", workdir);
         const resultPath = join(scratch, "result.json");
         // A cli may write no result file.
         await docker.copyFrom(name, "/thunderjar/result.json", resultPath).catch(() => {});
-        const harnessResult = existsSync(resultPath) ? await readFile(resultPath, "utf8") : "";
+        const harnessResult = (await exists(resultPath)) ? await Bun.file(resultPath).text() : "";
         return scratchContext(workdir, harnessResult, scratch);
       } catch (error) {
-        await rm(scratch, { recursive: true, force: true });
+        await remove(scratch);
         throw error;
       } finally {
         await docker.removeContainer(name).catch(() => {});
@@ -253,12 +242,11 @@ function scratchContext(workdir: string, harnessResult: string, scratch: string)
     workdir,
     harnessResult,
     exec: (command) => exec(command, workdir),
-    readFile: (path) => readFile(resolve(workdir, path), "utf8"),
+    readFile: (path) => Bun.file(resolve(workdir, path)).text(),
     async writeFile(path, contents) {
-      await mkdir(dirname(resolve(workdir, path)), { recursive: true });
-      await writeFile(resolve(workdir, path), contents);
+      await Bun.write(resolve(workdir, path), contents);
     },
     glob: async (pattern) => (await Array.fromAsync(new Bun.Glob(pattern).scan({ cwd: workdir, dot: true }))).toSorted(),
-    close: () => rm(scratch, { recursive: true, force: true }),
+    close: () => remove(scratch),
   };
 }

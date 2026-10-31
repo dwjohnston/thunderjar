@@ -1,13 +1,11 @@
 import { expect, test } from "bun:test";
-import { readdirSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { listDir, makeTempDir } from "../platform/fs.ts";
+import { join } from "../platform/path.ts";
 import { jsonFileStore, type AggregationResult, type ContainerRunRecord } from "./run-data-store.ts";
 
 /** A store in a fresh temp directory, under a `.data/` folder that doesn't exist yet. */
 async function tempStore() {
-  const dir = await mkdtemp(join(tmpdir(), "thunderjar-store-"));
+  const dir = await makeTempDir("thunderjar-store-");
   const path = join(dir, ".data", "runs.json");
   return { dir, path, store: jsonFileStore(path) };
 }
@@ -45,7 +43,7 @@ test("a record round-trips, and nothing but the store file is left behind", asyn
 
   const { containerRuns } = (await Bun.file(path).json()) as { containerRuns: ContainerRunRecord[] };
   expect(containerRuns).toEqual([r]);
-  expect(readdirSync(join(dir, ".data"))).toEqual(["runs.json"]);
+  expect(listDir(join(dir, ".data"))).toEqual(["runs.json"]);
   // A new store on the same file sees it.
   expect(await jsonFileStore(path).listExecutions()).toEqual([
     { executionId: "01k4x9j2e8mqz3", testCase: "fake-is-prime", ranAt: "2026-09-29T14:30:55.104Z", containerRuns: 1 },
@@ -197,7 +195,7 @@ test("aggregation results sit in the same file as the run records, and a file wi
     containerRuns: [runOf(id, "4f9a21c8", 0)],
     aggregationResults: [aggregationOf(id, "4f9a21c8")],
   });
-  expect(readdirSync(join(dir, ".data"))).toEqual(["runs.json"]);
+  expect(listDir(join(dir, ".data"))).toEqual(["runs.json"]);
 });
 
 test("recordAggregationResult overwrites by execution and permutation", async () => {

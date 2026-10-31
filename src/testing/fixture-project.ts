@@ -3,8 +3,8 @@
 // one code state, two prompt sets, two harness/model pairs across two families, one
 // task with two initial prompts and four measurements.
 
-import { mkdir, symlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { makeDir, symlink } from "../platform/fs.ts";
+import { join, resolve } from "../platform/path.ts";
 import { LOCK, PACKAGE, json } from "./seed-repo.ts";
 
 const repoRoot = resolve(import.meta.dir, "..", "..");
@@ -166,13 +166,12 @@ export async function createFixtureProject(dir: string, changes: Record<string, 
   for (const [rel, content] of Object.entries({ ...FILES, ...changes })) {
     if (content === null) continue;
     const path = join(root, rel);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, content);
+    await Bun.write(path, content);
   }
 }
 
 /** Makes `thunderjar` resolvable from `dir`, the same way `bun link` would. */
 export async function linkThunderjar(dir: string): Promise<void> {
-  await mkdir(join(dir, "node_modules"), { recursive: true });
-  await symlink(repoRoot, join(dir, "node_modules", "thunderjar"), "dir");
+  await makeDir(join(dir, "node_modules"));
+  await symlink(repoRoot, join(dir, "node_modules", "thunderjar"));
 }

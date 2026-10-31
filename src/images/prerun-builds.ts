@@ -15,7 +15,7 @@
 //     git/<commit>.bundle         what ctx.git asked for
 //     git/<commit>/<path>
 
-import { dirname, join } from "node:path";
+import { dirname, join } from "../platform/path.ts";
 import { DockerBuildError, type Docker } from "../adapters/docker/docker.ts";
 import type { ResolvedPermutation } from "../matrix/resolve.ts";
 import { prerunTag } from "../matrix/tags.ts";

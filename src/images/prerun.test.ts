@@ -1,22 +1,18 @@
 import { expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { listDir, makeDir, makeTempDir, readTextSync } from "../platform/fs.ts";
+import { join } from "../platform/path.ts";
 import { checkoutCommit } from "../api/fragments.ts";
 import { assembleBuildContext, checkCommits, MissingCommitsError, renderPrerun, type PrerunParameters } from "./prerun.ts";
 import { findRepository } from "./repository.ts";
 import { SEED_COMMITS, seedRepo } from "../testing/seed-repo.ts";
 
-const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-prerun-"));
+const tmp = () => makeTempDir("thunderjar-prerun-");
 
 /** A folder parameter whose folder holds `files`. */
 async function folder(owner: string, files: Record<string, string> = {}) {
   const dir = await tmp();
   for (const [path, contents] of Object.entries(files)) {
-    await mkdir(join(dir, path, ".."), { recursive: true });
-    await writeFile(join(dir, path), contents);
+    await Bun.write(join(dir, path), contents);
   }
   return { owner, dir, config: undefined as unknown };
 }
@@ -190,8 +186,8 @@ test("a file missing at its commit fails, naming the parameter", async () => {
   );
 });
 
-const git = (cwd: string, ...args: string[]) => spawnSync("git", args, { cwd, encoding: "utf8" }).stdout.trim();
-const tree = (dir: string) => readdirSync(dir, { recursive: true }).map(String).toSorted();
+const git = (cwd: string, ...args: string[]) => Bun.spawnSync(["git", ...args], { cwd }).stdout.toString().trim();
+const tree = (dir: string) => listDir(dir, { recursive: true }).toSorted();
 
 test("the build context holds the Dockerfile and each folder parameter, less the harness's map files", async () => {
   const p = await parameters();
@@ -214,7 +210,7 @@ test("the build context holds the Dockerfile and each folder parameter, less the
       join("parameters", "promptSet", "index.ts"),
     ].toSorted(),
   );
-  expect(readFileSync(join(dir, "Dockerfile"), "utf8")).toBe(renderPrerun(p).dockerfile);
+  expect(readTextSync(join(dir, "Dockerfile"))).toBe(renderPrerun(p).dockerfile);
 });
 
 test("what ctx.git asked for is in the build context: a bundle of the commit's history only, and the file", async () => {
@@ -231,17 +227,17 @@ test("what ctx.git asked for is in the build context: a bundle of the commit's h
     dir,
   );
 
-  expect(readFileSync(join(dir, "git", SEED_COMMITS.prompts, "prompts", "snerk.md"), "utf8")).toStartWith("# Snerk\n");
+  expect(readTextSync(join(dir, "git", SEED_COMMITS.prompts, "prompts", "snerk.md"))).toStartWith("# Snerk\n");
   // Cloned as checkoutCommit clones it, the bundle has the commit and nothing after it.
   const clone = join(await tmp(), "clone");
-  spawnSync("git", ["clone", "--quiet", join(dir, "git", `${SEED_COMMITS.baseline.slice(0, 10)}.bundle`), clone]);
+  Bun.spawnSync(["git", "clone", "--quiet", join(dir, "git", `${SEED_COMMITS.baseline.slice(0, 10)}.bundle`), clone]);
   expect(git(clone, "log", "--all", "--format=%H")).toBe(SEED_COMMITS.baseline);
 });
 
 test("assembling again replaces what was there", async () => {
   const p = await parameters();
   const dir = join(await tmp(), "prerun-h4f9a21c8");
-  await mkdir(join(dir, "stale"), { recursive: true });
+  await makeDir(join(dir, "stale"));
   await assembleBuildContext(p, undefined, dir);
-  expect(readdirSync(dir).toSorted()).toEqual(["Dockerfile", "parameters"]);
+  expect(listDir(dir).toSorted()).toEqual(["Dockerfile", "parameters"]);
 });

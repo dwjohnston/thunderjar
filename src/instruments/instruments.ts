@@ -2,8 +2,7 @@
 // Each is host-side logic run against a MeasurementContext, so it is unit-testable against a
 // directory on disk without a measurement container.
 
-import { readFile } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "../platform/path.ts";
 import type { AggregateFor, InstrumentName, InstrumentTypes, MeasurementContext, MeasurementResult } from "../api/declarations.ts";
 
 /**
@@ -173,7 +172,7 @@ export const templateTest: Instrument<{ subject: string; template: string }, { p
   async evaluate({ subject, template }, ctx) {
     const subjects = await ctx.glob(subject);
     if (subjects.length === 0) return { outcome: "skipped", reason: `no file matches ${subject}` };
-    const source = await readFile(template, "utf8");
+    const source = await Bun.file(template).text();
     const total = { passed: 0, failed: 0 };
     try {
       for (const path of subjects) {

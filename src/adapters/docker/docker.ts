@@ -7,8 +7,6 @@
 // Thunderjar builds prerun images, runs a container run in a container from one and commits it
 // into a postrun image, and copies files out of a postrun image to measure it.
 
-import { spawn } from "node:child_process";
-
 export interface Docker {
   /** Why the Docker daemon can't be reached, or undefined when it can. */
   unreachable(): Promise<string | undefined>;
@@ -61,21 +59,16 @@ export class DockerCommandError extends Error {
  * of its output to our stderr, keeping stdout for Thunderjar's own; "stdout" collects stdout and
  * passes stderr to ours.
  */
-function docker(binary: string, args: string[], output: "collect" | "stderr" | "stdout") {
-  return new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve, reject) => {
-    const stdio = {
-      collect: ["ignore", "ignore", "pipe"] as const,
-      stderr: ["ignore", 2, 2] as const,
-      stdout: ["ignore", "pipe", 2] as const,
-    }[output];
-    const child = spawn(binary, args, { stdio: [...stdio] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout?.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
-    child.stderr?.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ exitCode: code ?? 1, stdout, stderr }));
-  });
+async function docker(binary: string, args: string[], output: "collect" | "stderr" | "stdout") {
+  const stdio: Record<typeof output, { stdout: "ignore" | "pipe" | number; stderr: "pipe" | number }> = {
+    collect: { stdout: "ignore", stderr: "pipe" },
+    stderr: { stdout: 2, stderr: 2 },
+    stdout: { stdout: "pipe", stderr: 2 },
+  };
+  const child = Bun.spawn([binary, ...args], { stdin: "ignore", ...stdio[output] });
+  const text = (stream: unknown) => (stream instanceof ReadableStream ? new Response(stream).text() : Promise.resolve(""));
+  const [stdout, stderr] = await Promise.all([text(child.stdout), text(child.stderr), child.exited]);
+  return { exitCode: child.exitCode ?? 1, stdout, stderr };
 }
 
 /** A Docker that runs the `docker` CLI, or `binary` in its place. */

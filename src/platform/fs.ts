@@ -76,6 +76,28 @@ export function readTextSync(path: string): string {
   return result.stdout.toString();
 }
 
+/** Appends `text` to the file at `path`, creating it if it's missing, as node's `appendFileSync`. */
+export function appendTextSync(path: string, text: string): void {
+  const result = Bun.spawnSync(["sh", "-c", 'cat >> "$1"', "sh", path], { stdin: Buffer.from(text), stderr: "pipe" });
+  if (result.exitCode !== 0) throw new Error(`can't append to ${path}: ${result.stderr.toString().trim()}`);
+}
+
+/** The bytes of the file at `path`, for code that can't wait: prefer `Bun.file(path).bytes()`. */
+export function readBytesSync(path: string): Uint8Array {
+  const result = Bun.spawnSync(["cat", "--", path], { stderr: "pipe" });
+  if (result.exitCode !== 0) throw new Error(`can't read ${path}: ${result.stderr.toString().trim()}`);
+  return new Uint8Array(result.stdout);
+}
+
+/**
+ * The regular files under `dir`, recursively, sorted, as paths relative to it, hidden ones
+ * included. Symlinks aren't followed or listed, as node's `Dirent.isFile()`.
+ */
+export function listFilesSync(dir: string): string[] {
+  if (!isDirectorySync(dir)) throw new Error(`not a directory: ${dir}`);
+  return [...new Bun.Glob("**").scanSync({ cwd: dir, dot: true, onlyFiles: true, followSymlinks: false })].toSorted();
+}
+
 export type DirEntry = { path: string; isDirectory: boolean };
 
 /**

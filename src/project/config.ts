@@ -5,8 +5,8 @@
 // Loading checks the configuration by hand, against the files on disk rather than
 // `_generated/`, so a stale generated file or an ignored type error is still caught.
 
-import { existsSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { existsSync } from "../platform/fs.ts";
+import { basename, dirname, join, resolve } from "../platform/path.ts";
 import { declaredBy, type MeasurementDeclaration, type TestCaseDeclaration } from "../api/declarations.ts";
 import { aggregateMethods, instruments, isInstrumentName } from "../instruments/instruments.ts";
 

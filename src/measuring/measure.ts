@@ -2,7 +2,7 @@
 // The run is reached only through its MeasurementContext, so a fresh run and a backfill take
 // the same path.
 
-import { resolve } from "node:path";
+import { resolve } from "../platform/path.ts";
 import type { Measurement } from "../project/config.ts";
 import type { MeasurementContext, MeasurementResult } from "../api/declarations.ts";
 import { hashMeasurement } from "../matrix/hashing.ts";

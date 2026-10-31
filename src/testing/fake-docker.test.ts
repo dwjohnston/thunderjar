@@ -7,10 +7,8 @@
 //   fixtureTests/scenario_8_recorded_executions/postrun-files/<execution ID>/<postrun tag>/
 
 import { afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { existsSync, listDir, listFilesSync, makeDir, makeTempDir, readBytesSync, remove } from "../platform/fs.ts";
+import { join } from "../platform/path.ts";
 import { fakeDocker, scenario } from "./cli.ts";
 import { FAKE_DOCKER } from "./fake-docker.ts";
 
@@ -35,11 +33,7 @@ export const isPrime = (n: number) => n > 1 && n % 2 !== 0;
 /** Every file under `dir`, relative to it, with its bytes; none if there is no `dir`. */
 function contents(dir: string): Record<string, Buffer> {
   if (!existsSync(dir)) return {};
-  const files = readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => join(entry.parentPath, entry.name))
-    .toSorted();
-  return Object.fromEntries(files.map((file) => [relative(dir, file), readFileSync(file)]));
+  return Object.fromEntries(listFilesSync(dir).map((file) => [file, Buffer.from(readBytesSync(join(dir, file)))]));
 }
 
 type State = Awaited<ReturnType<typeof fakeDocker>>;
@@ -65,7 +59,7 @@ describe("fake docker with saved postrun files", () => {
   const states: State[] = [];
 
   const destination = async () => {
-    const dir = await mkdtemp(join(tmpdir(), "thunderjar-fake-docker-cp-"));
+    const dir = await makeTempDir("thunderjar-fake-docker-cp-");
     disposable.push(dir);
     return dir;
   };
@@ -80,7 +74,7 @@ describe("fake docker with saved postrun files", () => {
   });
 
   afterEach(async () => {
-    for (const dir of disposable.splice(0)) await rm(dir, { recursive: true, force: true });
+    for (const dir of disposable.splice(0)) await remove(dir);
     for (const created of states.splice(0)) {
       await created.remove();
       expect(existsSync(created.env.FAKE_DOCKER_DIR)).toBe(false);
@@ -133,7 +127,7 @@ describe("fake docker with saved postrun files", () => {
       stderr: "Error response from daemon: Could not find the file /thunderjar/result.json in container thunderjar-measure-1a2b3c4d\n",
       exitCode: 1,
     });
-    expect(readdirSync(scratch)).toEqual([]);
+    expect(listDir(scratch)).toEqual([]);
     expect(fake.commands()).toEqual([
       `docker create --name thunderjar-measure-1a2b3c4d --entrypoint sh ${ref(ERRORED_I00)}`,
       `docker cp thunderjar-measure-1a2b3c4d:/thunderjar/result.json ${join(scratch, "result.json")}`,
@@ -143,9 +137,9 @@ describe("fake docker with saved postrun files", () => {
   test("cp of a saved /thunderjar/result.json copies it to the destination file", async () => {
     // Scenario 8 saves no result file, so this image's files are saved in a folder of the test's own.
     const files = await destination();
-    await mkdir(join(files, "workspace"));
-    await mkdir(join(files, "thunderjar"));
-    await writeFile(join(files, "thunderjar", "result.json"), '{"model":"fake-model-small-001"}\n');
+    await makeDir(join(files, "workspace"));
+    await makeDir(join(files, "thunderjar"));
+    await Bun.write(join(files, "thunderjar", "result.json"), '{"model":"fake-model-small-001"}\n');
     const fake = await state({ "throwaway:postrun-with-result": files });
     const scratch = await destination();
 
@@ -173,7 +167,7 @@ describe("fake docker with saved postrun files", () => {
       stderr: "Error response from daemon: No such container: thunderjar-measure-1a2b3c4d\n",
       exitCode: 1,
     });
-    expect(readdirSync(workdir)).toEqual([]);
+    expect(listDir(workdir)).toEqual([]);
   });
 
   test("after rm --force, the container's files can't be copied, and its name can be used again", async () => {

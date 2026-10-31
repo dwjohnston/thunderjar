@@ -1,8 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { existsSync, listDir, makeDir, makeTempDir, readTextSync } from "../platform/fs.ts";
+import { join } from "../platform/path.ts";
 import { fileCreated, grep, templateTest } from "./instruments.ts";
 import { createHostMeasurementOpener, type OpenedMeasurementContext } from "../testing/measurement-context.ts";
 
@@ -15,13 +13,12 @@ afterEach(async () => {
 
 /** The kept workspace of a container run holding `files` (empty ones, if given as a list). */
 async function keptWorkspace(files: string[] | Record<string, string>) {
-  const rootDir = await mkdtemp(join(tmpdir(), "thunderjar-instruments-"));
+  const rootDir = await makeTempDir("thunderjar-instruments-");
   const workspace = join(rootDir, "01k4x9j2e8mqz3abcdefghjkmn", TAG, "workspace");
-  await mkdir(workspace, { recursive: true });
+  await makeDir(workspace);
   const contents = Array.isArray(files) ? Object.fromEntries(files.map((file) => [file, ""])) : files;
   for (const [file, content] of Object.entries(contents)) {
-    await mkdir(dirname(join(workspace, file)), { recursive: true });
-    await writeFile(join(workspace, file), content);
+    await Bun.write(join(workspace, file), content);
   }
   return { rootDir, workspace };
 }
@@ -129,8 +126,8 @@ const BUGGY = CORRECT.replace("n < 2", "n < 1");
 
 /** `template` written to a file of its own on the host, as a measurement bundles it. */
 async function templateFile(template = TEMPLATE) {
-  const path = join(await mkdtemp(join(tmpdir(), "thunderjar-template-")), "isPrime.test.template.ts");
-  await writeFile(path, template);
+  const path = join(await makeTempDir("thunderjar-template-"), "isPrime.test.template.ts");
+  await Bun.write(path, template);
   return path;
 }
 
@@ -223,11 +220,11 @@ test("templateTest leaves the kept workspace as it was", async () => {
   expect(result).toEqual({ outcome: "measured", data: { passed: 9, failed: 1 } });
 
   // The rendered tests are in the context's scratch copy, and gone once it is closed.
-  expect(readdirSync(ctx.workdir).toSorted()).toEqual(["isPrime.templateTest.test.ts", "isPrime.ts", "src"]);
+  expect(listDir(ctx.workdir).toSorted()).toEqual(["isPrime.templateTest.test.ts", "isPrime.ts", "src"]);
   await ctx.close();
   expect(existsSync(ctx.workdir)).toBe(false);
-  expect(readdirSync(workspace, { recursive: true }).map(String).toSorted()).toEqual(["isPrime.ts", "src", "src/isPrime.ts"]);
-  for (const [file, content] of Object.entries(files)) expect(readFileSync(join(workspace, file), "utf8")).toBe(content);
+  expect(listDir(workspace, { recursive: true }).toSorted()).toEqual(["isPrime.ts", "src", "src/isPrime.ts"]);
+  for (const [file, content] of Object.entries(files)) expect(readTextSync(join(workspace, file))).toBe(content);
 }, 20000);
 
 test("templateTest checks its config is a subject glob and a template path", () => {

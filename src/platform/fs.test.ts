@@ -1,14 +1,17 @@
 import { afterEach, expect, test } from "bun:test";
 import {
+  appendTextSync,
   copy,
   exists,
   existsSync,
   isDirectory,
   listDir,
   listEntries,
+  listFilesSync,
   makeDir,
   makeTempDir,
   move,
+  readBytesSync,
   readTextSync,
   remove,
   symlink,
@@ -54,4 +57,33 @@ test("move, remove, exists and makeDir", async () => {
 
 test("readTextSync throws for a missing file", () => {
   expect(() => readTextSync("/no/such/file")).toThrow("can't read /no/such/file");
+});
+
+test("readBytesSync reads bytes as they are, empty files included", async () => {
+  dir = await makeTempDir("thunderjar-fs-test-");
+  await Bun.write(`${dir}/bin`, new Uint8Array([0, 255, 128, 10]));
+  await Bun.write(`${dir}/empty`, "");
+  expect(readBytesSync(`${dir}/bin`)).toEqual(new Uint8Array([0, 255, 128, 10]));
+  expect(readBytesSync(`${dir}/empty`)).toEqual(new Uint8Array());
+  expect(() => readBytesSync(`${dir}/missing`)).toThrow("can't read");
+});
+
+test("listFilesSync lists regular files recursively, sorted, without symlinks or directories", async () => {
+  dir = await makeTempDir("thunderjar-fs-test-");
+  await Bun.write(`${dir}/b.txt`, "b");
+  await Bun.write(`${dir}/.hidden/x`, "x");
+  await Bun.write(`${dir}/a/z/deep.txt`, "d");
+  await makeDir(`${dir}/emptyDir`);
+  await symlink("b.txt", `${dir}/link`);
+  await symlink("a", `${dir}/dirLink`);
+  expect(listFilesSync(dir)).toEqual([".hidden/x", "a/z/deep.txt", "b.txt"]);
+  expect(() => listFilesSync(`${dir}/missing`)).toThrow("not a directory");
+});
+
+test("appendTextSync appends to a file, creating it if it's missing", async () => {
+  dir = await makeTempDir("thunderjar-fs-test-");
+  appendTextSync(`${dir}/log`, "one\t$HOME\n");
+  appendTextSync(`${dir}/log`, "-n two\n");
+  expect(await Bun.file(`${dir}/log`).text()).toBe("one\t$HOME\n-n two\n");
+  expect(() => appendTextSync(`${dir}/missing/log`, "x")).toThrow("can't append");
 });

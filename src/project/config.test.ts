@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { makeDir, makeTempDir } from "../platform/fs.ts";
+import { join } from "../platform/path.ts";
 import { findThunderjarRoot, loadMeasurements, loadTestCase, TestCaseNotFoundError, ThunderjarRootNotFoundError } from "./config.ts";
 import { createFixtureProject, linkThunderjar } from "../testing/fixture-project.ts";
 
-const tmp = () => mkdtemp(join(tmpdir(), "thunderjar-config-"));
+const tmp = () => makeTempDir("thunderjar-config-");
 
 test("finds .thunderjar/ in the current directory", async () => {
   const dir = await tmp();
@@ -18,7 +17,7 @@ test("finds .thunderjar/ by walking up from a nested directory", async () => {
   const dir = await tmp();
   await createFixtureProject(dir);
   const nested = join(dir, "src", "deep", "nested");
-  await mkdir(nested, { recursive: true });
+  await makeDir(nested);
 
   expect(findThunderjarRoot(nested)).toBe(join(dir, ".thunderjar"));
 });

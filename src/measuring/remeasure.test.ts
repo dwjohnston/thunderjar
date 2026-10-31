@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { join } from "../platform/path.ts";
 import { hashMeasurement } from "../matrix/hashing.ts";
 import type { Measurement } from "../project/config.ts";
 import type { ContainerRunRecord, RecordedMeasure, RecordedOutcome, Result } from "../store/run-data-store.ts";

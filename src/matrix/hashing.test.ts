@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rename, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { makeTempDir, move } from "../platform/fs.ts";
+import { join } from "../platform/path.ts";
 import {
   abbreviateHash,
   hashBaseImage,
@@ -21,7 +20,7 @@ import { createFixtureProject, linkThunderjar, stub } from "../testing/fixture-p
  * live at a different one.
  */
 async function parameters(changes: Record<string, string | null> = {}): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "thunderjar-hashing-"));
+  const dir = await makeTempDir("thunderjar-hashing-");
   await createFixtureProject(dir, changes);
   await linkThunderjar(dir);
   return join(dir, ".thunderjar", "test-case-parameters");
@@ -60,10 +59,10 @@ test("renaming a folder keeps its hash; editing index.ts changes it", async () =
   const dir = await parameters();
   const before = hashBaseImage(join(dir, "baseImages", "node20"));
 
-  await rename(join(dir, "baseImages", "node20"), join(dir, "baseImages", "node-twenty"));
+  await move(join(dir, "baseImages", "node20"), join(dir, "baseImages", "node-twenty"));
   expect(hashBaseImage(join(dir, "baseImages", "node-twenty"))).toBe(before);
 
-  await writeFile(
+  await Bun.write(
     join(dir, "baseImages", "node-twenty", "index.ts"),
     stub("declareBaseImage", "{\n  applyParameter: () => `FROM node:22-bookworm`,\n}"),
   );
@@ -97,7 +96,7 @@ test("an initial prompt is hashed by its own content; renaming keeps it, and mea
   await Bun.write(join(dir, "tasks", "is-prime", "measurements", "isPrimeTsExists.ts"), "// edited\n");
   expect(hashInitialPrompt(join(prompts, "plain.ts"))).toBe(plain);
 
-  await rename(join(prompts, "plain.ts"), join(prompts, "simple.ts"));
+  await move(join(prompts, "plain.ts"), join(prompts, "simple.ts"));
   expect(hashInitialPrompt(join(prompts, "simple.ts"))).toBe(plain);
 });
 
@@ -105,7 +104,7 @@ test("an initial prompt's timeout is part of its hash", async () => {
   const dir = await parameters();
   const path = join(dir, "tasks", "is-prime", "initial-prompts", "plain.ts");
   const before = hashInitialPrompt(path);
-  await writeFile(path, (await Bun.file(path).text()).replace("timeoutSeconds: 600", "timeoutSeconds: 900"));
+  await Bun.write(path, (await Bun.file(path).text()).replace("timeoutSeconds: 600", "timeoutSeconds: 900"));
   expect(hashInitialPrompt(path)).not.toBe(before);
 });
 
@@ -208,7 +207,7 @@ test("editing shared execution content changes every pair in the family", async 
 test("renaming the family folder keeps its pairs' hashes", async () => {
   const dir = await parameters();
   const pair = await hashHarnessModelPair(join(dir, "harnessModels", "fake-harness-alpha"), "1.0.0", "fake-model-small");
-  await rename(join(dir, "harnessModels", "fake-harness-alpha"), join(dir, "harnessModels", "alpha"));
+  await move(join(dir, "harnessModels", "fake-harness-alpha"), join(dir, "harnessModels", "alpha"));
   expect(await hashHarnessModelPair(join(dir, "harnessModels", "alpha"), "1.0.0", "fake-model-small")).toBe(pair);
 });
 

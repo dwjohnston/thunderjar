@@ -3,22 +3,18 @@
 // holding `.thunderjar/` is in. Thunderjar only reads it: it never fetches, and never writes a
 // ref or an object into it.
 
-import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { makeTempDir, remove } from "../platform/fs.ts";
+import { join } from "../platform/path.ts";
 
 /** Runs git in `cwd`, collecting stdout as bytes. */
-function git(cwd: string, args: string[]) {
-  return new Promise<{ exitCode: number; stdout: Buffer; stderr: string }>((resolve, reject) => {
-    const child = spawn("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    const stdout: Buffer[] = [];
-    let stderr = "";
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ exitCode: code ?? 1, stdout: Buffer.concat(stdout), stderr }));
-  });
+async function git(cwd: string, args: string[]): Promise<{ exitCode: number; stdout: Buffer; stderr: string }> {
+  const child = Bun.spawn(["git", ...args], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+  const [stdout, stderr] = await Promise.all([
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  return { exitCode: child.exitCode ?? 1, stdout: Buffer.from(stdout), stderr };
 }
 
 async function gitOrThrow(cwd: string, args: string[]) {
@@ -61,15 +57,15 @@ export async function findRepository(dir: string): Promise<Repository | undefine
     async bundle(commit, dest) {
       // `git bundle` needs a ref to bundle, and the user's repository is never written to. So
       // the ref goes in a throwaway repository that borrows the user's objects (alternates).
-      const scratch = await mkdtemp(join(tmpdir(), "thunderjar-bundle-"));
+      const scratch = await makeTempDir("thunderjar-bundle-");
       try {
         await gitOrThrow(scratch, ["init", "--quiet", "--bare"]);
-        await writeFile(join(scratch, "objects", "info", "alternates"), `${objects}\n`);
+        await Bun.write(join(scratch, "objects", "info", "alternates"), `${objects}\n`);
         await gitOrThrow(scratch, ["update-ref", "refs/heads/code-state", commit]);
         await gitOrThrow(scratch, ["symbolic-ref", "HEAD", "refs/heads/code-state"]);
         await gitOrThrow(scratch, ["bundle", "create", "--quiet", dest, "HEAD", "code-state"]);
       } finally {
-        await rm(scratch, { recursive: true, force: true });
+        await remove(scratch);
       }
     },
   };

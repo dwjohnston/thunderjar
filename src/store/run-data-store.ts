@@ -9,9 +9,8 @@
 // Aggregation results sit beside the container run records, in the same file. They are
 // computed in src/measuring/aggregate.ts; the store only keeps them.
 
-import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { makeDir, move } from "../platform/fs.ts";
+import { dirname, join, resolve } from "../platform/path.ts";
 import type { Axis } from "../matrix/resolve.ts";
 import { findThunderjarRoot } from "../project/config.ts";
 
@@ -194,7 +193,7 @@ export function jsonFileStore(path: string): RunDataStore {
   const read = async (): Promise<JsonFile> => {
     let text: string;
     try {
-      text = await readFile(path, "utf8");
+      text = await Bun.file(path).text();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return { containerRuns: [] };
       throw error;
@@ -203,10 +202,10 @@ export function jsonFileStore(path: string): RunDataStore {
   };
 
   const write = async (data: JsonFile) => {
-    await mkdir(dirname(path), { recursive: true });
-    const temp = `${path}.${randomUUID()}.tmp`;
-    await writeFile(temp, `${JSON.stringify(data, null, 2)}\n`);
-    await rename(temp, path);
+    await makeDir(dirname(path));
+    const temp = `${path}.${crypto.randomUUID()}.tmp`;
+    await Bun.write(temp, `${JSON.stringify(data, null, 2)}\n`);
+    await move(temp, path);
   };
 
   return {

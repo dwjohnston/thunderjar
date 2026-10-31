@@ -10,9 +10,7 @@
 // code state's in the repository it was built from: the one it must never show the agent.
 // Nothing here writes a README or a @ts-ignore, so the fake agents' measures are what they wrote.
 
-import { spawnSync } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "../platform/path.ts";
 
 export const SEED_COMMITS = {
   baseline: "089b6a7a1688798c917f0b78535b0c8348a1dbae",
@@ -49,14 +47,14 @@ const COMMITS: { message: string; date: string; files: Record<string, string> }[
 const IDENTITY = { name: "Thunderjar Fixtures", email: "fixtures@thunderjar.invalid" };
 
 function git(dir: string, args: string[], env: Record<string, string> = {}) {
-  const result = spawnSync("git", args, {
+  const result = Bun.spawnSync(["git", ...args], {
     cwd: dir,
-    encoding: "utf8",
+    stderr: "pipe",
     // Nothing from the developer's own git config: no signing, hooks or templates.
     env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", ...env },
   });
-  if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed in ${dir}:\n${result.stderr}`);
-  return result.stdout.trim();
+  if (result.exitCode !== 0) throw new Error(`git ${args.join(" ")} failed in ${dir}:\n${result.stderr.toString()}`);
+  return result.stdout.toString().trim();
 }
 
 /**
@@ -68,8 +66,7 @@ export async function seedRepo(dir: string): Promise<typeof SEED_COMMITS> {
   const hashes: string[] = [];
   for (const { message, date, files } of COMMITS) {
     for (const [path, contents] of Object.entries(files)) {
-      await mkdir(dirname(join(dir, path)), { recursive: true });
-      await writeFile(join(dir, path), contents);
+      await Bun.write(join(dir, path), contents);
     }
     git(dir, ["add", "--", ...Object.keys(files)]);
     git(dir, ["commit", "--quiet", "--no-verify", "-m", message], {

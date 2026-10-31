@@ -4,7 +4,7 @@
 // (spec/064-harness.md#cli-running-the-agent). Nothing is run here: `run --dry-run` prints
 // this, and `run` hands each container run to a ContainerRunner (src/running/runner.ts).
 
-import { join } from "node:path";
+import { join } from "../platform/path.ts";
 import { parseHarnessModelPair } from "../project/config.ts";
 import type {
   HarnessDeclaration,

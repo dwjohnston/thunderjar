@@ -7,12 +7,11 @@
 //
 // `additionalHash` and `determineHash` (floating parameters) are not applied yet.
 
-import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { listFilesSync, readBytesSync } from "../platform/fs.ts";
+import { join, resolve } from "../platform/path.ts";
 import { instruments, isInstrumentName } from "../instruments/instruments.ts";
 
-const sha256 = (data: string | Uint8Array) => createHash("sha256").update(data).digest("hex");
+const sha256 = (data: string | Uint8Array) => new Bun.CryptoHasher("sha256").update(data).digest("hex");
 
 /**
  * A stable string for a value: object keys sorted, functions as their source. JSON.stringify
@@ -33,21 +32,13 @@ const hashValue = (value: unknown) => sha256(canonical(value));
 /** The abbreviated hash shown by `plan` and carried in image tags. */
 export const abbreviateHash = (hash: string) => hash.slice(0, 8);
 
-/** Every file under `dir`, as `/`-separated paths relative to it, sorted. */
-function listFiles(dir: string): string[] {
-  return readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile())
-    .map((entry) => relative(dir, join(entry.parentPath, entry.name)).split(sep).join("/"))
-    .toSorted();
-}
-
 /**
  * Hashes a folder's content: each file's path relative to the folder, and its bytes. The
  * folder's own name and location are not part of it. `exclude` lists relative paths to leave out.
  */
 function hashFolder(dir: string, exclude: string[] = []): string {
-  const files = listFiles(dir).filter((file) => !exclude.includes(file));
-  return hashValue(files.map((file) => [file, sha256(readFileSync(join(dir, file)))]));
+  const files = listFilesSync(dir).filter((file) => !exclude.includes(file));
+  return hashValue(files.map((file) => [file, sha256(readBytesSync(join(dir, file)))]));
 }
 
 /** `baseImages/<name>/` — index.ts and everything bundled beside it. */
@@ -63,7 +54,7 @@ export const hashPromptSet = (path: string) => hashFolder(path);
  * `tasks/<task>/initial-prompts/<name>.ts` — the file's content alone. The task's
  * `measurements/` never contributes (spec/066-task.md#excluded-from-every-parameter-hash).
  */
-export const hashInitialPrompt = (path: string) => sha256(readFileSync(path));
+export const hashInitialPrompt = (path: string) => sha256(readBytesSync(path));
 
 /**
  * The family files Thunderjar loads separately. They are excluded from the shared execution
@@ -135,6 +126,6 @@ export function hashMeasurement({ instrument, config, dir }: { instrument: strin
   if (keys.length === 0) return hashValue({ instrument, config });
   if (dir === undefined) throw new Error(`a ${instrument} measurement's hash needs the folder its bundled files are in`);
   const paths = config as Record<string, string>;
-  const files = Object.fromEntries(keys.map((key) => [key, sha256(readFileSync(resolve(dir, paths[key]!)))]));
+  const files = Object.fromEntries(keys.map((key) => [key, sha256(readBytesSync(resolve(dir, paths[key]!)))]));
   return hashValue({ instrument, config, files });
 }

@@ -2,10 +2,8 @@
 // (`bun run fixture <scenario> …`), against the recording fake Docker (fake-docker.ts), which
 // every CLI a test starts inherits from test-setup.ts. `fakeDocker` gives it a state of its own.
 
-import { existsSync, readFileSync } from "node:fs";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { copy, existsSync, makeTempDir, readTextSync, remove } from "../platform/fs.ts";
+import { join, resolve } from "../platform/path.ts";
 import { linkThunderjar } from "./fixture-project.ts";
 
 const repoRoot = resolve(import.meta.dir, "..", "..");
@@ -19,11 +17,11 @@ export const scenario = (name: string) => join(repoRoot, "fixtureTests", name, "
  * anything a manual run left behind, or the tsconfig fixtureTests/typecheck.test.ts writes.
  */
 export async function copyOfFixtures(fixtures: string) {
-  const dir = await mkdtemp(join(tmpdir(), "thunderjar-fixture-run-"));
-  await cp(fixtures, dir, {
-    recursive: true,
-    filter: (src) => !/[/\\]\.thunderjar[/\\](\.data|_generated|tsconfig\.json)$/.test(src),
-  });
+  const dir = await makeTempDir("thunderjar-fixture-run-");
+  await copy(fixtures, dir);
+  const leftBehind = new Bun.Glob("**/.thunderjar/{.data,_generated,tsconfig.json}");
+  const paths = Array.from(leftBehind.scanSync({ cwd: dir, dot: true, onlyFiles: false, followSymlinks: false }));
+  for (const path of paths) await remove(join(dir, path));
   await linkThunderjar(dir);
   return dir;
 }
@@ -39,11 +37,11 @@ export async function fakeDocker(
   flags: ("unreachable" | "fail-build")[] = [],
   postruns: Record<string, string> = {},
 ) {
-  const dir = await mkdtemp(join(tmpdir(), "thunderjar-fake-docker-"));
-  await writeFile(join(dir, "images"), images.map((ref) => `${ref}\n`).join(""));
-  await writeFile(join(dir, "postruns"), Object.entries(postruns).map(([ref, saved]) => `${ref}\t${saved}\n`).join(""));
-  for (const flag of flags) await writeFile(join(dir, flag), "");
-  const read = (name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "");
+  const dir = await makeTempDir("thunderjar-fake-docker-");
+  await Bun.write(join(dir, "images"), images.map((ref) => `${ref}\n`).join(""));
+  await Bun.write(join(dir, "postruns"), Object.entries(postruns).map(([ref, saved]) => `${ref}\t${saved}\n`).join(""));
+  for (const flag of flags) await Bun.write(join(dir, flag), "");
+  const read = (name: string) => (existsSync(join(dir, name)) ? readTextSync(join(dir, name)) : "");
   return {
     env: { FAKE_DOCKER_DIR: dir },
     /** Each command run, `docker <args…>`. */
@@ -52,7 +50,7 @@ export async function fakeDocker(
     /** The names of the containers that exist. */
     containers: () => read("containers").split("\n").filter(Boolean).map((line) => line.split("\t")[0]!),
     /** Deletes this state. */
-    remove: () => rm(dir, { recursive: true, force: true }),
+    remove: () => remove(dir),
   };
 }
 

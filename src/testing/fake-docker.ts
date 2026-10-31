@@ -18,8 +18,8 @@
 // A container's files are only ever its image's saved files, which `cp` copies out: it never
 // runs, so no agent or command runs in it, and nothing is committed.
 
-import { appendFileSync, cpSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { appendTextSync, copy, existsSync, isDirectorySync, readTextSync } from "../platform/fs.ts";
+import { basename, join } from "../platform/path.ts";
 import type { Docker } from "../adapters/docker/docker.ts";
 
 /** This file's path: set THUNDERJAR_DOCKER to it. */
@@ -51,7 +51,7 @@ if (import.meta.main) {
   const args = process.argv.slice(2);
   const dir = process.env.FAKE_DOCKER_DIR;
   const has = (name: string) => dir !== undefined && existsSync(join(dir, name));
-  const lines = (name: string) => (has(name) ? readFileSync(join(dir!, name), "utf8").split("\n").filter(Boolean) : []);
+  const lines = (name: string) => (has(name) ? readTextSync(join(dir!, name)).split("\n").filter(Boolean) : []);
   const images = () => lines("images");
   /** The rows of a tab-separated state file, keyed by their first column. */
   const table = (name: string) => new Map(lines(name).map((line) => line.split("\t") as [string, string]));
@@ -60,7 +60,7 @@ if (import.meta.main) {
     process.exit(1);
   };
 
-  if (dir) appendFileSync(join(dir, "commands"), `docker ${args.join(" ")}\n`);
+  if (dir) appendTextSync(join(dir, "commands"), `docker ${args.join(" ")}\n`);
 
   const [command, ...rest] = args;
   if (command === "version") {
@@ -75,14 +75,14 @@ if (import.meta.main) {
     const context = rest.at(-1)!;
     if (!existsSync(join(context, "Dockerfile"))) fail(`fake docker: no Dockerfile in ${context}`);
     if (has("fail-build")) fail("fake docker: the build failed");
-    if (dir) appendFileSync(join(dir, "images"), `${ref}\n`);
+    if (dir) appendTextSync(join(dir, "images"), `${ref}\n`);
   } else if (command === "create" && rest[0] === "--name") {
     // docker create --name <name> --entrypoint sh <ref>
     const name = rest[1]!;
     const ref = rest.at(-1)!;
     if (!table("postruns").has(ref)) fail(`Error: No such image: ${ref} (fake docker: no saved postrun files for it)`);
     if (table("containers").has(name)) fail(`Error response from daemon: Conflict. The container name "/${name}" is already in use`);
-    appendFileSync(join(dir!, "containers"), `${name}\t${ref}\n`);
+    appendTextSync(join(dir!, "containers"), `${name}\t${ref}\n`);
   } else if (command === "cp" && rest.length === 2 && rest[0]!.includes(":")) {
     // docker cp <name>:<path> <dest>, where <path> ending in /. copies a folder's contents.
     const [source, dest] = rest as [string, string];
@@ -91,13 +91,13 @@ if (import.meta.main) {
     const ref = table("containers").get(name) ?? fail(`Error response from daemon: No such container: ${name}`);
     const from = join(table("postruns").get(ref)!, path);
     if (!existsSync(from)) fail(`Error response from daemon: Could not find the file ${path} in container ${name}`);
-    const into = existsSync(dest) && statSync(dest).isDirectory() && !path.endsWith("/.") ? join(dest, basename(from)) : dest;
-    cpSync(from, into, { recursive: true, verbatimSymlinks: true });
+    const into = isDirectorySync(dest) && !path.endsWith("/.") ? join(dest, basename(from)) : dest;
+    await copy(from, into);
   } else if (command === "rm" && rest[0] === "--force") {
     // docker rm --force <name>, which succeeds even if there's no such container.
     const name = rest[1]!;
     const containers = [...table("containers")].filter(([other]) => other !== name);
-    if (dir) writeFileSync(join(dir, "containers"), containers.map((row) => `${row.join("\t")}\n`).join(""));
+    if (dir) await Bun.write(join(dir, "containers"), containers.map((row) => `${row.join("\t")}\n`).join(""));
   } else {
     fail(`fake docker: unsupported command: docker ${args.join(" ")}`);
   }

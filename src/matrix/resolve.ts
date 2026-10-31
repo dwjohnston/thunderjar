@@ -2,7 +2,7 @@
 // name it selects, and each permutation with its permutation hash —
 // spec/060-test-case-parameters.md#parameter-hashing-and-identity. Shared by `plan` and `run`.
 
-import { join } from "node:path";
+import { join } from "../platform/path.ts";
 import { parseHarnessModelPair } from "../project/config.ts";
 import type { TestCaseDeclaration } from "../api/declarations.ts";
 import {

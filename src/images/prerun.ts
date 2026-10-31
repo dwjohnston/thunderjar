@@ -21,8 +21,8 @@
 // commits a build needs are known, and checked, before anything is built. Images are tagged in
 // a local repository, `thunderjar`, until the image store arrives.
 
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join, posix, relative } from "node:path";
+import { copy, makeDir, remove } from "../platform/fs.ts";
+import { dirname, isAbsolute, join, normalize } from "../platform/path.ts";
 import type { Docker } from "../adapters/docker/docker.ts";
 import { parseHarnessModelPair } from "../project/config.ts";
 import type {
@@ -149,8 +149,8 @@ function recordingGit(owner: string, needs: GitNeed[]): GitBuildContext {
     },
     show(commit, file) {
       checkCommit("show", commit);
-      const normal = posix.normalize(file);
-      if (file === "" || posix.isAbsolute(file) || normal === "." || normal.split("/").includes("..")) {
+      const normal = normalize(file);
+      if (file === "" || isAbsolute(file) || normal === "." || normal.split("/").includes("..")) {
         throw new Error(`error: ${owner}: ctx.git.show needs a path inside the repository, got ${JSON.stringify(file)}.`);
       }
       const path = `git/${commit}/${normal}`;
@@ -212,16 +212,15 @@ export async function checkCommits(needs: GitNeed[], repository: Repository): Pr
  */
 export async function assembleBuildContext(parameters: PrerunParameters, repository: Repository | undefined, dir: string) {
   const { dockerfile, git } = renderPrerun(parameters);
-  await rm(dir, { recursive: true, force: true });
-  await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, "Dockerfile"), dockerfile);
+  await remove(dir);
+  await makeDir(dir);
+  await Bun.write(join(dir, "Dockerfile"), dockerfile);
 
   for (const role of Object.keys(PARAMETER_DIRS) as Role[]) {
     const { dir: source, exclude = [] } = parameters[role];
-    await cp(source, join(dir, PARAMETER_DIRS[role]), {
-      recursive: true,
-      filter: (src) => !exclude.includes(relative(source, src)),
-    });
+    const target = join(dir, PARAMETER_DIRS[role]);
+    await copy(source, target);
+    for (const path of exclude) await remove(join(target, path));
   }
 
   const written = new Set<string>();
@@ -230,7 +229,7 @@ export async function assembleBuildContext(parameters: PrerunParameters, reposit
     written.add(need.path);
     if (!repository) throw new Error(`${need.owner} reads commit ${need.commit}, but there is no repository to read it from`);
     const dest = join(dir, need.path);
-    await mkdir(dirname(dest), { recursive: true });
+    await makeDir(dirname(dest));
     if (need.kind === "bundle") {
       const full = await repository.resolveCommit(need.commit);
       if (!full) throw new Error(`commit ${need.commit} is not in the repository`);
@@ -238,7 +237,7 @@ export async function assembleBuildContext(parameters: PrerunParameters, reposit
     } else {
       const contents = await repository.readFile(need.commit, need.file);
       if (contents === undefined) throw new Error(`${need.file} is not in commit ${need.commit}`);
-      await writeFile(dest, contents);
+      await Bun.write(dest, contents);
     }
   }
 }

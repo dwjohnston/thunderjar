@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, listDir, makeDir, makeTempDir, readTextSync } from "../platform/fs.ts";
+import { join } from "../platform/path.ts";
 import { createHostMeasurementOpener } from "./runner.ts";
 
 const ID = "01k4x9j2e8mqz3abcdefghjkmn";
@@ -10,13 +8,13 @@ const TAG = `postrun-e${ID}-h4f9a21c8-i00`;
 
 /** A kept container run under a fresh root, as the host runner leaves it. */
 async function keptRun({ result }: { result?: string } = {}) {
-  const rootDir = await mkdtemp(join(tmpdir(), "thunderjar-runner-"));
+  const rootDir = await makeTempDir("thunderjar-runner-");
   const dir = join(rootDir, ID, TAG);
-  await mkdir(join(dir, "workspace", "src"), { recursive: true });
-  await mkdir(join(dir, "thunderjar"), { recursive: true });
-  await writeFile(join(dir, "workspace", "src", "isPrime.ts"), "export default () => true;\n");
-  await writeFile(join(dir, "workspace", ".hidden"), "");
-  if (result !== undefined) await writeFile(join(dir, "thunderjar", "result.json"), result);
+  await makeDir(join(dir, "workspace", "src"));
+  await makeDir(join(dir, "thunderjar"));
+  await Bun.write(join(dir, "workspace", "src", "isPrime.ts"), "export default () => true;\n");
+  await Bun.write(join(dir, "workspace", ".hidden"), "");
+  if (result !== undefined) await Bun.write(join(dir, "thunderjar", "result.json"), result);
   return { rootDir, workspace: join(dir, "workspace") };
 }
 
@@ -31,7 +29,7 @@ test("the host measurement context works in a scratch copy of the run's workspac
 
   await ctx.writeFile("src/isPrime.test.ts", "test\n");
   await ctx.writeFile("new/dir/file.txt", "made\n");
-  expect(readFileSync(join(ctx.workdir, "src", "isPrime.test.ts"), "utf8")).toBe("test\n");
+  expect(readTextSync(join(ctx.workdir, "src", "isPrime.test.ts"))).toBe("test\n");
   expect(await ctx.readFile("new/dir/file.txt")).toBe("made\n");
 
   expect(await ctx.exec("pwd && ls src && echo oops >&2 && exit 4")).toEqual({
@@ -41,7 +39,7 @@ test("the host measurement context works in a scratch copy of the run's workspac
   });
 
   // Nothing written reached the kept workspace, and closing discards the copy.
-  expect(readdirSync(workspace, { recursive: true }).map(String).toSorted()).toEqual([".hidden", "src", "src/isPrime.ts"]);
+  expect(listDir(workspace, { recursive: true }).toSorted()).toEqual([".hidden", "src", "src/isPrime.ts"]);
   await ctx.close();
   expect(existsSync(ctx.workdir)).toBe(false);
   expect(existsSync(join(workspace, "src", "isPrime.ts"))).toBe(true);
