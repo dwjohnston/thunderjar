@@ -67,6 +67,41 @@ From the first fixture test to the end of the 🧪 series took 49 commits and ab
 
 The core of the pattern is commits 1, 3 and 6.
 
+## Worth preserving: real git or not
+
+The "Real git or not" section of [fixtureTests/AGENTS.md on the `permutations` branch](https://github.com/dwjohnston/thunderjar/blob/permutations/fixtureTests/AGENTS.md) is a good approach. It splits scenarios by how their code states and prompt sets get their files.
+
+| Scenario | Code states | Prompt sets |
+|---|---|---|
+| 1 minimal initial setup | 📁 copied files | 📁 copied files |
+| 2 typical project | 📁 copied files | 📁 copied files |
+| 3 misbehaving agents | 📁 copied files | 📁 copied files |
+| 4 git project | 🌿 **real git** | 🌿 **real git** |
+
+- 📁 **Copied files**
+  - The parameter copies files kept beside its declaration. It reads no commits, so it builds anywhere, and editing one of those files changes its hash.
+  - e.g.
+    ```ts
+    applyParameter: (_config, ctx) => `COPY ${ctx.dir}/files/ /workspace/\nRUN npm ci`,
+    ```
+- 🌿 **Real git**
+  - The parameter reads real commits of the thunderjar repository itself, so CI checks out with full history.
+  - Scenario 4's project was committed twice in this repository, and each code state checks out one of those commits.
+  - The worktree's copy of the prompt file has moved on from both commits, so tests can show a prompt file is read at its commit, not from the worktree.
+  - Each pinned commit is tagged `fixture-scenario-4-<name>`, so it stays reachable if the branch is squash-merged.
+  - Rule: add a new tagged commit for a new state, and never amend, squash or rebase away a pinned commit.
+
+Most scenarios use copied files, so they build in place and show hashing directly. Only one scenario covers real git.
+
+Commits:
+
+- [65bcb92](https://github.com/dwjohnston/thunderjar/commit/65bcb92) and [5f52f9e](https://github.com/dwjohnston/thunderjar/commit/5f52f9e)
+  - Scenario 4's project, at the two commits its code states check out.
+- [8333403](https://github.com/dwjohnston/thunderjar/commit/8333403)
+  - Add scenario 4: code states and prompt sets that read real git.
+
+⚠️ The tags no longer protect these commits. On 31 Oct, `fixture-scenario-4-first` and `-second` were recreated pointing at new commits (523984c and 952687d). The scenario 4 declarations still pin 65bcb92 and 5f52f9e, so those stay reachable only while the `permutations` or `ralph-2026-10-17` branch exists.
+
 ## Where the rules are written down
 
 There's no list of test types. The rules are spread across three files:
