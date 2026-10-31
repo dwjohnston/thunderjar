@@ -67,6 +67,61 @@ From the first fixture test to the end of the 🧪 series took 49 commits and ab
 
 The core of the pattern is commits 1, 3 and 6.
 
+## Features in order
+
+Each range runs from the feature's first commit to its last, and the link shows the combined diff.
+
+### Before the Ralph loop (PR #24)
+
+| # | Feature | Commits | Count | Finished |
+|---|---|---|---|---|
+| 1 | `thunderjar init`, and a library entry point | [780903c…575d53c](https://github.com/dwjohnston/thunderjar/compare/e5010f24dca35b3cb4f93ba4d518b30263855216...575d53c99cff6dcd2e0cf777ec13e36633222e46) | 3 | 14 Oct 11:31 |
+| 2 | `generate` and `plan`, with typed declarations and a config loader | [96e7946…f35a3da](https://github.com/dwjohnston/thunderjar/compare/575d53c99cff6dcd2e0cf777ec13e36633222e46...f35a3da74c9acfc514821346f0d217271a31cfdc) | 2 | 15 Oct 08:47 |
+| 3 | Repository layout enforced by generated oxlint rules | [8fbf1ff…dea8010](https://github.com/dwjohnston/thunderjar/compare/f35a3da74c9acfc514821346f0d217271a31cfdc...dea80103d26ba0afbb450814fa697f98675cf2e4) | 2 | 15 Oct 09:01 |
+| 4 | Clear configuration errors from `plan` and `generate`, plus a note on annotated tags | [b3d09c4…b93051c](https://github.com/dwjohnston/thunderjar/compare/dea80103d26ba0afbb450814fa697f98675cf2e4...b93051c43e5ab088961136143dbe0f9f54aaf3c4) | 2 | 15 Oct 09:39 |
+| 5 | Matrix shape, permutations and content hashes in `plan` | [9851f50…e8bbd10](https://github.com/dwjohnston/thunderjar/compare/b93051c43e5ab088961136143dbe0f9f54aaf3c4...e8bbd1081b613f4e31298c12ce8934e21f21a636) | 3 | 15 Oct 09:47 |
+| 6 | `thunderjar run <test case> --dry-run`, with ULID execution IDs | [2636f76…95a7e0e](https://github.com/dwjohnston/thunderjar/compare/e8bbd1081b613f4e31298c12ce8934e21f21a636...95a7e0edc6288dabc946cf40f45aa95a417dc9be) | 3 | 15 Oct 09:53 |
+| 7 | `thunderjar run <test case>` on the host | [0a7076b…b989a4b](https://github.com/dwjohnston/thunderjar/compare/95a7e0edc6288dabc946cf40f45aa95a417dc9be...b989a4b4e4c2307415878a086090e2c27ab2c50d) | 2 | 15 Oct 10:07 |
+| 8 | A run data store, and `thunderjar executions` | [690efa7…de91d68](https://github.com/dwjohnston/thunderjar/compare/b989a4b4e4c2307415878a086090e2c27ab2c50d...de91d6895537b1fd957ffdedded62bd0bb07e35c) | 3 | 15 Oct 10:27 |
+| 9 | Measurements taken on each container run | [b007653…a3e2a70](https://github.com/dwjohnston/thunderjar/compare/de91d6895537b1fd957ffdedded62bd0bb07e35c...a3e2a7068781661557463a587c8077ad1387003c) | 3 | 15 Oct 10:56 |
+| 10 | `grep` and `templateTest` instruments | [2089355…d48b115](https://github.com/dwjohnston/thunderjar/compare/a3e2a7068781661557463a587c8077ad1387003c...d48b1154961a7c6fe86455b26cc59f7210c7c5ca) | 2 | 15 Oct 11:22 |
+| 11 | `thunderjar show`, and a reason for a skipped measure | [8c8d3b2…3d64208](https://github.com/dwjohnston/thunderjar/compare/d48b1154961a7c6fe86455b26cc59f7210c7c5ca...3d642081f4dc28ca00b69fcc71136592106fca81) | 3 | 15 Oct 14:13 |
+| 12 | Aggregation results per permutation, shown by `show` | [ec85bd3…3fd9c98](https://github.com/dwjohnston/thunderjar/compare/3d642081f4dc28ca00b69fcc71136592106fca81...3fd9c98f53c249741ef7a2447da2b7122e5ca16e) | 4 | 15 Oct 22:19 |
+| 13 | Fixture tests for `run`, against a checked-in project | [fa62bdd…deccebb](https://github.com/dwjohnston/thunderjar/compare/3fd9c98f53c249741ef7a2447da2b7122e5ca16e...deccebb1d1cb330144872723ac677a5991d8a789) | 2 | 16 Oct 23:25 |
+| 14 | Fixture scenarios, with fake agents | [bea690c…bd8958d](https://github.com/dwjohnston/thunderjar/compare/deccebb1d1cb330144872723ac677a5991d8a789...bd8958d7f2bccba238f0d81745d86d3d6ccd4bce) | 4 | 17 Oct 00:25 |
+| 15 | `thunderjar build <test case>` | [28eba43…6fabd64](https://github.com/dwjohnston/thunderjar/compare/bd8958d7f2bccba238f0d81745d86d3d6ccd4bce...6fabd645fcf450c9b2e0ea58c453c2ca016981a8) | 3 | 17 Oct 01:46 |
+| 16 | A parameter's `applyParameter` decides what applying it does | [b59de5b…9e481a8](https://github.com/dwjohnston/thunderjar/compare/6fabd645fcf450c9b2e0ea58c453c2ca016981a8...9e481a8482cbc9aed510869b88147ede96050e93) | 2 | 17 Oct 03:40 |
+| 17 | Scenario catalogue in fixtureTests/AGENTS.md | [544d59e](https://github.com/dwjohnston/thunderjar/commit/544d59e506db3599767a42e05c4f4998d3511421) | 1 | 17 Oct 03:47 |
+| 18 | Scenario 4: code states and prompt sets that read real git | [65bcb92…8333403](https://github.com/dwjohnston/thunderjar/compare/544d59e506db3599767a42e05c4f4998d3511421...833340355a5583ddf92cf7e494b5e73e2aadebb6) | 3 | 17 Oct 03:52 |
+| 19 | Restructure src/ into layers, one folder per command | [7661ac6…bd6ddc6](https://github.com/dwjohnston/thunderjar/compare/833340355a5583ddf92cf7e494b5e73e2aadebb6...bd6ddc64fac64a4d0ec9ef00c8033b57184cfd7a) | 4 | 17 Oct 09:00 |
+| 20 | Build tests move beside the build command | [822a898](https://github.com/dwjohnston/thunderjar/commit/822a8986864639931d3641ce3ae49d3758da4532) | 1 | 17 Oct 09:10 |
+| 21 | Ralph loop set up, and the test strategy split into tasks | [d520f68…4dceed3](https://github.com/dwjohnston/thunderjar/compare/822a8986864639931d3641ce3ae49d3758da4532...4dceed3093f6e742a0981a98981ad9cf4f7dd3b0) | 4 | 17 Oct 10:37 |
+
+### Ralph loop (unmonitored)
+
+| # | Feature | Commits | Count | Finished |
+|---|---|---|---|---|
+| 22 | Testing philosophy in the AGENTS.md files, with the user's corrections | [eef5fe6…682017d](https://github.com/dwjohnston/thunderjar/compare/4dceed3093f6e742a0981a98981ad9cf4f7dd3b0...682017d6c174c88b8de8486d5ca8ccc516bde974) | 3 | 17 Oct 10:46 |
+| 23 | `--image-prefix <name>` on `build`, `run` and `plan` | [42c6163…b619c8b](https://github.com/dwjohnston/thunderjar/compare/682017d6c174c88b8de8486d5ca8ccc516bde974...b619c8be4612d2ac5ed8b74a52b7f4d97935b810) | 2 | 17 Oct 10:51 |
+| 24 | `thunderjar build <test case> --dry-run` | [1814eff…bb3aa95](https://github.com/dwjohnston/thunderjar/compare/b619c8be4612d2ac5ed8b74a52b7f4d97935b810...bb3aa95b77fb358d6df1afd2768ebd2176728214) | 3 | 17 Oct 10:54 |
+| 25 | `run` builds missing prerun images, then runs each iteration in a container | [eb62b82…14a416a](https://github.com/dwjohnston/thunderjar/compare/bb3aa95b77fb358d6df1afd2768ebd2176728214...14a416a2c43b970dd818922a1758c1f87f169447) | 3 | 17 Oct 11:09 |
+| 26 | 🧪 series: each command's tests move to scenarios | [d7704bd…d30d3fa](https://github.com/dwjohnston/thunderjar/compare/14a416a2c43b970dd818922a1758c1f87f169447...d30d3fac9f3a48693c0b2737c35052942e84bf9c) | 16 | 17 Oct 11:32 |
+| 27 | Chores: tasks 13 and 14 skipped, and the loop sleeps on overage | [c7e4779…1f1d7f6](https://github.com/dwjohnston/thunderjar/compare/d30d3fac9f3a48693c0b2737c35052942e84bf9c...1f1d7f656df3d21ac290fc3d14d2a62c13ee9e0c) | 5 | 17 Oct 12:02 |
+| 28 | Usage for no command or an unknown one | [935bac2…4c98586](https://github.com/dwjohnston/thunderjar/compare/1f1d7f656df3d21ac290fc3d14d2a62c13ee9e0c...4c9858643a854e18aae513a783c12fbc793624de) | 3 | 17 Oct 12:04 |
+| 29 | `--data-dir <dir>` on `run`, `executions` and `show` | [ca38c9a…5e4747a](https://github.com/dwjohnston/thunderjar/compare/4c9858643a854e18aae513a783c12fbc793624de...5e4747a29a4205c24a431796dbdf788401cf73f7) | 4 | 17 Oct 12:08 |
+| 30 | Switch to the ralph2 loop, and fix lint | [a517c2e…ca46b3f](https://github.com/dwjohnston/thunderjar/compare/5e4747a29a4205c24a431796dbdf788401cf73f7...ca46b3f0ca2f483bc97903f72c0fbfccf5400bcc) | 6 | 17 Oct 12:36 |
+| 31 | `measureStatus`: a recorded measure is missing, stale or current | [efa5b41…f14f8b9](https://github.com/dwjohnston/thunderjar/compare/ca46b3f0ca2f483bc97903f72c0fbfccf5400bcc...f14f8b91f51af88afb57d914cfcb6abdfe1792f0) | 3 | 17 Oct 12:41 |
+| 32 | `planRemeasure`: the measurements each container run needs | [a7e5a8d…53df109](https://github.com/dwjohnston/thunderjar/compare/f14f8b91f51af88afb57d914cfcb6abdfe1792f0...53df10999a66e0c4abb57f07ffbb948b1529c6b7) | 3 | 17 Oct 12:47 |
+| 33 | Execution summaries in `planRemeasure` | [bf689b0…3016f0c](https://github.com/dwjohnston/thunderjar/compare/53df10999a66e0c4abb57f07ffbb948b1529c6b7...3016f0c1dc12e89b3228fdc7ec416a71c759ca14) | 3 | 17 Oct 12:53 |
+| 34 | `show` marks a stale measure in the container run view | [c94992a…ac67f5d](https://github.com/dwjohnston/thunderjar/compare/3016f0c1dc12e89b3228fdc7ec416a71c759ca14...ac67f5dbd83f6092339b4d21be6522e7c1f12497) | 4 | 17 Oct 12:59 |
+| 35 | `show` marks a stale value in the execution view | [e9c440f…b847042](https://github.com/dwjohnston/thunderjar/compare/ac67f5dbd83f6092339b4d21be6522e7c1f12497...b847042faf00635deca0e4353c71fd17cb25e4eb) | 3 | 17 Oct 13:04 |
+| 36 | `thunderjar remeasure` entry point, not yet implemented | [b85ee3a…5c622ab](https://github.com/dwjohnston/thunderjar/compare/b847042faf00635deca0e4353c71fd17cb25e4eb...5c622ab510327a058e51e1f7c98ae6b9731c3a7b) | 4 | 17 Oct 13:10 |
+| 37 | `remeasure` reports an execution's plan | [860ce99…099578b](https://github.com/dwjohnston/thunderjar/compare/5c622ab510327a058e51e1f7c98ae6b9731c3a7b...099578b0c600dfc61f20ec59f8db4779f606710b) | 3 | 17 Oct 13:14 |
+| 38 | `remeasure` reports a test case | [b44b586…3062445](https://github.com/dwjohnston/thunderjar/compare/099578b0c600dfc61f20ec59f8db4779f606710b...3062445329988a23c75840ee886c47bd55ec2ac2) | 3 | 17 Oct 13:17 |
+| 39 | `remeasure` recomputes aggregation results | [90ab020…64951b7](https://github.com/dwjohnston/thunderjar/compare/3062445329988a23c75840ee886c47bd55ec2ac2...64951b7b3b2af7d99212b4b12daabae3e24a2c02) | 4 | 17 Oct 13:23 |
+| 40 | The fake Docker serves a saved postrun workspace | [38c8906…0d96ccf](https://github.com/dwjohnston/thunderjar/compare/64951b7b3b2af7d99212b4b12daabae3e24a2c02...0d96ccf9595ab43f1c90e8dcf035da24ffb5858d) | 4 | 17 Oct 13:37 |
+| 41 | `remeasure` takes and stores only the planned measurements, plus a final clean-up | [09d3940…cb935ba](https://github.com/dwjohnston/thunderjar/compare/0d96ccf9595ab43f1c90e8dcf035da24ffb5858d...cb935bab65590c3a7b0d7904ad3801bcc0f03a3f) | 4 | 17 Oct 13:46 |
+
 ## Worth preserving: real git or not
 
 The "Real git or not" section of [fixtureTests/AGENTS.md on the `permutations` branch](https://github.com/dwjohnston/thunderjar/blob/permutations/fixtureTests/AGENTS.md) is a good approach. It splits scenarios by how their code states and prompt sets get their files.
