@@ -1,5 +1,11 @@
 # thunderjar
 
+## 0.1.3
+
+### Patch Changes
+
+- 919fee1: Add a `plan` command.
+
 ## 0.1.2
 
 ### Patch Changes
