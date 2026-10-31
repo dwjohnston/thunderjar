@@ -1,0 +1,9 @@
+# fixtureTests/node_modules/thunderjar is a checked-in link to the repo, so every scenario's
+# fixtures resolve `thunderjar` from a fresh clone, before any test has run.
+!/node_modules/
+*/node_modules/
+# Written by typecheck.test.ts before each scenario is checked.
+*/fixtures/.thunderjar/tsconfig.json
+# Scenario 11 isn't checked by typecheck.test.ts: its tsconfig is part of the project, so its
+# type errors can be reproduced by hand.
+!/scenario_11_type_errors/fixtures/.thunderjar/tsconfig.json
