@@ -25,7 +25,8 @@ flowchart TD
     C2["6fabd64<br/>Add thunderjar build: first build tests, with a recording fake Docker<br/>and the first real-Docker test, run in CI with test:docker"] -->|"3 commits · 2h 01m"| D
     D["544d59e<br/>Scenario catalogue in fixtureTests/AGENTS.md"] -->|"5 commits · 3h 05m"| E1
     E1["0993e6e<br/>One folder per command"] -->|"3 commits · 2h 18m"| E2
-    E2["822a898<br/>Build tests move beside the build command"] -->|"5 commits · 1h 30m"| F
+    E2["822a898<br/>Build tests move beside the build command"] -->|"4 commits · 1h 26m"| P
+    P["4dceed3 · 17 Oct 10:37 UTC<br/>End of PR #24: Ralph loop set up and test strategy split into tasks<br/>Unmonitored from here"] -->|"1 commit · 3m"| F
     F["eef5fe6<br/>Testing philosophy written down"] -->|"11 commits · 33m"| G
     G["d7704bd → 1beb543 · 17 Oct 11:32 UTC<br/>🧪 series: every command's tests move to scenarios<br/>15 commits over 18m"] -->|"57 commits · 2h 14m"| T
     T["cb935ba · 17 Oct 13:46 UTC<br/>PR's last commit"]
