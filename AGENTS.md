@@ -1,6 +1,19 @@
 # Thunderjar 
 
-## Folder structure
+Thunderjar is a TypeScript/Bun CLI for
+  - Running repeatable experiments that
+     - Compare coding-agent harnesses for these combinations: 
+        - Initial code state
+        - Prompsets (AGENTS.md, SKILL.md files etc)
+        - The harness model pair 
+        - The task 
+  - Experiments are run in docker containers
+  - After the run is complete, measurements are applied 
+  - Different configurations of a run can be compared by comparing the same measurements 
+
+## Folder structure 
+
+
 
 - `src/`: the implementation.
   - `cli/`: 
@@ -14,7 +27,7 @@
   - `.vitepress/`: site config.
   - `cli/`: CLI reference pages, generated per command.
   - `index.md`: landing page.
-- `project/`: markdown files live here
+- `project-md/`: markdown files live here
   - `candidates`: tracking various commits points across varios projects that will make good thunderjar test cases
   - `research`: preserved unstructured investigations
   - `prd` - product requirements docs
