@@ -327,12 +327,15 @@ jobs:
             exit 1
           }
 
+      # Verbose logging shows the OIDC token exchange, which npm otherwise
+      # skips silently before falling back to the setup-node placeholder token.
       - name: Publish to npm
         run: |
+          echo "npm $(npm --version)"
           if [ "$(npm view "thunderjar@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
             echo "thunderjar@$VERSION is already on npm."
           else
-            npm publish package.tgz --tag preview --ignore-scripts --registry https://registry.npmjs.org
+            npm publish package.tgz --tag preview --ignore-scripts --registry https://registry.npmjs.org --loglevel verbose
           fi
 
       - name: Comment on the PR
