@@ -15,6 +15,36 @@ Each step names the scenario it adds and the test type it uses, from [Test types
 5. Make data from an image
 6. Unit test
 
+## Fixture layout
+
+Scenarios are grouped by kind, as set out in the root AGENTS.md:
+
+```
+fixtures/
+  01_unitialised/
+    0101_javascript_project/
+      project/
+    0102_bash_project/
+      project/
+  02_regular/
+    0101_minimal_existing_setup/
+      project/
+  03_real_git/
+  04_unhappy/
+```
+
+Each scenario keeps the PR's wrapper: the project sits in its own folder, with anything that isn't part of the project beside it.
+
+```
+0101_minimal_existing_setup/
+  tsconfig.json           extends the project's tsconfig, adds the type tests
+  parameterNames.test.ts  type tests run directly against the project
+  project/
+    .thunderjar/          the project, as a user would have it
+```
+
+**Why:** some tests run directly against the project, mostly to check that type errors are reported. Their test files and tsconfig must not be inside the project. The same goes for a scenario's starting state from outside the project, such as the saved files that stand in for Docker images.
+
 ## Proposed order
 
 ```mermaid
