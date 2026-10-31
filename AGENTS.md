@@ -135,34 +135,43 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
 
 ## Test types
 
-Most tests run the CLI against a scenario: a checked-in Thunderjar project in `fixtureTests/`. A scenario knows nothing about the tests that use it.
 
-e.g.
+
+1. Real file creating tests
+   - For commands that need to create files
+      - eg. `init`, `generate`
+   - Create a copy of scenario in a temp directory and run there, and then assert on the files created. 
+2. Fixture + stdout tests
+   - For commands that only read the project
+     -`plan` or `show`, or commands with a `--dry-run`
+   - Run on the scenario unchanged, and assert on stdout. 
+3. Create docker image tests
+    - eg. `build`
+   - Uses real docker 
+   - Run the command, assert on the created docker image, then clean up docker image.
+4. Read from docker image tests
+   - For commands that read from an existing image, but do not need to act on it 
+    - e.g. `remeasure`, 
+   - The image is presumed to already exist 
+5. Run on docker container tests
+   - eg. `run`. Start
+   -  containers from an existing image, execute some behaviour, then assert on effects both inside the container and out.
+6. Regular unit tests
+   - For comprehensive business logic
+
+## Fixtures 
+
+Fixtures are example projects with sample thunderjar configurations. 
+
+The fixtures represent _scenarios_. 
+
+Tests for the individual commands are then run against one or more scenarios. 
+
+Tests should never modify the scenarios. 
+
+A helper script `fixture` should exist. This allows the human developer to run arbitrary thunderjar commands against a given scenario and observe its effects. 
+
 
 ```sh
 bun run fixture 2 plan two-pairs
 ```
-
-**Rationale:** A developer can cd into the scenario and get the same output by hand.
-
-1. Real file creating tests
-   - For commands that write into the project, e.g. `init`.
-   - Run on a copy of the scenario, then check the files written.
-2. Fixture + stdout tests
-   - For commands that only read the project, e.g. `plan` or `show`.
-   - Run on the scenario unchanged, then check stdout.
-3. Create docker image tests
-   - For `build`. Run real Docker, then check the images created.
-4. Read from docker image tests
-   - For commands that read from an existing image, e.g. `remeasure`.
-   - The image is a precondition, not built by the test.
-5. Run on docker container tests
-   - For `run`. Start containers from an existing image, then check the results recorded.
-6. Regular unit tests
-   - For behaviour the CLI can't trigger, e.g. a crash mid-run.
-
-✅ **Do** put a variation a test needs into a scenario.
-
-❌ **Don't** patch the scenario from inside the test.
-
-**Rationale:** A variation in a scenario can be seen and run by hand, and other tests can reuse it.
