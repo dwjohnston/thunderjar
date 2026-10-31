@@ -1,0 +1,10 @@
+{
+  "version": "0.1.3-rc.0",
+  "changesets": [
+    {
+      "id": "add-plan-command",
+      "type": "patch",
+      "summary": "Add a `plan` command."
+    }
+  ]
+}
