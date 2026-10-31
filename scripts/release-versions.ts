@@ -16,36 +16,22 @@ export type RcChangeset = { id: string; type: BumpType; summary: string };
 export type RcFile = { version: string; changesets: RcChangeset[] };
 export type RcDecision = { action: "open"; rc: RcFile } | { action: "close" };
 
-function help() {
-  return `
-Version helpers for release candidates and previews. See AGENTS.md, "Releases".
-
-Release candidates (RCs) are tracked in ${RC_FILE}. The RC PR only changes that
-file. Merging it publishes the version in it with the npm "rc" tag.
-
-- prepare-rc     Decide whether the RC PR should be open. If so, write
-                 ${RC_FILE} and the PR body, and print {"action":"open","version":...}.
-                 Otherwise print {"action":"close"}.
-- rc-to-publish  Print the RC version in ${RC_FILE} if it has no git tag yet,
-                 and is not stale (its stable version is unreleased, and its
-                 changesets are still pending). Otherwise print nothing.
-- rc-notes       Print the release notes for the RC in ${RC_FILE}.
-- preview        Print the preview version for a commit: <next>-preview-<short sha>.
-
-<next> is the version the pending changesets would release. With no pending
-changesets, it is a patch bump of the current version.
-`;
-}
-
 if (import.meta.main) {
   const program = new Command()
-    // 👇
-    .description(help())
+    .description(
+      `Version helpers for release candidates and previews. See AGENTS.md, "Releases".
+
+Release candidates (RCs) are tracked in ${RC_FILE}. The RC PR only changes that file. Merging it publishes the version in it with the npm "rc" tag.
+
+<next> is the version the pending changesets would release. With no pending changesets, it is a patch bump of the current version.`,
+    )
     .showHelpAfterError();
 
   program
     .command("prepare-rc")
-    .description(`write ${RC_FILE} and the PR body if a new RC is needed`)
+    .description(
+      `decide whether the RC PR should be open. If so, write ${RC_FILE} and the PR body, and print {"action":"open","version":...}. Otherwise print {"action":"close"}`,
+    )
     .requiredOption("--body-file <path>", "where to write the RC PR body")
     .action(async (opts: { bodyFile: string }) => {
       const decision = await prepareRc(REPO_ROOT, opts.bodyFile);
@@ -54,7 +40,9 @@ if (import.meta.main) {
 
   program
     .command("rc-to-publish")
-    .description(`print the version in ${RC_FILE} if it is not yet tagged`)
+    .description(
+      `print the RC version in ${RC_FILE} if it has no git tag yet and is not stale (its stable version is unreleased, and its changesets are still pending). Otherwise print nothing`,
+    )
     .action(async () => {
       const version = await rcToPublish(REPO_ROOT);
       if (version) console.log(version);
@@ -69,7 +57,7 @@ if (import.meta.main) {
 
   program
     .command("preview")
-    .description("print the preview version for a commit")
+    .description("print the preview version for a commit: <next>-preview-<short sha>")
     .requiredOption("--sha <sha>", "full or short commit sha the preview is built from")
     .action(async (opts: { sha: string }) => {
       console.log(previewVersion(await nextVersion(REPO_ROOT), opts.sha));
