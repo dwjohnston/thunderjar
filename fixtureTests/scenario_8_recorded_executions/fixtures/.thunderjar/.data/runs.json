@@ -1,0 +1,1110 @@
+{
+  "containerRuns": [
+    {
+      "executionId": "01k4tq3h8r0000000000000000",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "42440c48b1cee8eeabea4c8ac45fb03f66331039bb3b57b9ecca96bc83a4fb03",
+      "iteration": 0,
+      "postrunImage": "postrun-e01k4tq3h8r0000000000000000-h42440c48-i00",
+      "ranAt": "2026-09-28T09:15:00.120Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.1/fake-model-small",
+          "parameterHash": "c0b21c855ddb4f0890cfac5bc30b07e9a9e454c59a0668477bd2ea39f810a1d4"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.1",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-28T09:15:00.200Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/isPrime.ts"
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-28T09:15:00.240Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": false
+          }
+        },
+        "readmeExists": {
+          "instrument": "fileCreated",
+          "contentHash": "1b02f49f9a0461ff7afc6d0fc47a458f32a38bedd0b6ebdd0f6069304d2ca32f",
+          "measuredAt": "2026-09-28T09:15:00.280Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": true
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-28T09:15:00.320Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/*.ts"
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790586900120,
+        "finishedAt": 1790586900160,
+        "exitCode": 3
+      }
+    },
+    {
+      "executionId": "01k4tq3h8r0000000000000000",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "42440c48b1cee8eeabea4c8ac45fb03f66331039bb3b57b9ecca96bc83a4fb03",
+      "iteration": 1,
+      "postrunImage": "postrun-e01k4tq3h8r0000000000000000-h42440c48-i01",
+      "ranAt": "2026-09-28T09:15:00.360Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.1/fake-model-small",
+          "parameterHash": "c0b21c855ddb4f0890cfac5bc30b07e9a9e454c59a0668477bd2ea39f810a1d4"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.1",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-28T09:15:00.440Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/isPrime.ts"
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-28T09:15:00.480Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": false
+          }
+        },
+        "readmeExists": {
+          "instrument": "fileCreated",
+          "contentHash": "1b02f49f9a0461ff7afc6d0fc47a458f32a38bedd0b6ebdd0f6069304d2ca32f",
+          "measuredAt": "2026-09-28T09:15:00.520Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": true
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-28T09:15:00.560Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/*.ts"
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790586900360,
+        "finishedAt": 1790586900400,
+        "exitCode": 3
+      }
+    },
+    {
+      "executionId": "01k4tq3h8r0000000000000000",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "8ffdda6e5c8221796af0671d22f10f9e35edab65e0c056a829946f54c90753e7",
+      "iteration": 0,
+      "postrunImage": "postrun-e01k4tq3h8r0000000000000000-h8ffdda6e-i00",
+      "ranAt": "2026-09-28T09:15:00.680Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.0/fake-model-small",
+          "parameterHash": "da287975bee28c03edda7e184945e4b595d04e0396adb42f461bb2e4784798ff"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.0",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-28T09:15:00.760Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": {
+              "passed": 3,
+              "failed": 2
+            }
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-28T09:15:00.800Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": true
+          }
+        },
+        "readmeExists": {
+          "instrument": "fileCreated",
+          "contentHash": "1b02f49f9a0461ff7afc6d0fc47a458f32a38bedd0b6ebdd0f6069304d2ca32f",
+          "measuredAt": "2026-09-28T09:15:00.840Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": false
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-28T09:15:00.880Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": 1
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790586900680,
+        "finishedAt": 1790586900720,
+        "exitCode": 0
+      }
+    },
+    {
+      "executionId": "01k4tq3h8r0000000000000000",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "8ffdda6e5c8221796af0671d22f10f9e35edab65e0c056a829946f54c90753e7",
+      "iteration": 1,
+      "postrunImage": "postrun-e01k4tq3h8r0000000000000000-h8ffdda6e-i01",
+      "ranAt": "2026-09-28T09:15:00.920Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.0/fake-model-small",
+          "parameterHash": "da287975bee28c03edda7e184945e4b595d04e0396adb42f461bb2e4784798ff"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.0",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {},
+      "execution": {
+        "startedAt": 1790586900920,
+        "finishedAt": 1790586900960,
+        "exitCode": 3
+      }
+    },
+    {
+      "executionId": "01k4x9j2e8mqz3abcdefghjkmn",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "42440c48b1cee8eeabea4c8ac45fb03f66331039bb3b57b9ecca96bc83a4fb03",
+      "iteration": 0,
+      "postrunImage": "postrun-e01k4x9j2e8mqz3abcdefghjkmn-h42440c48-i00",
+      "ranAt": "2026-09-29T14:30:55.120Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.1/fake-model-small",
+          "parameterHash": "c0b21c855ddb4f0890cfac5bc30b07e9a9e454c59a0668477bd2ea39f810a1d4"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.1",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-29T14:30:55.200Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/isPrime.ts"
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-29T14:30:55.240Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": false
+          }
+        },
+        "readmeExists": {
+          "instrument": "fileCreated",
+          "contentHash": "1b02f49f9a0461ff7afc6d0fc47a458f32a38bedd0b6ebdd0f6069304d2ca32f",
+          "measuredAt": "2026-09-29T14:30:55.280Z",
+          "outcome": {
+            "outcome": "erroredWhileMeasuring",
+            "error": {
+              "message": "disk on fire"
+            }
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-29T14:30:55.320Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/*.ts"
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790692255120,
+        "finishedAt": 1790692255160,
+        "exitCode": 3
+      }
+    },
+    {
+      "executionId": "01k4x9j2e8mqz3abcdefghjkmn",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "42440c48b1cee8eeabea4c8ac45fb03f66331039bb3b57b9ecca96bc83a4fb03",
+      "iteration": 1,
+      "postrunImage": "postrun-e01k4x9j2e8mqz3abcdefghjkmn-h42440c48-i01",
+      "ranAt": "2026-09-29T14:30:55.360Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.1/fake-model-small",
+          "parameterHash": "c0b21c855ddb4f0890cfac5bc30b07e9a9e454c59a0668477bd2ea39f810a1d4"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.1",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-29T14:30:55.440Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/isPrime.ts"
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-29T14:30:55.480Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": false
+          }
+        },
+        "readmeExists": {
+          "instrument": "fileCreated",
+          "contentHash": "1b02f49f9a0461ff7afc6d0fc47a458f32a38bedd0b6ebdd0f6069304d2ca32f",
+          "measuredAt": "2026-09-29T14:30:55.520Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": true
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-29T14:30:55.560Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/*.ts"
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790692255360,
+        "finishedAt": 1790692255400,
+        "exitCode": 3
+      }
+    },
+    {
+      "executionId": "01k4x9j2e8mqz3abcdefghjkmn",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "8ffdda6e5c8221796af0671d22f10f9e35edab65e0c056a829946f54c90753e7",
+      "iteration": 0,
+      "postrunImage": "postrun-e01k4x9j2e8mqz3abcdefghjkmn-h8ffdda6e-i00",
+      "ranAt": "2026-09-29T14:30:55.680Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.0/fake-model-small",
+          "parameterHash": "da287975bee28c03edda7e184945e4b595d04e0396adb42f461bb2e4784798ff"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.0",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "bb51049de512668d086c029a9ba6e3a18c47eb23f88ab72a66e95ae74d6f8f03",
+          "measuredAt": "2026-09-29T14:30:55.760Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": {
+              "passed": 3,
+              "failed": 2
+            }
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-29T14:30:55.800Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": true
+          }
+        },
+        "readmeExists": {
+          "instrument": "fileCreated",
+          "contentHash": "1b02f49f9a0461ff7afc6d0fc47a458f32a38bedd0b6ebdd0f6069304d2ca32f",
+          "measuredAt": "2026-09-29T14:30:55.840Z",
+          "outcome": {
+            "outcome": "erroredWhileMeasuring",
+            "error": {
+              "message": "disk on fire"
+            }
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-29T14:30:55.880Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": 1
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790692255680,
+        "finishedAt": 1790692255720,
+        "exitCode": 0
+      }
+    },
+    {
+      "executionId": "01k4x9j2e8mqz3abcdefghjkmn",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "8ffdda6e5c8221796af0671d22f10f9e35edab65e0c056a829946f54c90753e7",
+      "iteration": 1,
+      "postrunImage": "postrun-e01k4x9j2e8mqz3abcdefghjkmn-h8ffdda6e-i01",
+      "ranAt": "2026-09-29T14:30:55.920Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.0/fake-model-small",
+          "parameterHash": "da287975bee28c03edda7e184945e4b595d04e0396adb42f461bb2e4784798ff"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.0",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-29T14:30:56.000Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": {
+              "passed": 3,
+              "failed": 2
+            }
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-29T14:30:56.040Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": true
+          }
+        },
+        "readmeExists": {
+          "instrument": "fileCreated",
+          "contentHash": "1b02f49f9a0461ff7afc6d0fc47a458f32a38bedd0b6ebdd0f6069304d2ca32f",
+          "measuredAt": "2026-09-29T14:30:56.080Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": false
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-29T14:30:56.120Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": 1
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790692255920,
+        "finishedAt": 1790692255960,
+        "exitCode": 0
+      }
+    },
+    {
+      "executionId": "01k4xb7q0c2tnvabcdefghjkmn",
+      "testCase": "times-out",
+      "task": "wait",
+      "permutationHash": "389190d41af852c3b80e2d399804c682de3810d2b936de26db7de0ac273faca6",
+      "iteration": 0,
+      "postrunImage": "postrun-e01k4xb7q0c2tnvabcdefghjkmn-h389190d4-i00",
+      "ranAt": "2026-09-29T15:02:10.120Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.2/fake-model-small",
+          "parameterHash": "c1ee9f4557c512f29961fa39e692270c083f49ce7cb81deda465d741cd325950"
+        },
+        "initialPrompt": {
+          "name": "impatient",
+          "parameterHash": "129b6358932dd0f2268ed2683869afd58a1ace15e68e49fcd3274126c275be7b"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.2",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {},
+      "execution": {
+        "startedAt": 1790694130120,
+        "finishedAt": 1790694130160,
+        "exitCode": 124
+      }
+    },
+    {
+      "executionId": "01k4xb7q0c2tnvabcdefghjkmn",
+      "testCase": "times-out",
+      "task": "wait",
+      "permutationHash": "389190d41af852c3b80e2d399804c682de3810d2b936de26db7de0ac273faca6",
+      "iteration": 1,
+      "postrunImage": "postrun-e01k4xb7q0c2tnvabcdefghjkmn-h389190d4-i01",
+      "ranAt": "2026-09-29T15:02:10.200Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.2/fake-model-small",
+          "parameterHash": "c1ee9f4557c512f29961fa39e692270c083f49ce7cb81deda465d741cd325950"
+        },
+        "initialPrompt": {
+          "name": "impatient",
+          "parameterHash": "129b6358932dd0f2268ed2683869afd58a1ace15e68e49fcd3274126c275be7b"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.2",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {},
+      "execution": {
+        "startedAt": 1790694130200,
+        "finishedAt": 1790694130240,
+        "exitCode": 124
+      }
+    },
+    {
+      "executionId": "01k4xc0000000000000000000a",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "42440c48b1cee8eeabea4c8ac45fb03f66331039bb3b57b9ecca96bc83a4fb03",
+      "iteration": 0,
+      "postrunImage": "postrun-e01k4xc0000000000000000000a-h42440c48-i00",
+      "ranAt": "2026-09-30T08:00:00.120Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.1/fake-model-small",
+          "parameterHash": "c0b21c855ddb4f0890cfac5bc30b07e9a9e454c59a0668477bd2ea39f810a1d4"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.1",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-30T08:00:00.200Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/isPrime.ts"
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-30T08:00:00.240Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": false
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-30T08:00:00.280Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/*.ts"
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790755200120,
+        "finishedAt": 1790755200160,
+        "exitCode": 3
+      }
+    },
+    {
+      "executionId": "01k4xc0000000000000000000a",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "42440c48b1cee8eeabea4c8ac45fb03f66331039bb3b57b9ecca96bc83a4fb03",
+      "iteration": 1,
+      "postrunImage": "postrun-e01k4xc0000000000000000000a-h42440c48-i01",
+      "ranAt": "2026-09-30T08:00:00.320Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.1/fake-model-small",
+          "parameterHash": "c0b21c855ddb4f0890cfac5bc30b07e9a9e454c59a0668477bd2ea39f810a1d4"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.1",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-30T08:00:00.400Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/isPrime.ts"
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-30T08:00:00.440Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": false
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-30T08:00:00.480Z",
+          "outcome": {
+            "outcome": "skipped",
+            "reason": "no file matches **/*.ts"
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790755200320,
+        "finishedAt": 1790755200360,
+        "exitCode": 3
+      }
+    },
+    {
+      "executionId": "01k4xc0000000000000000000a",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "8ffdda6e5c8221796af0671d22f10f9e35edab65e0c056a829946f54c90753e7",
+      "iteration": 0,
+      "postrunImage": "postrun-e01k4xc0000000000000000000a-h8ffdda6e-i00",
+      "ranAt": "2026-09-30T08:00:00.600Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.0/fake-model-small",
+          "parameterHash": "da287975bee28c03edda7e184945e4b595d04e0396adb42f461bb2e4784798ff"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.0",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-30T08:00:00.680Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": {
+              "passed": 3,
+              "failed": 2
+            }
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-30T08:00:00.720Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": true
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-30T08:00:00.760Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": 1
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790755200600,
+        "finishedAt": 1790755200640,
+        "exitCode": 0
+      }
+    },
+    {
+      "executionId": "01k4xc0000000000000000000a",
+      "testCase": "fails",
+      "task": "is-prime",
+      "permutationHash": "8ffdda6e5c8221796af0671d22f10f9e35edab65e0c056a829946f54c90753e7",
+      "iteration": 1,
+      "postrunImage": "postrun-e01k4xc0000000000000000000a-h8ffdda6e-i01",
+      "ranAt": "2026-09-30T08:00:00.800Z",
+      "parameters": {
+        "baseImage": {
+          "name": "node20",
+          "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+        },
+        "codeState": {
+          "name": "baseline",
+          "parameterHash": "bb1584cd142240a49d44df2a022ccc0b44aa5f1f80b64ebfb315cdccd61bc17d"
+        },
+        "promptSet": {
+          "name": "snerk",
+          "parameterHash": "827aa0ce119c03e50394f440623db3c3d2720ab09e7a346f357787c4ed297f12"
+        },
+        "harnessModel": {
+          "name": "fake-harness-alpha@1.0.0/fake-model-small",
+          "parameterHash": "da287975bee28c03edda7e184945e4b595d04e0396adb42f461bb2e4784798ff"
+        },
+        "initialPrompt": {
+          "name": "plain",
+          "parameterHash": "9e30b385cb88353f582ca75013a579d8b399a4572128d95dd0b4d29b3bea0f16"
+        }
+      },
+      "harnessModel": {
+        "family": "fake-harness-alpha",
+        "version": "1.0.0",
+        "modelId": "fake-model-small-001"
+      },
+      "result": {
+        "isPrimeTemplateTest": {
+          "instrument": "templateTest",
+          "contentHash": "e4cf4e5c3ec40d0d5373b9a92c23e7a90d30500caef60d7e1df608258cd2a6cd",
+          "measuredAt": "2026-09-30T08:00:00.880Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": {
+              "passed": 3,
+              "failed": 2
+            }
+          }
+        },
+        "isPrimeTsExists": {
+          "instrument": "fileCreated",
+          "contentHash": "e514c7262f9be694b4f4eb151381431b9e99c39b660739f5238f3a1637be63ed",
+          "measuredAt": "2026-09-30T08:00:00.920Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": true
+          }
+        },
+        "tsIgnoreCount": {
+          "instrument": "grep",
+          "contentHash": "383b2dc3ebbb7aed32c3f0cb6cd13ee824eae5aec189deaa66b7cb30e9b1b492",
+          "measuredAt": "2026-09-30T08:00:00.960Z",
+          "outcome": {
+            "outcome": "measured",
+            "data": 1
+          }
+        }
+      },
+      "execution": {
+        "startedAt": 1790755200800,
+        "finishedAt": 1790755200840,
+        "exitCode": 0
+      }
+    }
+  ],
+  "aggregationResults": [
+    {
+      "executionId": "01k4x9j2e8mqz3abcdefghjkmn",
+      "permutationHash": "42440c48b1cee8eeabea4c8ac45fb03f66331039bb3b57b9ecca96bc83a4fb03",
+      "iterations": 2,
+      "measures": {
+        "isPrimeTemplateTest": {
+          "measured": 0
+        },
+        "isPrimeTsExists": {
+          "measured": 2,
+          "rate": 0
+        },
+        "readmeExists": {
+          "measured": 1,
+          "count": 1,
+          "rate": 1
+        },
+        "tsIgnoreCount": {
+          "measured": 0
+        }
+      },
+      "duration": {
+        "mean": 40,
+        "max": 40
+      }
+    },
+    {
+      "executionId": "01k4x9j2e8mqz3abcdefghjkmn",
+      "permutationHash": "8ffdda6e5c8221796af0671d22f10f9e35edab65e0c056a829946f54c90753e7",
+      "iterations": 2,
+      "measures": {
+        "isPrimeTemplateTest": {
+          "measured": 2,
+          "mean": {
+            "passed": 3,
+            "failed": 2
+          },
+          "sum": {
+            "passed": 6,
+            "failed": 4
+          }
+        },
+        "isPrimeTsExists": {
+          "measured": 2,
+          "rate": 1
+        },
+        "readmeExists": {
+          "measured": 1,
+          "count": 0,
+          "rate": 0
+        },
+        "tsIgnoreCount": {
+          "measured": 2,
+          "median": 1,
+          "min": 1,
+          "sum": 2
+        }
+      },
+      "duration": {
+        "mean": 40,
+        "max": 40
+      }
+    },
+    {
+      "executionId": "01k4xb7q0c2tnvabcdefghjkmn",
+      "permutationHash": "389190d41af852c3b80e2d399804c682de3810d2b936de26db7de0ac273faca6",
+      "iterations": 2,
+      "measures": {},
+      "duration": {
+        "mean": 40,
+        "max": 40
+      }
+    },
+    {
+      "executionId": "01k4xc0000000000000000000a",
+      "permutationHash": "42440c48b1cee8eeabea4c8ac45fb03f66331039bb3b57b9ecca96bc83a4fb03",
+      "iterations": 2,
+      "measures": {
+        "isPrimeTemplateTest": {
+          "measured": 0
+        },
+        "isPrimeTsExists": {
+          "measured": 2,
+          "rate": 0
+        },
+        "tsIgnoreCount": {
+          "measured": 0
+        }
+      },
+      "duration": {
+        "mean": 40,
+        "max": 40
+      }
+    },
+    {
+      "executionId": "01k4xc0000000000000000000a",
+      "permutationHash": "8ffdda6e5c8221796af0671d22f10f9e35edab65e0c056a829946f54c90753e7",
+      "iterations": 2,
+      "measures": {
+        "isPrimeTemplateTest": {
+          "measured": 2,
+          "mean": {
+            "passed": 3,
+            "failed": 2
+          },
+          "sum": {
+            "passed": 6,
+            "failed": 4
+          }
+        },
+        "isPrimeTsExists": {
+          "measured": 2,
+          "rate": 1
+        },
+        "tsIgnoreCount": {
+          "measured": 2,
+          "median": 1,
+          "min": 1,
+          "sum": 2
+        }
+      },
+      "duration": {
+        "mean": 40,
+        "max": 40
+      }
+    }
+  ]
+}
