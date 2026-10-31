@@ -3,9 +3,8 @@
 //
 //   bun scripts/sync-oxlint-layout.ts           rewrite the generated region of .oxlintrc.json
 //   bun scripts/sync-oxlint-layout.ts --check   fail on files under src/ or test/ that no entry allows
-import { existsSync } from "node:fs";
-import { readdir, readFile, writeFile } from "node:fs/promises";
-import { join, posix, relative, resolve, sep } from "node:path";
+import { isDirectory } from "../src/platform/fs.ts";
+import { basename, dirname, join, relative, resolve } from "../src/platform/path.ts";
 import { layout as repoLayout, type Layout } from "./layout.ts";
 
 export const BEGIN = "// sync-oxlint-layout: begin — generated, do not edit";
@@ -15,6 +14,7 @@ export const END = "// sync-oxlint-layout: end";
 export const CHECKED_ROOTS = ["src", "test"];
 
 type Override = { files: string[]; rules: Record<string, unknown> };
+type Pattern = { regex: string; message?: string };
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -23,12 +23,23 @@ const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * `to` (or `to` itself, as a directory import).
  */
 function importRegex(from: string, to: string): string {
-  let rel = posix.relative(from, to);
+  let rel = relative(from, to);
   if (!rel.startsWith("..")) rel = `./${rel}`;
   return `^${escapeRegex(rel)}(/[^/]+)?$`;
 }
 
-export function generateOverrides(layout: Layout): Override[] {
+/**
+ * The `no-restricted-imports` patterns at the top level of `config`, such as the ban on node's
+ * APIs. An override replaces a rule's options for the files it matches, so every generated
+ * override repeats them.
+ */
+export function basePatterns(config: string): Pattern[] {
+  const { rules } = Bun.JSONC.parse(config) as { rules?: Record<string, unknown> };
+  const rule = rules?.["no-restricted-imports"];
+  return (Array.isArray(rule) ? (rule[1] as { patterns?: Pattern[] } | undefined)?.patterns : undefined) ?? [];
+}
+
+export function generateOverrides(layout: Layout, base: Pattern[] = []): Override[] {
   const folders = Object.keys(layout).sort();
   return folders.map((folder) => {
     const entry = layout[folder]!;
@@ -42,7 +53,9 @@ export function generateOverrides(layout: Layout): Override[] {
     const rules: Record<string, unknown> = {
       "unicorn/filename-case": ["error", { case: entry.filenameCase ?? "kebabCase" }],
     };
-    if (patterns.length > 0) rules["no-restricted-imports"] = ["error", { patterns }];
+    if (base.length + patterns.length > 0) {
+      rules["no-restricted-imports"] = ["error", { patterns: [...base, ...patterns] }];
+    }
     return { files: [`${folder}/*`], rules };
   });
 }
@@ -63,16 +76,16 @@ export function applyRegion(config: string, overrides: Override[]): string {
 /** Rewrites the generated region of `<root>/.oxlintrc.json`. Returns whether it changed. */
 export async function sync(root: string, layout: Layout): Promise<boolean> {
   const path = join(root, ".oxlintrc.json");
-  const before = await readFile(path, "utf8");
-  const after = applyRegion(before, generateOverrides(layout));
+  const before = await Bun.file(path).text();
+  const after = applyRegion(before, generateOverrides(layout, basePatterns(before)));
   if (after === before) return false;
-  await writeFile(path, after);
+  await Bun.write(path, after);
   return true;
 }
 
+/** The files under `dir`, hidden ones included, relative to `dir`. */
 async function listFiles(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
-  return entries.filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name));
+  return Array.fromAsync(new Bun.Glob("**").scan({ cwd: dir, dot: true, onlyFiles: true }));
 }
 
 /** Files under the checked roots, relative to `root`, that no layout entry allows. */
@@ -80,11 +93,11 @@ export async function findMisplaced(root: string, layout: Layout): Promise<strin
   const misplaced: string[] = [];
   for (const top of CHECKED_ROOTS) {
     const dir = join(root, top);
-    if (!existsSync(dir)) continue;
+    if (!(await isDirectory(dir))) continue;
     for (const file of await listFiles(dir)) {
-      const rel = relative(root, file).split(sep).join("/");
-      const entry = layout[posix.dirname(rel)];
-      const name = posix.basename(rel);
+      const rel = `${top}/${file}`;
+      const entry = layout[dirname(rel)];
+      const name = basename(rel);
       if (!entry?.allowedFiles.some((glob) => new Bun.Glob(glob).match(name))) misplaced.push(rel);
     }
   }
@@ -99,7 +112,7 @@ export function formatMisplaced(files: string[]): string {
 
 if (import.meta.main) {
   const root = resolve(import.meta.dir, "..");
-  if (process.argv.includes("--check")) {
+  if (Bun.argv.includes("--check")) {
     const misplaced = await findMisplaced(root, repoLayout);
     if (misplaced.length > 0) {
       console.error(formatMisplaced(misplaced));

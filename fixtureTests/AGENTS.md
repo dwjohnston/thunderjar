@@ -2,7 +2,7 @@
 
 Each `scenario_<n>_<what the project is>/` folder is a checked-in Thunderjar project, which the CLI is run against the way a user would. See the fixture test rules in the repo's root `AGENTS.md`.
 
-A scenario is a project and the state it starts in, nothing more. Command tests run against it unchanged, from beside each command in `src/commands/`, and keep every expected result to themselves. Only `init` works on a copy; everything else runs in place. A real `run` sends its run data store to a temp folder with `--data-dir`, and never runs in a scenario with a checked-in store.
+A scenario is a project and the state it starts in, nothing more. Command tests run against it unchanged, from beside each command in `src/cli/commands/`, and keep every expected result to themselves. Only `init` works on a copy; everything else runs in place. A real `run` sends its run data store to a temp folder with `--data-dir`, and never runs in a scenario with a checked-in store.
 
 ## Add a variation as a scenario
 
@@ -125,8 +125,9 @@ Unless its entry says otherwise, scenarios 1–3 and 8 use these:
 - `scenario_4_git_project` 🌿 **real git**
   - A project whose code states and prompt sets read real commits, the way `init` scaffolds them. Its code is `fixtures/project/`, committed twice in this repository.
   - The commits
+    - Two commits on top of `main`, reachable only through their tags: they're on no branch.
     - The first adds `project/` with `greet.js` and `prompts/house-style.md`. It's tagged `fixture-scenario-4-first`.
-    - The second changes both, and adds `farewell.js`. It's tagged `fixture-scenario-4-second`.
+    - The second, on top of the first, changes both, and adds `farewell.js`. It's tagged `fixture-scenario-4-second`.
     - The worktree's `house-style.md` has moved on from both, so tests can show a prompt file is read at its commit, not from the worktree.
   - Fake agent
     - `fake-harness-alpha@1.0.0`
@@ -217,8 +218,8 @@ Unless its entry says otherwise, scenarios 1–3 and 8 use these:
 
 ### Changing scenario 4's commits
 
-✅ **Do** add a new commit, tag it `fixture-scenario-4-<name>`, and push the tag, when scenario 4 needs another state of its project.
+✅ **Do** add a new commit, tag it `fixture-scenario-4-<name>`, and push the tag, when scenario 4 needs another state of its project. Make it on top of `fixture-scenario-4-second` (or `main`) in a detached HEAD, so no branch has to keep it, and pin it by hash.
 
-❌ **Don't** amend, squash or rebase away a commit a scenario 4 declaration pins.
+❌ **Don't** move, delete or re-create a `fixture-scenario-4-*` tag, or rewrite the commit it names. Don't rely on a branch to keep a pinned commit either.
 
-**Why:** the declarations pin commits by hash, so a commit that stops being reachable breaks the scenario on every fresh clone, CI included. The tag keeps it reachable even if the branch is squash-merged.
+**Why:** the declarations pin commits by hash, and the tags are all that keep those commits reachable. A commit that stops being reachable breaks the scenario on every fresh clone, CI included, which fetches tags with `fetch-depth: 0`. A tag also outlives a branch that is squash-merged or deleted.

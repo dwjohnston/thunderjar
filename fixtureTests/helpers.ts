@@ -11,11 +11,8 @@
 // tests, which run it in these scenarios too.
 
 import { expect } from "bun:test";
-import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { listDir, makeTempDir } from "../src/platform/fs.ts";
+import { join } from "../src/platform/path.ts";
 import type { AggregationResult, ContainerRunRecord } from "../src/store/run-data-store.ts";
 import { copyOfFixtures, thunderjar } from "../src/testing/cli.ts";
 
@@ -39,21 +36,22 @@ export const normalise = (stdout: string, tmpDir?: string) => {
 
 /** The top level of `dir` and everything under `.thunderjar/`, so a test can show nothing was written. */
 export const listTree = (dir: string) => [
-  ...readdirSync(dir),
-  ...readdirSync(join(dir, ".thunderjar"), { recursive: true }).map(String),
+  ...listDir(dir),
+  ...listDir(join(dir, ".thunderjar"), { recursive: true }),
 ].toSorted();
 
 /** Runs `script` with sh in a throwaway container from the image `ref`, returning its stdout. */
 export function inImage(ref: string, script: string) {
-  const result = spawnSync("docker", ["run", "--rm", ref, "sh", "-c", script], { encoding: "utf8" });
-  expect(result.stderr).toBe("");
-  return result.stdout;
+  const result = Bun.spawnSync(["docker", "run", "--rm", ref, "sh", "-c", script], { stdout: "pipe", stderr: "pipe" });
+  expect(result.stderr.toString()).toBe("");
+  return result.stdout.toString();
 }
 
 /** Every image tagged under `prefix`, as `<prefix>:<tag>`. */
 export const imagesUnder = (prefix: string) =>
-  spawnSync("docker", ["image", "ls", "--format", "{{.Repository}}:{{.Tag}}", prefix], { encoding: "utf8" })
-    .stdout.split("\n")
+  Bun.spawnSync(["docker", "image", "ls", "--format", "{{.Repository}}:{{.Tag}}", prefix], { stdout: "pipe", stderr: "pipe" })
+    .stdout.toString()
+    .split("\n")
     .filter(Boolean)
     .toSorted();
 
@@ -63,7 +61,7 @@ const prefixes: string[] = [];
 /** Deletes every image a real run in this test file tagged. Call it in `afterAll`. */
 export function removeTestImages() {
   const images = prefixes.flatMap(imagesUnder);
-  if (images.length > 0) spawnSync("docker", ["image", "rm", "--force", ...images]);
+  if (images.length > 0) Bun.spawnSync(["docker", "image", "rm", "--force", ...images], { stdout: "ignore", stderr: "ignore" });
 }
 
 /**
@@ -73,7 +71,7 @@ export function removeTestImages() {
  */
 export async function runForReal(fixtures: string, testCase: string) {
   const dir = await copyOfFixtures(fixtures);
-  const tmpDir = await mkdtemp(join(tmpdir(), "thunderjar-fixture-tmp-"));
+  const tmpDir = await makeTempDir("thunderjar-fixture-tmp-");
   const prefix = `thunderjar-test-${process.pid}-${prefixes.length}-${Date.now()}`;
   prefixes.push(prefix);
   const before = listTree(dir);
@@ -82,12 +80,12 @@ export async function runForReal(fixtures: string, testCase: string) {
     THUNDERJAR_DOCKER: "docker",
   });
   expect(exitCode).toBe(0);
-  const store = JSON.parse(readFileSync(join(dir, ".thunderjar", ".data", "runs.json"), "utf8")) as {
+  const store = (await Bun.file(join(dir, ".thunderjar", ".data", "runs.json")).json()) as {
     containerRuns: ContainerRunRecord[];
     aggregationResults?: AggregationResult[];
   };
   expect(listTree(dir)).toEqual([...before, ".data", join(".data", "runs.json")].toSorted());
-  expect(readdirSync(tmpDir).filter((name) => name.startsWith("thunderjar-measure-"))).toEqual([]);
+  expect(listDir(tmpDir).filter((name) => name.startsWith("thunderjar-measure-"))).toEqual([]);
   const output = normalise(stdout, tmpDir)
     .replaceAll(prefix, "<prefix>")
     .replace(/ built \(\d+\.\d\ds\)$/gm, " built (<t>s)");

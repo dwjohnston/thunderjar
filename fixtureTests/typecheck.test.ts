@@ -24,10 +24,8 @@
 // tsconfig.json isn't checked: a project before `init`, or one broken on purpose.
 
 import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { copyFile, mkdtemp, readdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { copy, exists, existsSync, listEntries, makeTempDir } from "../src/platform/fs.ts";
+import { join, resolve } from "../src/platform/path.ts";
 import { generate } from "../src/cli/commands/generate/generate.ts";
 import { init } from "../src/cli/commands/init/init.ts";
 
@@ -35,17 +33,17 @@ const here = import.meta.dir;
 const repoRoot = resolve(here, "..");
 const tsc = join(repoRoot, "node_modules", ".bin", "tsc");
 
-const scenarios = (await readdir(here, { withFileTypes: true }))
-  .filter((entry) => entry.isDirectory() && existsSync(join(here, entry.name, "tsconfig.json")))
-  .map((entry) => entry.name);
+const scenarios = listEntries(here)
+  .filter((entry) => entry.isDirectory && existsSync(join(here, entry.path, "tsconfig.json")))
+  .map((entry) => entry.path);
 
 /** Copies in the `.thunderjar/tsconfig.json` that `init` scaffolds for a fresh project. */
 async function copyScaffoldedTsconfig(fixturesDir: string) {
-  const scratch = await mkdtemp(join(tmpdir(), "thunderjar-fixture-"));
+  const scratch = await makeTempDir("thunderjar-fixture-");
   await init(scratch);
   const tsconfig = join(scratch, ".thunderjar", "tsconfig.json");
-  expect(existsSync(tsconfig), "init scaffolds .thunderjar/tsconfig.json").toBe(true);
-  await copyFile(tsconfig, join(fixturesDir, ".thunderjar", "tsconfig.json"));
+  expect(await exists(tsconfig), "init scaffolds .thunderjar/tsconfig.json").toBe(true);
+  await copy(tsconfig, join(fixturesDir, ".thunderjar", "tsconfig.json"));
 }
 
 async function runTsc(project: string): Promise<{ exitCode: number; output: string }> {

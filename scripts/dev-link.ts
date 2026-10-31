@@ -1,14 +1,13 @@
 // Builds the CLI and resets the two manual-testing directories named in .env.
 // Bun loads .env automatically.
 import { $ } from "bun";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { resolve, sep } from "node:path";
+import { homedir, listDir, makeDir, remove } from "../src/platform/fs.ts";
+import { resolve, sep } from "../src/platform/path.ts";
 
 const repo = resolve(import.meta.dir, "..");
 
 function dirFromEnv(name: string): string {
-  const value = process.env[name];
+  const value = Bun.env[name];
   if (!value) {
     console.error(`${name} is not set. Copy .env.example to .env and fill it in.`);
     process.exit(1);
@@ -36,9 +35,9 @@ if (jsDir === nonJsDir) {
 }
 
 async function reset(dir: string) {
-  await mkdir(dir, { recursive: true });
-  for (const entry of await readdir(dir)) {
-    await rm(resolve(dir, entry), { recursive: true, force: true });
+  await makeDir(dir);
+  for (const entry of listDir(dir)) {
+    await remove(resolve(dir, entry));
   }
 }
 
@@ -46,7 +45,7 @@ await $`bun run build`.cwd(repo);
 await $`bun link`.cwd(repo).quiet();
 
 await reset(jsDir);
-await writeFile(resolve(jsDir, "package.json"), JSON.stringify({ name: "try-js", private: true }, null, 2) + "\n");
+await Bun.write(resolve(jsDir, "package.json"), JSON.stringify({ name: "try-js", private: true }, null, 2) + "\n");
 await $`bun link thunderjar`.cwd(jsDir).quiet();
 
 await reset(nonJsDir);

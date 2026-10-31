@@ -1,12 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { makeTempDir, remove } from "../src/platform/fs.ts";
+import { join, resolve } from "../src/platform/path.ts";
 import type { Layout } from "./layout.ts";
 import {
   BEGIN,
   END,
   applyRegion,
+  basePatterns,
   findMisplaced,
   formatMisplaced,
   generateOverrides,
@@ -21,9 +21,11 @@ const fixtureLayout: Layout = {
   "src/commands": { allowedFiles: ["*.ts"], mayImport: ["src"] },
 };
 
+const nodeBan = { regex: "^node:", message: "Use Bun's APIs." };
+
 const config = `{
   // hand-written
-  "rules": { "eqeqeq": "error" },
+  "rules": { "eqeqeq": "error", "no-restricted-imports": ["error", { "patterns": [${JSON.stringify(nodeBan)}] }] },
 
   ${BEGIN}
   ${END}
@@ -32,17 +34,16 @@ const config = `{
 
 const dirs: string[] = [];
 afterEach(async () => {
-  await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+  await Promise.all(dirs.splice(0).map(remove));
 });
 
 /** A temporary project holding `files`, plus an .oxlintrc.json synced from `layout`. */
 async function project(files: Record<string, string>, layout = fixtureLayout) {
-  const dir = await mkdtemp(join(tmpdir(), "thunderjar-layout-"));
+  const dir = await makeTempDir("thunderjar-layout-");
   dirs.push(dir);
-  await writeFile(join(dir, ".oxlintrc.json"), config);
+  await Bun.write(join(dir, ".oxlintrc.json"), config);
   for (const [path, content] of Object.entries(files)) {
-    await mkdir(dirname(join(dir, path)), { recursive: true });
-    await writeFile(join(dir, path), content);
+    await Bun.write(join(dir, path), content);
   }
   await sync(dir, layout);
   return dir;
@@ -121,9 +122,18 @@ test("generates one override per folder, restricting every folder not in mayImpo
   ]);
 });
 
+test("every override repeats the top-level no-restricted-imports patterns", () => {
+  expect(basePatterns(config)).toEqual([nodeBan]);
+  expect(basePatterns(`{ "rules": {} }`)).toEqual([]);
+  const overrides = generateOverrides({ ...fixtureLayout, "src/free": { allowedFiles: ["*.ts"], mayImport: Object.keys(fixtureLayout) } }, [nodeBan]);
+  for (const { rules } of overrides) {
+    expect((rules["no-restricted-imports"] as [string, { patterns: unknown[] }])[1].patterns[0]).toEqual(nodeBan);
+  }
+});
+
 test("rewrites only the marked region, and is stable", () => {
   const once = applyRegion(config, generateOverrides(fixtureLayout));
-  expect(once.startsWith(`{\n  // hand-written\n  "rules": { "eqeqeq": "error" },\n\n  ${BEGIN}\n  "overrides": [`)).toBe(true);
+  expect(once.startsWith(`${config.slice(0, config.indexOf(BEGIN))}${BEGIN}\n  "overrides": [`)).toBe(true);
   expect(once.endsWith(`],\n  ${END}\n}\n`)).toBe(true);
   expect(applyRegion(once, generateOverrides(fixtureLayout))).toBe(once);
 });
@@ -136,7 +146,7 @@ test("sync reports whether the config changed", async () => {
   const dir = await project(wellPlaced);
   expect(await sync(dir, fixtureLayout)).toBe(false);
   expect(await sync(dir, { ...fixtureLayout, "src/cli": { allowedFiles: ["*.ts"] } })).toBe(true);
-  expect(await readFile(join(dir, ".oxlintrc.json"), "utf8")).toContain("src/cli may not import from src/commands");
+  expect(await Bun.file(join(dir, ".oxlintrc.json")).text()).toContain("src/cli may not import from src/commands");
 });
 
 test("a project that follows the layout lints clean", async () => {
@@ -161,6 +171,16 @@ test("a forbidden import fails lint", async () => {
       help: "src/cli may not import from src. See scripts/layout.ts.",
       filename: "src/cli/index.ts",
     }),
+  );
+});
+
+test("a node: import fails lint, in a folder with an override too", async () => {
+  // An override replaces the top-level rule's options, so this fails only if sync repeats them.
+  const dir = await project({ ...wellPlaced, "src/cli/index.ts": `import { join } from "node:path";\nconsole.log(join);\n` });
+  const { exitCode, diagnostics } = await lint(dir);
+  expect(exitCode).not.toBe(0);
+  expect(diagnostics).toContainEqual(
+    expect.objectContaining({ code: "eslint(no-restricted-imports)", help: nodeBan.message, filename: "src/cli/index.ts" }),
   );
 });
 

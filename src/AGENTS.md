@@ -6,7 +6,7 @@ Thunderjar's source, in layers. Each layer imports only from the layers below it
 
 ```mermaid
 flowchart TD
-    cli --> commands
+    cli --> commands["cli/commands"]
     commands --> images & running & measuring & store
     images --> matrix
     running --> matrix
@@ -20,10 +20,10 @@ flowchart TD
 The diagram shows the imports that exist today. What the lint allows is any layer lower in this order, lowest first:
 
 ```
-api → instruments → project → matrix → store → running → images → measuring → commands → cli
+api → instruments → project → matrix → store → running → images → measuring → cli/commands → cli
 ```
 
-Every layer may also import `adapters/docker` and `testing`.
+Every layer may also import `platform`, `adapters/docker` and `testing`.
 
 ## Folders
 
@@ -38,10 +38,13 @@ src/
   running/
   images/
   measuring/
-  commands/
-    format.ts
-    <command>/
   cli/
+    index.ts
+    program.ts
+    commands/
+      format.ts
+      <command>/
+  platform/
   adapters/docker/
   testing/
 ```
@@ -77,21 +80,27 @@ src/
   - `aggregate.ts`: combines a permutation's iterations into its aggregation result.
   - `remeasure.ts`: for a backfill, whether a stored measure is missing, stale or current, which measurements each container run needs, and each execution's measurement statuses and deleted names.
   - `remeasure-templates/`: two versions of a bundled template, static test data for `remeasure.test.ts`.
-- `commands/`
+- `cli/commands/`
   - One folder per command, holding the command and its tests, e.g.
     ```
-    commands/build/
+    cli/commands/build/
       build.ts
       build.test.ts
       build.docker.test.ts
     ```
+  - `<command>.ts` exports the command's function, e.g. `build()`, and `createBuildCommand()`, which declares its arguments and options as a Commander `Command` and calls that function.
   - A command's tests drive the CLI against a checked-in `fixtureTests/` scenario, unchanged, and assert only on what the command produced. Every expected result lives in the test. See "Fixture tests" in the root `AGENTS.md`.
   - `format.ts`: how commands print what they share, such as counts and durations.
-  - Tests that cut across commands sit directly in `commands/`: configuration errors (`validation.test.ts`) and typed parameter names (`declarations.typecheck.test.ts`).
+  - Tests that cut across commands sit directly in `cli/commands/`: configuration errors (`validation.test.ts`) and typed parameter names (`declarations.typecheck.test.ts`).
 - `cli/`
-  - `index.ts`: parses arguments and calls a command.
+  - `program.ts`: `createProgram()`, the Commander program, which adds every command's `createXCommand()`.
+  - `index.ts`: the `thunderjar` entry point. It parses the arguments with `createProgram()`.
+- `platform/`
+  - Stands in for `node:path`, `node:fs` and `node:os`, which this repository doesn't use (see "Use Bun" in the root `AGENTS.md`). It imports nothing else from `src/`.
+  - `path.ts`: POSIX path functions, such as `join`, `resolve` and `relative`.
+  - `fs.ts`: file helpers on Bun's APIs and shell, such as `makeTempDir`, `remove` and `listEntries`. To read or write a file, use `Bun.file` and `Bun.write` directly.
 - `adapters/docker/`
-  - The real Docker, behind the seam tests swap out. It imports nothing else from `src/`.
+  - The real Docker, behind the seam tests swap out. It imports nothing else from `src/` but `platform/`.
 - `testing/`
   - Test helpers, shared by tests in every layer.
   - `cli.ts`: runs the CLI in a `fixtureTests/` scenario, the way `bun run fixture` does. `scenario()` names a scenario's project; `copyOfFixtures()` copies it for `init` only, the one command that writes into the project; a real `run` passes `--data-dir` instead.
@@ -104,7 +113,7 @@ src/
 
 ### Never import upward
 
-✅ **Do** import only from a layer below, or from `adapters/docker` or `testing`.
+✅ **Do** import only from a layer below, or from `platform`, `adapters/docker` or `testing`.
 
 ❌ **Don't** import from a layer above, even for one function. Move the function down instead.
 
@@ -116,7 +125,7 @@ e.g. `config.ts` checks a measurement's aggregate methods. It used to import the
 
 ✅ **Do** pick the layer by what the module needs to import: the lowest layer whose imports suffice.
 
-❌ **Don't** put it in `commands/` because a command is its first user.
+❌ **Don't** put it in `cli/commands/` because a command is its first user.
 
 **Why:** a module placed too high can't be used by the layers that will later need it, and the next person moves it.
 
@@ -132,7 +141,7 @@ A test of a lower layer that needs something from a higher one gets it through `
 
 ### Share between commands through format.ts
 
-✅ **Do** put anything two commands print alike in `commands/format.ts`, or lower if it isn't about printing.
+✅ **Do** put anything two commands print alike in `cli/commands/format.ts`, or lower if it isn't about printing.
 
 ❌ **Don't** import one command from another in a command's own code.
 
@@ -142,6 +151,6 @@ The lint can't tell a command's code from its tests, so it allows command folder
 
 ### Adding a layer or a command
 
-- A command: add a folder under `commands/`, add its name to `COMMANDS` in `scripts/layout.ts`, and wire it into `cli/index.ts`.
+- A command: add a folder under `cli/commands/` whose `<command>.ts` exports `createXCommand()`, add its name to `COMMANDS` in `scripts/layout.ts`, and add the command to `createProgram()` in `cli/program.ts`.
 - A layer: add it to `LAYERS` in `scripts/layout.ts`, in order, then update the diagram and this file.
 - Then run `bun run lint`, which regenerates the rules in `.oxlintrc.json`.

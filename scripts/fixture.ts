@@ -8,17 +8,16 @@
 // `scenario_`. `build` and a real `run` use real Docker:
 //
 //   bun run fixture 2 build two-pairs
-import { readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { listEntries } from "../src/platform/fs.ts";
+import { join, resolve } from "../src/platform/path.ts";
 
 const repo = resolve(import.meta.dir, "..");
 const fixtureTests = join(repo, "fixtureTests");
-const scenarios = readdirSync(fixtureTests, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory() && entry.name.startsWith("scenario_"))
-  .map((entry) => entry.name)
-  .toSorted();
+const scenarios = listEntries(fixtureTests)
+  .filter((entry) => entry.isDirectory && entry.path.startsWith("scenario_"))
+  .map((entry) => entry.path);
 
-const [query, ...args] = process.argv.slice(2);
+const [query, ...args] = Bun.argv.slice(2);
 const matches = query
   ? scenarios.filter((name) => name === query || name.startsWith(query) || name.startsWith(`scenario_${query}_`))
   : [];
