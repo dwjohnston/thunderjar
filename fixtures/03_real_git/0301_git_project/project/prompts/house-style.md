@@ -1,3 +1,3 @@
-# House style (first commit)
+# House style (second commit)
 
-Write small functions.
+Write small functions, and name every parameter.

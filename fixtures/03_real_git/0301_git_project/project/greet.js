@@ -1,2 +1,2 @@
-// Scenario 0301's project, at its first commit.
-export const greet = () => "Hello!";
+// Scenario 0301's project, at its second commit.
+export const greet = (name) => `Hello, ${name}!`;
