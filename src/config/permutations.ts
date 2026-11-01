@@ -41,16 +41,42 @@ const sha256 = (data: string | ArrayBuffer) => new CryptoHasher("sha256").update
 const HARNESS_MAPS = new Set(["models.ts", "versions.ts"]);
 
 /**
- * Each file under `<root>/<path>` (a folder, or a single file), as `[path within it, sha256]`,
- * sorted by path. The folder's own name is left out, so renaming it keeps its content.
+ * Every file under `dir`, as its path relative to `dir`. Symlinks are followed, so a linked
+ * file or folder counts under the link's own path. A link back to a folder already being walked
+ * is skipped, and a dangling link is listed with no content.
  */
-async function contentOf(root: string, path: string, exclude = new Set<string>()): Promise<[string, string][]> {
+async function walk(dir: string, prefix = "", ancestors = new Set<string>()): Promise<{ file: string; dangling?: true }[]> {
+  const { dev, ino } = await Bun.file(dir).stat();
+  const id = `${dev}:${ino}`;
+  if (ancestors.has(id)) return [];
+  const within = new Set([...ancestors, id]);
+  const entries = [...new Glob("*").scanSync({ cwd: dir, onlyFiles: false, dot: true })];
+  const nested = await Promise.all(
+    entries.map(async (entry) => {
+      const stat = await Bun.file(`${dir}/${entry}`)
+        .stat()
+        .catch(() => undefined);
+      if (!stat) return [{ file: `${prefix}${entry}`, dangling: true as const }];
+      if (stat.isDirectory()) return walk(`${dir}/${entry}`, `${prefix}${entry}/`, within);
+      return [{ file: `${prefix}${entry}` }];
+    }),
+  );
+  return nested.flat();
+}
+
+/**
+ * Each file under `<root>/<path>` (a folder, or a single file), as `[path within it, sha256]`,
+ * sorted by path. The folder's own name is left out, so renaming it keeps its content. A
+ * symlink's target content is hashed, so editing a shared file it links to changes the hash.
+ */
+async function contentOf(root: string, path: string, exclude = new Set<string>()): Promise<[string, string | null][]> {
   if (!path.endsWith("/")) return [["", sha256(await Bun.file(`${root}/${path}`).arrayBuffer())]];
-  const files = [...new Glob("**/*").scanSync({ cwd: `${root}/${path}`, onlyFiles: true, dot: true })]
-    .filter((file) => !exclude.has(file))
-    .toSorted();
+  const files = (await walk(`${root}/${path}`)).filter(({ file }) => !exclude.has(file)).toSorted((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
   return Promise.all(
-    files.map(async (file): Promise<[string, string]> => [file, sha256(await Bun.file(`${root}/${path}${file}`).arrayBuffer())]),
+    files.map(async ({ file, dangling }): Promise<[string, string | null]> => [
+      file,
+      dangling ? null : sha256(await Bun.file(`${root}/${path}${file}`).arrayBuffer()),
+    ]),
   );
 }
 
