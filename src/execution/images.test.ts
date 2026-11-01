@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { imagePrefixProblem, postrunImage, prerunImage } from "./images.ts";
+import { containerName, imagePrefixProblem, postrunImage, prerunImage } from "./images.ts";
 
 test("a prerun image is tagged with the permutation's abbreviated hash", () => {
   expect(prerunImage("e943919c".padEnd(64, "0"))).toBe("thunderjar-prerun:e943919c");
@@ -7,6 +7,11 @@ test("a prerun image is tagged with the permutation's abbreviated hash", () => {
 
 test("a postrun image is tagged with the execution, permutation and iteration", () => {
   expect(postrunImage("01aryz6s410000000000000000", 3, 2)).toBe("thunderjar-postrun:01aryz6s410000000000000000-3-2");
+});
+
+test("a container is named, under the prefix, by the execution, permutation and iteration", () => {
+  expect(containerName("01aryz6s410000000000000000", 3, 2)).toBe("thunderjar-run-01aryz6s410000000000000000-3-2");
+  expect(containerName("01aryz6s410000000000000000", 3, 2, "throwaway")).toBe("throwaway-run-01aryz6s410000000000000000-3-2");
 });
 
 test("--image-prefix replaces thunderjar in every image name", () => {

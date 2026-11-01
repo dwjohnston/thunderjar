@@ -1,4 +1,5 @@
-// The names of the Docker images an execution builds. Every image name is made here.
+// The names of the Docker images an execution builds, and of the containers it runs. Every image
+// and container name is made here.
 import { abbreviateHash } from "../config/permutations.ts";
 
 /** The prefix image names start with, unless `--image-prefix` gives another. */
@@ -27,3 +28,11 @@ export const postrunImage = (
   iteration: number,
   prefix: string = DEFAULT_IMAGE_PREFIX,
 ) => `${prefix}-postrun:${executionId}-${permutation}-${iteration}`;
+
+/** The container one container run runs in, until it's committed to its postrun image and removed. */
+export const containerName = (
+  executionId: string,
+  permutation: number,
+  iteration: number,
+  prefix: string = DEFAULT_IMAGE_PREFIX,
+) => `${prefix}-run-${executionId}-${permutation}-${iteration}`;
