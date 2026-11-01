@@ -4,8 +4,9 @@
 //
 // Its state is a folder, FAKE_DOCKER_DIR, which a test writes and reads:
 //
-//   images        the images that exist, `<repository>:<tag>`, one per line
+//   images        the images that exist, `<repository>:<tag>`, one per line; a build adds one
 //   unreachable   if present, the daemon can't be reached
+//   failing       the images whose build fails, one per line
 //   commands      appended to: one line per command, `docker <args…>`
 //
 // Without FAKE_DOCKER_DIR the daemon is reachable, no image exists, and nothing is recorded.
@@ -26,13 +27,20 @@ export type FakeDocker = AsyncDisposable & {
   remove: () => Promise<void>;
 };
 
+const lines = (values: string[]) => values.map((value) => `${value}\n`).join("");
+
 /**
- * State for the fake, in which `images` exist, or the daemon is `unreachable`.
- * Remove it when done, or declare it with `await using`.
+ * State for the fake, in which `images` exist, building the `failing` images fails, or the
+ * daemon is `unreachable`. Remove it when done, or declare it with `await using`.
  */
-export async function fakeDocker({ images = [], unreachable = false }: { images?: string[]; unreachable?: boolean } = {}): Promise<FakeDocker> {
+export async function fakeDocker({
+  images = [],
+  failing = [],
+  unreachable = false,
+}: { images?: string[]; failing?: string[]; unreachable?: boolean } = {}): Promise<FakeDocker> {
   const dir = `${FIXTURES_DIR}/.tmp/docker-${crypto.randomUUID()}`;
-  await Bun.write(`${dir}/images`, images.map((image) => `${image}\n`).join(""));
+  await Bun.write(`${dir}/images`, lines(images));
+  await Bun.write(`${dir}/failing`, lines(failing));
   if (unreachable) await Bun.write(`${dir}/unreachable`, "");
   const commandsFile = Bun.file(`${dir}/commands`);
   const remove = async () => {
@@ -64,14 +72,23 @@ if (import.meta.main) {
     fail("Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?");
   }
 
+  const list = async (name: string) => (dir && (await state(name).exists()) ? (await state(name).text()).split("\n").filter(Boolean) : []);
+
   const [command, subcommand, ...rest] = args;
   if (command === "image" && subcommand === "ls" && rest[0] === "--format" && rest.length === 3) {
     // docker image ls --format {{.Repository}}:{{.Tag}} <repository>
     const repository = rest[2] as string;
-    const images = dir && (await state("images").exists()) ? (await state("images").text()).split("\n") : [];
-    for (const image of images) {
+    for (const image of await list("images")) {
       if (image.slice(0, image.lastIndexOf(":")) === repository) console.log(image);
     }
+  } else if (command === "build" && subcommand === "-t" && rest.length === 2) {
+    // docker build -t <image> <context>
+    const [image, context] = rest as [string, string];
+    if (!(await Bun.file(`${context}/Dockerfile`).exists())) fail(`fake docker: no Dockerfile in the build context ${context}`);
+    if ((await list("failing")).includes(image)) {
+      fail(`ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1`);
+    }
+    if (dir) await Bun.write(state("images"), lines([...(await list("images")), image]));
   } else {
     fail(`fake docker: unsupported command: docker ${args.join(" ")}`);
   }

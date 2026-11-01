@@ -196,15 +196,21 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
    - Uses real docker 
    - Run the command, assert on the created docker image, then clean up docker image.
    - Tests of this type should have the extension `.docker.test.ts`
+   - `bun test` skips them. Run them with `bun run test:docker`, which CI runs too.
+   - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
 5. Read from docker image tests
    - For commands that read from an existing image, but do not need to act on it 
     - e.g. `remeasure`, 
    - The image is presumed to already exist 
    - Tests of this type should have the extension `.docker.test.ts`
+   - `bun test` skips them. Run them with `bun run test:docker`, which CI runs too.
+   - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
 6. Run on docker container tests
    - eg. `run`. Start
    -  containers from an existing image, execute some behaviour, then assert on effects both inside the container and out.
    - Tests of this type should have the extension `.docker.test.ts`
+   - `bun test` skips them. Run them with `bun run test:docker`, which CI runs too.
+   - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
 7. Regular unit tests
    - For comprehensive business logic
 
