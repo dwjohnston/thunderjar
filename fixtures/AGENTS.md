@@ -76,9 +76,13 @@ bun run fixture 0201 plan two-pairs
 
 ## Scenario catalogue
 
-None yet.
+- **What the scenarios share**
+  - Nothing yet: no scenario has a `.thunderjar/`.
+- **01_unitialised**: projects before `init`.
+  - `0101_empty_project`: an empty project, not JavaScript. `init` gives it a nested `.thunderjar/package.json`.
+  - `0102_javascript_project`: a JavaScript project with its own `package.json`. `init` gives it no nested one.
 
-Fill it in with this format:
+Keep it in this format:
 
 - **What the scenarios share**
   - The base image, code state, prompt sets and fake agents that most scenarios use, so entries only list their differences.
