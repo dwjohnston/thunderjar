@@ -31,7 +31,7 @@ import { thunderjar, copyScenarioProject } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
 // Read-only commands run on the scenario unchanged.
-const { stdout, exitCode } = await thunderjar(scenario("0201"), ["plan", "two-pairs"]);
+const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"]);
 
 // Commands that write files run on a copy.
 await using copy = await copyScenarioProject("0101");
@@ -51,7 +51,7 @@ await thunderjar(copy.dir, ["init"]);
 Run a command by hand in a scenario with its ID:
 
 ```sh
-bun run fixture 0201 plan two-pairs
+bun run fixture 0202 plan is-prime-baseline
 ```
 
 ## Type-checked scenarios
@@ -89,6 +89,11 @@ bun run fixture 0201 plan two-pairs
   - `0102_javascript_project`: a JavaScript project with its own `package.json`. `init` gives it no nested one.
 - **02_regular**: initialised projects that work.
   - `0201_minimal_existing_setup`: exactly the shared setup. Has type tests of the generated names.
+  - `0202_typical_project`: a matrix of two prompt sets, two fake agents and two wordings of the task.
+    - Prompt sets `snerk` and `glurk`, each writing its own `FAKE_INSTRUCTIONS.md`.
+    - A second fake agent, `fake-harness-beta`, version `1.0.0`, models `fake-model-small` and `fake-model-large`. It writes a correct `isPrime.ts`, where alpha's is buggy.
+    - Task `is-prime` has a second initial prompt, `terse`.
+    - Test cases: `example`, and `is-prime-baseline`: both prompt sets, `fake-harness-alpha@1.0.0/fake-model-small` and `fake-harness-beta@1.0.0/fake-model-large`, both initial prompts, 5 iterations. Matrix shape 1/1/2/2/2.
 - **04_unhappy**: projects broken on purpose.
   - `0401_type_errors`: the shared setup, but test case `example` names prompt set `snerkk`, which isn't declared. Fails to type-check.
   - `0402_broken_declarations`: the shared setup, beside declarations broken in ways only loading finds. No `tsconfig.json` or `_generated/`: it isn't type-checked.
