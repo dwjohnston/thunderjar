@@ -89,7 +89,17 @@ async function writeJson(path: string, value: unknown): Promise<void> {
   await $`mv ${temporary} ${path}`.quiet();
 }
 
-/** Each file in `dir` matching `pattern`, parsed. None if `dir` doesn't exist. */
+/** A record in the store that can't be read, at `path`. */
+export class RunDataStoreError extends Error {
+  readonly path: string;
+
+  constructor(path: string, message: string) {
+    super(message);
+    this.path = path;
+  }
+}
+
+/** Each file in `dir` matching `pattern`, parsed. None if `dir` doesn't exist. Throws a RunDataStoreError for a file that isn't JSON. */
 async function readJsonFiles<T>(dir: string, pattern: string): Promise<T[]> {
   const isDirectory = await Bun.file(dir)
     .stat()
@@ -97,7 +107,16 @@ async function readJsonFiles<T>(dir: string, pattern: string): Promise<T[]> {
     .catch(() => false);
   if (!isDirectory) return [];
   const files = await Array.fromAsync(new Glob(pattern).scan({ cwd: dir }));
-  return Promise.all(files.map(async (file) => (await Bun.file(`${dir}/${file}`).json()) as T));
+  return Promise.all(
+    files.map(async (file) => {
+      const path = `${dir}/${file}`;
+      try {
+        return (await Bun.file(path).json()) as T;
+      } catch (error) {
+        throw new RunDataStoreError(path, error instanceof Error ? error.message : String(error));
+      }
+    }),
+  );
 }
 
 /** A store of JSON files under `dataDir`. A missing folder is an empty store. */

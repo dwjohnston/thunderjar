@@ -1,0 +1,18 @@
+{
+  "executionId": "01m40g5972dza3k7g3d36k55zw",
+  "testCase": "example",
+  "task": "is-prime",
+  "startedAt": "2026-10-03T09:05:12.930Z",
+  "status": "running",
+  "matrix": {
+    "shape": [
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "permutations": 1,
+    "iterations": 1
+  }
+}
