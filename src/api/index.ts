@@ -14,9 +14,12 @@ export {
   sqliteStore,
 } from "./declarations.ts";
 export type {
+  ApplyParameterCtx,
   BaseImageDeclaration,
   CodeStateDeclaration,
   ConfigDeclaration,
+  FragmentCtx,
+  HarnessApplyCtx,
   HarnessCliCtx,
   HarnessDeclaration,
   HarnessModelsDeclaration,
