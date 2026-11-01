@@ -1,0 +1,19 @@
+{
+  "executionId": "01m3vf68s54p5eyn5s3t1ygkdj",
+  "testCase": "is-prime-baseline",
+  "task": "is-prime",
+  "startedAt": "2026-10-01T10:12:04.517Z",
+  "finishedAt": "2026-10-01T10:42:01.717Z",
+  "status": "complete",
+  "matrix": {
+    "shape": [
+      1,
+      1,
+      2,
+      2,
+      2
+    ],
+    "permutations": 8,
+    "iterations": 5
+  }
+}

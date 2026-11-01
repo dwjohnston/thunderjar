@@ -1,0 +1,19 @@
+{
+  "executionId": "01m3ygz4g89aqh8yey8em0twpq",
+  "testCase": "two-harnesses",
+  "task": "is-prime",
+  "startedAt": "2026-10-02T14:40:51.208Z",
+  "finishedAt": "2026-10-02T14:42:09.158Z",
+  "status": "failed",
+  "matrix": {
+    "shape": [
+      1,
+      1,
+      1,
+      2,
+      1
+    ],
+    "permutations": 2,
+    "iterations": 1
+  }
+}
