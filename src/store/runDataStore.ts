@@ -44,6 +44,22 @@ export type Execution = {
   exitCode: number;
 };
 
+/** A MeasurementResult as the store keeps it: an error by its message. */
+export type RecordedOutcome =
+  | { outcome: "measured"; data: unknown }
+  | { outcome: "skipped"; reason?: string }
+  | { outcome: "erroredWhileMeasuring"; error: { message: string } };
+
+/** One measure of a container run. */
+export type RecordedMeasure = {
+  instrument: string;
+  /** Of the measurement that took it; a measure whose hash differs from its measurement's now is stale. */
+  contentHash: string;
+  /** ISO timestamp of when it was taken, not of when the container run ran. */
+  measuredAt: string;
+  outcome: RecordedOutcome;
+};
+
 /** One container run: one iteration of one permutation. */
 export type ContainerRunRecord = {
   executionId: string;
@@ -65,8 +81,8 @@ export type ContainerRunRecord = {
   execution: Execution;
   /** The text of the result file the harness's `cli` left, or null if it left none. */
   harnessResult: string | null;
-  /** The run's measures, by measurement name. */
-  result: Record<string, unknown>;
+  /** The run's measures, by measurement name. Empty until it has been measured. */
+  result: Record<string, RecordedMeasure>;
 };
 
 export interface RunDataStore {

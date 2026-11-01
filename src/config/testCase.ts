@@ -4,6 +4,7 @@
 import type { TestCaseDeclaration } from "../api/declarations.ts";
 import { foldersIn, PARAMETERS } from "./folders.ts";
 import { ConfigError, existsIn, FOLDER, loadDeclaration, type Problem, problemsError } from "./loader.ts";
+import { checkMeasurements } from "./measurements.ts";
 
 const show = (value: unknown) => JSON.stringify(value) ?? String(value);
 
@@ -100,6 +101,7 @@ class TestCaseChecker {
       return;
     }
     if (!(await this.requires("task", task, `${PARAMETERS}/tasks/${task}/`))) return;
+    await checkMeasurements(this.root, task, this.problems);
 
     for (const name of initialPrompts) {
       const prompt = `${PARAMETERS}/tasks/${task}/initial-prompts/${name}.ts`;
