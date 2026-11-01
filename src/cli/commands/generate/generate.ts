@@ -1,5 +1,6 @@
 import { Command } from "commander";
-import { ConfigError, FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
+import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
+import { reportingConfigErrors } from "../../configErrors.ts";
 import { GENERATED_PATH, writeParameterNames } from "./parameterNames.ts";
 
 /** `path`, an absolute path under `dir` or a folder above it, relative to `dir`. */
@@ -28,14 +29,10 @@ export function createGenerateCommand(): Command {
     .description(
       `Write the names declared under ${FOLDER}/test-case-parameters/ to ${FOLDER}/${GENERATED_PATH}, so a test case that names an undeclared parameter is a type error.`,
     )
-    .action(async () => {
-      try {
+    .action(
+      reportingConfigErrors(async () => {
         const path = await generate(process.cwd());
         console.log(`Wrote ${relativeTo(process.cwd(), path)}`);
-      } catch (error) {
-        if (!(error instanceof ConfigError)) throw error;
-        console.error(`Error: ${error.message}`);
-        process.exitCode = 1;
-      }
-    });
+      }),
+    );
 }

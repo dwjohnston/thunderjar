@@ -91,6 +91,14 @@ bun run fixture 0201 plan two-pairs
   - `0201_minimal_existing_setup`: exactly the shared setup. Has type tests of the generated names.
 - **04_unhappy**: projects broken on purpose.
   - `0401_type_errors`: the shared setup, but test case `example` names prompt set `snerkk`, which isn't declared. Fails to type-check.
+  - `0402_broken_declarations`: the shared setup, beside declarations broken in ways only loading finds. No `tsconfig.json` or `_generated/`: it isn't type-checked.
+    - Base image `no-default-export`, which exports its declaration under a name.
+    - Code states `unwrapped`, a plain object, and `wrongly-wrapped`, wrapped in `declareBaseImage`.
+    - Task `fizz-buzz`, whose only initial prompt is `fizzy`.
+    - Test cases, instead of `example`: `sound`, as `example` is in the shared setup, and one per mistake: `unknown-prompt-set` (`snirk`), `unknown-task` (`is-even`), `prompt-of-another-task` (`fizzy`), `unexported-base-image`, `unwrapped-code-state`, `wrongly-wrapped-code-state`, `unknown-harness-models` (an unknown version, an unknown model, and a pair not of the form `harness@version/model`), `empty-code-states` (`codeState: []` and 2.5 iterations) and `zero-iterations`.
+  - `0403_broken_harness_family`: the shared setup, with a second fake agent, `fake-harness-beta`, whose `versions.ts` isn't wrapped in `declareHarnessVersions`. No `tsconfig.json` or `_generated/`.
+    - Test cases: `example`, and `beta`, which names `fake-harness-beta@1.0.0/fake-model-large`.
+  - `0404_empty_parameter_folders`: the shared setup with every declaration deleted: each parameter folder holds only a `.gitkeep`. Test case `example` is left. No `tsconfig.json` or `_generated/`.
 
 Keep it in this format:
 
