@@ -58,6 +58,10 @@ bun run fixture 0201 plan two-pairs
 
 `src/testing/scenarios.typecheck.test.ts` runs `tsc --noEmit -p <scenario>/tsconfig.json` for each scenario with a `tsconfig.json` beside its `project/`. A scenario without one isn't checked.
 
+- A scenario in `04_unhappy/` must fail, with exactly the errors the test lists for it.
+- Any other scenario must pass.
+- The test doesn't run `generate`, so a checked scenario checks in its `_generated/` folder. A test of `generate` keeps it up to date.
+
 ## Add a variation as a scenario
 
 ✅ **Do** put any variation a test needs, such as an empty parameter folder or a failed run, into a scenario: one that fits, or a new one.
@@ -77,10 +81,16 @@ bun run fixture 0201 plan two-pairs
 ## Scenario catalogue
 
 - **What the scenarios share**
-  - Nothing yet: no scenario has a `.thunderjar/`.
+  - Initialised scenarios start from what `init` scaffolds in an empty project: base image `node20`, code state `baseline`, prompt set `snerk`, task `is-prime` with initial prompt `plain` and measurement `isPrimeTsExists`, and test case `example`.
+  - The agent is the fake `fake-harness-alpha`, version `1.0.0`, model `fake-model-small`, instead of `claude-code`.
+  - Each checks in its `_generated/parameterNames.d.ts`, though `.thunderjar/.gitignore` ignores it, so it type-checks without running `generate`.
 - **01_unitialised**: projects before `init`.
   - `0101_empty_project`: an empty project, not JavaScript. `init` gives it a nested `.thunderjar/package.json`.
   - `0102_javascript_project`: a JavaScript project with its own `package.json`. `init` gives it no nested one.
+- **02_regular**: initialised projects that work.
+  - `0201_minimal_existing_setup`: exactly the shared setup. Has type tests of the generated names.
+- **04_unhappy**: projects broken on purpose.
+  - `0401_type_errors`: the shared setup, but test case `example` names prompt set `snerkk`, which isn't declared. Fails to type-check.
 
 Keep it in this format:
 

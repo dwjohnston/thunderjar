@@ -24,6 +24,7 @@ Thunderjar is a TypeScript/Bun CLI for
       - `<command>/`
         - `<command>.ts`
         - `<command>.test.ts`  
+  - `config/`: finds a project's `.thunderjar/` folder and loads its declarations.
   - `testing/`: the fixture harness that tests use to run the CLI in a scenario.
 - `docs/`: the VitePress docs site.
   - `.vitepress/`: site config.
