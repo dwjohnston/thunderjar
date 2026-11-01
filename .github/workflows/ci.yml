@@ -17,6 +17,8 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun test
+      - name: Docker image tests (GitHub's Ubuntu runners have Docker)
+        run: bun run test:docker
 
   build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
