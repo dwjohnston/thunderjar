@@ -31,6 +31,12 @@
       "skillPath": "skills/markdown-writing-prompts/SKILL.md",
       "computedHash": "1061a85467be303d902e4de25680d3642abd531e9a1f5baa91b8eef4ea63e2dc"
     },
+    "subagent-driven-development": {
+      "source": "obra/superpowers",
+      "sourceType": "github",
+      "skillPath": "skills/subagent-driven-development/SKILL.md",
+      "computedHash": "92a9fefb8e11bfc77e95bb1557a1b01b390261a53fa71b3aa773a5c8aa2cf3a9"
+    },
     "ts-write-script": {
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
