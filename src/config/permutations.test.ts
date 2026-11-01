@@ -24,6 +24,13 @@ const TWO_PAIRS: TestCaseDeclaration = {
 const hashes = async (root: string, testCase: TestCaseDeclaration) =>
   (await hashPermutations(root, testCase)).map((permutation) => permutation.hash);
 
+const edit = async (path: string, change: (text: string) => string) => {
+  const text = await Bun.file(path).text();
+  const changed = change(text);
+  if (changed === text) throw new Error(`editing ${path} changed nothing`);
+  await Bun.write(path, changed);
+};
+
 describe("matrixShape", () => {
   test("is the size of each axis, in declaration field order", () => {
     expect(matrixShape(ONE)).toEqual([1, 1, 1, 1, 1]);
@@ -83,20 +90,58 @@ describe("hashPermutations", () => {
   });
 
   test("every permutation differing on any axis has its own hash", async () => {
+    const all = await hashes(root, { ...TWO_PAIRS, harnessModel: [...TWO_PAIRS.harnessModel, "fake-harness-beta@1.0.0/fake-model-small"] });
+
+    expect(all).toHaveLength(2 * 3 * 2);
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  test("renaming a parameter's folder or file keeps its hash", async () => {
     await using copy = await copyScenarioProject("0202");
     const parameters = `${copy.dir}/.thunderjar/test-case-parameters`;
-    // Under other names, with the same files: the name is part of the hash.
-    await Bun.$`cp -R ${parameters}/baseImages/node20 ${parameters}/baseImages/node20-again`.quiet();
-    await Bun.$`cp -R ${parameters}/codeStates/baseline ${parameters}/codeStates/baseline-again`.quiet();
-    const all = await hashes(`${copy.dir}/.thunderjar`, {
-      ...TWO_PAIRS,
-      baseImage: ["node20", "node20-again"],
-      codeState: ["baseline", "baseline-again"],
-      harnessModel: [...TWO_PAIRS.harnessModel, "fake-harness-beta@1.0.0/fake-model-small"],
-    });
+    await Bun.$`mv ${parameters}/baseImages/node20 ${parameters}/baseImages/node20-renamed`.quiet();
+    await Bun.$`mv ${parameters}/codeStates/baseline ${parameters}/codeStates/baseline-renamed`.quiet();
+    await Bun.$`mv ${parameters}/promptSets/snerk ${parameters}/promptSets/snerk-renamed`.quiet();
+    await Bun.$`mv ${parameters}/harnessModels/fake-harness-alpha ${parameters}/harnessModels/fake-harness-renamed`.quiet();
+    await Bun.$`mv ${parameters}/tasks/is-prime/initial-prompts/plain.ts ${parameters}/tasks/is-prime/initial-prompts/plain-renamed.ts`.quiet();
 
-    expect(all).toHaveLength(2 * 2 * 2 * 3 * 2);
-    expect(new Set(all).size).toBe(all.length);
+    expect(
+      await hashes(`${copy.dir}/.thunderjar`, {
+        ...ONE,
+        baseImage: ["node20-renamed"],
+        codeState: ["baseline-renamed"],
+        promptSet: ["snerk-renamed"],
+        harnessModel: ["fake-harness-renamed@1.0.0/fake-model-small"],
+        initialPrompt: ["plain-renamed"],
+      }),
+    ).toEqual(await hashes(root, ONE));
+  });
+
+  test("adding a model or a version to a harness changes no hash", async () => {
+    await using copy = await copyScenarioProject("0202");
+    const harness = `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-alpha`;
+    await edit(`${harness}/models.ts`, (text) => text.replace(/\n\}\);/, '\n  "fake-model-huge": "fake-model-huge-001",\n});'));
+    await edit(`${harness}/versions.ts`, (text) => text.replace(/\n\}\);/, '\n  "2.0.0": { version: "2.0.0" },\n});'));
+
+    expect(await hashes(`${copy.dir}/.thunderjar`, TWO_PAIRS)).toEqual(await hashes(root, TWO_PAIRS));
+  });
+
+  test.each([
+    ["model's ID", "models.ts", "fake-model-large-001", "fake-model-large-002", "fake-model-large"],
+    ["version's entry", "versions.ts", '{ version: "1.0.0" }', '{ version: "1.0.1" }', "@1.0.0/"],
+  ])("changing the chosen %s changes only the hashes of the permutations using it", async (_, file, from, to, used) => {
+    const testCase = { ...TWO_PAIRS, harnessModel: [...TWO_PAIRS.harnessModel, "fake-harness-beta@1.0.0/fake-model-small"] };
+    await using copy = await copyScenarioProject("0202");
+    const before = await hashPermutations(root, testCase);
+    await edit(`${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-beta/${file}`, (text) => text.replace(from, to));
+
+    const after = await hashes(`${copy.dir}/.thunderjar`, testCase);
+
+    before.forEach((permutation, i) => {
+      const changed = permutation.harnessModel.startsWith("fake-harness-beta") && permutation.harnessModel.includes(used);
+      if (changed) expect(after[i]).not.toBe(permutation.hash);
+      else expect(after[i]).toBe(permutation.hash);
+    });
   });
 
   // Each edit is to a file of the declaration of one parameter of the first permutation, on its own axis.
@@ -104,13 +149,12 @@ describe("hashPermutations", () => {
     ["baseImage", "baseImages/node20/index.ts"],
     ["codeState", "codeStates/baseline/index.ts"],
     ["promptSet", "promptSets/snerk/index.ts"],
-    ["harnessModel", "harnessModels/fake-harness-alpha/versions.ts"],
+    ["harnessModel", "harnessModels/fake-harness-alpha/index.ts"],
     ["initialPrompt", "tasks/is-prime/initial-prompts/plain.ts"],
   ] as const)("editing a file of a %s's declaration changes the hash of each permutation naming it", async (axis, file) => {
     await using copy = await copyScenarioProject("0202");
     const before = await hashPermutations(root, TWO_PAIRS);
-    const edited = Bun.file(`${copy.dir}/.thunderjar/test-case-parameters/${file}`);
-    await Bun.write(edited, `${await edited.text()}\n// edited\n`);
+    await edit(`${copy.dir}/.thunderjar/test-case-parameters/${file}`, (text) => `${text}\n// edited\n`);
 
     const after = await hashes(`${copy.dir}/.thunderjar`, TWO_PAIRS);
 
