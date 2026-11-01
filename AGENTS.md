@@ -233,6 +233,9 @@ fixtures/
       tsconfig.json 
       project/
   03_real_git/
+    0301_git_project/
+      tsconfig.json
+      project/
   04_unhappy/ 
 ```
 
