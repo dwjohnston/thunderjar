@@ -65,40 +65,40 @@ initialPrompt: plain, terse
 
 Matrix shape: 1/1/2/2/2 (8 permutations)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be  missing
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fc556cc9  missing
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   90abcb0a  missing
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   775c8f66  missing
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   cda1818b  missing
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   67844e9a  missing
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   df1934bd  missing
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   f4979542  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5650e1a8  missing
+ 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   8ff151b1  missing
+ 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   de78e815  missing
+ 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   4437033b  missing
+ 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   69114039  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   050f83dc  missing
+ 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   db4da990  missing
+ 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   b36f0c54  missing
 `);
   });
 
   test("says which prerun images are built, asking Docker once", async () => {
     await using docker = await fakeDocker({
-      images: ["thunderjar-prerun:45bcf0be", "thunderjar-prerun:775c8f66", "other-prerun:fc556cc9", "thunderjar-postrun:f4979542"],
+      images: ["thunderjar-prerun:5650e1a8", "thunderjar-prerun:4437033b", "other-prerun:8ff151b1", "thunderjar-postrun:b36f0c54"],
     });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"], { env: docker.env });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be  built
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fc556cc9  missing
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   90abcb0a  missing
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   775c8f66  built
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   cda1818b  missing
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   67844e9a  missing
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   df1934bd  missing
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   f4979542  missing
+    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5650e1a8  built
+ 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   8ff151b1  missing
+ 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   de78e815  missing
+ 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   4437033b  built
+ 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   69114039  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   050f83dc  missing
+ 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   db4da990  missing
+ 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   b36f0c54  missing
 `);
     expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun"]);
   });
 
   test("--image-prefix looks for the images under that prefix", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:45bcf0be", "other-prerun:fc556cc9"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:5650e1a8", "other-prerun:8ff151b1"] });
 
     const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline", "--image-prefix", "other"], {
       env: docker.env,
@@ -120,7 +120,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
   });
 
   test("when Docker can't be reached, it still plans, with each image's status unknown, and says why", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:45bcf0be"], unreachable: true });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:5650e1a8"], unreachable: true });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example"], { env: docker.env });
 
@@ -128,7 +128,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
       "Warning: Docker can't be reached, so whether each prerun image is built is unknown: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be  unknown\n");
+    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5650e1a8  unknown\n");
   });
 
   test("without a docker command, it still plans, with each image's status unknown", async () => {
@@ -140,14 +140,14 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
       "Warning: Docker can't be reached, so whether each prerun image is built is unknown: bun: command not found: no-such-docker\n",
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith("plain   45bcf0be  unknown\n");
+    expect(stdout).toEndWith("plain   5650e1a8  unknown\n");
   });
 
   test("a permutation has the same hash in every test case naming it", async () => {
     const { stdout } = await thunderjar(scenario("0202"), ["plan", "example"]);
 
     expect(stdout).toEndWith(
-      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be  missing\n",
+      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5650e1a8  missing\n",
     );
   });
 });
@@ -170,6 +170,7 @@ describe("0402 broken declarations", () => {
   const plan = (testCase: string) => thunderjar(scenario("0402"), ["plan", testCase]);
   const testCase = (name: string) => `.thunderjar/test-cases/${name}.ts`;
   const parameter = (path: string) => `.thunderjar/test-case-parameters/${path}`;
+  const measurement = (path: string) => parameter(`tasks/${path}`);
 
   test("a test case naming only sound declarations plans beside the broken ones", async () => {
     const { stdout, stderr, exitCode } = await plan("sound");
@@ -235,6 +236,42 @@ describe("0402 broken declarations", () => {
       "zero iterations",
       "zero-iterations",
       [`${testCase("zero-iterations")}: iterations: must be a positive integer, got 0`],
+    ],
+    [
+      "a measurement naming an unknown instrument",
+      "unknown-instrument",
+      [
+        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest`,
+      ],
+    ],
+    [
+      "a measurement whose config doesn't fit its instrument",
+      "misfit-config",
+      [`${measurement("misfit-config/measurements/isPrimeTsExists.ts")}: config.glob: must be a glob pattern, got undefined`],
+    ],
+    [
+      "a measurement combining its values in a way its instrument's can't be",
+      "unfit-aggregate",
+      [
+        `${measurement("unfit-aggregate/measurements/isPrimeTsExists.ts")}: aggregate: "mean" is not a way fileCreated's values combine. Use one of: rate, count`,
+      ],
+    ],
+    [
+      "a templateTest measurement whose template is missing",
+      "missing-template",
+      [
+        `${measurement("missing-template/measurements/isPrimeTemplateTest.ts")}: config.template: "./isPrime.tset.template.ts" has no matching ${measurement("missing-template/measurements/isPrime.tset.template.ts")}`,
+      ],
+    ],
+    [
+      "a grep measurement whose pattern isn't a valid regular expression",
+      "invalid-regex",
+      [`${measurement("invalid-regex/measurements/tsIgnoreCount.ts")}: config.pattern: "@ts-ignore(" is not a valid regular expression: missing )`],
+    ],
+    [
+      "a measurement not wrapped in declareMeasurement",
+      "unwrapped-measurement",
+      [`${measurement("unwrapped-measurement/measurements/isPrimeTsExists.ts")}: default export is not wrapped in declareMeasurement(...).`],
     ],
   ])("%s (%s)", async (_, name, problems) => {
     const { stdout, stderr, exitCode } = await plan(name);

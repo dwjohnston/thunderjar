@@ -15,6 +15,7 @@ export {
   sqliteStore,
 } from "./declarations.ts";
 export type {
+  AggregateFor,
   ApplyParameterCtx,
   BaseImageDeclaration,
   CodeStateDeclaration,
@@ -27,7 +28,11 @@ export type {
   HarnessModelsDeclaration,
   HarnessVersionsDeclaration,
   InitialPromptDeclaration,
+  InstrumentName,
+  InstrumentTypes,
+  MeasurementContext,
   MeasurementDeclaration,
+  MeasurementResult,
   PromptSetDeclaration,
   SqliteStore,
   TestCaseDeclaration,
