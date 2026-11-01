@@ -28,30 +28,58 @@ export function declaredBy(value: unknown): string | undefined {
   return typeof mark === "string" ? mark : undefined;
 }
 
-// Its arguments get their types once thunderjar applies parameters.
-type ApplyParameter = (config: any, ctx: any) => string;
+// --- applyParameter ---
+//
+// Each parameter's `applyParameter(config, ctx)` returns the Dockerfile fragment that applies it
+// to the prerun image; see src/execution/prerunDockerfile.ts for the order they are built in.
+// `config` is the declaration's own `config`, as written (undefined if it has none).
 
-type ParameterDeclaration = {
-  applyParameter?: ApplyParameter;
+/** What every fragment gets. */
+export type FragmentCtx = {};
+
+/**
+ * What a fragment gets when its parameter is a folder. `dir` is that folder's path in the build
+ * context, so files kept beside the declaration can be copied in: `COPY ${ctx.dir}/files/ /workspace/`.
+ * It names the parameter's role, not its folder, so renaming the folder changes nothing.
+ */
+export type ApplyParameterCtx = FragmentCtx & {
+  dir: string;
 };
 
-export type BaseImageDeclaration = ParameterDeclaration;
+/**
+ * A parameter declaration's `config`, and the `applyParameter` that receives it. A method, so a
+ * declaration with any `config` is still a `XDeclaration<unknown>` once loaded.
+ */
+type Applies<C, Ctx> = {
+  config?: C;
+  applyParameter?(config: C, ctx: Ctx): string;
+};
 
-export function declareBaseImage(declaration: BaseImageDeclaration): BaseImageDeclaration {
+/** A base image's fragment is required: it carries the prerun image's `FROM`. */
+export type BaseImageDeclaration<C = unknown> = Applies<C, ApplyParameterCtx> & {
+  applyParameter(config: C, ctx: ApplyParameterCtx): string;
+};
+
+export function declareBaseImage<C = undefined>(declaration: BaseImageDeclaration<C>): BaseImageDeclaration<C> {
   return declared("declareBaseImage", declaration);
 }
 
-export type CodeStateDeclaration = ParameterDeclaration;
+export type CodeStateDeclaration<C = unknown> = Applies<C, ApplyParameterCtx>;
 
-export function declareCodeState(declaration: CodeStateDeclaration): CodeStateDeclaration {
+export function declareCodeState<C = undefined>(declaration: CodeStateDeclaration<C>): CodeStateDeclaration<C> {
   return declared("declareCodeState", declaration);
 }
 
-export type PromptSetDeclaration = ParameterDeclaration;
+export type PromptSetDeclaration<C = unknown> = Applies<C, ApplyParameterCtx>;
 
-export function declarePromptSet(declaration: PromptSetDeclaration): PromptSetDeclaration {
+export function declarePromptSet<C = undefined>(declaration: PromptSetDeclaration<C>): PromptSetDeclaration<C> {
   return declared("declarePromptSet", declaration);
 }
+
+/** `dir` is the harness's folder; `version` is the pair's version, as its `versions.ts` entry gives it. */
+export type HarnessApplyCtx = ApplyParameterCtx & {
+  version: string;
+};
 
 /** What a harness's `cli` gets, to build the command that runs the agent. */
 export type HarnessCliCtx = {
@@ -62,13 +90,13 @@ export type HarnessCliCtx = {
   resultPath: string;
 };
 
-export type HarnessDeclaration = ParameterDeclaration & {
+export type HarnessDeclaration<C = unknown> = Applies<C, HarnessApplyCtx> & {
   cli: (ctx: HarnessCliCtx) => string;
   /** Environment variables the agent needs, e.g. its API key. */
   requiredEnv?: string[];
 };
 
-export function declareHarness(declaration: HarnessDeclaration): HarnessDeclaration {
+export function declareHarness<C = undefined>(declaration: HarnessDeclaration<C>): HarnessDeclaration<C> {
   return declared("declareHarness", declaration);
 }
 
@@ -106,12 +134,16 @@ export function declareTokenCostCollector(collector: TokenCostCollector): TokenC
   return declared("declareTokenCostCollector", collector);
 }
 
-export type InitialPromptDeclaration = ParameterDeclaration & {
+/**
+ * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. It is used when
+ * the harness runs, so its fragment is usually left out.
+ */
+export type InitialPromptDeclaration<C = unknown> = Applies<C, FragmentCtx> & {
   prompt: string;
   timeoutSeconds: number;
 };
 
-export function declareInitialPrompt(declaration: InitialPromptDeclaration): InitialPromptDeclaration {
+export function declareInitialPrompt<C = undefined>(declaration: InitialPromptDeclaration<C>): InitialPromptDeclaration<C> {
   return declared("declareInitialPrompt", declaration);
 }
 
