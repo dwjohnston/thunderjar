@@ -11,8 +11,15 @@
   "bin": {
     "thunderjar": "./dist/cli.js"
   },
+  "main": "./src/api/index.ts",
+  "types": "./src/api/index.ts",
+  "exports": {
+    ".": "./src/api/index.ts"
+  },
   "files": [
-    "dist"
+    "dist",
+    "src/api",
+    "!src/**/*.test.ts"
   ],
   "publishConfig": {
     "access": "public"
