@@ -3,7 +3,17 @@ import { afterEach, expect, test } from "bun:test";
 import { FAKE_DOCKER, fakeDocker } from "../testing/fakeDocker.ts";
 import { $ } from "bun";
 import { FIXTURES_DIR } from "../testing/scenario.ts";
-import { buildImage, DockerBuildError, DockerUnavailableError, imagesIn } from "./docker.ts";
+import {
+  buildImage,
+  commitContainer,
+  DockerBuildError,
+  DockerContainerError,
+  DockerUnavailableError,
+  imagesIn,
+  readContainerFile,
+  removeContainer,
+  runContainer,
+} from "./docker.ts";
 
 const saved = { THUNDERJAR_DOCKER: Bun.env.THUNDERJAR_DOCKER, FAKE_DOCKER_DIR: Bun.env.FAKE_DOCKER_DIR };
 
@@ -69,4 +79,38 @@ test("buildImage throws a DockerBuildError with Docker's reason when the build f
     'ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1',
   );
   expect(await imagesIn("tj-prerun")).toEqual(new Set());
+});
+
+test("a container runs its script, its files can be read, and it can be committed and removed", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
+  Object.assign(Bun.env, docker.env);
+
+  await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "mkdir -p /thunderjar && echo hi > /thunderjar/out.txt");
+
+  expect(await readContainerFile("tj-run-1", "/thunderjar/out.txt")).toBe("hi\n");
+  expect(await readContainerFile("tj-run-1", "/thunderjar/missing.txt")).toBeUndefined();
+  await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa");
+  await removeContainer("tj-run-1");
+  expect(await docker.images()).toEqual(["tj-prerun:aaaaaaaa", "tj-postrun:x-1-1"]);
+  expect(await docker.containers()).toEqual([]);
+});
+
+test("runContainer throws a DockerContainerError with the reason when its script fails", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
+  Object.assign(Bun.env, docker.env);
+
+  const error = await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "echo nope >&2 && exit 4").catch((e: unknown) => e);
+
+  expect(error).toBeInstanceOf(DockerContainerError);
+  expect((error as Error).message).toBe("nope");
+});
+
+test("readContainerFile throws a DockerContainerError when there's no such container", async () => {
+  await using docker = await fakeDocker();
+  Object.assign(Bun.env, docker.env);
+
+  const error = await readContainerFile("tj-run-1", "/thunderjar/run.json").catch((e: unknown) => e);
+
+  expect(error).toBeInstanceOf(DockerContainerError);
+  expect((error as Error).message).toBe("Error response from daemon: No such container: tj-run-1");
 });
