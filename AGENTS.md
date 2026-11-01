@@ -24,6 +24,7 @@ Thunderjar is a TypeScript/Bun CLI for
       - `<command>/`
         - `<command>.ts`
         - `<command>.test.ts`  
+  - `testing/`: the fixture harness that tests use to run the CLI in a scenario.
 - `docs/`: the VitePress docs site.
   - `.vitepress/`: site config.
   - `cli/`: CLI reference pages, generated per command.
@@ -214,18 +215,21 @@ Fixtures are example projects with sample thunderjar configurations.
 
 ```
 fixtures/
+  node_modules/thunderjar   link to the repo root, so scenarios resolve `thunderjar`
   01_unitialised/
-    0101_javascript_project/
+    0101_empty_project/
       project/
-    0102_bash_project/
+    0102_javascript_project/
       project/
   02_regular/
-    0101_minimal_existing_setup/
+    0201_minimal_existing_setup/
       tsconfig.json 
       project/
   03_real_git/
   04_unhappy/ 
 ```
+
+See [`fixtures/AGENTS.md`](./fixtures/AGENTS.md) for the harness, the placeholders in the CLI's output, and the catalogue of scenarios.
 
 #### Why a scenario has its own `tsconfig.json`
 
@@ -291,7 +295,8 @@ fixtures/
 
 ```ts
 // 👍 Good
-const dir = scenario("0201");
+const dir = scenario("0201");             // fixtures/02_regular/0201_…/project
+const folder = scenarioFolder("0201");    // fixtures/02_regular/0201_…
 ```
 
 ❌ **Don't** hard-code a scenario's path in a test, or keep a list in a scenario of the tests that use it.
@@ -320,9 +325,8 @@ In this case it's tests that checking the behaviour of the typings. These tests 
 
 ### Helper `fixture` script 
 
-A helper script `fixture` should exist. This allows the human developer to run arbitrary thunderjar commands against a given scenario and observe its effects. 
-
+The `fixture` script lets a developer run any thunderjar command in a scenario's `project/`, by the scenario's ID, and observe its effects.
 
 ```sh
-bun run fixture 2 plan two-pairs
+bun run fixture 0201 plan two-pairs
 ```

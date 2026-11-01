@@ -3,3 +3,8 @@ dist
 docs/.vitepress/dist
 docs/.vitepress/cache
 .versioned-docs
+
+# The link that lets scenarios resolve `thunderjar`.
+!fixtures/node_modules/
+# Copies of scenario projects that tests write to.
+fixtures/.tmp/
