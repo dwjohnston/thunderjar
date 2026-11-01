@@ -1,4 +1,5 @@
 // The `thunderjar` library: what a project's `.thunderjar/` files import.
+export { checkoutCommit } from "./checkoutCommit.ts";
 export {
   declareBaseImage,
   declareCodeState,
@@ -19,6 +20,7 @@ export type {
   CodeStateDeclaration,
   ConfigDeclaration,
   FragmentCtx,
+  GitCtx,
   HarnessApplyCtx,
   HarnessCliCtx,
   HarnessDeclaration,

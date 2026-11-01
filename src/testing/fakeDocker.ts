@@ -8,6 +8,7 @@
 //   unreachable   if present, the daemon can't be reached
 //   failing       the images whose build fails, one per line
 //   commands      appended to: one line per command, `docker <args…>`
+//   contexts/     a copy of each build's context, by image, e.g. contexts/thunderjar-prerun:45bcf0be/
 //
 // Without FAKE_DOCKER_DIR the daemon is reachable, no image exists, and nothing is recorded.
 // Tests make its state with `fakeDocker()`.
@@ -23,6 +24,8 @@ export type FakeDocker = AsyncDisposable & {
   env: Record<string, string>;
   /** The commands the fake was given, so far, each `docker <args…>`. */
   commands: () => Promise<string[]>;
+  /** Where the copy of the build context of `image` is, once it has been built. */
+  contextOf: (image: string) => string;
   /** Deletes its state. */
   remove: () => Promise<void>;
 };
@@ -49,6 +52,7 @@ export async function fakeDocker({
   return {
     env: { THUNDERJAR_DOCKER: FAKE_DOCKER, FAKE_DOCKER_DIR: dir },
     commands: async () => ((await commandsFile.exists()) ? (await commandsFile.text()).split("\n").filter(Boolean) : []),
+    contextOf: (image) => `${dir}/contexts/${image}`,
     remove,
     [Symbol.asyncDispose]: remove,
   };
@@ -88,7 +92,10 @@ if (import.meta.main) {
     if ((await list("failing")).includes(image)) {
       fail(`ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1`);
     }
-    if (dir) await Bun.write(state("images"), lines([...(await list("images")), image]));
+    if (dir) {
+      await $`mkdir -p ${dir}/contexts/${image} && cp -R ${context}/. ${dir}/contexts/${image}`.quiet();
+      await Bun.write(state("images"), lines([...(await list("images")), image]));
+    }
   } else {
     fail(`fake docker: unsupported command: docker ${args.join(" ")}`);
   }

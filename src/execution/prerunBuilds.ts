@@ -6,12 +6,14 @@
 //
 //   Dockerfile
 //   parameters/<role>/     each folder parameter, at its ctx.dir: see PARAMETER_DIRS
+//   code.bundle, git/      what its fragments read from the repository: see prerunDockerfile.ts
 import { $ } from "bun";
 import { PARAMETERS } from "../config/folders.ts";
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
 import { buildImage, imagesIn } from "../docker/docker.ts";
+import { checkGitNeeds, writeGitNeeds } from "./gitNeeds.ts";
 import { prerunImage, prerunRepository } from "./images.ts";
-import { type FolderRole, loadPrerunParameters, PARAMETER_DIRS, renderPrerunDockerfile } from "./prerunDockerfile.ts";
+import { type FolderRole, loadPrerunParameters, PARAMETER_DIRS, renderPrerun } from "./prerunDockerfile.ts";
 
 /** Where each folder parameter of `permutation` is, relative to `.thunderjar/`. */
 const parameterFolders = (permutation: HashedPermutation): Record<FolderRole, string> => ({
@@ -55,7 +57,8 @@ export type PrerunBuildResult = {
 /**
  * Builds the prerun image of each of `permutations`, of a test case of `task` under `root` (the
  * `.thunderjar/` folder), that doesn't exist yet. Permutations with the same hash share one image.
- * Every Dockerfile is rendered before the first build, so a configuration error builds nothing.
+ * Every Dockerfile is rendered, and every commit they read checked, before the first build, so a
+ * configuration error or a missing commit builds nothing.
  *
  * Throws a DockerUnavailableError if Docker can't be asked which images exist, a ConfigError, or
  * a DockerBuildError if a build fails, after which no other image is built.
@@ -75,15 +78,17 @@ export async function buildPrerunImages(
     missing.map(async ({ permutation, image }) => ({
       permutation,
       image,
-      dockerfile: renderPrerunDockerfile(await loadPrerunParameters(root, task, permutation)),
+      ...renderPrerun(await loadPrerunParameters(root, task, permutation)),
     })),
   );
+  const repository = await checkGitNeeds(root, builds.flatMap(({ git }) => git));
 
-  for (const { permutation, image, dockerfile } of builds) {
+  for (const { permutation, image, dockerfile, git } of builds) {
     hooks.onBuilding?.(image);
     const contextDir = await temporaryFolder();
     try {
       await copyParameters(root, permutation, contextDir);
+      await writeGitNeeds(repository, git, contextDir);
       await Bun.write(`${contextDir}/Dockerfile`, dockerfile);
       await buildImage(contextDir, image);
     } finally {
