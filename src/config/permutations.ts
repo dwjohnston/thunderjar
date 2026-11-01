@@ -17,6 +17,13 @@ export type Permutation = Record<Axis, string>;
 export type HashedPermutation = Permutation & {
   /** SHA-256 hex digest. Compare with this; show `abbreviateHash(hash)`. */
   hash: string;
+  /**
+   * Each parameter's own hash, from its content. `harnessModel`'s is the harness's, with the
+   * chosen version's entry: the model is `modelId`.
+   */
+  parameterHashes: Record<Axis, string>;
+  /** The model ID the harness model pair resolves to. */
+  modelId: string;
 };
 
 /** The size of each axis, e.g. `[1, 1, 2, 2, 2]`. Their product is the number of permutations. */
@@ -148,7 +155,13 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
         initialPromptHash(permutation.initialPrompt),
         modelId(permutation.harnessModel),
       ]);
-      return { ...permutation, hash: sha256(JSON.stringify(parts)) };
+      const [baseImage, codeState, promptSet, harnessModel, initialPrompt, model] = parts;
+      return {
+        ...permutation,
+        hash: sha256(JSON.stringify(parts)),
+        parameterHashes: { baseImage, codeState, promptSet, harnessModel, initialPrompt },
+        modelId: model,
+      };
     }),
   );
   if (problems.length > 0) throw problemsError(problems);
