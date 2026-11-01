@@ -1,9 +1,24 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "categories": { "correctness": "error" },
+  "categories": {
+    "correctness": "error"
+  },
   "rules": {
     "eqeqeq": "error",
-    "no-restricted-imports": ["error", { "patterns": [{ "regex": "^node:" }] }]
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "regex": "^node:"
+          }
+        ]
+      }
+    ]
   },
-  "ignorePatterns": ["node_modules", "dist"]
+  "ignorePatterns": [
+    "node_modules",
+    "dist"
+  ],
+  "overrides": []
 }
