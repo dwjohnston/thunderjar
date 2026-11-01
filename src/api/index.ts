@@ -13,3 +13,19 @@ export {
   declareTokenCostCollector,
   sqliteStore,
 } from "./declarations.ts";
+export type {
+  BaseImageDeclaration,
+  CodeStateDeclaration,
+  ConfigDeclaration,
+  HarnessCliCtx,
+  HarnessDeclaration,
+  HarnessModelsDeclaration,
+  HarnessVersionsDeclaration,
+  InitialPromptDeclaration,
+  MeasurementDeclaration,
+  PromptSetDeclaration,
+  SqliteStore,
+  TestCaseDeclaration,
+  TokenCostCollector,
+  TokenCosts,
+} from "./declarations.ts";

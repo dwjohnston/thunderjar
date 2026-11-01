@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
 import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
-import { REPO_ROOT } from "../../../testing/scenario.ts";
+import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
 
 /** Every file under `.thunderjar/` in `dir`, sorted. */
 const filesIn = (dir: string) =>
@@ -130,5 +130,28 @@ describe("0102 JavaScript project", () => {
     expect(filesIn(copy.dir)).toEqual(SCAFFOLD.toSorted());
     expect(await read(copy.dir, ".gitignore")).toBe("_generated/\n.data/\n");
     expect(await Bun.file(`${copy.dir}/package.json`).text()).toBe(rootPackage);
+  });
+});
+
+describe("0201 minimal existing setup", () => {
+  const ALPHA = `${P}/harnessModels/fake-harness-alpha/`;
+  const CLAUDE_CODE = `${P}/harnessModels/claude-code/`;
+  const GENERATED = "_generated/parameterNames.d.ts";
+
+  test("is what init scaffolds in 0101, with the agent swapped for fake-harness-alpha", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await thunderjar(copy.dir, ["init"]);
+    const scaffolded = filesIn(copy.dir);
+    const existing = filesIn(scenario("0201"));
+
+    const swapped = (path: string) => path.replace(CLAUDE_CODE, ALPHA);
+    expect(existing).toEqual([...scaffolded.map(swapped), GENERATED].toSorted());
+    for (const path of scaffolded.filter((path) => !path.startsWith(CLAUDE_CODE))) {
+      const content = (await read(copy.dir, path)).replace(
+        '"claude-code@2.1.283/haiku-4-5"',
+        '"fake-harness-alpha@1.0.0/fake-model-small"',
+      );
+      expect(await read(scenario("0201"), path), path).toBe(content);
+    }
   });
 });
