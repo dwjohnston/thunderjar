@@ -6,6 +6,7 @@ import { createGenerateCommand } from "./commands/generate/generate.ts";
 import { createInitCommand } from "./commands/init/init.ts";
 import { createPlanCommand } from "./commands/plan/plan.ts";
 import { createRunCommand } from "./commands/run/run.ts";
+import { createShowCommand } from "./commands/show/show.ts";
 
 export function createProgram(): Command {
   return new Command()
@@ -17,5 +18,6 @@ export function createProgram(): Command {
     .addCommand(createPlanCommand())
     .addCommand(createBuildCommand())
     .addCommand(createRunCommand())
-    .addCommand(createExecutionsCommand());
+    .addCommand(createExecutionsCommand())
+    .addCommand(createShowCommand());
 }
