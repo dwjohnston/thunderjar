@@ -17,8 +17,8 @@ minor
 
 ```
 $ thunderjar executions
-01JB8Z...  2026-10-01 10:12  8 permutations × 5 iterations  complete
-01JB9A...  2026-10-02 14:40  2 permutations × 1 iteration   failed
+01JB9A...  two-harnesses      2026-10-02 14:40  2 permutations × 1 iteration   failed
+01JB8Z...  is-prime-baseline  2026-10-01 10:12  8 permutations × 5 iterations  complete
 ```
 
 ## Tests
