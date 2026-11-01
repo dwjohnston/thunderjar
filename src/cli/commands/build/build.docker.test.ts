@@ -61,6 +61,42 @@ export default declarePromptSet({
     expect(await inImage(image.replace("<PREFIX>", PREFIX), "cat /workspace/AGENTS.md")).toBe("# Snerk");
   });
 
+  test("0301 two-commits: /workspace is this repository at the code state's commit, detached, with nothing after it", async () => {
+    // The project's two pinned commits, tagged fixture-0301-first and fixture-0301-second.
+    const FIRST = "2dcf1912eb39b8b0ee181367b8564646886de132";
+    const SECOND = "ad8a952bd73a86c85623d1fbd5da9723ecddc08d";
+    const PROJECT = "fixtures/03_real_git/0301_git_project/project";
+
+    const { stdout, stderr, exitCode } = await build(scenario("0301"), "two-commits");
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith("4 built, 0 already present\n");
+
+    // Code state first, prompt set house-style-second.
+    const first = `${REPOSITORY}:65a1cb99`;
+    expect(await inImage(first, "pwd && git rev-parse HEAD && git rev-parse --abbrev-ref HEAD")).toBe(`/workspace\n${FIRST}\nHEAD`);
+    expect(await inImage(first, "git remote && git for-each-ref")).toBe("");
+    expect(await inImage(first, `git rev-list --all | grep -c ${SECOND} || true`)).toBe("0");
+    expect(await inImage(first, `ls ${PROJECT} && cat ${PROJECT}/greet.js`)).toBe(
+      `greet.js\npackage-lock.json\npackage.json\nprompts\n// Scenario 0301's project, at its first commit.\nexport const greet = () => "Hello!";`,
+    );
+    expect(await inImage(first, "head -1 HOUSE_STYLE.md")).toBe("# House style (second commit)");
+
+    // Code state second, prompt set house-style-first.
+    const second = `${REPOSITORY}:9417dc85`;
+    expect(await inImage(second, "git rev-parse HEAD && git remote")).toBe(SECOND);
+    expect(await inImage(second, `cat ${PROJECT}/farewell.js ${PROJECT}/greet.js`)).toBe(
+      [
+        "// Added at the project's second commit, so it isn't there at the first.",
+        "export const farewell = (name) => `Goodbye, ${name}!`;",
+        "// Scenario 0301's project, at its second commit.",
+        "export const greet = (name) => `Hello, ${name}!`;",
+      ].join("\n"),
+    );
+    expect(await inImage(second, "head -1 HOUSE_STYLE.md")).toBe("# House style (first commit)");
+  }, 600_000);
+
   test("a failed build is an error with Docker's reason", async () => {
     await using copy = await copyScenarioProject("0201");
     await Bun.write(

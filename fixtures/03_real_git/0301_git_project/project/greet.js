@@ -1,2 +1,2 @@
-// Scenario 0301's project, at its second commit.
-export const greet = (name) => `Hello, ${name}!`;
+// Scenario 0301's project, in the worktree: moved on from both of its pinned commits.
+export const greet = (name, greeting = "Hello") => `${greeting}, ${name}!`;

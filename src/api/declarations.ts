@@ -34,8 +34,23 @@ export function declaredBy(value: unknown): string | undefined {
 // to the prerun image; see src/execution/prerunDockerfile.ts for the order they are built in.
 // `config` is the declaration's own `config`, as written (undefined if it has none).
 
+/**
+ * Reads the repository the project is in, without fetching. Each commit is a hash, full or
+ * abbreviated, and must already be in the repository, or nothing is built.
+ */
+export type GitCtx = {
+  /**
+   * Puts `path`'s content at `commit` into the build context, and returns where it is there, to
+   * COPY: `COPY ${ctx.git.show("e4f5a6", "prompts/snerk.md")} /workspace/CLAUDE.md`. `path` is
+   * relative to the repository's root.
+   */
+  show(commit: string, path: string): string;
+};
+
 /** What every fragment gets. */
-export type FragmentCtx = {};
+export type FragmentCtx = {
+  git: GitCtx;
+};
 
 /**
  * What a fragment gets when its parameter is a folder. `dir` is that folder's path in the build
