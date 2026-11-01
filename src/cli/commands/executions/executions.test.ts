@@ -21,11 +21,11 @@ afterEach(async () => {
 });
 
 describe("0203 recorded executions", () => {
-  test("every execution, newest first, with when it started, its matrix and its status", async () => {
+  test("every execution, newest first, with its test case, when it started, its matrix and its status", async () => {
     expect(await thunderjar(scenario("0203"), ["executions"])).toEqual({
-      stdout: `<ULID>  2026-10-03 09:05  1 permutation × 1 iteration    running
-<ULID>  2026-10-02 14:40  2 permutations × 1 iteration   failed
-<ULID>  2026-10-01 10:12  8 permutations × 5 iterations  complete
+      stdout: `<ULID>  example            2026-10-03 09:05  1 permutation × 1 iteration    running
+<ULID>  two-harnesses      2026-10-02 14:40  2 permutations × 1 iteration   failed
+<ULID>  is-prime-baseline  2026-10-01 10:12  8 permutations × 5 iterations  complete
 `,
       stderr: "",
       exitCode: 0,
@@ -44,7 +44,7 @@ describe("0203 recorded executions", () => {
 
   test("<test case>: only that test case's executions", async () => {
     expect(await thunderjar(scenario("0203"), ["executions", "two-harnesses"])).toEqual({
-      stdout: "<ULID>  2026-10-02 14:40  2 permutations × 1 iteration  failed\n",
+      stdout: "<ULID>  two-harnesses  2026-10-02 14:40  2 permutations × 1 iteration  failed\n",
       stderr: "",
       exitCode: 0,
     });
@@ -70,7 +70,7 @@ describe("0203 recorded executions", () => {
     const store = `${scenario("0203")}/.thunderjar/.data`;
 
     expect(await thunderjar(TMP_DIR, ["executions", "two-harnesses", "--data-dir", store])).toEqual({
-      stdout: "<ULID>  2026-10-02 14:40  2 permutations × 1 iteration  failed\n",
+      stdout: "<ULID>  two-harnesses  2026-10-02 14:40  2 permutations × 1 iteration  failed\n",
       stderr: "",
       exitCode: 0,
     });
