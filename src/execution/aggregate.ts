@@ -1,7 +1,8 @@
 // Combining a permutation's iterations into its aggregation result: each measurement's values
 // across the container runs, by the methods its declaration chooses (PRD 085). An iteration that
 // gave a measure no value (skipped, errored while measuring, or never measured) is left out of
-// it, and counted as left out. A recorded measure the task no longer declares is ignored.
+// it, and counted as left out. A recorded measure the task no longer declares is ignored. Recorded
+// values the methods declared today can't combine are marked incompatible, not thrown over.
 import type { AggregateFor } from "../api/declarations.ts";
 import type { Measurement } from "../config/measurements.ts";
 import type { ContainerRunRecord } from "../store/runDataStore.ts";
@@ -16,8 +17,10 @@ export type AggregatedValue = number | Record<string, number>;
 export type AggregatedMeasure = {
   /** The iterations that gave it a value. */
   measured: number;
-  /** Its value by each of its measurement's methods, in the order declared. Empty if none was measured. */
+  /** Its value by each of its measurement's methods, in the order declared. Empty if none was measured, or if incompatible. */
   values: Partial<Record<AggregateMethod, AggregatedValue>>;
+  /** Why the recorded values don't combine by the methods declared today, if they don't. */
+  incompatible?: string;
 };
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -61,23 +64,27 @@ function menuFor(values: unknown[]): [kind: string, Methods<never>] | undefined 
   return undefined;
 }
 
+/** Values combined, keyed by method, or why they can't be, e.g. recorded before the measurement changed. */
+export type Combined = { values: Partial<Record<AggregateMethod, AggregatedValue>> } | { incompatible: string };
+
 /**
  * `values` combined by each of `methods`, keyed by method, in the order given. No values give no
- * keys. Throws if the values aren't all booleans, numbers or records of numbers, or a method
- * doesn't combine their type.
+ * keys. Values that aren't all booleans, numbers or records of numbers, or a method that doesn't
+ * combine their type, give why instead.
  */
-export function aggregateValues(values: readonly unknown[], methods: readonly AggregateMethod[]): Partial<Record<AggregateMethod, AggregatedValue>> {
-  if (values.length === 0) return {};
+export function aggregateValues(values: readonly unknown[], methods: readonly AggregateMethod[]): Combined {
+  if (values.length === 0) return { values: {} };
   const menu = menuFor([...values]);
-  if (!menu) throw new Error(`can't combine ${JSON.stringify(values)}: not all booleans, numbers or records of numbers`);
+  if (!menu) return { incompatible: "recorded values aren't all booleans, numbers or records of numbers" };
   const [kind, menuMethods] = menu;
-  return Object.fromEntries(
-    methods.map((method) => {
-      const apply = menuMethods[method] as ((values: unknown[]) => AggregatedValue) | undefined;
-      if (!apply) throw new Error(`"${method}" doesn't combine ${kind}`);
-      return [method, apply([...values])];
-    }),
-  );
+  const unfit = methods.filter((method) => !menuMethods[method]);
+  if (unfit.length > 0) {
+    const list = unfit.map((method) => `"${method}"`).join(", ");
+    return { incompatible: `recorded values are ${kind}; ${list} ${unfit.length === 1 ? "doesn't" : "don't"} combine them` };
+  }
+  return {
+    values: Object.fromEntries(methods.map((method) => [method, (menuMethods[method] as (values: unknown[]) => AggregatedValue)([...values])])),
+  };
 }
 
 /**
@@ -94,7 +101,10 @@ export function aggregatePermutation(
         const outcome = result[name]?.outcome;
         return outcome?.outcome === "measured" ? [outcome.data] : [];
       });
-      return [name, { measured: values.length, values: aggregateValues(values, declaration.aggregate) }];
+      const combined = aggregateValues(values, declaration.aggregate);
+      const measure: AggregatedMeasure =
+        "incompatible" in combined ? { measured: values.length, values: {}, incompatible: combined.incompatible } : { measured: values.length, values: combined.values };
+      return [name, measure];
     }),
   );
 }
