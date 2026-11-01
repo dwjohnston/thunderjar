@@ -2,6 +2,7 @@
 // unchanged. Any of these can be run by hand, e.g. `bun run fixture 0402 plan unknown-prompt-set`.
 import { describe, expect, test } from "bun:test";
 import { thunderjar } from "../../../testing/cli.ts";
+import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
 const EXAMPLE_PLAN = `baseImage:     node20
@@ -13,7 +14,7 @@ initialPrompt: plain
 
 Matrix shape: 1/1/1/1/1 (1 permutation)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   e943919c
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   e943919c  missing
 `;
 
 describe("0201 minimal existing setup", () => {
@@ -64,22 +65,89 @@ initialPrompt: plain, terse
 
 Matrix shape: 1/1/2/2/2 (8 permutations)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fc556cc9
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   90abcb0a
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   775c8f66
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   cda1818b
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   67844e9a
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   df1934bd
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   f4979542
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be  missing
+ 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fc556cc9  missing
+ 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   90abcb0a  missing
+ 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   775c8f66  missing
+ 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   cda1818b  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   67844e9a  missing
+ 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   df1934bd  missing
+ 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   f4979542  missing
 `);
+  });
+
+  test("says which prerun images are built, asking Docker once", async () => {
+    await using docker = await fakeDocker({
+      images: ["thunderjar-prerun:45bcf0be", "thunderjar-prerun:775c8f66", "other-prerun:fc556cc9", "thunderjar-postrun:f4979542"],
+    });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be  built
+ 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fc556cc9  missing
+ 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   90abcb0a  missing
+ 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   775c8f66  built
+ 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   cda1818b  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   67844e9a  missing
+ 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   df1934bd  missing
+ 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   f4979542  missing
+`);
+    expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun"]);
+  });
+
+  test("--image-prefix looks for the images under that prefix", async () => {
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:45bcf0be", "other-prerun:fc556cc9"] });
+
+    const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline", "--image-prefix", "other"], {
+      env: docker.env,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stdout.match(/(?<=[0-9a-f]{8}  )\w+$/gm)).toEqual(["missing", "built", ...Array(6).fill("missing")]);
+    expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} other-prerun"]);
+  });
+
+  test("an --image-prefix Docker wouldn't accept is an error", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example", "--image-prefix", "Other"]);
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      "error: option '--image-prefix <name>' argument 'Other' is invalid. It must be lowercase letters and digits, joined by single separators (., _, __ or -), as a Docker repository name is.\n",
+    );
+    expect(exitCode).toBe(1);
+  });
+
+  test("when Docker can't be reached, it still plans, with each image's status unknown, and says why", async () => {
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:45bcf0be"], unreachable: true });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example"], { env: docker.env });
+
+    expect(stderr).toBe(
+      "Warning: Docker can't be reached, so whether each prerun image is built is unknown: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be  unknown\n");
+  });
+
+  test("without a docker command, it still plans, with each image's status unknown", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example"], {
+      env: { THUNDERJAR_DOCKER: "no-such-docker" },
+    });
+
+    expect(stderr).toBe(
+      "Warning: Docker can't be reached, so whether each prerun image is built is unknown: bun: command not found: no-such-docker\n",
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith("plain   45bcf0be  unknown\n");
   });
 
   test("a permutation has the same hash in every test case naming it", async () => {
     const { stdout } = await thunderjar(scenario("0202"), ["plan", "example"]);
 
     expect(stdout).toEndWith(
-      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be\n",
+      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be  missing\n",
     );
   });
 });

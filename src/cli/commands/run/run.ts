@@ -4,6 +4,7 @@ import { loadTestCase } from "../../../config/testCase.ts";
 import { type PlannedExecution, planExecution } from "../../../execution/planExecution.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
+import { imagePrefixOption } from "../../imagePrefix.ts";
 
 const indent = (text: string, by: string) =>
   text
@@ -26,11 +27,11 @@ export function renderExecution({ executionId, permutations }: PlannedExecution)
 }
 
 /** What an execution of test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it, would do. */
-export async function dryRun(cwd: string, name: string): Promise<string> {
+export async function dryRun(cwd: string, name: string, imagePrefix?: string): Promise<string> {
   const root = await findThunderjarRoot(cwd);
   const executionId = ulid();
   const testCase = await loadTestCase(root, name);
-  return renderExecution(await planExecution(root, testCase, executionId));
+  return renderExecution(await planExecution(root, testCase, executionId, imagePrefix));
 }
 
 export function createRunCommand(): Command {
@@ -40,14 +41,15 @@ export function createRunCommand(): Command {
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option("--dry-run", "print the images and harness commands the execution would use, without running anything")
+    .addOption(imagePrefixOption())
     .action(
-      reportingConfigErrors(async (name: string, options: { dryRun?: boolean }) => {
+      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string }) => {
         if (!options.dryRun) {
           console.error("Error: Running a test case is not implemented yet; use --dry-run.");
           process.exitCode = 1;
           return;
         }
-        console.log(await dryRun(process.cwd(), name));
+        console.log(await dryRun(process.cwd(), name, options.imagePrefix));
       }),
     );
 }
