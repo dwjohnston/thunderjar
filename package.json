@@ -30,6 +30,7 @@
     "lint:generate": "bun scripts/lint-layers.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "test:docker": "THUNDERJAR_DOCKER_TESTS=1 bun test .docker.test",
     "fixture": "bun scripts/fixture.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
