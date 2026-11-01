@@ -4,7 +4,7 @@
 // by hand, e.g. `bun run fixture 0203 show 01m3vf68s54p5eyn5s3t1ygkdj`.
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
-import { TMP_DIR, thunderjar } from "../../../testing/cli.ts";
+import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
 /** Is-prime-baseline: complete, 8 permutations × 5 iterations; 2-4 errored and 6-3 skipped measures. */
@@ -185,6 +185,35 @@ Measures
     const { stdout, exitCode } = await thunderjar(TMP_DIR, ["show", BASELINE, "1-1", "--data-dir", store]);
 
     expect(stdout).toStartWith("Container run  1-1\n");
+    expect(exitCode).toBe(0);
+  });
+
+  test("a measure whose recorded values its declaration no longer combines shows ?, and why, and the rest still shows", async () => {
+    await using copy = await copyScenarioProject("0203");
+    await Bun.write(
+      `${copy.dir}/.thunderjar/test-case-parameters/tasks/is-prime/measurements/tsIgnoreCount.ts`,
+      `import { declareMeasurement } from "thunderjar";
+
+export default declareMeasurement({
+  instrument: "fileCreated",
+  config: { glob: "**/*.ts" },
+  aggregate: ["rate"],
+});
+`,
+    );
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["show", BASELINE]);
+
+    expect(stdout).toContain(`
+                                                                        isPrimeTemplateTest                                      isPrimeTsExists   tsIgnoreCount
+     promptSet | harnessModel | initialPrompt                    runs   sum                        mean                          rate              rate
+ 1   snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5/5    {passed: 16, failed: 9}    {passed: 3.2, failed: 1.8}    5/5               ?
+`);
+    expect(stdout).toEndWith(`
+? Can't aggregate as declared today:
+  tsIgnoreCount:  recorded values are numbers; "rate" doesn't combine them (remeasure)
+`);
+    expect(stderr).toBe("");
     expect(exitCode).toBe(0);
   });
 
