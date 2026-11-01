@@ -11,7 +11,7 @@ import type {
 import { PARAMETERS } from "../config/folders.ts";
 import { loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
 import { type HashedPermutation, hashPermutations, parsePair } from "../config/permutations.ts";
-import { postrunImage, prerunImage } from "./images.ts";
+import { DEFAULT_IMAGE_PREFIX, postrunImage, prerunImage } from "./images.ts";
 
 /** Where, inside the container, the harness's `cli` must leave the agent's result file. */
 export const RESULT_PATH = "/thunderjar/result.json";
@@ -63,9 +63,14 @@ async function harnessCommand(
 
 /**
  * Every container run of execution `executionId` of `testCase`, a test case of `root` (the
- * `.thunderjar/` folder) already checked by `loadTestCase`.
+ * `.thunderjar/` folder) already checked by `loadTestCase`, with image names starting `imagePrefix`.
  */
-export async function planExecution(root: string, testCase: TestCaseDeclaration, executionId: string): Promise<PlannedExecution> {
+export async function planExecution(
+  root: string,
+  testCase: TestCaseDeclaration,
+  executionId: string,
+  imagePrefix: string = DEFAULT_IMAGE_PREFIX,
+): Promise<PlannedExecution> {
   const hashed = await hashPermutations(root, testCase);
   const problems: Problem[] = [];
   const commands = await Promise.all(hashed.map((permutation) => harnessCommand(root, testCase.task, permutation, problems)));
@@ -75,10 +80,10 @@ export async function planExecution(root: string, testCase: TestCaseDeclaration,
     permutations: hashed.map((permutation, p) => ({
       number: p + 1,
       permutation,
-      prerunImage: prerunImage(permutation.hash),
+      prerunImage: prerunImage(permutation.hash, imagePrefix),
       iterations: Array.from({ length: testCase.iterations }, (_, i) => ({
         number: i + 1,
-        postrunImage: postrunImage(executionId, p + 1, i + 1),
+        postrunImage: postrunImage(executionId, p + 1, i + 1, imagePrefix),
         command: commands[p] as string,
       })),
     })),
