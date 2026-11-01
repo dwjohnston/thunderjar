@@ -1,7 +1,14 @@
 // Type tests of `applyParameter`'s arguments. Checked by `bun run typecheck`, not run for behaviour:
 // every `@ts-expect-error` must be a real error, and every other line must compile.
 import { test } from "bun:test";
-import { declareBaseImage, declareCodeState, declareHarness, declareInitialPrompt, declarePromptSet } from "./declarations.ts";
+import {
+  declareBaseImage,
+  declareCodeState,
+  declareHarness,
+  declareInitialPrompt,
+  declareMeasurement,
+  declarePromptSet,
+} from "./declarations.ts";
 
 function assertType<T>(_value: T) {}
 
@@ -47,4 +54,26 @@ test("a base image must say how it is applied: it carries the FROM", () => {
   // @ts-expect-error - applyParameter is missing
   declareBaseImage({});
   declareCodeState({});
+});
+
+test("a measurement's config and aggregate are typed by its instrument", () => {
+  declareMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate", "count"] });
+  declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, aggregate: ["mean", "max"] });
+  declareMeasurement({
+    instrument: "templateTest",
+    config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
+    aggregate: ["sum", "mean"],
+  });
+  // @ts-expect-error - not an instrument
+  declareMeasurement({ instrument: "fileCraeted", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] });
+  // @ts-expect-error - fileCreated's config is a glob
+  declareMeasurement({ instrument: "fileCreated", config: { path: "isPrime.ts" }, aggregate: ["rate"] });
+  // @ts-expect-error - grep needs a pattern
+  declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts" }, aggregate: ["max"] });
+  // @ts-expect-error - a boolean has no mean
+  declareMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["mean"] });
+  // @ts-expect-error - a count has no rate
+  declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts", pattern: "x" }, aggregate: ["rate"] });
+  // @ts-expect-error - pass and fail counts have no median
+  declareMeasurement({ instrument: "templateTest", config: { subject: "*.ts", template: "./t.ts" }, aggregate: ["median"] });
 });

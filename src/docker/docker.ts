@@ -1,6 +1,7 @@
 // Everything Thunderjar asks of Docker goes through here: building images, and running a container
-// from one, reading files out of it and committing it. It runs the `docker` CLI, or the
-// executable THUNDERJAR_DOCKER names in its place: tests point that at src/testing/fakeDocker.ts.
+// from one, reading files out of it, running commands in it and committing it. It runs the
+// `docker` CLI, or the executable THUNDERJAR_DOCKER names in its place: tests point that at
+// src/testing/fakeDocker.ts.
 import { $ } from "bun";
 
 /** Thrown when the Docker CLI can't be run, or can't reach its daemon. */
@@ -95,4 +96,34 @@ export async function commitContainer(name: string, image: string, like: string)
 /** Removes the container `name`, stopped or not. Throws a DockerContainerError. */
 export async function removeContainer(name: string): Promise<void> {
   await mustRun(["rm", "--force", name]);
+}
+
+/**
+ * Starts a new container `name` from the local image `image`, in place of its entrypoint, that
+ * keeps running, doing nothing, until it's removed: for `execInContainer`. Throws a
+ * DockerContainerError.
+ */
+export async function startContainer(image: string, name: string): Promise<void> {
+  await mustRun(["run", "--detach", "--name", name, "--pull", "never", "--entrypoint", "sh", image, "-c", "exec sleep 2147483647"]);
+}
+
+export type ExecResult = { stdout: string; stderr: string; exitCode: number };
+
+/**
+ * Runs `command` (a program and its arguments) in the running container `name`, in `workdir`,
+ * with `stdin` as its input if given, and returns how it went, however it exited. Throws a
+ * DockerContainerError if Docker itself fails, e.g. there's no such container.
+ */
+export async function execInContainer(name: string, workdir: string, command: string[], stdin?: string): Promise<ExecResult> {
+  const binary = dockerBinary();
+  const args = ["exec", ...(stdin === undefined ? [] : ["--interactive"]), "--workdir", workdir, name, ...command];
+  const result =
+    stdin === undefined
+      ? await $`${binary} ${args}`.quiet().nothrow()
+      : await $`${binary} ${args} < ${new Response(stdin)}`.quiet().nothrow();
+  // `docker exec` exits as the command did, or 1 or 127 when Docker fails, saying why.
+  if (result.exitCode !== 0 && /^(Error response from daemon|OCI runtime exec failed|Cannot connect to the Docker daemon)/.test(result.stderr.toString())) {
+    throw new DockerContainerError(reasonOf(result.stderr) || `\`${binary} exec\` exited ${result.exitCode}`);
+  }
+  return { stdout: result.stdout.toString(), stderr: result.stderr.toString(), exitCode: result.exitCode };
 }

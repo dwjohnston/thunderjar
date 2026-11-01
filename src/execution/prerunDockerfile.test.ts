@@ -253,6 +253,7 @@ describe("loadPrerunParameters", () => {
     expect(dockerfiles[0]).toBe(
       [
         "FROM node:20-bookworm",
+        "RUN npm install --global bun@1.3.14",
         "WORKDIR /workspace",
         'RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md',
         'RUN echo "install fake-harness-alpha@1.0.0"',
@@ -265,6 +266,7 @@ describe("loadPrerunParameters", () => {
           ["alpha", "beta"].map((harness) =>
             [
               "FROM node:20-bookworm",
+              "RUN npm install --global bun@1.3.14",
               "WORKDIR /workspace",
               `RUN echo "${instructions}" > /workspace/FAKE_INSTRUCTIONS.md`,
               `RUN echo "install fake-harness-${harness}@1.0.0"`,
