@@ -19,7 +19,8 @@
   },
   "scripts": {
     "build": "bun build src/cli/index.ts --target bun --outfile dist/cli.js",
-    "lint": "oxlint",
+    "lint": "bun scripts/lint-layers.ts --check && oxlint",
+    "lint:generate": "bun scripts/lint-layers.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "docs:dev": "vitepress dev docs",
