@@ -66,8 +66,18 @@ ${permutation(8, "f4979542", 5, BETA(TERSE))}
     const run = await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"]);
     const plan = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"]);
 
-    const hashes = plan.stdout.match(/\b[0-9a-f]{8}$/gm);
+    const hashes = plan.stdout.match(/\b[0-9a-f]{8}(?=  \w+$)/gm);
     expect(run.stdout.match(/(?<=thunderjar-prerun:)[0-9a-f]{8}/g)).toEqual(hashes);
+  });
+
+  test("--image-prefix starts every image name with it", async () => {
+    const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--dry-run", "--image-prefix", "throwaway"]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Execution <ULID>
+
+${permutation(1, "45bcf0be", 1, ALPHA(PLAIN)).replaceAll("thunderjar-", "throwaway-")}
+`);
   });
 
   test("writes nothing", async () => {

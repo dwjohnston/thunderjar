@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { postrunImage, prerunImage } from "./images.ts";
+import { imagePrefixProblem, postrunImage, prerunImage } from "./images.ts";
 
 test("a prerun image is tagged with the permutation's abbreviated hash", () => {
   expect(prerunImage("e943919c".padEnd(64, "0"))).toBe("thunderjar-prerun:e943919c");
@@ -7,4 +7,19 @@ test("a prerun image is tagged with the permutation's abbreviated hash", () => {
 
 test("a postrun image is tagged with the execution, permutation and iteration", () => {
   expect(postrunImage("01aryz6s410000000000000000", 3, 2)).toBe("thunderjar-postrun:01aryz6s410000000000000000-3-2");
+});
+
+test("--image-prefix replaces thunderjar in every image name", () => {
+  expect(prerunImage("e943919c".padEnd(64, "0"), "throwaway")).toBe("throwaway-prerun:e943919c");
+  expect(postrunImage("01aryz6s410000000000000000", 3, 2, "throwaway")).toBe(
+    "throwaway-postrun:01aryz6s410000000000000000-3-2",
+  );
+});
+
+test.each(["thunderjar", "tj-test", "a.b_c__d--e", "x1"])("%s is a legal image prefix", (prefix) => {
+  expect(imagePrefixProblem(prefix)).toBeUndefined();
+});
+
+test.each(["", "Thunderjar", "-tj", "tj-", "tj..x", "tj/x", "tj:x", "tj x"])("%p is not a legal image prefix", (prefix) => {
+  expect(imagePrefixProblem(prefix)).toBeString();
 });
