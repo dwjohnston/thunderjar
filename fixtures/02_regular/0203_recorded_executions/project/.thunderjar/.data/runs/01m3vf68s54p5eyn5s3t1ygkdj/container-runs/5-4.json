@@ -3,14 +3,14 @@
   "testCase": "is-prime-baseline",
   "task": "is-prime",
   "permutation": 5,
-  "permutationHash": "cda1818b4528438ee37c8b3a3f4b8eec30397b5a5b4629c9c79be12bdc2158cc",
+  "permutationHash": "69114039b478befdb1c3882f8aa169c94529e701a1fbfbf2c6b251e3f42aca35",
   "iteration": 4,
   "postrunImage": "thunderjar-postrun:01m3vf68s54p5eyn5s3t1ygkdj-5-4",
   "ranAt": "2026-10-01T10:29:31.467Z",
   "parameters": {
     "baseImage": {
       "name": "node20",
-      "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+      "parameterHash": "f71eef28e0f6a0387ed6b6315879f2957e5545b15215768e0de63d55748335d2"
     },
     "codeState": {
       "name": "baseline",
@@ -41,5 +41,36 @@
     "exitCode": 0
   },
   "harnessResult": "{\"model\":\"fake-model-small-001\"}\n",
-  "result": {}
+  "result": {
+    "isPrimeTemplateTest": {
+      "instrument": "templateTest",
+      "contentHash": "1fbb81a5b5c137b717829b19709f9f6a3b863948b27462a5ca510c3f95bf6c70",
+      "measuredAt": "2026-10-01T10:30:13.017Z",
+      "outcome": {
+        "outcome": "measured",
+        "data": {
+          "passed": 3,
+          "failed": 2
+        }
+      }
+    },
+    "isPrimeTsExists": {
+      "instrument": "fileCreated",
+      "contentHash": "2073d4dbb28598987ec3412296141e224ee426a5c6a11fbe2334a0e35a543d52",
+      "measuredAt": "2026-10-01T10:30:13.617Z",
+      "outcome": {
+        "outcome": "measured",
+        "data": true
+      }
+    },
+    "tsIgnoreCount": {
+      "instrument": "grep",
+      "contentHash": "ea5fd64fd9bec83c69c652734a0c4219a1b41b6c273cb9c64350e95a614261fe",
+      "measuredAt": "2026-10-01T10:30:14.217Z",
+      "outcome": {
+        "outcome": "measured",
+        "data": 1
+      }
+    }
+  }
 }

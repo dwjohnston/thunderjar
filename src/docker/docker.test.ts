@@ -9,10 +9,12 @@ import {
   DockerBuildError,
   DockerContainerError,
   DockerUnavailableError,
+  execInContainer,
   imagesIn,
   readContainerFile,
   removeContainer,
   runContainer,
+  startContainer,
 } from "./docker.ts";
 
 const saved = { THUNDERJAR_DOCKER: Bun.env.THUNDERJAR_DOCKER, FAKE_DOCKER_DIR: Bun.env.FAKE_DOCKER_DIR };
@@ -113,4 +115,33 @@ test("readContainerFile throws a DockerContainerError when there's no such conta
 
   expect(error).toBeInstanceOf(DockerContainerError);
   expect((error as Error).message).toBe("Error response from daemon: No such container: tj-run-1");
+});
+
+test("a started container holds its image's files, and runs commands, with input, however they exit", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
+  Object.assign(Bun.env, docker.env);
+  await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "echo hi > /workspace/a.txt");
+  await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa");
+  await removeContainer("tj-run-1");
+
+  await startContainer("tj-postrun:x-1-1", "tj-measure-1");
+
+  expect(await execInContainer("tj-measure-1", "/workspace", ["cat", "a.txt"])).toEqual({ stdout: "hi\n", stderr: "", exitCode: 0 });
+  expect(await execInContainer("tj-measure-1", "/workspace", ["sh", "-c", "cat; echo no >&2; exit 3"], "in\n")).toEqual({
+    stdout: "in\n",
+    stderr: "no\n",
+    exitCode: 3,
+  });
+  await removeContainer("tj-measure-1");
+  expect(await docker.containers()).toEqual([]);
+});
+
+test("execInContainer throws a DockerContainerError when there's no such container", async () => {
+  await using docker = await fakeDocker();
+  Object.assign(Bun.env, docker.env);
+
+  const error = await execInContainer("tj-measure-1", "/workspace", ["true"]).catch((e: unknown) => e);
+
+  expect(error).toBeInstanceOf(DockerContainerError);
+  expect((error as Error).message).toBe("Error response from daemon: No such container: tj-measure-1");
 });

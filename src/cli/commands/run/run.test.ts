@@ -5,7 +5,7 @@
 // `bun run fixture 0202 run is-prime-baseline --dry-run`. For real Docker, see run.docker.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
-import type { ContainerRunRecord, ExecutionRecord } from "../../../store/runDataStore.ts";
+import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure, RecordedOutcome } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
@@ -38,7 +38,7 @@ describe("0202 typical project", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "45bcf0be", 1, ALPHA(PLAIN))}
+${permutation(1, "5650e1a8", 1, ALPHA(PLAIN))}
 `);
   });
 
@@ -49,21 +49,21 @@ ${permutation(1, "45bcf0be", 1, ALPHA(PLAIN))}
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "45bcf0be", 5, ALPHA(PLAIN))}
+${permutation(1, "5650e1a8", 5, ALPHA(PLAIN))}
 
-${permutation(2, "fc556cc9", 5, ALPHA(TERSE))}
+${permutation(2, "8ff151b1", 5, ALPHA(TERSE))}
 
-${permutation(3, "90abcb0a", 5, BETA(PLAIN))}
+${permutation(3, "de78e815", 5, BETA(PLAIN))}
 
-${permutation(4, "775c8f66", 5, BETA(TERSE))}
+${permutation(4, "4437033b", 5, BETA(TERSE))}
 
-${permutation(5, "cda1818b", 5, ALPHA(PLAIN))}
+${permutation(5, "69114039", 5, ALPHA(PLAIN))}
 
-${permutation(6, "67844e9a", 5, ALPHA(TERSE))}
+${permutation(6, "050f83dc", 5, ALPHA(TERSE))}
 
-${permutation(7, "df1934bd", 5, BETA(PLAIN))}
+${permutation(7, "db4da990", 5, BETA(PLAIN))}
 
-${permutation(8, "f4979542", 5, BETA(TERSE))}
+${permutation(8, "b36f0c54", 5, BETA(TERSE))}
 `);
   });
 
@@ -81,7 +81,7 @@ ${permutation(8, "f4979542", 5, BETA(TERSE))}
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "45bcf0be", 1, ALPHA(PLAIN)).replaceAll("thunderjar-", "throwaway-")}
+${permutation(1, "5650e1a8", 1, ALPHA(PLAIN)).replaceAll("thunderjar-", "throwaway-")}
 `);
   });
 
@@ -107,9 +107,9 @@ ${permutation(1, "45bcf0be", 1, ALPHA(PLAIN)).replaceAll("thunderjar-", "throwaw
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "45bcf0be", 1, ALPHA(PLAIN))}
+${permutation(1, "5650e1a8", 1, ALPHA(PLAIN))}
 
-${permutation(2, "90abcb0a", 1, BETA(PLAIN))}
+${permutation(2, "de78e815", 1, BETA(PLAIN))}
 `);
   });
 });
@@ -148,6 +148,14 @@ const containerCommands = async (docker: FakeDocker) =>
 const ISO = expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
 const SHA = expect.stringMatching(/^[0-9a-f]{64}$/);
 
+/** The measures line of a fake agent's container run, in 0202's is-prime task. */
+const ALPHA_MEASURES = "      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1";
+const BETA_MEASURES = "      isPrimeTemplateTest: {passed: 5, failed: 0}   isPrimeTsExists: true   tsIgnoreCount: 0";
+
+/** A measure as recorded, taken by `instrument`, with `outcome`. */
+const measure = (instrument: string, outcome: RecordedOutcome): RecordedMeasure => ({ instrument, contentHash: SHA, measuredAt: ISO, outcome });
+const measured = (instrument: string, data: unknown) => measure(instrument, { outcome: "measured", data });
+
 describe("run, against the fake Docker", () => {
   test("0202 two-harnesses: builds the missing prerun images, runs each iteration in a container, and records it", async () => {
     await using docker = await fakeDocker();
@@ -161,10 +169,12 @@ describe("run, against the fake Docker", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
-Building thunderjar-prerun:45bcf0be ... done
-Building thunderjar-prerun:90abcb0a ... done
+Building thunderjar-prerun:5650e1a8 ... done
+Building thunderjar-prerun:de78e815 ... done
  1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
+${ALPHA_MEASURES}
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
+${BETA_MEASURES}
 Wrote <DATA>/runs/<ULID>/
 `);
 
@@ -186,7 +196,7 @@ Wrote <DATA>/runs/<ULID>/
       testCase: "two-harnesses",
       task: "is-prime",
       permutation: 1,
-      permutationHash: expect.stringMatching(/^45bcf0be[0-9a-f]{56}$/),
+      permutationHash: expect.stringMatching(/^5650e1a8[0-9a-f]{56}$/),
       iteration: 1,
       postrunImage: `thunderjar-postrun:${id}-1-1`,
       ranAt: new Date(alpha.execution.startedAt).toISOString(),
@@ -200,19 +210,33 @@ Wrote <DATA>/runs/<ULID>/
       harnessModel: { harness: "fake-harness-alpha", version: "1.0.0", model: "fake-model-small", modelId: "fake-model-small-001" },
       execution: { startedAt: expect.any(Number), finishedAt: expect.any(Number), exitCode: 0 },
       harnessResult: '{"model":"fake-model-small-001"}\n',
-      result: {},
+      result: {
+        isPrimeTemplateTest: measured("templateTest", { passed: 3, failed: 2 }),
+        isPrimeTsExists: measured("fileCreated", true),
+        tsIgnoreCount: measured("grep", 1),
+      },
     });
     expect(alpha.execution.finishedAt).toBeGreaterThanOrEqual(alpha.execution.startedAt);
-    expect(beta.permutationHash).toStartWith("90abcb0a");
+    expect(beta.permutationHash).toStartWith("de78e815");
     expect(beta.harnessModel.modelId).toBe("fake-model-large-001");
     expect(beta.harnessResult).toBe('{"model":"fake-model-large-001"}\n');
     expect(beta.parameters.baseImage).toEqual(alpha.parameters.baseImage);
     expect(beta.parameters.harnessModel).not.toEqual(alpha.parameters.harnessModel);
+    expect(beta.result).toEqual({
+      isPrimeTemplateTest: measured("templateTest", { passed: 5, failed: 0 }),
+      isPrimeTsExists: measured("fileCreated", true),
+      tsIgnoreCount: measured("grep", 0),
+    });
+    // The same measurements took both runs' measures.
+    for (const name of Object.keys(alpha.result)) {
+      expect(beta.result[name]?.contentHash).toBe(alpha.result[name]?.contentHash as string);
+    }
 
     // Each container ran from its prerun image, then was committed into its postrun image and removed.
     const container = (n: number) => `thunderjar-run-${id}-${n}-1`;
-    const prerun = (n: number) => `thunderjar-prerun:${n === 1 ? "45bcf0be" : "90abcb0a"}`;
-    expect(await containerCommands(docker)).toEqual(
+    const prerun = (n: number) => `thunderjar-prerun:${n === 1 ? "5650e1a8" : "de78e815"}`;
+    const commands = await containerCommands(docker);
+    expect(commands.filter((command) => !command.includes("-measure-"))).toEqual(
       [1, 2].flatMap((n) => [
         `docker run --name ${container(n)} --pull never --entrypoint sh ${prerun(n)} -c <script>`,
         `docker cp ${container(n)}:/thunderjar/run.json <destination>`,
@@ -222,9 +246,22 @@ Wrote <DATA>/runs/<ULID>/
         `docker rm --force ${container(n)}`,
       ]),
     );
+    // Then each measure was taken in a container of its own, from the postrun image, then removed.
+    for (const n of [1, 2]) {
+      for (const k of [1, 2, 3]) {
+        const measuring = commands.filter((command) => command.includes(` ${container(n)}-measure-${k}`));
+        expect(measuring[0]).toBe(
+          `docker run --detach --name ${container(n)}-measure-${k} --pull never --entrypoint sh thunderjar-postrun:${id}-${n}-1 -c <script>`,
+        );
+        expect(measuring.slice(1, -1)).not.toBeEmpty();
+        expect(measuring.slice(1, -1).every((command) => command.startsWith(`docker exec `))).toBe(true);
+        expect(measuring.at(-1)).toBe(`docker rm --force ${container(n)}-measure-${k}`);
+        expect(commands.indexOf(measuring[0] as string)).toBeGreaterThan(commands.indexOf(`docker rm --force ${container(n)}`));
+      }
+    }
     expect(await docker.images()).toEqual([
-      "thunderjar-prerun:45bcf0be",
-      "thunderjar-prerun:90abcb0a",
+      "thunderjar-prerun:5650e1a8",
+      "thunderjar-prerun:de78e815",
       `thunderjar-postrun:${id}-1-1`,
       `thunderjar-postrun:${id}-2-1`,
     ]);
@@ -233,7 +270,7 @@ Wrote <DATA>/runs/<ULID>/
 
   test("by default, the store is .thunderjar/.data/, and existing prerun images are reused", async () => {
     await using copy = await copyScenarioProject("0202");
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:45bcf0be"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:5650e1a8"] });
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: docker.env });
 
@@ -241,6 +278,7 @@ Wrote <DATA>/runs/<ULID>/
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
+${ALPHA_MEASURES}
 Wrote .thunderjar/.data/runs/<ULID>/
 `);
     const store = await readStore(`${copy.dir}/.thunderjar/.data`);
@@ -267,7 +305,11 @@ Wrote .thunderjar/.data/runs/<ULID>/
       " 2/8  iteration 1/5  snerk | fake-harness-alpha | terse  ... done (<duration>)",
     ]);
     expect(lines.at(-1)).toBe(" 8/8  iteration 5/5  glurk | fake-harness-beta | terse  ... done (<duration>)");
-  });
+    // Permutations 1, 2, 5 and 6 are alpha's; 3, 4, 7 and 8 beta's.
+    const measures = stdout.split("\n").filter((line) => line.startsWith("      isPrime"));
+    const tenOf = (line: string) => Array<string>(10).fill(line);
+    expect(measures).toEqual([...tenOf(ALPHA_MEASURES), ...tenOf(BETA_MEASURES), ...tenOf(ALPHA_MEASURES), ...tenOf(BETA_MEASURES)]);
+  }, 60_000);
 
   test("a harness in two of the test case's pairs is shown by its whole pair", async () => {
     await using copy = await copyScenarioProject("0202");
@@ -316,10 +358,20 @@ export default declareHarness({ cli: () => "echo partial > isPrime.ts && exit 3"
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(1);
-    expect(stdout).toMatch(/^ 1\/2  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. failed \(exit 3\)$/m);
-    expect(stdout).toMatch(/^ 2\/2  iteration 1\/1  fake-harness-beta \| plain  \.\.\. done \(<duration>\)\nWrote <DATA>\/runs\/<ULID>\/\n$/m);
+    expect(stdout).toEndWith(`
+ 1/2  iteration 1/1  fake-harness-alpha | plain  ... failed (exit 3)
+      isPrimeTemplateTest: erroredWhileMeasuring (isPrime.ts has no export to bind {{defaultExport}} to)   isPrimeTsExists: true   tsIgnoreCount: 0
+ 2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
+${BETA_MEASURES}
+Wrote <DATA>/runs/<ULID>/
+`);
     const store = await readStore(data);
     expect(store.execution.status).toBe("failed");
+    // What the agent left is measured all the same.
+    expect(store.containerRuns[0]?.result.isPrimeTemplateTest?.outcome).toEqual({
+      outcome: "erroredWhileMeasuring",
+      error: { message: "isPrime.ts has no export to bind {{defaultExport}} to" },
+    });
     expect(store.containerRuns.map(({ execution, harnessResult }) => [execution.exitCode, harnessResult])).toEqual([
       [3, null],
       [0, '{"model":"fake-model-large-001"}\n'],
@@ -327,6 +379,51 @@ export default declareHarness({ cli: () => "echo partial > isPrime.ts && exit 3"
     // A failed run is committed too, so what the agent left can be looked at.
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
     expect(await docker.containers()).toEqual([]);
+  });
+
+  test("a measure that can't be taken says why", async () => {
+    await using copy = await copyScenarioProject("0202");
+    await Bun.write(
+      `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-alpha/index.ts`,
+      `import { declareHarness } from "thunderjar";
+
+export default declareHarness({ cli: () => "true" });
+`,
+    );
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], {
+      env: docker.env,
+      paths: { "<DATA>": data },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
+      isPrimeTemplateTest: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   tsIgnoreCount: skipped (no file matches **/*.ts)
+Wrote <DATA>/runs/<ULID>/
+`);
+    const [record] = (await readStore(data)).containerRuns;
+    expect(record?.result).toEqual({
+      isPrimeTemplateTest: measure("templateTest", { outcome: "skipped", reason: "no file matches **/isPrime.ts" }),
+      isPrimeTsExists: measured("fileCreated", false),
+      tsIgnoreCount: measure("grep", { outcome: "skipped", reason: "no file matches **/*.ts" }),
+    });
+  });
+
+  test("a task without measurements has no measures to show", async () => {
+    await using copy = await copyScenarioProject("0202");
+    await $`rm -r ${copy.dir}/.thunderjar/test-case-parameters/tasks/is-prime/measurements`.quiet();
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toMatch(/ 1\/1  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. done \(<duration>\)\nWrote /);
+    expect((await readStore(data)).containerRuns[0]?.result).toEqual({});
+    expect((await docker.commands()).filter((command) => command.includes("-measure-"))).toEqual([]);
   });
 
   test("a container run that fails, not its agent, is an error, after recording the execution as failed", async () => {
@@ -339,7 +436,7 @@ export default declareHarness({ cli: () => "echo partial > isPrime.ts && exit 3"
 export default declareHarness({ cli: () => "rm -rf /thunderjar" });
 `,
     );
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:90abcb0a"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:de78e815"] });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], { env: docker.env });
@@ -369,14 +466,14 @@ export default declareHarness({ cli: () => "rm -rf /thunderjar" });
   });
 
   test("a failed build is an error, and nothing is run or written", async () => {
-    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:45bcf0be"] });
+    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:5650e1a8"] });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--data-dir", data], { env: docker.env });
 
-    expect(stdout).toBe("Execution <ULID>\nBuilding thunderjar-prerun:45bcf0be ... failed\n");
+    expect(stdout).toBe("Execution <ULID>\nBuilding thunderjar-prerun:5650e1a8 ... failed\n");
     expect(stderr).toBe(
-      'Error: Building thunderjar-prerun:45bcf0be failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1\n',
+      'Error: Building thunderjar-prerun:5650e1a8 failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1\n',
     );
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => command.startsWith("docker run"))).toEqual([]);
@@ -394,5 +491,24 @@ describe("0201 minimal existing setup", () => {
 
 ${permutation(1, "e943919c", 1, ALPHA(PLAIN))}
 `);
+  });
+});
+
+describe("0402 broken declarations", () => {
+  test("a broken measurement stops the run before anything is built, run or written", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0402"), ["run", "unknown-instrument", "--data-dir", data], {
+      env: docker.env,
+    });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      'Error: .thunderjar/test-case-parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest\n',
+    );
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
+    expect(await Bun.file(data).exists()).toBe(false);
   });
 });
