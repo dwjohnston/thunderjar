@@ -53,7 +53,7 @@ interface ThunderjarParameterNames {
 });
 
 // The type-checked scenarios check in their generated names, as the type-check doesn't run generate.
-describe.each(["0201", "0202", "0401"])("%s's checked-in generated names", (id) => {
+describe.each(["0201", "0202", "0301", "0401"])("%s's checked-in generated names", (id) => {
   test("are what generate writes", async () => {
     await using copy = await copyScenarioProject(id);
     await $`rm -r ${copy.dir}/.thunderjar/_generated`.quiet();

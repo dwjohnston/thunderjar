@@ -5,27 +5,29 @@ import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerBuildError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { prerunImage } from "../../../execution/images.ts";
 import { buildPrerunImages } from "../../../execution/prerunBuilds.ts";
-import { loadPrerunParameters, renderPrerunDockerfile } from "../../../execution/prerunDockerfile.ts";
+import { checkGitNeeds } from "../../../execution/gitNeeds.ts";
+import { loadPrerunParameters, renderPrerun } from "../../../execution/prerunDockerfile.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 
 /**
  * Each prerun image test case `name` needs, of the nearest `.thunderjar/` folder in `cwd` or above
  * it: `# <image>`, then its Dockerfile. Permutations with the same hash share one image. Docker
- * isn't asked anything.
+ * isn't asked anything, but every commit the Dockerfiles read is checked, as a build would.
  */
 export async function dryRun(cwd: string, name: string, imagePrefix?: string): Promise<string> {
   const root = await findThunderjarRoot(cwd);
   const testCase = await loadTestCase(root, name);
   const permutations = await hashPermutations(root, testCase);
   const unique = [...new Map(permutations.map((permutation) => [permutation.hash, permutation])).values()];
-  const blocks = await Promise.all(
-    unique.map(async (permutation) => {
-      const dockerfile = renderPrerunDockerfile(await loadPrerunParameters(root, testCase.task, permutation));
-      return `# ${prerunImage(permutation.hash, imagePrefix)}\n${dockerfile.trimEnd()}`;
-    }),
+  const rendered = await Promise.all(
+    unique.map(async (permutation) => ({
+      image: prerunImage(permutation.hash, imagePrefix),
+      ...renderPrerun(await loadPrerunParameters(root, testCase.task, permutation)),
+    })),
   );
-  return blocks.join("\n\n");
+  await checkGitNeeds(root, rendered.flatMap(({ git }) => git));
+  return rendered.map(({ image, dockerfile }) => `# ${image}\n${dockerfile.trimEnd()}`).join("\n\n");
 }
 
 /**
