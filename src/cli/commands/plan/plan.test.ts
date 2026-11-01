@@ -13,7 +13,7 @@ initialPrompt: plain
 
 Matrix shape: 1/1/1/1/1 (1 permutation)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   23ed35bf
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   e943919c
 `;
 
 describe("0201 minimal existing setup", () => {
@@ -64,14 +64,14 @@ initialPrompt: plain, terse
 
 Matrix shape: 1/1/2/2/2 (8 permutations)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   002478cc
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fe1cf3ee
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   f99a2617
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   43573d59
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   8643f9c2
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   a820f148
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   0f09175b
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   33ed7379
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be
+ 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fc556cc9
+ 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   90abcb0a
+ 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   775c8f66
+ 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   cda1818b
+ 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   67844e9a
+ 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   df1934bd
+ 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   f4979542
 `);
   });
 
@@ -79,7 +79,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
     const { stdout } = await thunderjar(scenario("0202"), ["plan", "example"]);
 
     expect(stdout).toEndWith(
-      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   002478cc\n",
+      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be\n",
     );
   });
 });
