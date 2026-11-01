@@ -1,16 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import type { MeasurementDeclaration } from "../api/declarations.ts";
 import type { ContainerRunRecord, RecordedOutcome } from "../store/runDataStore.ts";
-import { aggregatePermutation, aggregateValues } from "./aggregate.ts";
+import { aggregatePermutation, aggregateValues, type Combined } from "./aggregate.ts";
+
+/** The combined values, failing the test if they were incompatible. */
+function values(combined: Combined) {
+  if (!("values" in combined)) throw new Error(combined.incompatible);
+  return combined.values;
+}
 
 describe("aggregateValues", () => {
   test("booleans: rate is the fraction true, count the number true", () => {
-    expect(aggregateValues([true, false, true, true], ["rate", "count"])).toEqual({ rate: 0.75, count: 3 });
+    expect(aggregateValues([true, false, true, true], ["rate", "count"])).toEqual({ values: { rate: 0.75, count: 3 } });
   });
 
   test("numbers: mean, median, min, max and sum", () => {
-    expect(aggregateValues([3, 1, 2, 10], ["mean", "median", "min", "max", "sum"])).toEqual({ mean: 4, median: 2.5, min: 1, max: 10, sum: 16 });
-    expect(aggregateValues([5, 1, 3], ["median"])).toEqual({ median: 3 });
+    expect(aggregateValues([3, 1, 2, 10], ["mean", "median", "min", "max", "sum"])).toEqual({ values: { mean: 4, median: 2.5, min: 1, max: 10, sum: 16 } });
+    expect(aggregateValues([5, 1, 3], ["median"])).toEqual({ values: { median: 3 } });
   });
 
   test("records of numbers: sum and mean key by key, a missing key counting as 0", () => {
@@ -23,24 +29,26 @@ describe("aggregateValues", () => {
         ],
         ["sum", "mean"],
       ),
-    ).toEqual({ sum: { passed: 12, failed: 2 }, mean: { passed: 4, failed: 2 / 3 } });
+    ).toEqual({ values: { sum: { passed: 12, failed: 2 }, mean: { passed: 4, failed: 2 / 3 } } });
   });
 
   test("keys are in the order the methods are given", () => {
-    expect(Object.keys(aggregateValues([1, 2], ["max", "mean", "min"]))).toEqual(["max", "mean", "min"]);
+    expect(Object.keys(values(aggregateValues([1, 2], ["max", "mean", "min"])))).toEqual(["max", "mean", "min"]);
   });
 
   test("no values give no keys", () => {
-    expect(aggregateValues([], ["rate"])).toEqual({});
+    expect(aggregateValues([], ["rate"])).toEqual({ values: {} });
   });
 
-  test("a method that doesn't combine the values' type throws", () => {
-    expect(() => aggregateValues([true], ["mean"])).toThrow('"mean" doesn\'t combine booleans');
+  test("a method that doesn't combine the values' type gives why, not a throw", () => {
+    expect(aggregateValues([true], ["mean"])).toEqual({ incompatible: 'recorded values are booleans; "mean" doesn\'t combine them' });
+    expect(aggregateValues([1, 2], ["rate", "count", "max"])).toEqual({ incompatible: 'recorded values are numbers; "rate", "count" don\'t combine them' });
   });
 
-  test("values of mixed or unknown types throw", () => {
-    expect(() => aggregateValues([true, 1], ["sum"])).toThrow("can't combine [true,1]");
-    expect(() => aggregateValues(["a"], ["sum"])).toThrow("not all booleans, numbers or records of numbers");
+  test("values of mixed or unknown types give why, not a throw", () => {
+    const why = { incompatible: "recorded values aren't all booleans, numbers or records of numbers" };
+    expect(aggregateValues([true, 1], ["sum"])).toEqual(why);
+    expect(aggregateValues(["a"], ["sum"])).toEqual(why);
   });
 });
 
@@ -104,6 +112,15 @@ describe("aggregatePermutation", () => {
   test("ignores a recorded measure the task no longer declares", () => {
     expect(aggregatePermutation([run(1, { deleted: measured(true), exists: measured(true) })], [EXISTS])).toEqual({
       exists: { measured: 1, values: { rate: 1 } },
+    });
+  });
+
+  test("marks a measure whose recorded values its methods no longer combine, and still combines the rest", () => {
+    const runs = [run(1, { exists: measured(2), ignores: measured(1) }), run(2, { exists: measured(0), ignores: measured(3) })];
+
+    expect(aggregatePermutation(runs, [EXISTS, IGNORES])).toEqual({
+      exists: { measured: 2, values: {}, incompatible: 'recorded values are numbers; "rate" doesn\'t combine them' },
+      ignores: { measured: 2, values: { mean: 2, max: 3 } },
     });
   });
 });

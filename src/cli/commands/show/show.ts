@@ -70,7 +70,8 @@ function varyingAxes(runs: ContainerRunRecord[]) {
 /**
  * The execution's table: a header naming each measurement above its methods, then a row per
  * permutation, `<n>  <its varying parameters>`, with its container runs and each aggregate. An
- * aggregate that leaves an iteration out is starred, and the iterations left out listed below.
+ * aggregate that leaves an iteration out is starred, and the iterations left out listed below. A
+ * measure whose recorded values its methods can't combine shows `?`, and why below.
  */
 function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[], measurements: Measurement[]): string[] {
   const axes = varyingAxes(runs);
@@ -79,6 +80,7 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
 
   const rows: string[][] = [];
   const leftOut: string[][] = [];
+  const incompatible = new Map<string, Set<string>>();
   for (let permutation = 1; permutation <= execution.matrix.permutations; permutation++) {
     const number = String(permutation).padStart(numberWidth);
     const own = runs.filter((run) => run.permutation === permutation);
@@ -88,6 +90,9 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
       continue;
     }
     const measures = aggregatePermutation(own, measurements);
+    for (const [name, measure] of Object.entries(measures)) {
+      if (measure.incompatible !== undefined) incompatible.set(name, (incompatible.get(name) ?? new Set()).add(measure.incompatible));
+    }
     for (const { name } of measurements) {
       for (const run of own) {
         const outcome = run.result[name]?.outcome;
@@ -99,7 +104,8 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
       axes.map((axis) => first.parameters[axis].name).join(" | "),
       `${own.length}/${execution.matrix.iterations}`,
       ...methodColumns.map(({ name, method }) => {
-        const { measured, values } = measures[name]!;
+        const { measured, values, incompatible } = measures[name]!;
+        if (incompatible !== undefined) return "?";
         const value = values[method];
         if (value === undefined) return "—";
         return `${showAggregate(method, value, measured)}${measured < own.length ? "*" : ""}`;
@@ -122,6 +128,10 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
 
   const lines = [...(measurements.length > 0 ? [names] : []), line(header), ...rows.map(line)];
   if (leftOut.length > 0) lines.push("", "* Left out of the aggregate:", ...columns(leftOut));
+  if (incompatible.size > 0) {
+    const reasons = [...incompatible].flatMap(([name, why]) => [...why].map((reason) => [`${name}:`, `${reason} (remeasure)`]));
+    lines.push("", "? Can't aggregate as declared today:", ...columns(reasons));
+  }
   return lines;
 }
 
