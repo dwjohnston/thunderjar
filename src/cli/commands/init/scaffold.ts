@@ -1,5 +1,6 @@
-// What `thunderjar init` writes into `.thunderjar/`: a runnable example test case, and the
-// parameters it uses.
+// What `thunderjar init` writes into `.thunderjar/`: a runnable example test case, the parameters
+// it uses, and starter parameters to copy and edit: a second prompt set, and more harnesses.
+import { STARTER_HARNESSES } from "./starterHarnesses.ts";
 
 const declaration = (fn: string, body: string) =>
   `import { ${fn} } from "thunderjar";\n\nexport default ${fn}(${body});\n`;
@@ -50,44 +51,6 @@ const baseImage = declaration(
 }`,
 );
 
-const harness = `import { claudeCodeReply, declareHarness } from "thunderjar";
-
-// Claude Code, installed as root, then run as the image's non-root \`node\` user: it won't skip its
-// permission prompts as root, and nobody is there to answer them.
-export default declareHarness({
-  applyParameter: (_config, ctx) => \`RUN npm install -g @anthropic-ai/claude-code@\${ctx.version}
-RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
-USER node\`,
-  // The prompt is read from its file, so quotes and newlines reach the agent intact. Turn 0 starts
-  // the session, and any later turn resumes it.
-  cli: (ctx) =>
-    \`claude -p "$(cat \${ctx.promptPath})" --model \${ctx.modelId} --output-format json --dangerously-skip-permissions\` +
-    \` \${ctx.turn === 0 ? "--session-id" : "--resume"} \${ctx.sessionId} > \${ctx.resultPath}\`,
-  collectReply: claudeCodeReply,
-  requiredEnv: ["ANTHROPIC_API_KEY"],
-});
-`;
-
-const harnessModels = declaration(
-  "declareHarnessModels",
-  `{
-  "haiku-4-5": "claude-haiku-4-5-20251001",
-}`,
-);
-
-const harnessVersions = declaration(
-  "declareHarnessVersions",
-  `{
-  "2.1.283": { version: "2.1.283" },
-}`,
-);
-
-// Claude Code's \`--output-format json\` result, read by the library's own reader.
-const collectTokenCosts = `import { claudeCodeTokenCosts, declareTokenCostCollector } from "thunderjar";
-
-export default declareTokenCostCollector((raw) => claudeCodeTokenCosts(raw));
-`;
-
 const initialPrompt = declaration(
   "declareInitialPrompt",
   `{
@@ -105,13 +68,77 @@ const measurement = declaration(
 }`,
 );
 
+/**
+ * Checks out `head`, the project's commit when `init` ran, or, outside a git repository, leaves
+ * `/workspace` empty, with how to check one out in a comment.
+ */
+const codeState = (head: string | undefined) =>
+  head
+    ? `import { checkoutCommit, declareCodeState } from "thunderjar";
+
+// The project's repository at a commit, checked out into /workspace. The commit must be in the
+// repository: commit it, or Thunderjar can't build it.
+export default declareCodeState({
+  config: { commit: "${head}" },
+  applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),
+});
+`
+    : `import { declareCodeState } from "thunderjar";
+
+// An empty /workspace. The project wasn't a git repository when \`thunderjar init\` ran. Once it is,
+// check a commit of it out into /workspace:
+//
+//   import { checkoutCommit, declareCodeState } from "thunderjar";
+//
+//   export default declareCodeState({
+//     config: { commit: "<a commit hash>" },
+//     applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),
+//   });
+export default declareCodeState({});
+`;
+
+/** Copies files from a commit: `git checkout <commit> -- <paths>`, without needing the commit in /workspace. */
+const snerk = (head: string | undefined) => `import { declarePromptSet } from "thunderjar";
+
+// Files from a commit of the project's repository, such as its AGENTS.md or skills, copied into
+// /workspace at the same paths, like \`git checkout <commit> -- <paths>\`. They're left uncommitted.
+// Each path is from the repository's root, e.g. "AGENTS.md" or ".agents/skills/review/SKILL.md".
+export default declarePromptSet<{ commit: string; paths: string[] }>({
+  config: {
+    commit: "${head ?? "<a commit hash>"}",
+    paths: [],
+  },
+  applyParameter: (config, ctx) =>
+    config.paths.map((path) => \`COPY \${ctx.git.show(config.commit, path)} /workspace/\${path}\`).join("\\n"),
+});
+`;
+
+// Files kept beside the declaration, copied over /workspace and committed.
+const houseStyle = `import { declarePromptSet } from "thunderjar";
+
+// The files in this folder's files/, copied over /workspace and committed, so the agent's changes
+// can be told from them. \`git add -A\`, not \`git commit -a\`, which skips new files such as a new
+// skill. Use it with a code state that checks out a commit, so /workspace is a git repository.
+export default declarePromptSet({
+  applyParameter: (_config, ctx) => \`COPY \${ctx.dir}/files/ /workspace/
+RUN cd /workspace && git add -A && git commit --quiet -m "Thunderjar: apply promptSet"\`,
+});
+`;
+
+const houseStyleAgentsMd = `# House style
+
+- Write TypeScript, with strict types.
+- Add a test beside each new module.
+`;
+
 const P = "test-case-parameters";
 
 /**
  * The files `init` creates under `.thunderjar/`, keyed by their path in it, in the order it creates them.
  * `nestedPackage` is for a project without its own `package.json`: `.thunderjar/` gets one, with thunderjar as its dependency.
+ * `head` is the commit the project's repository is at, if it is in one, for the code state and prompt set to start from.
  */
-export function scaffold({ nestedPackage }: { nestedPackage: boolean }): Record<string, string> {
+export function scaffold({ nestedPackage, head }: { nestedPackage: boolean; head?: string }): Record<string, string> {
   return {
     ...(nestedPackage && {
       "package.json": json({ name: "thunderjar-config", private: true, type: "module", dependencies: { thunderjar: "latest" } }),
@@ -121,12 +148,15 @@ export function scaffold({ nestedPackage }: { nestedPackage: boolean }): Record<
     "thunderjar.config.ts": config,
     "test-cases/example.ts": testCase,
     [`${P}/baseImages/node20/index.ts`]: baseImage,
-    [`${P}/codeStates/baseline/index.ts`]: declaration("declareCodeState", "{}"),
-    [`${P}/promptSets/snerk/index.ts`]: declaration("declarePromptSet", "{}"),
-    [`${P}/harnessModels/claude-code/index.ts`]: harness,
-    [`${P}/harnessModels/claude-code/models.ts`]: harnessModels,
-    [`${P}/harnessModels/claude-code/versions.ts`]: harnessVersions,
-    [`${P}/harnessModels/claude-code/collectTokenCosts.ts`]: collectTokenCosts,
+    [`${P}/codeStates/baseline/index.ts`]: codeState(head),
+    [`${P}/promptSets/snerk/index.ts`]: snerk(head),
+    [`${P}/promptSets/house-style/index.ts`]: houseStyle,
+    [`${P}/promptSets/house-style/files/AGENTS.md`]: houseStyleAgentsMd,
+    ...Object.fromEntries(
+      Object.entries(STARTER_HARNESSES).flatMap(([harness, files]) =>
+        Object.entries(files).map(([file, content]) => [`${P}/harnessModels/${harness}/${file}`, content]),
+      ),
+    ),
     [`${P}/tasks/is-prime/initial-prompts/plain.ts`]: initialPrompt,
     [`${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`]: measurement,
   };
