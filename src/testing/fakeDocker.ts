@@ -8,14 +8,16 @@
 //   unreachable   if present, the daemon can't be reached
 //   failing       the images whose build or commit fails, one per line
 //   commands      appended to: one line per command, `docker <args…>`, a newline in an argument as `\n`
-//   contexts/     a copy of each build's context, by image, e.g. contexts/thunderjar-prerun:5650e1a8/
+//   contexts/     a copy of each build's context, by image, e.g. contexts/thunderjar-prerun:e4a5b2ee/
 //   containers/   each container not yet removed, by name, e.g. containers/<name>/:
 //     image         the image it was run from
 //     root/         its files: only what was written to /workspace and /thunderjar
 //   filesystems/  the root/ of each committed container, by image (URI-encoded)
 //
 // `run` runs the container's script on the host, with /workspace and /thunderjar in it mapped to
-// the container's root/, and root/workspace its working directory. A built image's container
+// the container's root/, and root/workspace its working directory. Its environment is only the
+// variables passed with `-e NAME`, from the fake's own, beside PATH and HOME, as a container sees
+// only what it's given. A built image's container
 // starts empty: nothing of the image is in it. A committed image's starts with the files of the
 // container it was committed from. So a fake harness's `cli` really runs, its result file is
 // really read, and what it left is in its postrun image. `run --detach` starts a container
@@ -42,6 +44,8 @@ export type FakeDocker = AsyncDisposable & {
   images: () => Promise<string[]>;
   /** The names of the containers not yet removed. */
   containers: () => Promise<string[]>;
+  /** The text of the file at `path`, under /workspace or /thunderjar, in the committed image `image`, or undefined if there's none. */
+  fileIn: (image: string, path: string) => Promise<string | undefined>;
   /** Deletes its state. */
   remove: () => Promise<void>;
 };
@@ -75,6 +79,10 @@ export async function fakeDocker({
       (await Bun.file(`${dir}/containers`).exists())
         ? (await Array.fromAsync(new Glob("*/image").scan({ cwd: `${dir}/containers` }))).map((file) => file.slice(0, -"/image".length)).sort()
         : [],
+    fileIn: async (image, path) => {
+      const file = Bun.file(`${dir}/filesystems/${encodeURIComponent(image)}${path}`);
+      return (await file.exists()) ? file.text() : undefined;
+    },
     remove,
     [Symbol.asyncDispose]: remove,
   };
@@ -106,9 +114,25 @@ if (import.meta.main) {
    * Runs `program` on the host as if in `container`, its /workspace and /thunderjar mapped to the
    * container's root/, in root/workspace.
    */
-  const inContainer = (container: string, program: string[], stdin?: string) => {
+  const inContainer = (container: string, program: string[], stdin?: string, env?: Record<string, string>) => {
     const mapped = program.map((arg) => arg.replace(/\/(workspace|thunderjar)\b/g, (_, folder: string) => `${container}/root/${folder}`));
-    return $`${mapped} < ${new Response(stdin ?? "")}`.cwd(`${container}/root/workspace`).quiet().nothrow();
+    const shell = $`${mapped} < ${new Response(stdin ?? "")}`.cwd(`${container}/root/workspace`).quiet().nothrow();
+    return env ? shell.env(env) : shell;
+  };
+
+  /** `docker run [--detach] --name <name> --pull never [-e <NAME>]… --entrypoint sh <image> -c <script>`, parsed. */
+  const parseRun = (runArgs: string[]) => {
+    const detach = runArgs[0] === "--detach";
+    const rest = detach ? runArgs.slice(1) : runArgs;
+    if (rest[0] !== "--name" || rest[2] !== "--pull" || rest[3] !== "never") return undefined;
+    const env: string[] = [];
+    let i = 4;
+    while (rest[i] === "-e" && rest[i + 1] !== undefined) {
+      env.push(rest[i + 1] as string);
+      i += 2;
+    }
+    if (rest[i] !== "--entrypoint" || rest[i + 1] !== "sh" || rest[i + 3] !== "-c" || rest.length !== i + 5) return undefined;
+    return { detach, name: rest[1] as string, env, image: rest[i + 2] as string, script: rest[i + 4] as string };
   };
 
   const [command, subcommand, ...rest] = args;
@@ -129,10 +153,9 @@ if (import.meta.main) {
       await $`mkdir -p ${dir}/contexts/${image} && cp -R ${context}/. ${dir}/contexts/${image}`.quiet();
       await Bun.write(state("images"), lines([...(await list("images")), image]));
     }
-  } else if (command === "run" && args.length === (subcommand === "--detach" ? 11 : 10) && args.at(-9) === "--name") {
-    // docker run [--detach] --name <name> --pull never --entrypoint sh <image> -c <script>
-    const detach = subcommand === "--detach";
-    const [name, , , , , image, , script] = args.slice(-8) as [string, string, string, string, string, string, string, string];
+  } else if (command === "run" && parseRun(args.slice(1))) {
+    // docker run [--detach] --name <name> --pull never [-e <NAME>]… --entrypoint sh <image> -c <script>
+    const { detach, name, env, image, script } = parseRun(args.slice(1))!;
     if (!dir) fail("fake docker: running a container needs FAKE_DOCKER_DIR");
     if (!(await list("images")).includes(image)) fail(`docker: Error response from daemon: No such image: ${image}`);
     const container = `${dir}/containers/${name}`;
@@ -143,7 +166,12 @@ if (import.meta.main) {
     if (detach) {
       console.log(crypto.randomUUID().replaceAll("-", ""));
     } else {
-      const result = await inContainer(container, ["sh", "-c", script]);
+      const passed = Object.fromEntries(env.flatMap((variable) => (Bun.env[variable] === undefined ? [] : [[variable, Bun.env[variable] as string]])));
+      const result = await inContainer(container, ["sh", "-c", script], undefined, {
+        PATH: Bun.env.PATH ?? "/usr/bin:/bin",
+        HOME: `${container}/root`,
+        ...passed,
+      });
       process.stdout.write(result.stdout);
       process.stderr.write(result.stderr);
       process.exit(result.exitCode);

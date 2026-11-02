@@ -2,6 +2,7 @@ import { Command } from "commander";
 import type { TestCaseDeclaration } from "../../../api/declarations.ts";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { AXES, parsePair } from "../../../config/permutations.ts";
+import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerBuildError, DockerContainerError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { type PlannedExecution, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
@@ -12,20 +13,26 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath } from "../../dataDir.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 
-const indent = (text: string, by: string) =>
-  text
-    .split("\n")
-    .map((line) => by + line)
-    .join("\n");
+/** How far a dry run's iteration fields are indented, and how wide their labels are. */
+const FIELD_INDENT = "    ";
+const LABEL_WIDTH = 10;
 
-/** The execution's ID, then each permutation's prerun image, with each iteration's postrun image and harness command. */
+/** `label: value`, the value's later lines lined up under its first. */
+const field = (label: string, value: string) =>
+  `${FIELD_INDENT}${`${label}:`.padEnd(LABEL_WIDTH)}${value.split("\n").join(`\n${FIELD_INDENT}${" ".repeat(LABEL_WIDTH)}`)}`;
+
+/**
+ * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
+ * the environment variables its container is given, by name, and its harness command.
+ */
 export function renderExecution({ executionId, permutations }: PlannedExecution): string {
   const blocks = permutations.map((permutation) =>
     [
       `Permutation ${permutation.number}: prerun image ${permutation.prerunImage}`,
       ...permutation.iterations.flatMap((iteration) => [
         `  Iteration ${iteration.number}: postrun image ${iteration.postrunImage}`,
-        indent(iteration.command, "    "),
+        ...(permutation.env.length > 0 ? [field("env", permutation.env.join(", "))] : []),
+        field("command", iteration.command),
       ]),
     ].join("\n"),
   );
@@ -37,6 +44,7 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string): P
   const root = await findThunderjarRoot(cwd);
   const executionId = ulid();
   const testCase = await loadTestCase(root, name);
+  await checkRequiredEnv(root, testCase);
   return renderExecution(await planExecution(root, testCase, executionId, imagePrefix));
 }
 
@@ -83,11 +91,13 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  * Runs test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it: builds its
  * missing prerun images, then runs each iteration in a container, writing a line for each as it
  * finishes, and one of its measures once they're taken, and records them in the run data store
- * under `dataDir`. Exits 1 if any agent exits non-zero, or with an error if Docker fails.
+ * under `dataDir`. Exits 1 if any agent exits non-zero, or with an error if Docker fails, or if a
+ * variable a harness needs is unset, before anything is built.
  */
 async function run(cwd: string, name: string, imagePrefix: string, dataDir?: string): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const testCase = await loadTestCase(root, name);
+  await checkRequiredEnv(root, testCase);
   const plan = await planExecution(root, testCase, ulid(), imagePrefix);
   const store = dataDirOf(cwd, root, dataDir);
   const permutations = plan.permutations.length;
@@ -149,7 +159,10 @@ export function createRunCommand(): Command {
       "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
-    .option("--dry-run", "print the images and harness commands the execution would use, without running anything")
+    .option(
+      "--dry-run",
+      "print the images, environment variables and harness commands the execution would use, without running anything",
+    )
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())
     .action(
