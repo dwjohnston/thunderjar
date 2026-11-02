@@ -13,6 +13,12 @@
       "skillPath": "skills/github-actions-docs-and-changesets/SKILL.md",
       "computedHash": "80c934493ec6a3837d11b94419032b90a2e0737f90a403a5fdc559606149cbf3"
     },
+    "langfuse": {
+      "source": "langfuse/skills",
+      "sourceType": "github",
+      "skillPath": "skills/langfuse/SKILL.md",
+      "computedHash": "ff5c606d22961ae0c70968e8944c73ce576a3a0a8422415861d6d7839a45539d"
+    },
     "markdown-general": {
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
