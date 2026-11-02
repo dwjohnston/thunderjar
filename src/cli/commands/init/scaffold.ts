@@ -54,7 +54,7 @@ const harness = declaration(
   "declareHarness",
   `{
   applyParameter: (_config, ctx) => \`RUN npm install -g @anthropic-ai/claude-code@\${ctx.version}\`,
-  cli: (ctx) => \`claude -p "\${ctx.initialPrompt}" --model \${ctx.modelId} > \${ctx.resultPath}\`,
+  cli: (ctx) => \`claude -p "$(cat \${ctx.promptPath})" --model \${ctx.modelId} > \${ctx.resultPath}\`,
   requiredEnv: ["ANTHROPIC_API_KEY"],
 }`,
 );

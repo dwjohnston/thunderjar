@@ -17,6 +17,9 @@ import { DEFAULT_IMAGE_PREFIX, postrunImage, prerunImage } from "./images.ts";
 /** Where, inside the container, the harness's `cli` must leave the agent's result file. */
 export const RESULT_PATH = "/thunderjar/result.json";
 
+/** Where, inside the container, the execution wrapper writes the initial prompt, for the harness's `cli` to read. */
+export const PROMPT_PATH = "/thunderjar/prompt.txt";
+
 export type PlannedIteration = {
   /** Counts from 1. */
   number: number;
@@ -32,6 +35,8 @@ export type PlannedPermutation = {
   prerunImage: string;
   /** The names of the environment variables its harness needs, passed into each of its containers. */
   env: string[];
+  /** Its initial prompt's text, written to PROMPT_PATH in each of its containers. */
+  prompt: string;
   iterations: PlannedIteration[];
 };
 
@@ -49,7 +54,7 @@ async function harnessCommand(
   task: string,
   permutation: HashedPermutation,
   problems: Problem[],
-): Promise<{ command: string; env: string[] } | undefined> {
+): Promise<{ command: string; env: string[]; prompt: string } | undefined> {
   const { harness: name, version, model } = parsePair(permutation.harnessModel);
   const dir = `${PARAMETERS}/harnessModels/${name}`;
   const [harness, versions, models, initialPrompt] = (await Promise.all([
@@ -63,9 +68,10 @@ async function harnessCommand(
     version: (versions[version] as { version: string }).version,
     modelId: models[model] as string,
     initialPrompt: initialPrompt.prompt,
+    promptPath: PROMPT_PATH,
     resultPath: RESULT_PATH,
   });
-  return { command, env: requiredEnvOf(harness) };
+  return { command, env: requiredEnvOf(harness), prompt: initialPrompt.prompt };
 }
 
 /**
@@ -82,7 +88,7 @@ export async function planExecution(
   const problems: Problem[] = [];
   const harnesses = await Promise.all(hashed.map((permutation) => harnessCommand(root, testCase.task, permutation, problems)));
   if (problems.length > 0) throw problemsError(problems);
-  const commands = harnesses as { command: string; env: string[] }[];
+  const commands = harnesses as { command: string; env: string[]; prompt: string }[];
   return {
     executionId,
     permutations: hashed.map((permutation, p) => ({
@@ -90,6 +96,7 @@ export async function planExecution(
       permutation,
       prerunImage: prerunImage(permutation.hash, imagePrefix),
       env: commands[p]!.env,
+      prompt: commands[p]!.prompt,
       iterations: Array.from({ length: testCase.iterations }, (_, i) => ({
         number: i + 1,
         postrunImage: postrunImage(executionId, p + 1, i + 1, imagePrefix),
