@@ -42,7 +42,11 @@
     "timedOut": false,
     "timeoutSeconds": 600
   },
-  "harnessResult": "{\"model\":\"fake-model-large-001\"}\n",
+  "harnessResult": "{\"model\":\"fake-model-large-001\",\"reply\":\"I wrote isPrime.ts, and tested it up to 100.\"}\n",
+  "reply": {
+    "outcome": "collected",
+    "text": "I wrote isPrime.ts, and tested it up to 100."
+  },
   "result": {
     "isPrimeTemplateTest": {
       "instrument": "templateTest",

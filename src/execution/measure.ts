@@ -14,19 +14,20 @@ const recordable = (result: MeasurementResult<unknown>): RecordedOutcome =>
 
 /**
  * Takes each measurement in turn, each against a context of its own from `open`, closed once it's
- * taken, so nothing one measurement writes is seen by the next. An instrument that throws gives
- * its measure `erroredWhileMeasuring`, and the rest are still taken. Each measure is dated when
- * it's taken. Throws if a context can't be opened or closed.
+ * taken, so nothing one measurement writes is seen by the next. `open` is told whether the
+ * instrument needs a measurement container, or only what was recorded of the run. An instrument
+ * that throws gives its measure `erroredWhileMeasuring`, and the rest are still taken. Each
+ * measure is dated when it's taken. Throws if a context can't be opened or closed.
  */
 export async function measureContainerRun(
   measurements: Measurement[],
-  open: () => Promise<OpenedMeasurementContext>,
+  open: (usesContainer: boolean) => Promise<OpenedMeasurementContext>,
   now: () => Date = () => new Date(),
 ): Promise<Record<string, RecordedMeasure>> {
   const result: Record<string, RecordedMeasure> = {};
   for (const { name, declaration, config, contentHash } of measurements) {
     const instrument = instruments[declaration.instrument] as Instrument<Record<string, string>, unknown>;
-    const ctx = await open();
+    const ctx = await open(instrument.usesContainer !== false);
     let outcome: RecordedOutcome;
     try {
       outcome = recordable(await instrument.evaluate(config, ctx));

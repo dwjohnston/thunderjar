@@ -34,6 +34,7 @@ export type {
   MeasurementDeclaration,
   MeasurementResult,
   PromptSetDeclaration,
+  Reply,
   SqliteStore,
   TestCaseDeclaration,
   TokenCostCollector,

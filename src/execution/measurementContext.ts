@@ -1,7 +1,7 @@
 // The measurement context over a measurement container: one started from a postrun image, for
 // one measurement, and removed once it's taken. The instrument's logic runs on the host; what it
 // asks of the context runs in the container, so nothing it writes reaches the postrun image.
-import type { MeasurementContext } from "../api/declarations.ts";
+import type { MeasurementContext, Reply } from "../api/declarations.ts";
 import { execInContainer, removeContainer, startContainer } from "../docker/docker.ts";
 
 /** Where in the container paths, globs and commands resolve: where the agent worked. */
@@ -13,11 +13,38 @@ export type OpenedMeasurementContext = MeasurementContext & {
 };
 
 /**
+ * A context over only what was recorded of a container run, `harnessResult` and `reply`, for an
+ * instrument that doesn't use a measurement container. Asking it for the container's files or
+ * commands is an error.
+ */
+export function recordedContext(harnessResult: string, reply: Reply): OpenedMeasurementContext {
+  const noContainer = async (): Promise<never> => {
+    throw new Error("this instrument has no measurement container: it reads only what was recorded of the run");
+  };
+  return {
+    workdir: WORKDIR,
+    harnessResult,
+    reply,
+    exec: noContainer,
+    readFile: noContainer,
+    writeFile: noContainer,
+    glob: noContainer,
+    close: async () => {},
+  };
+}
+
+/**
  * Starts the measurement container `container` from `postrunImage`, and returns a context over it.
- * `harnessResult` is what the harness's `cli` left, or "" if nothing. Throws a DockerContainerError
+ * `harnessResult` is what the harness's `cli` left, or "" if nothing, and `reply` the agent's final
+ * reply, or why there's none. Throws a DockerContainerError
  * if the container can't be started.
  */
-export async function openMeasurementContext(postrunImage: string, container: string, harnessResult: string): Promise<OpenedMeasurementContext> {
+export async function openMeasurementContext(
+  postrunImage: string,
+  container: string,
+  harnessResult: string,
+  reply: Reply,
+): Promise<OpenedMeasurementContext> {
   try {
     await startContainer(postrunImage, container);
   } catch (error) {
@@ -33,6 +60,7 @@ export async function openMeasurementContext(postrunImage: string, container: st
   return {
     workdir: WORKDIR,
     harnessResult,
+    reply,
     exec: (command) => run(["sh", "-c", command]),
     readFile: (path) => mustRun(`can't read ${path}`, ["cat", "--", path]),
     async writeFile(path, contents) {

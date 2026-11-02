@@ -137,6 +137,9 @@ class TestCaseChecker {
       | undefined;
     const envProblem = declaration && requiredEnvProblem(declaration.requiredEnv);
     if (envProblem) this.problems.push({ file: `${dir}/index.ts`, field: "requiredEnv", message: envProblem });
+    if (declaration && declaration.collectReply !== undefined && typeof declaration.collectReply !== "function") {
+      this.problems.push({ file: `${dir}/index.ts`, field: "collectReply", message: `must be a function of the result file's text, got ${show(declaration.collectReply)}` });
+    }
     await loadDeclaration(this.root, `${dir}/collectTokenCosts.ts`, "declareTokenCostCollector", this.problems);
     const harness = {
       versions: await loadDeclaration(this.root, `${dir}/versions.ts`, "declareHarnessVersions", this.problems),

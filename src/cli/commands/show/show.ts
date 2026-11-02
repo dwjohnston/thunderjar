@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadMeasurements, type Measurement } from "../../../config/measurements.ts";
 import { AXES, abbreviateHash } from "../../../config/permutations.ts";
+import type { Reply } from "../../../api/declarations.ts";
 import { type AggregatedValue, type AggregateMethod, aggregatePermutation } from "../../../execution/aggregate.ts";
 import { type ContainerRunRecord, type ExecutionRecord, fileStore, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
@@ -155,9 +156,13 @@ export function renderExecution(execution: ExecutionRecord, runs: ContainerRunRe
   return [...header, "", ...body].join("\n");
 }
 
-/** One container run: where it sits, its parameters, how the agent ran, and its measures. */
+/** A recorded reply, indented under its heading: its text, or why there's none. */
+const showReply = (reply: Reply) =>
+  reply.outcome === "collected" ? reply.text.split("\n").map((line) => `  ${line}`.trimEnd()) : [`  none  (${reply.reason})`];
+
+/** One container run: where it sits, its parameters, how the agent ran, its reply if it was recorded with one, and its measures. */
 export function renderContainerRun(record: ContainerRunRecord): string {
-  const { executionId, testCase, permutation, permutationHash, iteration, postrunImage, ranAt, parameters, harnessModel, execution, harnessResult, result } =
+  const { executionId, testCase, permutation, permutationHash, iteration, postrunImage, ranAt, parameters, harnessModel, execution, harnessResult, reply, result } =
     record;
   const names = Object.keys(result).toSorted();
   return [
@@ -180,6 +185,7 @@ export function renderContainerRun(record: ContainerRunRecord): string {
       ["Result file", harnessResult === null ? "none" : plural(new TextEncoder().encode(harnessResult).length, "byte")],
     ]),
     "",
+    ...(reply === undefined ? [] : ["Reply", ...showReply(reply), ""]),
     "Measures",
     ...(names.length === 0 ? ["  none"] : columns(names.map((name) => [name, showOutcome(result[name]!.outcome)]))),
   ].join("\n");

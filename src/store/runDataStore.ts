@@ -10,6 +10,7 @@
 // Every file is pretty JSON, written whole to a temporary file then renamed over the old one,
 // so an interrupted write leaves the previous contents rather than half a file.
 import { $, Glob } from "bun";
+import type { Reply } from "../api/declarations.ts";
 import type { Axis } from "../config/permutations.ts";
 
 /** `running` until its last container run finishes, or if it was interrupted. */
@@ -86,6 +87,8 @@ export type ContainerRunRecord = {
   execution: Execution;
   /** The text of the result file the harness's `cli` left, or null if it left none. */
   harnessResult: string | null;
+  /** The agent's final reply, read from the result file by its harness's `collectReply`, or why there's none. Absent from runs recorded before replies were. */
+  reply?: Reply;
   /** The run's measures, by measurement name. Empty until it has been measured. */
   result: Record<string, RecordedMeasure>;
 };

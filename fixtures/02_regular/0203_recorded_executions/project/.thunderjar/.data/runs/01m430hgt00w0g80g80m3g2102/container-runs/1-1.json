@@ -43,6 +43,10 @@
     "timeoutSeconds": 600
   },
   "harnessResult": null,
+  "reply": {
+    "outcome": "unavailable",
+    "reason": "the agent left no result file"
+  },
   "result": {
     "isPrimeTemplateTest": {
       "instrument": "templateTest",
