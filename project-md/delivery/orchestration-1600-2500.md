@@ -89,3 +89,6 @@ It needs the ai-experiments repository attached to the session, a published prev
 
 - Claude Code hangs when started from inside a Claude Code session, with the session's environment variables inherited. Run it with a clean environment, e.g. `env -i` plus `HOME`, `PATH`, the proxy variables and `NODE_EXTRA_CA_CERTS`. Inside Thunderjar's containers this doesn't arise.
 - Fetch the stack before branching: `git fetch origin stack/1500-show claude/affectionate-gauss-fw5ijs`. A fresh clone only has `main`.
+- Containers reach the internet through the session's proxy, but don't trust its certificate. Node in a container fails with `SELF_SIGNED_CERT_IN_CHAIN`. Real-agent tests here have to give the container `/root/.ccr/ca-bundle.crt`, e.g. mounted and named in `NODE_EXTRA_CA_CERTS`. Keep that in the test setup, not in what `init` scaffolds.
+- `deb.debian.org` is blocked, so `apt-get` fails in containers. 2300 needs `bubblewrap` from apt. Ask the human to allow `deb.debian.org` and `security.debian.org`, or install Claude Code with npm (`registry.npmjs.org` is allowed).
+- Docker Hub rate-limits anonymous pulls (`429 Too Many Requests`). Reuse images already pulled, such as `node:20-slim`, rather than pulling new ones.
