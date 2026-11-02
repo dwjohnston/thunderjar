@@ -155,3 +155,14 @@ describe("0201 minimal existing setup", () => {
     }
   });
 });
+
+describe("0501 Claude Code", () => {
+  test("holds what init scaffolds in 0101, as it is, beside its DeepSeek variant", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await thunderjar(copy.dir, ["init"]);
+
+    for (const path of filesIn(copy.dir)) {
+      expect(await read(scenario("0501"), path), path).toBe(await read(copy.dir, path));
+    }
+  });
+});
