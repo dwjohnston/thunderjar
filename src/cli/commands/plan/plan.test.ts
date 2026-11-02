@@ -292,6 +292,11 @@ describe("0402 broken declarations", () => {
       [`${measurement("invalid-regex/measurements/tsIgnoreCount.ts")}: config.pattern: "@ts-ignore(" is not a valid regular expression: missing )`],
     ],
     [
+      "an initial prompt with both a prompt and turns",
+      "muddled-prompt",
+      [`${parameter("tasks/is-prime/initial-prompts/muddled.ts")}: turns: can't be given beside prompt. Give a single prompt, or a list of turns.`],
+    ],
+    [
       "an initial prompt with no time to run in",
       "zero-timeout",
       [`${parameter("tasks/is-prime/initial-prompts/untimed.ts")}: timeoutSeconds: must be a number of seconds above 0, got 0`],

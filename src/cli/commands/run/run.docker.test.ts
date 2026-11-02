@@ -139,6 +139,28 @@ Wrote <DATA>/runs/<ULID>/
     expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${PREFIX}-`}`.text())).toEqual([]);
   }, 600_000);
 
+  test("0205 remember: each turn runs in the same container and session, so the last can answer from the first", async () => {
+    const data = `${DATA_DIR}/remember`;
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0205"), ["run", "remember", "--image-prefix", PREFIX, "--data-dir", data], {
+      docker: "real",
+      paths: { "<PREFIX>": PREFIX, "<DATA>": data },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(`
+ 1/1  iteration 1/1  fake-rememberer | tell-then-ask  ... done (<duration>)
+      promisedToRemember: true   remembersName: true
+`);
+    const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: data, onlyFiles: false })];
+    const record = (await Bun.file(`${data}/${executionDir}/container-runs/1-1.json`).json()) as ContainerRunRecord;
+    expect(record.turns?.map((turn) => turn.reply)).toEqual([
+      { outcome: "collected", text: "I will remember that: My rubber ducky is called Eli." },
+      { outcome: "collected", text: "You told me: My rubber ducky is called Eli." },
+    ]);
+    expect(await inImage(record.postrunImage, `cat "$HOME/.fake-rememberer/${record.sessionId}"`)).toBe("My rubber ducky is called Eli.");
+  }, 600_000);
+
   test("0202 quoting: the prompt reaches the agent byte for byte, through a file", async () => {
     const data = `${DATA_DIR}/quoting`;
     const { stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "quoting", "--image-prefix", PREFIX, "--data-dir", data], {

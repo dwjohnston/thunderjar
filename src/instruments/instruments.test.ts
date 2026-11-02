@@ -30,6 +30,7 @@ async function contextWith(files: string[] | Record<string, string>, reply: Repl
     workdir,
     harnessResult: "",
     reply,
+    replies: [reply],
     exec: async (command) => {
       const { stdout, stderr, exitCode } = await $`sh -c ${command}`.cwd(workdir).quiet().nothrow();
       return { stdout: stdout.toString(), stderr: stderr.toString(), exitCode };
@@ -51,6 +52,19 @@ describe("replyMatches", () => {
     // Case-sensitive, as a JavaScript RegExp without flags is.
     expect(await replyMatches.evaluate({ pattern: "^arr" }, await replying("Arr, matey"))).toEqual({ outcome: "measured", data: false });
     expect(await replyMatches.evaluate({ pattern: "^Arr" }, await replying("Arr, matey"))).toEqual({ outcome: "measured", data: true });
+  });
+
+  test("measures the reply to `turn`, counting from 1, or by default the last", async () => {
+    const replies: Reply[] = [
+      { outcome: "collected", text: "I'll remember that your rubber ducky is called Eli." },
+      { outcome: "collected", text: "I don't know." },
+    ];
+    const ctx = { ...(await contextWith([])), reply: replies[1] as Reply, replies };
+
+    expect(await replyMatches.evaluate({ pattern: "Eli" }, ctx)).toEqual({ outcome: "measured", data: false });
+    expect(await replyMatches.evaluate({ pattern: "Eli", turn: 1 }, ctx)).toEqual({ outcome: "measured", data: true });
+    expect(await replyMatches.evaluate({ pattern: "Eli", turn: 3 }, ctx)).toEqual({ outcome: "skipped", reason: "no turn 3: the initial prompt has 2" });
+    expect(replyMatches.checkConfig({ pattern: "Eli", turn: 0 })).toEqual([["config.turn", "must be a turn, counting from 1, got 0"]]);
   });
 
   test("a run without a reply is skipped, saying why", async () => {

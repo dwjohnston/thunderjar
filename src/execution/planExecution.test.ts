@@ -16,6 +16,8 @@ test("every postrun image of an execution carries its ID, and each permutation's
     expect(iterations.map((i) => i.postrunImage)).toEqual(
       [1, 2, 3, 4, 5].map((i) => `thunderjar-postrun:${EXECUTION_ID}-${number}-${i}`),
     );
-    expect(new Set(iterations.map((i) => i.command)).size).toBe(1);
+    // Its harness ignores the session ID, which each iteration has its own of.
+    expect(new Set(iterations.map((i) => i.turns[0]?.command)).size).toBe(1);
+    expect(new Set(iterations.map((i) => i.sessionId)).size).toBe(5);
   }
 });

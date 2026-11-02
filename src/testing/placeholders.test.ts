@@ -19,6 +19,10 @@ describe("applyPlaceholders", () => {
     for (const text of notUlids) expect(applyPlaceholders(text)).toBe(text);
   });
 
+  test("replaces UUIDs, such as a session ID", () => {
+    expect(applyPlaceholders("fake-agent --session 0f8b2c1e-3a4d-4e5f-9a6b-7c8d9e0f1a2b")).toBe("fake-agent --session <UUID>");
+  });
+
   test("replaces durations", () => {
     expect(applyPlaceholders("done (123ms)")).toBe("done (<duration>)");
     expect(applyPlaceholders("done (1.2s)")).toBe("done (<duration>)");

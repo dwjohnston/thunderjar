@@ -4,6 +4,7 @@ export type PathPlaceholders = Record<string, string>;
 // Crockford base32, and a ULID's first character is at most 7.
 const ULID = /\b[0-7][0-9A-HJKMNP-TV-Z]{25}\b/gi;
 const DURATION = /\b\d+(?:\.\d+)?(?:ms|s)\b/g;
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g;
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -13,6 +14,7 @@ const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * - each path in `paths` with its placeholder, longest path first
  * - ULIDs with `<ULID>`
  * - durations such as `123ms` or `1.2s` with `<duration>`
+ * - UUIDs, such as a session ID, with `<UUID>`
  */
 export function applyPlaceholders(text: string, paths: PathPlaceholders = {}): string {
   const byLength = Object.entries(paths)
@@ -23,5 +25,5 @@ export function applyPlaceholders(text: string, paths: PathPlaceholders = {}): s
     const trimmed = path.replace(/\/+$/, "") || path;
     result = result.replace(new RegExp(escapeRegex(trimmed), "g"), placeholder);
   }
-  return result.replace(ULID, "<ULID>").replace(DURATION, "<duration>");
+  return result.replace(ULID, "<ULID>").replace(UUID, "<UUID>").replace(DURATION, "<duration>");
 }

@@ -156,14 +156,21 @@ export function renderExecution(execution: ExecutionRecord, runs: ContainerRunRe
   return [...header, "", ...body].join("\n");
 }
 
-/** A recorded reply, indented under its heading: its text, or why there's none. */
-const showReply = (reply: Reply) =>
-  reply.outcome === "collected" ? reply.text.split("\n").map((line) => `  ${line}`.trimEnd()) : [`  none  (${reply.reason})`];
+/** A recorded reply, after `label`, its later lines lined up under its first: its text, or why there's none. */
+const showReply = (reply: Reply, label = "") => {
+  const lines = reply.outcome === "collected" ? reply.text.split("\n") : [`none  (${reply.reason})`];
+  return lines.map((line, i) => `  ${i === 0 ? label : " ".repeat(label.length)}${line}`.trimEnd());
+};
+
+/** A container run's reply, or with several turns, each turn's, numbered from 1. */
+const showReplies = ({ reply, turns }: ContainerRunRecord) =>
+  turns ? turns.flatMap((turn, i) => showReply(turn.reply, `Turn ${i + 1}:  `)) : showReply(reply as Reply);
 
 /** One container run: where it sits, its parameters, how the agent ran, its reply if it was recorded with one, and its measures. */
 export function renderContainerRun(record: ContainerRunRecord): string {
   const { executionId, testCase, permutation, permutationHash, iteration, postrunImage, ranAt, parameters, harnessModel, execution, harnessResult, reply, result } =
     record;
+  const turnsRan = execution.turns === undefined ? [] : [["Turns", `${execution.turns.length} of ${record.turns?.length ?? "?"} ran`] as [string, string]];
   const names = Object.keys(result).toSorted();
   return [
     ...labelled([
@@ -182,10 +189,11 @@ export function renderContainerRun(record: ContainerRunRecord): string {
       ["Model", `${harnessModel.model}  (${harnessModel.modelId})`],
       ["Duration", duration(execution.finishedAt - execution.startedAt)],
       ["Exit", execution.timedOut ? `timed out after ${execution.timeoutSeconds}s` : String(execution.exitCode)],
+      ...turnsRan,
       ["Result file", harnessResult === null ? "none" : plural(new TextEncoder().encode(harnessResult).length, "byte")],
     ]),
     "",
-    ...(reply === undefined ? [] : ["Reply", ...showReply(reply), ""]),
+    ...(reply === undefined ? [] : ["Reply", ...showReplies(record), ""]),
     "Measures",
     ...(names.length === 0 ? ["  none"] : columns(names.map((name) => [name, showOutcome(result[name]!.outcome)]))),
   ].join("\n");

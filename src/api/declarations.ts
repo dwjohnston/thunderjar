@@ -96,22 +96,32 @@ export type HarnessApplyCtx = ApplyParameterCtx & {
   version: string;
 };
 
-/** What a harness's `cli` gets, to build the command that runs the agent. */
+/**
+ * What a harness's `cli` gets, to build the command that runs the agent. An initial prompt of
+ * several turns runs `cli` once per turn, in the same container, one after another.
+ */
 export type HarnessCliCtx = {
   version: string;
   modelId: string;
   /**
-   * The initial prompt's text. Pasted into a shell command it breaks on the first quote, `$` or
+   * The turn's prompt text. Pasted into a shell command it breaks on the first quote, `$` or
    * backtick, so read `promptPath` instead.
    */
   initialPrompt: string;
   /**
-   * A file in the container holding the initial prompt, exactly, with no newline added: pass it
-   * to the agent as `"$(cat ${ctx.promptPath})"`, or as a file if it takes one.
+   * A file in the container holding the turn's prompt, exactly, with no newline added: pass it to
+   * the agent as `"$(cat ${ctx.promptPath})"`, or as a file if it takes one.
    */
   promptPath: string;
-  /** Where the agent's own report of the run goes. */
+  /** Where the agent's own report of the turn goes. Each turn has its own. */
   resultPath: string;
+  /** Which turn this is, counting from 0. A single prompt is turn 0. */
+  turn: number;
+  /**
+   * A fresh UUID for each container run, the same for each of its turns: start the agent's
+   * session with it on turn 0, and resume it on later turns, e.g. `--session-id`, then `--resume`.
+   */
+  sessionId: string;
 };
 
 export type HarnessDeclaration<C = unknown> = Applies<C, HarnessApplyCtx> & {
@@ -170,11 +180,14 @@ export function declareTokenCostCollector(collector: TokenCostCollector): TokenC
 /**
  * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. It is used when
  * the harness runs, so its fragment is usually left out.
+ *
+ * It's a single `prompt`, or a list of `turns`, each run by the harness's `cli` in turn, in the
+ * same container and agent session, so a later turn can ask about an earlier one. Its
+ * `timeoutSeconds` covers every turn together.
  */
 export type InitialPromptDeclaration<C = unknown> = Applies<C, FragmentCtx> & {
-  prompt: string;
   timeoutSeconds: number;
-};
+} & ({ prompt: string; turns?: never } | { turns: string[]; prompt?: never });
 
 export function declareInitialPrompt<C = undefined>(declaration: InitialPromptDeclaration<C>): InitialPromptDeclaration<C> {
   return declared("declareInitialPrompt", declaration);
@@ -205,6 +218,8 @@ export type MeasurementContext = {
   harnessResult: string;
   /** The agent's final reply, from its harness's `collectReply`, or why there's none. */
   reply: Reply;
+  /** Its reply to each turn, in order: one, unless its initial prompt has several turns. */
+  replies: Reply[];
   workdir: string;
 };
 
@@ -222,8 +237,11 @@ export type InstrumentTypes = {
    * rendered against each file matching `subject` and run with `bun test`?
    */
   templateTest: { config: { subject: string; template: string }; value: { passed: number; failed: number } };
-  /** Does the agent's final reply match `pattern`, a JavaScript regular expression? */
-  replyMatches: { config: { pattern: string }; value: boolean };
+  /**
+   * Does the agent's reply match `pattern`, a JavaScript regular expression? Its reply to `turn`,
+   * counting from 1, of an initial prompt of several turns, or by default its last.
+   */
+  replyMatches: { config: { pattern: string; turn?: number }; value: boolean };
 };
 
 export type InstrumentName = keyof InstrumentTypes;

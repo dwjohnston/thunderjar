@@ -76,16 +76,24 @@ function checkPattern(pattern: unknown): [string, string][] {
 }
 
 /**
- * Whether the agent's final reply, from its harness's `collectReply`, matches `pattern`.
- * `skipped`, saying why, when the run has no reply.
+ * Whether the agent's reply, from its harness's `collectReply`, matches `pattern`: its reply to
+ * `turn`, counting from 1, or by default its last. `skipped`, saying why, when the run has no
+ * reply to that turn.
  */
-export const replyMatches: Instrument<{ pattern: string }, boolean> = {
-  async evaluate({ pattern }, ctx) {
-    if (ctx.reply.outcome !== "collected") return { outcome: "skipped", reason: `no reply: ${ctx.reply.reason}` };
-    return { outcome: "measured", data: new RegExp(pattern).test(ctx.reply.text) };
+export const replyMatches: Instrument<{ pattern: string; turn?: number }, boolean> = {
+  async evaluate({ pattern, turn }, ctx) {
+    const reply = turn === undefined ? ctx.reply : ctx.replies[turn - 1];
+    if (!reply) return { outcome: "skipped", reason: `no turn ${turn}: the initial prompt has ${ctx.replies.length}` };
+    if (reply.outcome !== "collected") return { outcome: "skipped", reason: `no reply: ${reply.reason}` };
+    return { outcome: "measured", data: new RegExp(pattern).test(reply.text) };
   },
   checkConfig(config) {
-    return checkPattern((config as { pattern?: unknown } | undefined)?.pattern);
+    const { pattern, turn } = (config ?? {}) as { pattern?: unknown; turn?: unknown };
+    const problems = checkPattern(pattern);
+    if (turn !== undefined && (typeof turn !== "number" || !Number.isInteger(turn) || turn < 1)) {
+      problems.push(["config.turn", `must be a turn, counting from 1, got ${show(turn)}`]);
+    }
+    return problems;
   },
   usesContainer: false,
 };
