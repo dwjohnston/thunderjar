@@ -45,7 +45,7 @@ export type FakeDocker = AsyncDisposable & {
   images: () => Promise<string[]>;
   /** The names of the containers not yet removed. */
   containers: () => Promise<string[]>;
-  /** The text of the file at `path`, under /workspace or /thunderjar, in the committed image `image`, or undefined if there's none. */
+  /** The text of the file at `path`, from the container's root, in the committed image `image`, or undefined if there's none. */
   fileIn: (image: string, path: string) => Promise<string | undefined>;
   /** Deletes its state. */
   remove: () => Promise<void>;

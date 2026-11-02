@@ -114,6 +114,7 @@ class TestCaseChecker {
         if (declaration && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0)) {
           this.problems.push({ file: prompt, field: "timeoutSeconds", message: `must be a number of seconds above 0, got ${show(timeout)}` });
         }
+        if (declaration) this.checkPrompt(prompt, declaration);
         continue;
       }
       const owner = new Bun.Glob(`${PARAMETERS}/tasks/*/initial-prompts/${name}.ts`).scanSync({ cwd: this.root }).next()
@@ -124,6 +125,20 @@ class TestCaseChecker {
           ? `${show(name)} belongs to task ${show(owner.split("/")[2])}, not ${show(task)}`
           : `${show(name)} has no matching ${FOLDER}/${prompt}`,
       );
+    }
+  }
+
+  /** An initial prompt has a `prompt`, or a list of `turns`, not both. */
+  private checkPrompt(file: string, { prompt, turns }: Record<string, unknown>) {
+    const problem = (field: string, message: string) => this.problems.push({ file, field, message });
+    if (prompt !== undefined && turns !== undefined) {
+      problem("turns", "can't be given beside prompt. Give a single prompt, or a list of turns.");
+    } else if (turns !== undefined) {
+      if (!Array.isArray(turns) || turns.length === 0 || turns.some((turn) => typeof turn !== "string")) {
+        problem("turns", `must be a list of at least one prompt, got ${show(turns)}`);
+      }
+    } else if (typeof prompt !== "string") {
+      problem("prompt", `must be the prompt's text, or give a list of turns instead, got ${show(prompt)}`);
     }
   }
 

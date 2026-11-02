@@ -1,6 +1,6 @@
 // Laying out one execution of a test case: each permutation, in plan's order, with its prerun
-// image, and inside it each iteration: one container run, with its postrun image and the harness
-// command it runs. Nothing is run here.
+// image, and inside it each iteration: one container run, with its postrun image, its session ID,
+// and the harness command each of its turns runs. Nothing is run here.
 import type {
   HarnessDeclaration,
   HarnessModelsDeclaration,
@@ -20,12 +20,36 @@ export const RESULT_PATH = "/thunderjar/result.json";
 /** Where, inside the container, the execution wrapper writes the initial prompt, for the harness's `cli` to read. */
 export const PROMPT_PATH = "/thunderjar/prompt.txt";
 
+/**
+ * Where turn `turn` (counting from 0) of an initial prompt of `count` turns reads its prompt and
+ * leaves its result. A single prompt keeps PROMPT_PATH and RESULT_PATH; turns each have a folder,
+ * numbered from 1.
+ */
+export function turnPaths(turn: number, count: number): { promptPath: string; resultPath: string } {
+  if (count === 1) return { promptPath: PROMPT_PATH, resultPath: RESULT_PATH };
+  return { promptPath: `/thunderjar/turns/${turn + 1}/prompt.txt`, resultPath: `/thunderjar/turns/${turn + 1}/result.json` };
+}
+
+/** The prompts of an initial prompt, one per turn. */
+export const promptsOf = (initialPrompt: InitialPromptDeclaration): string[] => initialPrompt.turns ?? [initialPrompt.prompt];
+
+/** One turn of a container run: its prompt, where it's written, and the harness command that reads it. */
+export type PlannedTurn = {
+  prompt: string;
+  promptPath: string;
+  resultPath: string;
+  /** The harness's `cli` command for the turn. */
+  command: string;
+};
+
 export type PlannedIteration = {
   /** Counts from 1. */
   number: number;
   postrunImage: string;
-  /** The harness's `cli` command for the permutation. */
-  command: string;
+  /** A fresh UUID, the agent session its turns share. */
+  sessionId: string;
+  /** One, unless its initial prompt has several turns. */
+  turns: PlannedTurn[];
 };
 
 export type PlannedPermutation = {
@@ -35,12 +59,10 @@ export type PlannedPermutation = {
   prerunImage: string;
   /** The names of the environment variables its harness needs, passed into each of its containers. */
   env: string[];
-  /** Its initial prompt's text, written to PROMPT_PATH in each of its containers. */
-  prompt: string;
-  /** How long its agent may run, from its initial prompt, before it's killed. */
+  /** How long its agent may run, every turn together, from its initial prompt, before it's killed. */
   timeoutSeconds: number;
-  /** Its harness's `collectReply`, if it has one. */
-  collectReply?: HarnessDeclaration["collectReply"];
+  /** Its harness's `cli` and `collectReply`. */
+  harness: HarnessDeclaration;
   iterations: PlannedIteration[];
 };
 
@@ -49,19 +71,11 @@ export type PlannedExecution = {
   permutations: PlannedPermutation[];
 };
 
-/** What a permutation's harness and initial prompt give each of its container runs. */
-type Harnessed = Pick<PlannedPermutation, "env" | "prompt" | "timeoutSeconds" | "collectReply"> & { command: string };
+/** What a permutation's harness, harness model pair and initial prompt are, loaded. */
+type Loaded = { harness: HarnessDeclaration; version: string; modelId: string; initialPrompt: InitialPromptDeclaration };
 
-/**
- * The harness `cli` command `permutation` runs, and the variables its harness needs, or undefined
- * after adding to `problems` (`loadTestCase` already checked the files).
- */
-async function harnessCommand(
-  root: string,
-  task: string,
-  permutation: HashedPermutation,
-  problems: Problem[],
-): Promise<Harnessed | undefined> {
+/** `permutation`'s harness and initial prompt, or undefined after adding to `problems` (`loadTestCase` already checked the files). */
+async function loadHarness(root: string, task: string, permutation: HashedPermutation, problems: Problem[]): Promise<Loaded | undefined> {
   const { harness: name, version, model } = parsePair(permutation.harnessModel);
   const dir = `${PARAMETERS}/harnessModels/${name}`;
   const [harness, versions, models, initialPrompt] = (await Promise.all([
@@ -71,25 +85,23 @@ async function harnessCommand(
     loadDeclaration(root, `${PARAMETERS}/tasks/${task}/initial-prompts/${permutation.initialPrompt}.ts`, "declareInitialPrompt", problems),
   ])) as [HarnessDeclaration?, HarnessVersionsDeclaration?, HarnessModelsDeclaration?, InitialPromptDeclaration?];
   if (!harness || !versions || !models || !initialPrompt) return undefined;
-  const command = harness.cli({
-    version: (versions[version] as { version: string }).version,
-    modelId: models[model] as string,
-    initialPrompt: initialPrompt.prompt,
-    promptPath: PROMPT_PATH,
-    resultPath: RESULT_PATH,
+  return { harness, version: (versions[version] as { version: string }).version, modelId: models[model] as string, initialPrompt };
+}
+
+/** Each turn of a container run in session `sessionId`, with the harness command for it. */
+function planTurns({ harness, version, modelId, initialPrompt }: Loaded, sessionId: string): PlannedTurn[] {
+  const prompts = promptsOf(initialPrompt);
+  return prompts.map((prompt, turn) => {
+    const paths = turnPaths(turn, prompts.length);
+    const command = harness.cli({ version, modelId, initialPrompt: prompt, ...paths, turn, sessionId });
+    return { prompt, ...paths, command };
   });
-  return {
-    command,
-    env: requiredEnvOf(harness),
-    prompt: initialPrompt.prompt,
-    timeoutSeconds: initialPrompt.timeoutSeconds,
-    collectReply: harness.collectReply,
-  };
 }
 
 /**
  * Every container run of execution `executionId` of `testCase`, a test case of `root` (the
  * `.thunderjar/` folder) already checked by `loadTestCase`, with image names starting `imagePrefix`.
+ * Each gets a fresh session ID.
  */
 export async function planExecution(
   root: string,
@@ -99,24 +111,29 @@ export async function planExecution(
 ): Promise<PlannedExecution> {
   const hashed = await hashPermutations(root, testCase);
   const problems: Problem[] = [];
-  const harnesses = await Promise.all(hashed.map((permutation) => harnessCommand(root, testCase.task, permutation, problems)));
+  const loaded = await Promise.all(hashed.map((permutation) => loadHarness(root, testCase.task, permutation, problems)));
   if (problems.length > 0) throw problemsError(problems);
-  const commands = harnesses as Harnessed[];
   return {
     executionId,
-    permutations: hashed.map((permutation, p) => ({
-      number: p + 1,
-      permutation,
-      prerunImage: prerunImage(permutation.hash, imagePrefix),
-      env: commands[p]!.env,
-      prompt: commands[p]!.prompt,
-      timeoutSeconds: commands[p]!.timeoutSeconds,
-      collectReply: commands[p]!.collectReply,
-      iterations: Array.from({ length: testCase.iterations }, (_, i) => ({
-        number: i + 1,
-        postrunImage: postrunImage(executionId, p + 1, i + 1, imagePrefix),
-        command: commands[p]!.command,
-      })),
-    })),
+    permutations: hashed.map((permutation, p) => {
+      const harnessed = loaded[p] as Loaded;
+      return {
+        number: p + 1,
+        permutation,
+        prerunImage: prerunImage(permutation.hash, imagePrefix),
+        env: requiredEnvOf(harnessed.harness),
+        timeoutSeconds: harnessed.initialPrompt.timeoutSeconds,
+        harness: harnessed.harness,
+        iterations: Array.from({ length: testCase.iterations }, (_, i) => {
+          const sessionId = crypto.randomUUID();
+          return {
+            number: i + 1,
+            postrunImage: postrunImage(executionId, p + 1, i + 1, imagePrefix),
+            sessionId,
+            turns: planTurns(harnessed, sessionId),
+          };
+        }),
+      };
+    }),
   };
 }

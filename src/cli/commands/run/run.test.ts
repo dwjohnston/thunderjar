@@ -5,6 +5,7 @@
 // `bun run fixture 0202 run is-prime-baseline --dry-run`. For real Docker, see run.docker.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
+import type { Reply } from "../../../api/declarations.ts";
 import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure, RecordedOutcome } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
@@ -243,6 +244,7 @@ Wrote <DATA>/runs/<ULID>/
       execution: { startedAt: expect.any(Number), finishedAt: expect.any(Number), exitCode: 0, timedOut: false, timeoutSeconds: 600 },
       harnessResult: '{"model":"fake-model-small-001","reply":"Arr, isPrime.ts be written."}\n',
       reply: { outcome: "collected", text: "Arr, isPrime.ts be written." },
+      sessionId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
       result: {
         isPrimeTemplateTest: measured("templateTest", { passed: 3, failed: 2 }),
         isPrimeTsExists: measured("fileCreated", true),
@@ -623,6 +625,97 @@ Wrote <DATA>/runs/<ULID>/
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
     expect(await docker.containers()).toEqual([]);
   }, 30_000);
+});
+
+describe("0205 multi-turn", () => {
+  const RUN_TURN_1 = (session: string) =>
+    `mkdir -p "$HOME/.fake-rememberer" && cp /thunderjar/turns/1/prompt.txt "$HOME/.fake-rememberer/${session}" && printf '{"reply":"I will remember that: %s"}' "$(cat /thunderjar/turns/1/prompt.txt)" > /thunderjar/turns/1/result.json`;
+  const RUN_TURN_2 = (session: string) =>
+    `printf '{"reply":"You told me: %s"}' "$(cat "$HOME/.fake-rememberer/${session}")" > /thunderjar/turns/2/result.json`;
+
+  test("--dry-run: the iteration's session, then each turn's prompt and command", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0205"), ["run", "remember", "--dry-run"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Execution <ULID>
+
+Permutation 1: prerun image thunderjar-prerun:f863e7f5
+  Iteration 1: postrun image thunderjar-postrun:<ULID>-1-1
+    session:  <UUID>
+    prompt 1: My rubber ducky is called Eli.
+    turn 1:   ${RUN_TURN_1("<UUID>")}
+    prompt 2: What is my rubber ducky called?
+    turn 2:   ${RUN_TURN_2("<UUID>")}
+`);
+  });
+
+  test("each turn runs in the same container and session, and each reply is recorded and measured", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0205"), ["run", "remember", "--data-dir", data], {
+      env: docker.env,
+      paths: { "<DATA>": data },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith(`
+ 1/1  iteration 1/1  fake-rememberer | tell-then-ask  ... done (<duration>)
+      promisedToRemember: true   remembersName: true
+Wrote <DATA>/runs/<ULID>/
+`);
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    expect(record.execution.turns?.map((turn) => turn.exitCode)).toEqual([0, 0]);
+    expect(record.turns?.map((turn) => turn.reply)).toEqual([
+      { outcome: "collected", text: "I will remember that: My rubber ducky is called Eli." },
+      { outcome: "collected", text: "You told me: My rubber ducky is called Eli." },
+    ]);
+    // The record's reply and result file are the last turn's.
+    expect(record.reply).toEqual(record.turns?.[1]?.reply as Reply);
+    expect(record.harnessResult).toBe(record.turns?.[1]?.harnessResult as string);
+    // Both turns used the session ID the record names. (The fake Docker's HOME is the container's root.)
+    expect(await docker.fileIn(record.postrunImage, `/.fake-rememberer/${record.sessionId}`)).toBe("My rubber ducky is called Eli.");
+
+    // show gives each turn's reply.
+    const shown = await thunderjar(scenario("0205"), ["show", record.executionId, "1-1", "--data-dir", data]);
+    expect(shown.stdout).toContain(`
+Exit         0
+Turns        2 of 2 ran
+Result file  55 bytes
+
+Reply
+  Turn 1:  I will remember that: My rubber ducky is called Eli.
+  Turn 2:  You told me: My rubber ducky is called Eli.
+`);
+  });
+
+  test("a turn that exits non-zero stops the turns after it", async () => {
+    await using copy = await copyScenarioProject("0205");
+    await Bun.write(
+      `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-rememberer/index.ts`,
+      `import { declareHarness } from "thunderjar";
+
+export default declareHarness({
+  cli: (ctx) => (ctx.turn === 0 ? "exit 2" : \`echo '{"reply":"Eli"}' > \${ctx.resultPath}\`),
+  collectReply: (raw) => (JSON.parse(raw) as { reply: string }).reply,
+});
+`,
+    );
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "remember", "--data-dir", data], { env: docker.env });
+
+    expect(exitCode).toBe(1);
+    expect(stdout).toContain(" ... exited 2, no result file (<duration>)\n");
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    expect(record.execution.exitCode).toBe(2);
+    expect(record.execution.turns?.map((turn) => turn.exitCode)).toEqual([2]);
+    expect(record.turns?.map((turn) => turn.harnessResult)).toEqual([null, null]);
+    expect(record.result.remembersName?.outcome).toEqual({ outcome: "skipped", reason: "no reply: the agent left no result file" });
+  });
 });
 
 describe("0201 minimal existing setup", () => {
