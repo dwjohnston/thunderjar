@@ -28,6 +28,8 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Docker image tests (GitHub's Ubuntu runners have Docker)
         run: bun run test:docker
+      - name: Installed package smoke test
+        run: bun run test:package
 
   build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
