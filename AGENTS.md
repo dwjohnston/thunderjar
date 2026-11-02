@@ -213,6 +213,11 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
    - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
 7. Regular unit tests
    - For comprehensive business logic
+8. Real agent tests
+   - Run a real agent, against a real model, through `run`, e.g. scenario `0501` running Claude Code.
+   - Tests of this type should have the extension `.agent.test.ts`
+   - `bun test` skips them. Run them with `bun run test:agent`, with Docker and `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY` set. Each run costs a few cents.
+   - Not run in CI yet: an on-demand workflow is still to be added.
 
 ## Fixtures 
 

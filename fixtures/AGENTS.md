@@ -11,6 +11,7 @@ fixtures/
   02_regular/                  initialised projects that work
   03_real_git/                 parameters that read real commits of this repository
   04_unhappy/                  projects broken on purpose
+  05_real_agents/              projects that run a real agent
     <NNNN>_<what it is>/       a scenario, e.g. 0201_minimal_existing_setup
       project/                 the user's project: the CLI runs here
       tsconfig.json            optional: type-checks the scenario, see below
@@ -141,6 +142,12 @@ bun run fixture 0202 plan is-prime-baseline
   - `0403_broken_harness_family`: the shared setup, with a second fake agent, `fake-harness-beta`, whose `versions.ts` isn't wrapped in `declareHarnessVersions`. No `tsconfig.json` or `_generated/`.
     - Test cases: `example`, and `beta`, which names `fake-harness-beta@1.0.0/fake-model-large`.
   - `0404_empty_parameter_folders`: the shared setup with every declaration deleted: each parameter folder holds only a `.gitkeep`. Test case `example` is left. No `tsconfig.json` or `_generated/`.
+
+- **05_real_agents**: projects that run a real agent against a real model, for `bun run test:agent`.
+  - `0501_claude_code`: exactly what `init` scaffolds in an empty project, Claude Code on Haiku, and beside it the same on DeepSeek.
+    - Base image `node20-deepseek` points Claude Code at DeepSeek's Anthropic-compatible API.
+    - Harness `claude-code-deepseek`, init's `claude-code` with its `requiredEnv` `DEEPSEEK_API_KEY`, passed to Claude Code as its auth token, and model `deepseek-chat`.
+    - Test cases: `example`, init's, which needs `ANTHROPIC_API_KEY`, and `deepseek`, which needs `DEEPSEEK_API_KEY`.
 
 Keep it in this format:
 
