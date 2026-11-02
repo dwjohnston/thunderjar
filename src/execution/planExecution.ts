@@ -2,6 +2,7 @@
 // image, and inside it each iteration: one container run, with its postrun image, its session ID,
 // and the harness command each of its turns runs. Nothing is run here.
 import type {
+  BaseImageDeclaration,
   HarnessDeclaration,
   HarnessModelsDeclaration,
   HarnessVersionsDeclaration,
@@ -60,6 +61,8 @@ export type PlannedPermutation = {
   prerunImage: string;
   /** The names of the environment variables its harness needs, passed into each of its containers. */
   env: string[];
+  /** Its base image's `runOptions`, added to the `docker run` of each of its agent containers. */
+  runOptions: string[];
   /** How long its agent may run, every turn together, from its initial prompt, before it's killed. */
   timeoutSeconds: number;
   /** Its harness's `cli` and `collectReply`. */
@@ -79,6 +82,7 @@ export type PlannedExecution = {
 
 /** What a permutation's harness, harness model pair and initial prompt are, loaded. */
 type Loaded = {
+  baseImage: BaseImageDeclaration;
   harness: HarnessDeclaration;
   collectTokenCosts: TokenCostCollector;
   version: string;
@@ -90,16 +94,17 @@ type Loaded = {
 async function loadHarness(root: string, task: string, permutation: HashedPermutation, problems: Problem[]): Promise<Loaded | undefined> {
   const { harness: name, version, model } = parsePair(permutation.harnessModel);
   const dir = `${PARAMETERS}/harnessModels/${name}`;
-  const [harness, collectTokenCosts, versions, models, initialPrompt] = (await Promise.all([
+  const [baseImage, harness, collectTokenCosts, versions, models, initialPrompt] = (await Promise.all([
+    loadDeclaration(root, `${PARAMETERS}/baseImages/${permutation.baseImage}/index.ts`, "declareBaseImage", problems),
     loadDeclaration(root, `${dir}/index.ts`, "declareHarness", problems),
     loadDeclaration(root, `${dir}/collectTokenCosts.ts`, "declareTokenCostCollector", problems),
     loadDeclaration(root, `${dir}/versions.ts`, "declareHarnessVersions", problems),
     loadDeclaration(root, `${dir}/models.ts`, "declareHarnessModels", problems),
     loadDeclaration(root, `${PARAMETERS}/tasks/${task}/initial-prompts/${permutation.initialPrompt}.ts`, "declareInitialPrompt", problems),
-  ])) as [HarnessDeclaration?, TokenCostCollector?, HarnessVersionsDeclaration?, HarnessModelsDeclaration?, InitialPromptDeclaration?];
-  if (!harness || !collectTokenCosts || !versions || !models || !initialPrompt) return undefined;
+  ])) as [BaseImageDeclaration?, HarnessDeclaration?, TokenCostCollector?, HarnessVersionsDeclaration?, HarnessModelsDeclaration?, InitialPromptDeclaration?];
+  if (!baseImage || !harness || !collectTokenCosts || !versions || !models || !initialPrompt) return undefined;
   const pinned = (versions[version] as { version: string }).version;
-  return { harness, collectTokenCosts, version: pinned, modelId: models[model] as string, initialPrompt };
+  return { baseImage, harness, collectTokenCosts, version: pinned, modelId: models[model] as string, initialPrompt };
 }
 
 /** Each turn of a container run in session `sessionId`, with the harness command for it. */
@@ -136,6 +141,7 @@ export async function planExecution(
         permutation,
         prerunImage: prerunImage(permutation.hash, imagePrefix),
         env: requiredEnvOf(harnessed.harness),
+        runOptions: harnessed.baseImage.runOptions ?? [],
         timeoutSeconds: harnessed.initialPrompt.timeoutSeconds,
         harness: harnessed.harness,
         collectTokenCosts: harnessed.collectTokenCosts,

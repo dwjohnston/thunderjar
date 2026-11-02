@@ -75,6 +75,8 @@ export type ContainerRun = {
   turns: (WrappedTurn & Pick<PlannedTurn, "resultPath">)[];
   /** The names of the environment variables passed into the container, from Thunderjar's own. */
   env: string[];
+  /** More `docker run` options, from its base image. */
+  runOptions: string[];
   /** How long its turns, together, may run before it's killed. */
   timeoutSeconds: number;
   /** The container's name. */
@@ -126,7 +128,11 @@ export function parseExecution(text: string | undefined, timeoutSeconds: number,
  */
 export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
   try {
-    const stop = await runContainer(run.prerunImage, run.container, executionWrapper(run.turns), run.env, run.timeoutSeconds);
+    const stop = await runContainer(run.prerunImage, run.container, executionWrapper(run.turns), {
+      env: run.env,
+      runOptions: run.runOptions,
+      timeoutSeconds: run.timeoutSeconds,
+    });
     const killedAt = stop.timedOut ? stop.killedAt : undefined;
     const execution = parseExecution(await readContainerFile(run.container, RUN_PATH), run.timeoutSeconds, killedAt);
     const harnessResults: (string | null)[] = [];

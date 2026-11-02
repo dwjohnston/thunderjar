@@ -292,6 +292,11 @@ describe("0402 broken declarations", () => {
       [`${measurement("invalid-regex/measurements/tsIgnoreCount.ts")}: config.pattern: "@ts-ignore(" is not a valid regular expression: missing )`],
     ],
     [
+      "a base image whose run options take over what Thunderjar does",
+      "reserved-run-options",
+      [`${parameter("baseImages/reserved-options/index.ts")}: runOptions: "--rm", "--entrypoint=bash" can't be given: Thunderjar sets them itself`],
+    ],
+    [
       "an initial prompt with both a prompt and turns",
       "muddled-prompt",
       [`${parameter("tasks/is-prime/initial-prompts/muddled.ts")}: turns: can't be given beside prompt. Give a single prompt, or a list of turns.`],

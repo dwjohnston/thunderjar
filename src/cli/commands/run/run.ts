@@ -24,8 +24,8 @@ const field = (label: string, value: string) =>
 
 /**
  * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
- * the environment variables its container is given, by name, the prompt file's contents, and its
- * harness command. With several turns, its session ID, and each turn's prompt and command.
+ * the environment variables its container is given, by name, any more `docker run` options, the
+ * prompt file's contents, and its harness command. With several turns, its session ID, and each turn's prompt and command.
  */
 export function renderExecution({ executionId, permutations }: PlannedExecution): string {
   const blocks = permutations.map((permutation) =>
@@ -34,6 +34,7 @@ export function renderExecution({ executionId, permutations }: PlannedExecution)
       ...permutation.iterations.flatMap((iteration) => [
         `  Iteration ${iteration.number}: postrun image ${iteration.postrunImage}`,
         ...(permutation.env.length > 0 ? [field("env", permutation.env.join(", "))] : []),
+        ...(permutation.runOptions.length > 0 ? [field("docker", permutation.runOptions.join(" "))] : []),
         ...(iteration.turns.length === 1
           ? [field("prompt", iteration.turns[0]!.prompt), field("command", iteration.turns[0]!.command)]
           : [

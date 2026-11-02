@@ -73,6 +73,17 @@ type Applies<C, Ctx> = {
 /** A base image's fragment is required: it carries the prerun image's `FROM`. */
 export type BaseImageDeclaration<C = unknown> = Applies<C, ApplyParameterCtx> & {
   applyParameter(config: C, ctx: ApplyParameterCtx): string;
+  /**
+   * More `docker run` options for the agent's containers, for agents that need more of the
+   * kernel than Docker allows by default, e.g. Claude Code's bubblewrap sandbox, which needs user
+   * namespaces: `["--security-opt", "seccomp=unconfined", "--security-opt", "apparmor=unconfined"]`.
+   * Each option and value is its own string. Ask for the least you need: `--privileged` works, but
+   * gives the agent the whole machine.
+   *
+   * Some hosts forbid what no option can allow. Ubuntu 23.10 and later stop unconfined processes
+   * making user namespaces until `sysctl kernel.apparmor_restrict_unprivileged_userns=0`.
+   */
+  runOptions?: string[];
 };
 
 export function declareBaseImage<C = undefined>(declaration: BaseImageDeclaration<C>): BaseImageDeclaration<C> {
