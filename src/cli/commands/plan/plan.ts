@@ -8,6 +8,7 @@ import {
   hashPermutations,
   matrixShape,
 } from "../../../config/permutations.ts";
+import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerUnavailableError, imagesIn } from "../../../docker/docker.ts";
 import { prerunImage, prerunRepository } from "../../../execution/images.ts";
@@ -71,6 +72,7 @@ async function imageStatuses(
 export async function plan(cwd: string, name: string, imagePrefix?: string): Promise<{ output: string; warning?: string }> {
   const root = await findThunderjarRoot(cwd);
   const testCase = await loadTestCase(root, name);
+  await checkRequiredEnv(root, testCase);
   const permutations = await hashPermutations(root, testCase);
   const { statuses, unavailable } = await imageStatuses(permutations, imagePrefix);
   return {

@@ -11,6 +11,7 @@ import type {
 import { PARAMETERS } from "../config/folders.ts";
 import { loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
 import { type HashedPermutation, hashPermutations, parsePair } from "../config/permutations.ts";
+import { requiredEnvOf } from "../config/requiredEnv.ts";
 import { DEFAULT_IMAGE_PREFIX, postrunImage, prerunImage } from "./images.ts";
 
 /** Where, inside the container, the harness's `cli` must leave the agent's result file. */
@@ -29,6 +30,8 @@ export type PlannedPermutation = {
   number: number;
   permutation: HashedPermutation;
   prerunImage: string;
+  /** The names of the environment variables its harness needs, passed into each of its containers. */
+  env: string[];
   iterations: PlannedIteration[];
 };
 
@@ -37,13 +40,16 @@ export type PlannedExecution = {
   permutations: PlannedPermutation[];
 };
 
-/** The harness `cli` command `permutation` runs, or undefined after adding to `problems` (`loadTestCase` already checked the files). */
+/**
+ * The harness `cli` command `permutation` runs, and the variables its harness needs, or undefined
+ * after adding to `problems` (`loadTestCase` already checked the files).
+ */
 async function harnessCommand(
   root: string,
   task: string,
   permutation: HashedPermutation,
   problems: Problem[],
-): Promise<string | undefined> {
+): Promise<{ command: string; env: string[] } | undefined> {
   const { harness: name, version, model } = parsePair(permutation.harnessModel);
   const dir = `${PARAMETERS}/harnessModels/${name}`;
   const [harness, versions, models, initialPrompt] = (await Promise.all([
@@ -53,12 +59,13 @@ async function harnessCommand(
     loadDeclaration(root, `${PARAMETERS}/tasks/${task}/initial-prompts/${permutation.initialPrompt}.ts`, "declareInitialPrompt", problems),
   ])) as [HarnessDeclaration?, HarnessVersionsDeclaration?, HarnessModelsDeclaration?, InitialPromptDeclaration?];
   if (!harness || !versions || !models || !initialPrompt) return undefined;
-  return harness.cli({
+  const command = harness.cli({
     version: (versions[version] as { version: string }).version,
     modelId: models[model] as string,
     initialPrompt: initialPrompt.prompt,
     resultPath: RESULT_PATH,
   });
+  return { command, env: requiredEnvOf(harness) };
 }
 
 /**
@@ -73,18 +80,20 @@ export async function planExecution(
 ): Promise<PlannedExecution> {
   const hashed = await hashPermutations(root, testCase);
   const problems: Problem[] = [];
-  const commands = await Promise.all(hashed.map((permutation) => harnessCommand(root, testCase.task, permutation, problems)));
+  const harnesses = await Promise.all(hashed.map((permutation) => harnessCommand(root, testCase.task, permutation, problems)));
   if (problems.length > 0) throw problemsError(problems);
+  const commands = harnesses as { command: string; env: string[] }[];
   return {
     executionId,
     permutations: hashed.map((permutation, p) => ({
       number: p + 1,
       permutation,
       prerunImage: prerunImage(permutation.hash, imagePrefix),
+      env: commands[p]!.env,
       iterations: Array.from({ length: testCase.iterations }, (_, i) => ({
         number: i + 1,
         postrunImage: postrunImage(executionId, p + 1, i + 1, imagePrefix),
-        command: commands[p] as string,
+        command: commands[p]!.command,
       })),
     })),
   };

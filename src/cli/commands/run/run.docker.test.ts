@@ -33,14 +33,14 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("run, against real Docker", ()
     const { stdout, stderr, exitCode } = await thunderjar(
       scenario("0202"),
       ["run", "two-harnesses", "--image-prefix", PREFIX, "--data-dir", DATA_DIR],
-      { docker: "real", paths: { "<PREFIX>": PREFIX, "<DATA>": DATA_DIR } },
+      { docker: "real", env: { FAKE_HARNESS_KEY: "fake-key" }, paths: { "<PREFIX>": PREFIX, "<DATA>": DATA_DIR } },
     );
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
-Building <PREFIX>-prerun:5650e1a8 ... done
-Building <PREFIX>-prerun:de78e815 ... done
+Building <PREFIX>-prerun:e4a5b2ee ... done
+Building <PREFIX>-prerun:2a7ea4db ... done
  1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
@@ -90,10 +90,15 @@ Wrote <DATA>/runs/<ULID>/
       `// ${PLAIN}\nexport const isPrime = (n: number) => n > 1 && Array.from({ length: n - 2 }, (_, i) => i + 2).every((d) => n % d !== 0);`,
     );
 
+    // Alpha's container was given the key it needs, and beta's, of another harness, wasn't. Only
+    // whether it was set was written down, never its value.
+    expect(await inImage(alpha.postrunImage, "cat /thunderjar/fake-harness-key")).toBe("set");
+    expect(await inImage(beta.postrunImage, "cat /thunderjar/fake-harness-key")).toBe("");
+
     // A postrun image starts as its prerun image does, rather than running the agent again.
     const config = "{{json .Config.Entrypoint}} {{json .Config.Cmd}}";
     expect(await $`docker image inspect --format ${config} ${alpha.postrunImage}`.text()).toBe(
-      await $`docker image inspect --format ${config} ${PREFIX}-prerun:5650e1a8`.text(),
+      await $`docker image inspect --format ${config} ${PREFIX}-prerun:e4a5b2ee`.text(),
     );
 
     // Every container was removed.

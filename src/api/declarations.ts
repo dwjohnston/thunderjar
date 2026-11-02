@@ -107,7 +107,11 @@ export type HarnessCliCtx = {
 
 export type HarnessDeclaration<C = unknown> = Applies<C, HarnessApplyCtx> & {
   cli: (ctx: HarnessCliCtx) => string;
-  /** Environment variables the agent needs, e.g. its API key. */
+  /**
+   * The names of the environment variables the agent needs, e.g. its API key. Each is passed into
+   * this harness's containers only, as `docker run -e NAME`, so its value comes from the shell that
+   * runs Thunderjar, and is never written down. `plan` and `run` stop if one is unset.
+   */
   requiredEnv?: string[];
 };
 

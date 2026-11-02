@@ -52,6 +52,8 @@ export type ContainerRun = {
   postrunImage: string;
   /** The harness's `cli` command. */
   command: string;
+  /** The names of the environment variables passed into the container, from Thunderjar's own. */
+  env: string[];
   /** The container's name. */
   container: string;
 };
@@ -87,7 +89,7 @@ export function parseExecution(text: string | undefined): Execution {
  */
 export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
   try {
-    await runContainer(run.prerunImage, run.container, executionWrapper(run.command));
+    await runContainer(run.prerunImage, run.container, executionWrapper(run.command), run.env);
     const execution = parseExecution(await readContainerFile(run.container, RUN_PATH));
     const harnessResult = (await readContainerFile(run.container, RESULT_PATH)) ?? null;
     await commitContainer(run.container, run.postrunImage, run.prerunImage);
