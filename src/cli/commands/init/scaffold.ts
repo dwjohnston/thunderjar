@@ -54,7 +54,7 @@ const harness = declaration(
   "declareHarness",
   `{
   applyParameter: (_config, ctx) => \`RUN npm install -g @anthropic-ai/claude-code@\${ctx.version}\`,
-  cli: (ctx) => \`claude -p "$(cat \${ctx.promptPath})" --model \${ctx.modelId} > \${ctx.resultPath}\`,
+  cli: (ctx) => \`claude -p "$(cat \${ctx.promptPath})" --model \${ctx.modelId} --output-format json > \${ctx.resultPath}\`,
   requiredEnv: ["ANTHROPIC_API_KEY"],
 }`,
 );
@@ -73,12 +73,11 @@ const harnessVersions = declaration(
 }`,
 );
 
-const collectTokenCosts = declaration(
-  "declareTokenCostCollector",
-  `(_raw, _ctx) => {
-  return { outcome: "unavailable", reason: "notReported" };
-}`,
-);
+// Claude Code's \`--output-format json\` result, read by the library's own reader.
+const collectTokenCosts = `import { claudeCodeTokenCosts, declareTokenCostCollector } from "thunderjar";
+
+export default declareTokenCostCollector((raw) => claudeCodeTokenCosts(raw));
+`;
 
 const initialPrompt = declaration(
   "declareInitialPrompt",

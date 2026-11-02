@@ -144,24 +144,34 @@ Measures
     expect(failed).toContain("Exit         3\nResult file  none\n");
   });
 
-  test("<execution> with a run that timed out lists it below the table, measured all the same", async () => {
+  test("<execution> with a run that timed out lists it below the table, measured all the same; with token costs, their means", async () => {
     const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TIMED_OUT]);
 
     expect(exitCode).toBe(0);
     expect(stdout).toEndWith(`
- 1   fake-harness-alpha@1.0.0/fake-model-small   1/1    {passed: 3, failed: 2}   {passed: 3.0, failed: 2.0}   1/1               1.0    1
- 2   fake-harness-beta@1.0.0/fake-model-large    1/1    {passed: 5, failed: 0}   {passed: 5.0, failed: 0.0}   1/1               0.0    0
+     harnessModel                                runs   sum                      mean                         rate              mean   max      tokens (mean)   cost (mean)
+ 1   fake-harness-alpha@1.0.0/fake-model-small   1/1    {passed: 3, failed: 2}   {passed: 3.0, failed: 2.0}   1/1               1.0    1        not reported    —
+ 2   fake-harness-beta@1.0.0/fake-model-large    1/1    {passed: 5, failed: 0}   {passed: 5.0, failed: 0.0}   1/1               0.0    0        9,300           $0.045
 
 ! Agents that didn't end cleanly:
   1-1  timed out after <duration>
+
+* Left out of the aggregate:
+  1-1  tokens  not reported  (absent)
 `);
+  });
+
+  test("<execution> recorded before token costs were has no columns for them", async () => {
+    const { stdout } = await thunderjar(scenario("0203"), ["show", BASELINE]);
+
+    expect(stdout).not.toContain("tokens");
   });
 
   test("<container run> that timed out says so, with how long it ran before it was killed", async () => {
     const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TIMED_OUT, "1-1"]);
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("Duration     10:00\nExit         timed out after <duration>\nResult file  none\n\nReply\n  none  (the agent left no result file)\n\nMeasures\n");
+    expect(stdout).toContain("Duration     10:00\nExit         timed out after <duration>\nResult file  none\n\nReply\n  none  (the agent left no result file)\n\nToken costs\n  none  (absent)\n\nMeasures\n");
   });
 
   test("<container run> recorded with a reply shows it, under the agent's run", async () => {
@@ -174,6 +184,10 @@ Result file  88 bytes
 
 Reply
   I wrote isPrime.ts, and tested it up to 100.
+
+Token costs
+  model                 input  output  cache write  cache read  cost
+  fake-model-large-001  9,000  300     0            0           $0.045
 
 Measures
 `);

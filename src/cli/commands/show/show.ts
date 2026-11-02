@@ -5,12 +5,12 @@ import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadMeasurements, type Measurement } from "../../../config/measurements.ts";
 import { AXES, abbreviateHash } from "../../../config/permutations.ts";
-import type { Reply } from "../../../api/declarations.ts";
+import type { ModelTokenCosts, Reply, TokenCosts } from "../../../api/declarations.ts";
 import { type AggregatedValue, type AggregateMethod, aggregatePermutation } from "../../../execution/aggregate.ts";
 import { type ContainerRunRecord, type ExecutionRecord, fileStore, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath, resolvePath } from "../../dataDir.ts";
-import { agentEnd, endedCleanly, minute, plural } from "../../format.ts";
+import { agentEnd, dollars, endedCleanly, knownCost, minute, plural, thousands, totalTokens } from "../../format.ts";
 
 const GAP = "   ";
 
@@ -62,6 +62,44 @@ function duration(ms: number): string {
 /** A container run's name in its execution: `<permutation>-<iteration>`, as its record's file is named. */
 const runName = ({ permutation, iteration }: ContainerRunRecord) => `${permutation}-${iteration}`;
 
+/** Why a run's token costs weren't collected. */
+const notCollected = (costs: TokenCosts | undefined) =>
+  costs === undefined ? "not recorded" : costs.outcome === "unavailable" ? `not reported  (${costs.reason})` : "";
+
+/**
+ * A permutation's mean tokens and mean cost, over the runs that have them, starred if that leaves
+ * one out: never counting a run without them as zero. A cost only from runs whose cost can be
+ * trusted, and `—` if none's can.
+ */
+function costColumns(runs: ContainerRunRecord[]): [tokens: string, cost: string] {
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const tokens = runs.flatMap(({ tokenCosts }) => totalTokens(tokenCosts) ?? []);
+  const costs = runs.flatMap(({ tokenCosts }) => knownCost(tokenCosts) ?? []);
+  const star = (n: number) => (n < runs.length ? "*" : "");
+  return [
+    tokens.length === 0 ? "not reported" : `${thousands(mean(tokens))}${star(tokens.length)}`,
+    costs.length === 0 ? "—" : `${dollars(mean(costs))}${star(costs.length)}`,
+  ];
+}
+
+/** A run's token costs, a row per model, or why there are none. */
+function tokenCostLines(costs: TokenCosts): string[] {
+  if (costs.outcome === "unavailable") return [`  none  (${costs.reason})`];
+  const cost = ({ costUsd, costBasis }: ModelTokenCosts) =>
+    costUsd === undefined ? "not reported" : costBasis === "unknown" ? `not reported  (its price table doesn't know the model)` : dollars(costUsd);
+  return columns([
+    ["model", "input", "output", "cache write", "cache read", "cost"],
+    ...costs.models.map((model) => [
+      model.model,
+      thousands(model.inputTokens),
+      thousands(model.outputTokens),
+      thousands(model.cacheCreationTokens),
+      thousands(model.cacheReadTokens),
+      cost(model),
+    ]),
+  ]);
+}
+
 /** The axes whose parameter differs between `runs`, or every axis if none does. */
 function varyingAxes(runs: ContainerRunRecord[]) {
   const varying = AXES.filter((axis) => new Set(runs.map(({ parameters }) => parameters[axis].name)).size > 1);
@@ -80,6 +118,8 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
   const methodColumns = measurements.flatMap(({ name, declaration }) => declaration.aggregate.map((method, i) => ({ name, method, first: i === 0 })));
   const numberWidth = String(execution.matrix.permutations).length;
 
+  // Token costs are shown once any run was recorded with them.
+  const withCosts = runs.some(({ tokenCosts }) => tokenCosts !== undefined);
   const rows: string[][] = [];
   const leftOut: string[][] = [];
   const incompatible = new Map<string, Set<string>>();
@@ -101,6 +141,12 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
         if (outcome?.outcome !== "measured") leftOut.push([runName(run), name, showOutcome(outcome)]);
       }
     }
+    const costs = withCosts ? costColumns(own) : [];
+    if (withCosts) {
+      for (const run of own) {
+        if (run.tokenCosts?.outcome !== "collected") leftOut.push([runName(run), "tokens", notCollected(run.tokenCosts)]);
+      }
+    }
     rows.push([
       number,
       axes.map((axis) => first.parameters[axis].name).join(" | "),
@@ -112,10 +158,11 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
         if (value === undefined) return "—";
         return `${showAggregate(method, value, measured)}${measured < own.length ? "*" : ""}`;
       }),
+      ...costs,
     ]);
   }
 
-  const header = ["", axes.join(" | "), "runs", ...methodColumns.map(({ method }) => method)];
+  const header = ["", axes.join(" | "), "runs", ...methodColumns.map(({ method }) => method), ...(withCosts ? ["tokens (mean)", "cost (mean)"] : [])];
   const widths = header.map((cell, i) => Math.max(cell.length, ...rows.map((row) => row[i]?.length ?? 0)));
   // Widen a measurement's last column until its name fits above its methods.
   for (const { name, declaration } of measurements) {
@@ -194,6 +241,7 @@ export function renderContainerRun(record: ContainerRunRecord): string {
     ]),
     "",
     ...(reply === undefined ? [] : ["Reply", ...showReplies(record), ""]),
+    ...(record.tokenCosts === undefined ? [] : ["Token costs", ...tokenCostLines(record.tokenCosts), ""]),
     "Measures",
     ...(names.length === 0 ? ["  none"] : columns(names.map((name) => [name, showOutcome(result[name]!.outcome)]))),
   ].join("\n");

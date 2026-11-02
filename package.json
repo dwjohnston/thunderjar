@@ -19,7 +19,8 @@
   "files": [
     "dist",
     "src/api",
-    "!src/**/*.test.ts"
+    "!src/**/*.test.ts",
+    "!src/**/*.result.json"
   ],
   "publishConfig": {
     "access": "public"

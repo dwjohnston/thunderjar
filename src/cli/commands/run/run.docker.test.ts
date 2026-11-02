@@ -42,9 +42,9 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("run, against real Docker", ()
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
-Building <PREFIX>-prerun:7459d991 ... done
+Building <PREFIX>-prerun:f64ca35b ... done
 Building <PREFIX>-prerun:24b0ab67 ... done
- 1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
+ 1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
       isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
       isPrimeTemplateTest: {passed: 5, failed: 0}   isPrimeTsExists: true   saysArr: false   tsIgnoreCount: 0
@@ -86,7 +86,9 @@ Wrote <DATA>/runs/<ULID>/
     });
 
     // The two fake agents did different things.
-    expect(alpha.harnessResult).toBe('{"model":"fake-model-small-001","reply":"Arr, isPrime.ts be written."}\n');
+    expect(alpha.harnessResult).toStartWith('{"type":"result","result":"Arr, isPrime.ts be written."');
+    expect(alpha.tokenCosts).toMatchObject({ outcome: "collected", models: [{ model: "fake-model-small-001", inputTokens: 12000, costUsd: 0.061 }] });
+    expect(beta.tokenCosts).toEqual({ outcome: "unavailable", reason: "notReported" });
     expect(beta.harnessResult).toBe('{"model":"fake-model-large-001","reply":"I wrote isPrime.ts, and tested it up to 100."}\n');
     expect([alpha.reply, beta.reply]).toEqual([
       { outcome: "collected", text: "Arr, isPrime.ts be written." },
@@ -107,7 +109,7 @@ Wrote <DATA>/runs/<ULID>/
     // A postrun image starts as its prerun image does, rather than running the agent again.
     const config = "{{json .Config.Entrypoint}} {{json .Config.Cmd}}";
     expect(await $`docker image inspect --format ${config} ${alpha.postrunImage}`.text()).toBe(
-      await $`docker image inspect --format ${config} ${PREFIX}-prerun:7459d991`.text(),
+      await $`docker image inspect --format ${config} ${PREFIX}-prerun:f64ca35b`.text(),
     );
 
     // Every container was removed.

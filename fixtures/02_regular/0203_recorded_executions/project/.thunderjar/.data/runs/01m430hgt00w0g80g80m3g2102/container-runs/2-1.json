@@ -47,6 +47,21 @@
     "outcome": "collected",
     "text": "I wrote isPrime.ts, and tested it up to 100."
   },
+  "tokenCosts": {
+    "outcome": "collected",
+    "models": [
+      {
+        "model": "fake-model-large-001",
+        "inputTokens": 9000,
+        "outputTokens": 300,
+        "cacheCreationTokens": 0,
+        "cacheReadTokens": 0,
+        "costUsd": 0.045,
+        "costBasis": "list"
+      }
+    ],
+    "apiDurationMs": 21400
+  },
   "result": {
     "isPrimeTemplateTest": {
       "instrument": "templateTest",

@@ -157,20 +157,31 @@ export function declareHarnessVersions(versions: HarnessVersionsDeclaration): Ha
   return declared("declareHarnessVersions", versions);
 }
 
+/** One model's tokens, in four buckets priced differently, and its cost if the harness reports one. */
 export type ModelTokenCosts = {
   model: string;
   inputTokens: number;
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
+  /** The harness's own estimate, never computed by Thunderjar. Absent if it reports none. */
   costUsd?: number;
+  /** How far to trust `costUsd`: `unknown` when the harness's price table didn't know the model. */
+  costBasis?: "list" | "managed" | "unknown";
 };
 
+/**
+ * A container run's token costs, per model, or why there are none: no result file (`absent`), one
+ * that couldn't be read (`unparseable`), or one that counted nothing (`notReported`).
+ */
 export type TokenCosts =
-  | { outcome: "collected"; models: ModelTokenCosts[] }
+  | { outcome: "collected"; models: ModelTokenCosts[]; /** Time spent waiting on the model, if the harness reports it. */ apiDurationMs?: number }
   | { outcome: "unavailable"; reason: "absent" | "unparseable" | "notReported" };
 
-/** Reads the token costs from what the harness's `cli` wrote to its result path. */
+/**
+ * Reads the token costs from what the harness's `cli` wrote to its result path. Thunderjar calls
+ * it only for a result file that exists, once per turn, and sums them. A throw is `unparseable`.
+ */
 export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: string }) => TokenCosts;
 
 export function declareTokenCostCollector(collector: TokenCostCollector): TokenCostCollector {

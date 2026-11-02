@@ -47,6 +47,10 @@
     "outcome": "unavailable",
     "reason": "the agent left no result file"
   },
+  "tokenCosts": {
+    "outcome": "unavailable",
+    "reason": "absent"
+  },
   "result": {
     "isPrimeTemplateTest": {
       "instrument": "templateTest",

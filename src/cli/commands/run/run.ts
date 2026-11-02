@@ -11,7 +11,7 @@ import { ulid } from "../../../execution/ulid.ts";
 import { executionFolder, fileStore, type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath } from "../../dataDir.ts";
-import { agentEnd } from "../../format.ts";
+import { agentEnd, dollars, knownCost, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
@@ -131,10 +131,14 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
           ` ${ordinal(permutation.number, permutations)}  iteration ${ordinal(iteration.number, testCase.iterations)}  ${label(testCase, permutation)}  ... `,
         );
       },
-      onRan: (_permutation, _iteration, execution, harnessResult) => {
+      onRan: (_permutation, _iteration, { execution, harnessResult, tokenCosts }) => {
         lineOpen = false;
         const ended = agentEnd(execution, harnessResult);
-        console.log(execution.timedOut ? ended : `${ended} (${duration(execution.finishedAt - execution.startedAt)})`);
+        // Its cost if it can be trusted, else its tokens, if it has either.
+        const cost = knownCost(tokenCosts);
+        const tokens = totalTokens(tokenCosts);
+        const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
+        console.log(execution.timedOut ? ended : `${ended} (${duration(execution.finishedAt - execution.startedAt)}${spent})`);
       },
       onMeasured: (permutation, _iteration, result) => {
         // Under the iteration, lined up with it.
