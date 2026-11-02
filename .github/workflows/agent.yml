@@ -1,0 +1,19 @@
+name: Real agent tests
+
+# On demand only: each run spends a few cents on a real model. Needs the DEEPSEEK_API_KEY or
+# ANTHROPIC_API_KEY repository secret. With neither, the tests are skipped.
+on:
+  workflow_dispatch:
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Real agent tests (GitHub's Ubuntu runners have Docker)
+        run: bun run test:agent
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
