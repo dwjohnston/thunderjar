@@ -199,7 +199,7 @@ describe("0201 minimal existing setup", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toBe(`# thunderjar-prerun:e943919c
+    expect(stdout).toBe(`# thunderjar-prerun:cd8a23df
 FROM node:20-bookworm
 WORKDIR /workspace
 RUN echo "install fake-harness-alpha@1.0.0"
@@ -221,7 +221,7 @@ RUN echo "install fake-harness-alpha@1.0.0"
 
     expect(plan.stdout).toContain("(2 permutations)");
     expect(exitCode).toBe(0);
-    expect(stdout.match(/^# .*$/gm)).toEqual(["# thunderjar-prerun:e943919c"]);
+    expect(stdout.match(/^# .*$/gm)).toEqual(["# thunderjar-prerun:cd8a23df"]);
   });
 });
 
