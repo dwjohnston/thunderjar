@@ -39,9 +39,14 @@ export type ExecutionRecord = {
 export type Execution = {
   /** Epoch ms, harness start. */
   startedAt: number;
-  /** Epoch ms, harness exit. */
+  /** Epoch ms, harness exit, or when it was killed if it timed out. */
   finishedAt: number;
-  exitCode: number;
+  /** Null if it never exited: it timed out, and was killed. */
+  exitCode: number | null;
+  /** Whether it was still running after `timeoutSeconds`, and was killed. Absent from runs recorded before timeouts were. */
+  timedOut?: boolean;
+  /** Its initial prompt's limit, in seconds. Absent from runs recorded before timeouts were. */
+  timeoutSeconds?: number;
 };
 
 /** A MeasurementResult as the store keeps it: an error by its message. */

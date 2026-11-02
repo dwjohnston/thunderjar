@@ -63,7 +63,7 @@ Wrote <DATA>/runs/<ULID>/
     expect([alpha.postrunImage, beta.postrunImage]).toEqual([`${PREFIX}-postrun:${id}-1-1`, `${PREFIX}-postrun:${id}-2-1`]);
     for (const record of [alpha, beta]) {
       expect(record.execution.exitCode).toBe(0);
-      expect(JSON.parse(await inImage(record.postrunImage, "cat /thunderjar/run.json"))).toEqual(record.execution);
+      expect(record.execution).toMatchObject(JSON.parse(await inImage(record.postrunImage, "cat /thunderjar/run.json")));
       expect(await inImage(record.postrunImage, "cat /thunderjar/result.json")).toBe((record.harnessResult as string).trim());
       // Nothing measuring wrote, like a rendered test, is in it.
       expect(await inImage(record.postrunImage, "pwd && ls -A")).toBe("/workspace\nFAKE_INSTRUCTIONS.md\nisPrime.ts");
@@ -105,6 +105,31 @@ Wrote <DATA>/runs/<ULID>/
     );
 
     // Every container was removed.
+    expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${PREFIX}-`}`.text())).toEqual([]);
+  }, 600_000);
+
+  test("0204 misbehaving: an agent that times out is killed, and each is committed and measured however it ended", async () => {
+    const data = `${DATA_DIR}/misbehaving`;
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--image-prefix", PREFIX, "--data-dir", data], {
+      docker: "real",
+      paths: { "<PREFIX>": PREFIX, "<DATA>": data },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(1);
+    expect(stdout).toContain(`
+ 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
+      isPrimeTsExists: false
+ 2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (<duration>)
+      isPrimeTsExists: false
+ 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
+      isPrimeTsExists: true
+`);
+    const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: data, onlyFiles: false })];
+    const sleeper = (await Bun.file(`${data}/${executionDir}/container-runs/1-1.json`).json()) as ContainerRunRecord;
+    expect(sleeper.execution).toMatchObject({ exitCode: null, timedOut: true, timeoutSeconds: 2 });
+    // Its postrun image holds the wrapper's start, all it wrote before it was killed.
+    expect(Object.keys(JSON.parse(await inImage(sleeper.postrunImage, "cat /thunderjar/run.json")))).toEqual(["startedAt"]);
     expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${PREFIX}-`}`.text())).toEqual([]);
   }, 600_000);
 

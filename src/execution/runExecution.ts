@@ -2,9 +2,9 @@
 // iteration of every permutation, in plan's order, runs in a container (see containerRun.ts),
 // and is recorded in the run data store as soon as it finishes, so the runs that finished
 // before a crash are kept. Then the task's measurements are taken of it, each in a measurement
-// container from its postrun image, and recorded with it. An agent exiting non-zero is a
-// result, not an error: it's recorded and measured, and the rest still run, but the execution
-// is `failed`.
+// container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
+// for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
+// recorded and measured, and the rest still run, but the execution is `failed`.
 import type { TestCaseDeclaration } from "../api/declarations.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
@@ -26,8 +26,11 @@ import { buildPrerunImages, type PrerunBuildHooks } from "./prerunBuilds.ts";
 export type RunHooks = PrerunBuildHooks & {
   /** Called as each iteration's container run starts. */
   onRunning?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
-  /** Called as each iteration's container run finishes, however its agent exited. */
-  onRan?: (permutation: PlannedPermutation, iteration: PlannedIteration, execution: Execution) => void;
+  /**
+   * Called as each iteration's container run finishes, however its agent exited, or if it timed
+   * out, with the text of its result file, or null if it left none.
+   */
+  onRan?: (permutation: PlannedPermutation, iteration: PlannedIteration, execution: Execution, harnessResult: string | null) => void;
   /** Called once each container run's measures are taken, if the task has any measurements. */
   onMeasured?: (permutation: PlannedPermutation, iteration: PlannedIteration, result: Record<string, RecordedMeasure>) => void;
 };
@@ -113,12 +116,14 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
           command: iteration.command,
           env: permutation.env,
           prompt: permutation.prompt,
+          timeoutSeconds: permutation.timeoutSeconds,
           container,
         });
         const record = containerRunRecord(run, permutation, iteration, execution, harnessResult);
         await store.recordContainerRun(record);
+        // Timed out, its exit code is null.
         if (execution.exitCode !== 0) status = "failed";
-        hooks.onRan?.(permutation, iteration, execution);
+        hooks.onRan?.(permutation, iteration, execution, harnessResult);
 
         if (measurements.length === 0) continue;
         let opened = 0;

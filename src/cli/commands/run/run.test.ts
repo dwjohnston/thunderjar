@@ -239,7 +239,7 @@ Wrote <DATA>/runs/<ULID>/
         initialPrompt: { name: "plain", parameterHash: SHA },
       },
       harnessModel: { harness: "fake-harness-alpha", version: "1.0.0", model: "fake-model-small", modelId: "fake-model-small-001" },
-      execution: { startedAt: expect.any(Number), finishedAt: expect.any(Number), exitCode: 0 },
+      execution: { startedAt: expect.any(Number), finishedAt: expect.any(Number), exitCode: 0, timedOut: false, timeoutSeconds: 600 },
       harnessResult: '{"model":"fake-model-small-001"}\n',
       result: {
         isPrimeTemplateTest: measured("templateTest", { passed: 3, failed: 2 }),
@@ -407,7 +407,7 @@ export default declareHarness({ cli: () => "echo partial > isPrime.ts && exit 3"
     expect(stderr).toBe("");
     expect(exitCode).toBe(1);
     expect(stdout).toEndWith(`
- 1/2  iteration 1/1  fake-harness-alpha | plain  ... failed (exit 3)
+ 1/2  iteration 1/1  fake-harness-alpha | plain  ... exited 3, no result file (<duration>)
       isPrimeTemplateTest: erroredWhileMeasuring (isPrime.ts has no export to bind {{defaultExport}} to)   isPrimeTsExists: true   tsIgnoreCount: 0
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
 ${BETA_MEASURES}
@@ -448,7 +448,7 @@ export default declareHarness({ cli: () => "true" });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
+    expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done, no result file (<duration>)
       isPrimeTemplateTest: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   tsIgnoreCount: skipped (no file matches **/*.ts)
 Wrote <DATA>/runs/<ULID>/
 `);
@@ -577,6 +577,44 @@ export default declareTestCase({
     expect(exitCode).toBe(0);
     expect(stdout).not.toContain("env:");
   });
+});
+
+describe("0204 misbehaving agents", () => {
+  test("an agent that times out is killed, and one that exits non-zero or leaves no result file is marked, each measured all the same", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data], {
+      env: docker.env,
+      paths: { "<DATA>": data },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(1);
+    expect(stdout).toEndWith(`
+ 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
+      isPrimeTsExists: false
+ 2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (<duration>)
+      isPrimeTsExists: false
+ 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
+      isPrimeTsExists: true
+Wrote <DATA>/runs/<ULID>/
+`);
+    const store = await readStore(data);
+    expect(store.execution.status).toBe("failed");
+    const [sleeper, crasher, silent] = store.containerRuns as [ContainerRunRecord, ContainerRunRecord, ContainerRunRecord];
+    expect(sleeper.execution).toMatchObject({ exitCode: null, timedOut: true, timeoutSeconds: 2 });
+    // Killed at its timeout, not left to sleep out its 300s.
+    expect(sleeper.execution.finishedAt - sleeper.execution.startedAt).toBeLessThan(10_000);
+    expect(sleeper.harnessResult).toBeNull();
+    expect(crasher.execution).toMatchObject({ exitCode: 1, timedOut: false });
+    expect(crasher.harnessResult).toBe('{"error":"crashed"}\n');
+    expect(silent.execution).toMatchObject({ exitCode: 0, timedOut: false });
+    expect(silent.harnessResult).toBeNull();
+    // Each was committed, and removed.
+    expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
+    expect(await docker.containers()).toEqual([]);
+  }, 30_000);
 });
 
 describe("0201 minimal existing setup", () => {

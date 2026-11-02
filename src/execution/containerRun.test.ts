@@ -45,11 +45,27 @@ describe("the execution wrapper's now_ms", () => {
 
 describe("parseExecution", () => {
   test("reads the wrapper's run.json", () => {
-    expect(parseExecution('{"startedAt":1793499264123,"finishedAt":1793499265000,"exitCode":3}\n')).toEqual({
+    expect(parseExecution('{"startedAt":1793499264123,"finishedAt":1793499265000,"exitCode":3}\n', 600)).toEqual({
       startedAt: 1793499264123,
       finishedAt: 1793499265000,
       exitCode: 3,
+      timedOut: false,
+      timeoutSeconds: 600,
     });
+  });
+
+  test("a run killed for timing out has only its start, and finished when it was killed", () => {
+    expect(parseExecution('{"startedAt":1793499264123}\n', 5, 1793499269200)).toEqual({
+      startedAt: 1793499264123,
+      finishedAt: 1793499269200,
+      exitCode: null,
+      timedOut: true,
+      timeoutSeconds: 5,
+    });
+  });
+
+  test("a run that wasn't killed must have finished", () => {
+    expect(() => parseExecution('{"startedAt":1793499264123}\n', 5)).toThrow(DockerContainerError);
   });
 
   test.each([
@@ -57,10 +73,11 @@ describe("parseExecution", () => {
     ["a literal %3N", '{"startedAt":1793499260%3N,"finishedAt":1793499261%3N,"exitCode":0}'],
     ["a missing exit code", '{"startedAt":1793499264123,"finishedAt":1793499265000}'],
   ])("rejects %s", (_, text) => {
-    expect(() => parseExecution(text)).toThrow(DockerContainerError);
+    expect(() => parseExecution(text, 600)).toThrow(DockerContainerError);
   });
 
   test("rejects a missing run.json", () => {
-    expect(() => parseExecution(undefined)).toThrow(DockerContainerError);
+    expect(() => parseExecution(undefined, 600)).toThrow(DockerContainerError);
+    expect(() => parseExecution(undefined, 600, 1793499269200)).toThrow(DockerContainerError);
   });
 });

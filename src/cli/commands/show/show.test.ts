@@ -1,5 +1,5 @@
 // `thunderjar show`, through the CLI. It only reads the store, so it runs on the scenarios
-// unchanged: 0203 has a run data store checked in, of three executions. Stores changed for a test
+// unchanged: 0203 has a run data store checked in, of four executions. Stores changed for a test
 // are copied to a temporary `--data-dir`, never changed in the scenario. Any of these can be run
 // by hand, e.g. `bun run fixture 0203 show 01m3vf68s54p5eyn5s3t1ygkdj`.
 import { afterEach, describe, expect, test } from "bun:test";
@@ -13,6 +13,8 @@ const BASELINE = "01m3vf68s54p5eyn5s3t1ygkdj";
 const TWO_HARNESSES = "01m3ygz4g89aqh8yey8em0twpq";
 /** Example: running, with no container runs yet. */
 const RUNNING = "01m40g5972dza3k7g3d36k55zw";
+/** Two-harnesses: failed, fake-harness-alpha's run timed out after 600s. */
+const TIMED_OUT = "01m430hgt00w0g80g80m3g2102";
 
 const dirs: string[] = [];
 
@@ -73,6 +75,9 @@ Matrix     2 permutations × 1 iteration
  1   fake-harness-alpha@1.0.0/fake-model-small   1/1    {passed: 3, failed: 2}   {passed: 3.0, failed: 2.0}   1/1               1.0    1
  2   fake-harness-beta@1.0.0/fake-model-large    1/1    —                        —                            0/1               —      —
 
+! Agents that didn't end cleanly:
+  2-1  exited 3, no result file
+
 * Left out of the aggregate:
   2-1  isPrimeTemplateTest  skipped  (no file matches **/isPrime.ts)
   2-1  tsIgnoreCount        skipped  (no file matches **/*.ts)
@@ -113,10 +118,11 @@ Parameters
   harnessModel   fake-harness-alpha@1.0.0/fake-model-small  7cf14b84
   initialPrompt  terse                                      4bd07001
 
-Harness    fake-harness-alpha 1.0.0
-Model      fake-model-small  (fake-model-small-001)
-Duration   0:32
-Exit code  0
+Harness      fake-harness-alpha 1.0.0
+Model        fake-model-small  (fake-model-small-001)
+Duration     0:32
+Exit         0
+Result file  33 bytes
 
 Measures
   isPrimeTemplateTest  skipped  (no file matches **/isPrime.ts)
@@ -135,7 +141,27 @@ Measures
     expect(errored).toContain(
       "  isPrimeTemplateTest  errored while measuring  (isPrime.ts has 2 exports (isPrime, isComposite); {{defaultExport}} binds to a single one)\n",
     );
-    expect(failed).toContain("Exit code  3\n");
+    expect(failed).toContain("Exit         3\nResult file  none\n");
+  });
+
+  test("<execution> with a run that timed out lists it below the table, measured all the same", async () => {
+    const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TIMED_OUT]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith(`
+ 1   fake-harness-alpha@1.0.0/fake-model-small   1/1    {passed: 3, failed: 2}   {passed: 3.0, failed: 2.0}   1/1               1.0    1
+ 2   fake-harness-beta@1.0.0/fake-model-large    1/1    {passed: 5, failed: 0}   {passed: 5.0, failed: 0.0}   1/1               0.0    0
+
+! Agents that didn't end cleanly:
+  1-1  timed out after <duration>
+`);
+  });
+
+  test("<container run> that timed out says so, with how long it ran before it was killed", async () => {
+    const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TIMED_OUT, "1-1"]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Duration     10:00\nExit         timed out after <duration>\nResult file  none\n");
   });
 
   test("<container run> can be its postrun image", async () => {
@@ -171,6 +197,9 @@ Measures
      baseImage | codeState | promptSet | harnessModel | initialPrompt               runs   sum   mean            rate              mean   max
  1   no container runs
  2   node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large | plain   1/1    —     —               0/1               —      —
+
+! Agents that didn't end cleanly:
+  2-1  exited 3, no result file
 
 * Left out of the aggregate:
   2-1  isPrimeTemplateTest  skipped  (no file matches **/isPrime.ts)
