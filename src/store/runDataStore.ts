@@ -10,7 +10,7 @@
 // Every file is pretty JSON, written whole to a temporary file then renamed over the old one,
 // so an interrupted write leaves the previous contents rather than half a file.
 import { $, Glob } from "bun";
-import type { Reply } from "../api/declarations.ts";
+import type { Reply, TokenCosts } from "../api/declarations.ts";
 import type { Axis } from "../config/permutations.ts";
 
 /** `running` until its last container run finishes, or if it was interrupted. */
@@ -94,6 +94,12 @@ export type ContainerRunRecord = {
   harnessResult: string | null;
   /** The agent's final reply, read from the result file by its harness's `collectReply`, or why there's none. Absent from runs recorded before replies were. */
   reply?: Reply;
+  /**
+   * Its tokens and cost per model, read from its result files by its harness's
+   * `collectTokenCosts`, summed across turns, or why there are none. Absent from runs recorded
+   * before token costs were.
+   */
+  tokenCosts?: TokenCosts;
   /** The session ID its turns shared. Absent from runs recorded before sessions were. */
   sessionId?: string;
   /**

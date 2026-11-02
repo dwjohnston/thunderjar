@@ -1,5 +1,3 @@
-import { declareTokenCostCollector } from "thunderjar";
+import { claudeCodeTokenCosts, declareTokenCostCollector } from "thunderjar";
 
-export default declareTokenCostCollector((_raw, _ctx) => {
-  return { outcome: "unavailable", reason: "notReported" };
-});
+export default declareTokenCostCollector((raw) => claudeCodeTokenCosts(raw));

@@ -1,5 +1,6 @@
 // The `thunderjar` library: what a project's `.thunderjar/` files import.
 export { checkoutCommit } from "./checkoutCommit.ts";
+export { claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
 export {
   declareBaseImage,
   declareCodeState,
@@ -33,6 +34,7 @@ export type {
   MeasurementContext,
   MeasurementDeclaration,
   MeasurementResult,
+  ModelTokenCosts,
   PromptSetDeclaration,
   Reply,
   SqliteStore,
