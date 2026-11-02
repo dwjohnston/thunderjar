@@ -9,7 +9,7 @@ import {
   runContainer,
 } from "../docker/docker.ts";
 import type { Execution } from "../store/runDataStore.ts";
-import { RESULT_PATH } from "./planExecution.ts";
+import { PROMPT_PATH, RESULT_PATH } from "./planExecution.ts";
 
 /** Where, inside the container, the execution wrapper records how the agent ran. */
 export const RUN_PATH = "/thunderjar/run.json";
@@ -33,12 +33,14 @@ export const NOW_MS_FUNCTION = [
 ].join("\n");
 
 /**
- * The execution wrapper: runs `command` and writes when it started and finished (ms since the
- * epoch) and how it exited to RUN_PATH, which is committed into the postrun image with the rest.
+ * The execution wrapper: writes `prompt` to PROMPT_PATH, exactly, runs `command`, and writes when
+ * it started and finished (ms since the epoch) and how it exited to RUN_PATH, which is committed
+ * into the postrun image with the rest.
  */
-export const executionWrapper = (command: string) =>
+export const executionWrapper = (command: string, prompt: string) =>
   [
     "mkdir -p /thunderjar",
+    `printf '%s' ${shellQuote(prompt)} > ${PROMPT_PATH}`,
     NOW_MS_FUNCTION,
     "start=$(now_ms)",
     `sh -c ${shellQuote(command)}`,
@@ -54,6 +56,8 @@ export type ContainerRun = {
   command: string;
   /** The names of the environment variables passed into the container, from Thunderjar's own. */
   env: string[];
+  /** The initial prompt, written to PROMPT_PATH before `command` runs. */
+  prompt: string;
   /** The container's name. */
   container: string;
 };
@@ -89,7 +93,7 @@ export function parseExecution(text: string | undefined): Execution {
  */
 export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
   try {
-    await runContainer(run.prerunImage, run.container, executionWrapper(run.command), run.env);
+    await runContainer(run.prerunImage, run.container, executionWrapper(run.command, run.prompt), run.env);
     const execution = parseExecution(await readContainerFile(run.container, RUN_PATH));
     const harnessResult = (await readContainerFile(run.container, RESULT_PATH)) ?? null;
     await commitContainer(run.container, run.postrunImage, run.prerunImage);

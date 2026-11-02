@@ -112,6 +112,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
           postrunImage: iteration.postrunImage,
           command: iteration.command,
           env: permutation.env,
+          prompt: permutation.prompt,
           container,
         });
         const record = containerRunRecord(run, permutation, iteration, execution, harnessResult);

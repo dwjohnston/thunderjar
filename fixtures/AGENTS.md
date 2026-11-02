@@ -101,9 +101,10 @@ bun run fixture 0202 plan is-prime-baseline
     - Prompt sets `snerk` and `glurk`, each writing its own `FAKE_INSTRUCTIONS.md`.
     - A second fake agent, `fake-harness-beta`, version `1.0.0`, models `fake-model-small` and `fake-model-large`. It writes a correct `isPrime.ts`, where alpha's is buggy.
     - `fake-harness-alpha` needs `FAKE_HARNESS_KEY` (`requiredEnv`), so `plan` and `run` of its test cases stop without it: `FAKE_HARNESS_KEY=x bun run fixture 0202 plan example`. Both fake agents write `set` to `/thunderjar/fake-harness-key` if they see it, or an empty line if not, never its value.
+    - A third fake agent, `fake-echo`, version `1.0.0`, model `fake-model-small`, which only copies the prompt file it's given into its result file.
     - Base image `node20` installs `bun`, which the `templateTest` instrument runs its tests with.
-    - Task `is-prime` has a second initial prompt, `terse`, and two more measurements: `isPrimeTemplateTest`, a `templateTest` of `isPrime.test.template.ts` (5 tests; alpha's `isPrime.ts` passes 3 and fails 2, beta's passes all 5), and `tsIgnoreCount`, a `grep` for `@ts-ignore` (alpha's has 1, beta's none).
-    - Test cases: `example`, and `is-prime-baseline`: both prompt sets, `fake-harness-alpha@1.0.0/fake-model-small` and `fake-harness-beta@1.0.0/fake-model-large`, both initial prompts, 5 iterations. Matrix shape 1/1/2/2/2.
+    - Task `is-prime` has two more initial prompts, `terse`, and `awkward`, two lines full of shell syntax: quotes, `$HOME`, backticks, a backslash and `%`. It has two more measurements: `isPrimeTemplateTest`, a `templateTest` of `isPrime.test.template.ts` (5 tests; alpha's `isPrime.ts` passes 3 and fails 2, beta's passes all 5), and `tsIgnoreCount`, a `grep` for `@ts-ignore` (alpha's has 1, beta's none).
+    - Test cases: `example`, and `is-prime-baseline`: both prompt sets, `fake-harness-alpha@1.0.0/fake-model-small` and `fake-harness-beta@1.0.0/fake-model-large`, `plain` and `terse`, 5 iterations. Matrix shape 1/1/2/2/2. `two-harnesses`: alpha and beta, one iteration each. `quoting`: `fake-echo` with `awkward`.
   - `0203_recorded_executions`: `0202_typical_project`, with a run data store checked in at `.thunderjar/.data/`, as if three executions had already run. Fixed execution IDs and timestamps, in UTC.
     - `.thunderjar/.gitignore` ignores `.data/`, so its files are force-added.
     - `01m3vf68s54p5eyn5s3t1ygkdj`: `is-prime-baseline`, started 2026-10-01 10:12, complete. All 40 container runs, 8 permutations × 5 iterations, every agent exiting 0.
