@@ -57,7 +57,8 @@ export type ContainerStop = { timedOut: false } | { timedOut: true; /** Epoch ms
  * Runs `script` with `sh -c`, in place of the image's entrypoint, in a new container `name` from
  * the local image `image`, and leaves the container once it stops. Its output is discarded. Each
  * variable named in `env` is passed in with `-e NAME`, so Docker copies its value from Thunderjar's
- * own environment, and the value is never on a command line.
+ * own environment, and the value is never on a command line. `runOptions` are more `docker run`
+ * options, before the image.
  *
  * If it's still running after `timeoutSeconds`, it's killed with `docker kill`, which stops every
  * process in it, whatever the image has installed, and it's left stopped, like one that finished.
@@ -67,12 +68,11 @@ export async function runContainer(
   image: string,
   name: string,
   script: string,
-  env: string[] = [],
-  timeoutSeconds?: number,
+  { env = [], runOptions = [], timeoutSeconds }: { env?: string[]; runOptions?: string[]; timeoutSeconds?: number } = {},
 ): Promise<ContainerStop> {
   const binary = dockerBinary();
   const passed = env.flatMap((variable) => ["-e", variable]);
-  const args = ["run", "--name", name, "--pull", "never", ...passed, "--entrypoint", "sh", image, "-c", script];
+  const args = ["run", "--name", name, "--pull", "never", ...passed, ...runOptions, "--entrypoint", "sh", image, "-c", script];
   const child = Bun.spawn([binary, ...args], { env: { ...Bun.env }, stdin: "ignore", stdout: "ignore", stderr: "pipe" });
   let killing: Promise<number | undefined> | undefined;
   const timer =
