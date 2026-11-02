@@ -5,7 +5,7 @@
 // container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
 // recorded and measured, and the rest still run, but the execution is `failed`.
-import type { TestCaseDeclaration } from "../api/declarations.ts";
+import type { Reply, TestCaseDeclaration } from "../api/declarations.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
 import type {
@@ -19,7 +19,8 @@ import type {
 import { runInContainer } from "./containerRun.ts";
 import { containerName } from "./images.ts";
 import { measureContainerRun } from "./measure.ts";
-import { openMeasurementContext } from "./measurementContext.ts";
+import { openMeasurementContext, recordedContext } from "./measurementContext.ts";
+import { collectReply } from "./reply.ts";
 import type { PlannedExecution, PlannedIteration, PlannedPermutation } from "./planExecution.ts";
 import { buildPrerunImages, type PrerunBuildHooks } from "./prerunBuilds.ts";
 
@@ -52,6 +53,7 @@ function containerRunRecord(
   iteration: PlannedIteration,
   execution: Execution,
   harnessResult: string | null,
+  reply: Reply,
 ): ContainerRunRecord {
   const { harness, version, model } = parsePair(permutation.harnessModel);
   return {
@@ -69,6 +71,7 @@ function containerRunRecord(
     harnessModel: { harness, version, model, modelId: permutation.modelId },
     execution,
     harnessResult,
+    reply,
     result: {},
   };
 }
@@ -119,7 +122,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
           timeoutSeconds: permutation.timeoutSeconds,
           container,
         });
-        const record = containerRunRecord(run, permutation, iteration, execution, harnessResult);
+        const reply = collectReply(permutation.collectReply, harnessResult);
+        const record = containerRunRecord(run, permutation, iteration, execution, harnessResult, reply);
         await store.recordContainerRun(record);
         // Timed out, its exit code is null.
         if (execution.exitCode !== 0) status = "failed";
@@ -127,7 +131,10 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
 
         if (measurements.length === 0) continue;
         let opened = 0;
-        const open = () => openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, harnessResult ?? "");
+        const open = async (usesContainer: boolean) =>
+          usesContainer
+            ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, harnessResult ?? "", reply)
+            : recordedContext(harnessResult ?? "", reply);
         const result = await measureContainerRun(measurements, open);
         await store.recordContainerRun({ ...record, result });
         hooks.onMeasured?.(permutation, iteration, result);

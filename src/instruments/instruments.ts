@@ -16,6 +16,11 @@ export type Instrument<Config, Value> = {
    * they hold, and `evaluate` is given them as absolute paths on the host.
    */
   bundledFiles?: readonly (keyof Config & string)[];
+  /**
+   * False for an instrument that only reads what was recorded of the run, like its reply, so no
+   * measurement container is started for it.
+   */
+  usesContainer?: false;
 };
 
 const show = (value: unknown) => JSON.stringify(value) ?? String(value);
@@ -54,19 +59,35 @@ export const grep: Instrument<{ glob: string; pattern: string }, number> = {
   },
   checkConfig(config) {
     const { glob, pattern } = (config ?? {}) as { glob?: unknown; pattern?: unknown };
-    const problems = checkString("config.glob", glob, "a glob pattern");
-    if (typeof pattern !== "string") {
-      problems.push(["config.pattern", `must be a JavaScript regular expression, got ${show(pattern)}`]);
-    } else {
-      try {
-        new RegExp(pattern);
-      } catch (error) {
-        const reason = (error as Error).message.replace(/^Invalid regular expression: /, "");
-        problems.push(["config.pattern", `${show(pattern)} is not a valid regular expression: ${reason}`]);
-      }
-    }
-    return problems;
+    return [...checkString("config.glob", glob, "a glob pattern"), ...checkPattern(pattern)];
   },
+};
+
+/** Why `pattern` isn't a JavaScript regular expression, as a config problem, if it isn't one. */
+function checkPattern(pattern: unknown): [string, string][] {
+  if (typeof pattern !== "string") return [["config.pattern", `must be a JavaScript regular expression, got ${show(pattern)}`]];
+  try {
+    new RegExp(pattern);
+    return [];
+  } catch (error) {
+    const reason = (error as Error).message.replace(/^Invalid regular expression: /, "");
+    return [["config.pattern", `${show(pattern)} is not a valid regular expression: ${reason}`]];
+  }
+}
+
+/**
+ * Whether the agent's final reply, from its harness's `collectReply`, matches `pattern`.
+ * `skipped`, saying why, when the run has no reply.
+ */
+export const replyMatches: Instrument<{ pattern: string }, boolean> = {
+  async evaluate({ pattern }, ctx) {
+    if (ctx.reply.outcome !== "collected") return { outcome: "skipped", reason: `no reply: ${ctx.reply.reason}` };
+    return { outcome: "measured", data: new RegExp(pattern).test(ctx.reply.text) };
+  },
+  checkConfig(config) {
+    return checkPattern((config as { pattern?: unknown } | undefined)?.pattern);
+  },
+  usesContainer: false,
 };
 
 /** `text` as one `sh` word. */
@@ -186,13 +207,14 @@ export const templateTest: Instrument<{ subject: string; template: string }, { p
 /** Every built-in instrument, by the name a measurement gives as its `instrument`. */
 export const instruments: {
   [I in InstrumentName]: Instrument<InstrumentTypes[I]["config"], InstrumentTypes[I]["value"]>;
-} = { fileCreated, grep, templateTest };
+} = { fileCreated, grep, templateTest, replyMatches };
 
 /** The ways each instrument's values can combine: AggregateFor, at runtime, to check a measurement with. */
 export const aggregateMethods: { [I in InstrumentName]: readonly AggregateFor<InstrumentTypes[I]["value"]>[] } = {
   fileCreated: ["rate", "count"],
   grep: ["mean", "median", "min", "max", "sum"],
   templateTest: ["sum", "mean"],
+  replyMatches: ["rate", "count"],
 };
 
 export const isInstrumentName = (name: unknown): name is InstrumentName => typeof name === "string" && Object.hasOwn(instruments, name);

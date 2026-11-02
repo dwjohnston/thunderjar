@@ -12,7 +12,7 @@ describe("loadMeasurements", () => {
   test("loads each measurement of the task, named by its file, sorted, leaving out the files that come with them", async () => {
     const measurements = await loadMeasurements(root, "is-prime");
 
-    expect(measurements.map(({ name }) => name)).toEqual(["isPrimeTemplateTest", "isPrimeTsExists", "tsIgnoreCount"]);
+    expect(measurements.map(({ name }) => name)).toEqual(["isPrimeTemplateTest", "isPrimeTsExists", "saysArr", "tsIgnoreCount"]);
     expect(measurements[1]).toEqual({
       name: "isPrimeTsExists",
       declaration: { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] },
