@@ -17,7 +17,8 @@
 // `run` runs the container's script on the host, with /workspace and /thunderjar in it mapped to
 // the container's root/, and root/workspace its working directory. Its environment is only the
 // variables passed with `-e NAME`, from the fake's own, beside PATH and HOME, as a container sees
-// only what it's given. A built image's container
+// only what it's given. While it runs, `kill` stops it, and everything it started, as if the
+// container had been killed. A built image's container
 // starts empty: nothing of the image is in it. A committed image's starts with the files of the
 // container it was committed from. So a fake harness's `cli` really runs, its result file is
 // really read, and what it left is in its postrun image. `run --detach` starts a container
@@ -167,14 +168,19 @@ if (import.meta.main) {
       console.log(crypto.randomUUID().replaceAll("-", ""));
     } else {
       const passed = Object.fromEntries(env.flatMap((variable) => (Bun.env[variable] === undefined ? [] : [[variable, Bun.env[variable] as string]])));
-      const result = await inContainer(container, ["sh", "-c", script], undefined, {
-        PATH: Bun.env.PATH ?? "/usr/bin:/bin",
-        HOME: `${container}/root`,
-        ...passed,
+      const mapped = script.replace(/\/(workspace|thunderjar)\b/g, (_, folder: string) => `${container}/root/${folder}`);
+      const child = Bun.spawn(["sh", "-c", mapped], {
+        cwd: `${container}/root/workspace`,
+        env: { PATH: Bun.env.PATH ?? "/usr/bin:/bin", HOME: `${container}/root`, ...passed },
+        stdin: "ignore",
+        stdout: "inherit",
+        stderr: "inherit",
       });
-      process.stdout.write(result.stdout);
-      process.stderr.write(result.stderr);
-      process.exit(result.exitCode);
+      await Bun.write(`${container}/pid`, String(child.pid));
+      const exitCode = await child.exited;
+      await $`rm -f ${container}/pid`.quiet();
+      // Killed, it exits as Docker reports a killed container: 128 + SIGKILL.
+      process.exit(child.signalCode ? 137 : exitCode);
     }
   } else if (command === "exec") {
     // docker exec [--interactive] --workdir <dir> <name> <command…>
@@ -205,6 +211,18 @@ if (import.meta.main) {
     if ((await list("failing")).includes(image)) fail(`Error response from daemon: failed to commit ${name} as ${image}`);
     await $`mkdir -p ${filesystemOf(image)} && cp -R ${dir}/containers/${name}/root/. ${filesystemOf(image)}`.quiet();
     await Bun.write(state("images"), lines([...(await list("images")), image]));
+  } else if (command === "kill" && rest.length === 0) {
+    // docker kill <name>
+    const pidFile = state(`containers/${subcommand}/pid`);
+    if (!dir || !(await pidFile.exists())) fail(`Error response from daemon: cannot kill container: ${subcommand}: container is not running`);
+    // The script's process, and every process under it.
+    const tree = async (pid: string): Promise<string[]> => {
+      const children = (await $`pgrep -P ${pid}`.quiet().nothrow().text()).split("\n").filter(Boolean);
+      return [pid, ...(await Promise.all(children.map(tree))).flat()];
+    };
+    const pids = await tree((await pidFile.text()).trim());
+    await $`kill -KILL ${pids}`.quiet().nothrow();
+    console.log(subcommand);
   } else if (command === "rm" && subcommand === "--force" && rest.length === 1) {
     // docker rm --force <name>
     if (dir) await $`rm -rf ${dir}/containers/${rest[0] as string}`.quiet();

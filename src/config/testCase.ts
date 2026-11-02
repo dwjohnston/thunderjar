@@ -107,7 +107,13 @@ class TestCaseChecker {
     for (const name of initialPrompts) {
       const prompt = `${PARAMETERS}/tasks/${task}/initial-prompts/${name}.ts`;
       if (await existsIn(this.root, prompt)) {
-        await loadDeclaration(this.root, prompt, "declareInitialPrompt", this.problems);
+        const declaration = (await loadDeclaration(this.root, prompt, "declareInitialPrompt", this.problems)) as
+          | Record<string, unknown>
+          | undefined;
+        const timeout = declaration?.timeoutSeconds;
+        if (declaration && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0)) {
+          this.problems.push({ file: prompt, field: "timeoutSeconds", message: `must be a number of seconds above 0, got ${show(timeout)}` });
+        }
         continue;
       }
       const owner = new Bun.Glob(`${PARAMETERS}/tasks/*/initial-prompts/${name}.ts`).scanSync({ cwd: this.root }).next()

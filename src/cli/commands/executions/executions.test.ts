@@ -1,5 +1,5 @@
 // `thunderjar executions`, through the CLI. It only reads the store, so it runs on the scenarios
-// unchanged: 0203 has a run data store checked in, of three executions. Stores that are empty or
+// unchanged: 0203 has a run data store checked in, of four executions. Stores that are empty or
 // corrupt are made in a temporary `--data-dir`, never in a scenario. Any of these can be run by
 // hand, e.g. `bun run fixture 0203 executions two-harnesses`.
 import { afterEach, describe, expect, test } from "bun:test";
@@ -23,7 +23,8 @@ afterEach(async () => {
 describe("0203 recorded executions", () => {
   test("every execution, newest first, with its test case, when it started, its matrix and its status", async () => {
     expect(await thunderjar(scenario("0203"), ["executions"])).toEqual({
-      stdout: `<ULID>  example            2026-10-03 09:05  1 permutation × 1 iteration    running
+      stdout: `<ULID>  two-harnesses      2026-10-04 08:30  2 permutations × 1 iteration   failed
+<ULID>  example            2026-10-03 09:05  1 permutation × 1 iteration    running
 <ULID>  two-harnesses      2026-10-02 14:40  2 permutations × 1 iteration   failed
 <ULID>  is-prime-baseline  2026-10-01 10:12  8 permutations × 5 iterations  complete
 `,
@@ -36,6 +37,7 @@ describe("0203 recorded executions", () => {
     const { stdout } = await $`bun ${import.meta.dir}/../../index.ts executions`.cwd(scenario("0203")).quiet();
 
     expect(stdout.toString().match(/^\w{26}/gm)).toEqual([
+      "01m430hgt00w0g80g80m3g2102",
       "01m40g5972dza3k7g3d36k55zw",
       "01m3ygz4g89aqh8yey8em0twpq",
       "01m3vf68s54p5eyn5s3t1ygkdj",
@@ -44,7 +46,7 @@ describe("0203 recorded executions", () => {
 
   test("<test case>: only that test case's executions", async () => {
     expect(await thunderjar(scenario("0203"), ["executions", "two-harnesses"])).toEqual({
-      stdout: "<ULID>  two-harnesses  2026-10-02 14:40  2 permutations × 1 iteration  failed\n",
+      stdout: "<ULID>  two-harnesses  2026-10-04 08:30  2 permutations × 1 iteration  failed\n<ULID>  two-harnesses  2026-10-02 14:40  2 permutations × 1 iteration  failed\n",
       stderr: "",
       exitCode: 0,
     });
@@ -70,7 +72,7 @@ describe("0203 recorded executions", () => {
     const store = `${scenario("0203")}/.thunderjar/.data`;
 
     expect(await thunderjar(TMP_DIR, ["executions", "two-harnesses", "--data-dir", store])).toEqual({
-      stdout: "<ULID>  two-harnesses  2026-10-02 14:40  2 permutations × 1 iteration  failed\n",
+      stdout: "<ULID>  two-harnesses  2026-10-04 08:30  2 permutations × 1 iteration  failed\n<ULID>  two-harnesses  2026-10-02 14:40  2 permutations × 1 iteration  failed\n",
       stderr: "",
       exitCode: 0,
     });

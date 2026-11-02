@@ -292,6 +292,11 @@ describe("0402 broken declarations", () => {
       [`${measurement("invalid-regex/measurements/tsIgnoreCount.ts")}: config.pattern: "@ts-ignore(" is not a valid regular expression: missing )`],
     ],
     [
+      "an initial prompt with no time to run in",
+      "zero-timeout",
+      [`${parameter("tasks/is-prime/initial-prompts/untimed.ts")}: timeoutSeconds: must be a number of seconds above 0, got 0`],
+    ],
+    [
       "a harness whose requiredEnv isn't a list of variable names",
       "bad-required-env",
       [`${parameter("harnessModels/fake-harness-bad-env/index.ts")}: requiredEnv: "API KEY", 3 are not environment variable names`],

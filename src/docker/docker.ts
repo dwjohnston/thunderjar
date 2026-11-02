@@ -16,7 +16,7 @@ export class DockerContainerError extends Error {}
 const dockerBinary = () => Bun.env.THUNDERJAR_DOCKER || "docker";
 
 /** The last line of a failed command's stderr: where Docker puts its reason. */
-const reasonOf = (stderr: Buffer) => stderr.toString().trim().split("\n").at(-1);
+const reasonOf = (stderr: { toString(): string }) => stderr.toString().trim().split("\n").at(-1);
 
 /**
  * Builds the Dockerfile at the root of the build context `contextDir`, and tags the image `image`.
@@ -50,16 +50,50 @@ async function mustRun(args: string[]): Promise<string> {
   return result.stdout.toString();
 }
 
+/** How a container run by `runContainer` stopped. */
+export type ContainerStop = { timedOut: false } | { timedOut: true; /** Epoch ms, when it was killed. */ killedAt: number };
+
 /**
  * Runs `script` with `sh -c`, in place of the image's entrypoint, in a new container `name` from
  * the local image `image`, and leaves the container once it stops. Its output is discarded. Each
  * variable named in `env` is passed in with `-e NAME`, so Docker copies its value from Thunderjar's
- * own environment, and the value is never on a command line. Throws a DockerContainerError if the
- * script, or Docker, fails.
+ * own environment, and the value is never on a command line.
+ *
+ * If it's still running after `timeoutSeconds`, it's killed with `docker kill`, which stops every
+ * process in it, whatever the image has installed, and it's left stopped, like one that finished.
+ * Throws a DockerContainerError if the script, or Docker, fails.
  */
-export async function runContainer(image: string, name: string, script: string, env: string[] = []): Promise<void> {
+export async function runContainer(
+  image: string,
+  name: string,
+  script: string,
+  env: string[] = [],
+  timeoutSeconds?: number,
+): Promise<ContainerStop> {
+  const binary = dockerBinary();
   const passed = env.flatMap((variable) => ["-e", variable]);
-  await mustRun(["run", "--name", name, "--pull", "never", ...passed, "--entrypoint", "sh", image, "-c", script]);
+  const args = ["run", "--name", name, "--pull", "never", ...passed, "--entrypoint", "sh", image, "-c", script];
+  const child = Bun.spawn([binary, ...args], { env: { ...Bun.env }, stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+  let killing: Promise<number | undefined> | undefined;
+  const timer =
+    timeoutSeconds === undefined
+      ? undefined
+      : setTimeout(() => {
+          const killedAt = Date.now();
+          // If it finished just as the time ran out, there's nothing to kill: it didn't time out.
+          killing = mustRun(["kill", name]).then(
+            () => killedAt,
+            () => undefined,
+          );
+        }, timeoutSeconds * 1000);
+  const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  clearTimeout(timer);
+  const killedAt = await killing;
+  if (killedAt !== undefined) return { timedOut: true, killedAt };
+  if (exitCode !== 0) {
+    throw new DockerContainerError(reasonOf(stderr) || `\`${binary} run\` exited ${exitCode}`);
+  }
+  return { timedOut: false };
 }
 
 /**
