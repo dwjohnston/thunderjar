@@ -1,5 +1,5 @@
-// What `thunderjar init` writes into `.thunderjar/`: a runnable example test case, the parameters
-// it uses, and starter parameters to copy and edit: a second prompt set, and more harnesses.
+// What `thunderjar init` writes into `.thunderjar/`: two runnable test cases, one comparing models
+// and one comparing harnesses, the parameters they use, and a second prompt set to copy and edit.
 import { STARTER_HARNESSES } from "./starterHarnesses.ts";
 
 const declaration = (fn: string, body: string) =>
@@ -31,18 +31,39 @@ const tsconfig = json({
   exclude: ["node_modules", ".data", "**/*.template.ts"],
 });
 
-const testCase = declaration(
-  "declareTestCase",
-  `{
+// Two experiments on the is-prime task. Each varies one thing, so a difference in the measurements
+// is down to it.
+//
+// The same harness, Claude Code, on two models.
+const compareModels = `import { declareTestCase } from "thunderjar";
+
+// The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5.
+export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5"],
+  harnessModel: ["claude-code@2.1.283/haiku-4-5", "claude-code@2.1.283/haiku-5-5"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
-}`,
-);
+});
+`;
+
+// The same model, Haiku 5.5, in three harnesses.
+const compareHarnesses = `import { declareTestCase } from "thunderjar";
+
+// The same model in three harnesses: Haiku 5.5 in Claude Code, GitHub Copilot CLI and OpenCode.
+// Each harness needs its own key: ANTHROPIC_API_KEY, COPILOT_GITHUB_TOKEN and OPENCODE_API_KEY.
+export default declareTestCase({
+  baseImage: ["node20"],
+  codeState: ["baseline"],
+  promptSet: ["snerk"],
+  harnessModel: ["claude-code@2.1.283/haiku-5-5", "copilot@1.0.105/haiku-5-5", "opencode@1.19.5/haiku-5-5"],
+  task: "is-prime",
+  initialPrompt: ["plain"],
+  iterations: 1,
+});
+`;
 
 const baseImage = `import { declareBaseImage } from "thunderjar";
 
@@ -179,7 +200,8 @@ export function scaffold({ nestedPackage, head }: { nestedPackage: boolean; head
     "tsconfig.json": tsconfig,
     ".gitignore": ["_generated/", ".data/", ...(nestedPackage ? ["node_modules/"] : [])].join("\n") + "\n",
     "thunderjar.config.ts": config,
-    "test-cases/example.ts": testCase,
+    "test-cases/compare-models.ts": compareModels,
+    "test-cases/compare-harnesses.ts": compareHarnesses,
     [`${P}/baseImages/node20/index.ts`]: baseImage,
     [`${P}/codeStates/baseline/index.ts`]: codeState(head),
     [`${P}/promptSets/snerk/index.ts`]: snerk(head),

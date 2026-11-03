@@ -90,7 +90,7 @@ bun run fixture 0202 plan is-prime-baseline
 ## Scenario catalogue
 
 - **What the scenarios share**
-  - Initialised scenarios start from what `init` scaffolds in an empty project: base image `node20`, code state `baseline`, prompt set `snerk`, task `is-prime` with initial prompt `plain` and measurement `isPrimeTsExists`, and test case `example`.
+  - Initialised scenarios start from what `init` scaffolds in an empty project: base image `node20`, code state `baseline`, prompt set `snerk`, task `is-prime` with initial prompt `plain` and measurement `isPrimeTsExists`. In place of init's test cases, which use real harnesses, they have test case `example`: one fake agent, one iteration.
   - The agent is the fake `fake-harness-alpha`, version `1.0.0`, model `fake-model-small`, instead of `claude-code`.
   - Each checks in its `_generated/parameterNames.d.ts`, though `.thunderjar/.gitignore` ignores it, so it type-checks without running `generate`.
 - **01_unitialised**: projects before `init`.
@@ -149,8 +149,8 @@ bun run fixture 0202 plan is-prime-baseline
   - `0404_empty_parameter_folders`: the shared setup with every declaration deleted: each parameter folder holds only a `.gitkeep`. Test case `example` is left. No `tsconfig.json` or `_generated/`.
 
 - **05_real_agents**: projects that run a real agent against a real model, for `bun run test:agent`.
-  - `0501_claude_code`: exactly what `init` scaffolds in an empty project, Claude Code on Haiku.
-    - Test case: `example`, init's, which needs `ANTHROPIC_API_KEY`.
+  - `0501_claude_code`: exactly what `init` scaffolds in an empty project.
+    - Test cases, init's: `compare-models`, Claude Code on Haiku 4.5 and Haiku 5.5, which needs `ANTHROPIC_API_KEY`, and `compare-harnesses`, Haiku 5.5 in Claude Code, Copilot CLI and OpenCode, which also needs `COPILOT_GITHUB_TOKEN` and `OPENCODE_API_KEY`. The real agent test runs only `compare-models`.
 
 Keep it in this format:
 

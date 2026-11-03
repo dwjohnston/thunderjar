@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // The installed package's smoke test: builds and packs Thunderjar, installs the tarball into an
 // empty JavaScript project in a temporary folder, the way a user would, and runs `init`,
-// `generate`, `plan example` and `run example --dry-run` there with its own `thunderjar`. Every
+// `generate`, `plan` of both its test cases, and `build` and `run --dry-run` of one, there with its own `thunderjar`. Every
 // other test runs Thunderjar from source; this one runs only what's published.
 //
 //   bun run test:package
@@ -14,12 +14,16 @@ const ROOT = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, ""
 const TEMP = `${Bun.env.TMPDIR || "/tmp"}/thunderjar-package-${crypto.randomUUID()}`;
 const PROJECT = `${TEMP}/project`;
 
+/** The keys of the harnesses init's test cases use. Placeholders: nothing here reaches an agent. */
+const KEYS = { ANTHROPIC_API_KEY: "smoke-test", COPILOT_GITHUB_TOKEN: "smoke-test", OPENCODE_API_KEY: "smoke-test" };
+
 /** The commands run in the project, and what each one's output must contain. */
 const STEPS: { args: string[]; expect: string[] }[] = [
   {
     args: ["init"],
     expect: [
-      "test-cases/example.ts",
+      "test-cases/compare-models.ts",
+      "test-cases/compare-harnesses.ts",
       "promptSets/house-style/files/AGENTS.md",
       "harnessModels/opencode/index.ts",
       "measurements/isPrimeTemplateTest.ts",
@@ -28,10 +32,11 @@ const STEPS: { args: string[]; expect: string[] }[] = [
     ],
   },
   { args: ["generate"], expect: ["parameterNames.d.ts"] },
-  { args: ["plan", "example"], expect: ["claude-code@2.1.283/haiku-4-5"] },
+  { args: ["plan", "compare-models"], expect: ["claude-code@2.1.283/haiku-4-5", "claude-code@2.1.283/haiku-5-5"] },
+  { args: ["plan", "compare-harnesses"], expect: ["claude-code@2.1.283/haiku-5-5", "copilot@1.0.105/haiku-5-5", "opencode@1.19.5/haiku-5-5"] },
   // bun, which the templateTest measurement runs its tests with, is in the base image.
-  { args: ["build", "example", "--dry-run"], expect: ["npm install --global bun@1.3.14"] },
-  { args: ["run", "example", "--dry-run"], expect: ["claude -p"] },
+  { args: ["build", "compare-models", "--dry-run"], expect: ["npm install --global bun@1.3.14"] },
+  { args: ["run", "compare-models", "--dry-run"], expect: ["claude -p"] },
 ];
 
 /** A step that failed, with its output. */
@@ -70,8 +75,8 @@ try {
   const width = Math.max(...STEPS.map(({ args }) => `thunderjar ${args.join(" ")}`.length));
   for (const { args, expect } of STEPS) {
     const step = `thunderjar ${args.join(" ")}`.padEnd(width);
-    // init's Claude Code harness needs a key to plan or run; nothing here reaches Anthropic.
-    const { output } = await mustRun(step, $`npx --no-install thunderjar ${args}`.cwd(PROJECT).env({ ...Bun.env, ANTHROPIC_API_KEY: "smoke-test" }));
+    // init's harnesses need their keys to plan or run; nothing here reaches any of them.
+    const { output } = await mustRun(step, $`npx --no-install thunderjar ${args}`.cwd(PROJECT).env({ ...Bun.env, ...KEYS }));
     const missing = expect.find((text) => !output.includes(text));
     if (missing !== undefined) fail(step, `Expected the output to include ${JSON.stringify(missing)}:\n${output}`);
     console.log(`${step}  ok`);
