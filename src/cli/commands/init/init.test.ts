@@ -19,7 +19,7 @@ const P = "test-case-parameters";
 const init = (dir: string) => thunderjar(dir, ["init"], { env: { GIT_CEILING_DIRECTORIES: TMP_DIR } });
 
 const HARNESS_FILES = ["index.ts", "models.ts", "versions.ts", "collectTokenCosts.ts"];
-const HARNESSES = ["claude-code", "copilot", "codex", "claude-code-deepseek", "opencode"];
+const HARNESSES = ["claude-code", "copilot", "codex", "opencode"];
 
 /** What `init` scaffolds in any project, in the order it prints them, after the nested package.json. */
 const SCAFFOLD = [
@@ -213,7 +213,7 @@ describe("0201 minimal existing setup", () => {
 });
 
 describe("0501 Claude Code", () => {
-  test("holds what init scaffolds in 0101, as it is, beside its DeepSeek variant", async () => {
+  test("holds exactly what init scaffolds in 0101", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
 

@@ -149,10 +149,8 @@ bun run fixture 0202 plan is-prime-baseline
   - `0404_empty_parameter_folders`: the shared setup with every declaration deleted: each parameter folder holds only a `.gitkeep`. Test case `example` is left. No `tsconfig.json` or `_generated/`.
 
 - **05_real_agents**: projects that run a real agent against a real model, for `bun run test:agent`.
-  - `0501_claude_code`: exactly what `init` scaffolds in an empty project, Claude Code on Haiku, and beside it the same on DeepSeek.
-    - Base image `node20-deepseek` points Claude Code at DeepSeek's Anthropic-compatible API.
-    - Harness `claude-code-deepseek`, init's `claude-code` with its `requiredEnv` `DEEPSEEK_API_KEY`, passed to Claude Code as its auth token, and model `deepseek-chat`.
-    - Test cases: `example`, init's, which needs `ANTHROPIC_API_KEY`, and `deepseek`, which needs `DEEPSEEK_API_KEY`.
+  - `0501_claude_code`: exactly what `init` scaffolds in an empty project, Claude Code on Haiku.
+    - Test case: `example`, init's, which needs `ANTHROPIC_API_KEY`.
 
 Keep it in this format:
 

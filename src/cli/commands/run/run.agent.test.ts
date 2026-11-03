@@ -1,7 +1,6 @@
 // `thunderjar run` with a real agent: Claude Code, built into its prerun image by 0501's harness, run
 // against a real model, measured, recorded and shown. Skipped by `bun test`; run with
-// `bun run test:agent`, which needs Docker and a key: DEEPSEEK_API_KEY runs test case `deepseek`, on
-// DeepSeek's Anthropic-compatible API, and ANTHROPIC_API_KEY runs `example`, init's own, on Haiku.
+// `bun run test:agent`, which needs Docker and ANTHROPIC_API_KEY: it runs `example`, init's own, on Haiku.
 // Each run costs a few cents. Every image and container is named under a throwaway
 // `--image-prefix`, and removed afterwards, and the store goes to a temporary `--data-dir`.
 //
@@ -20,7 +19,6 @@ const lines = (text: string) => text.split("\n").filter(Boolean);
 
 /** Each test case of 0501, by the key that runs it. */
 const TEST_CASES = [
-  { testCase: "deepseek", key: "DEEPSEEK_API_KEY", label: "claude-code-deepseek | plain" },
   { testCase: "example", key: "ANTHROPIC_API_KEY", label: "claude-code | plain" },
 ].filter(({ key }) => Bun.env[key]);
 
