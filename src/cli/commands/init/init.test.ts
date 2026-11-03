@@ -35,6 +35,9 @@ const SCAFFOLD = [
   ...HARNESSES.flatMap((harness) => HARNESS_FILES.map((file) => `${P}/harnessModels/${harness}/${file}`)),
   `${P}/tasks/is-prime/initial-prompts/plain.ts`,
   `${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`,
+  `${P}/tasks/is-prime/measurements/isPrimeTemplateTest.ts`,
+  `${P}/tasks/is-prime/measurements/isPrime.test.template.ts`,
+  `${P}/tasks/is-prime/measurements/tsIgnoreCount.ts`,
 ];
 
 const createdLines = (paths: string[]) =>
@@ -93,8 +96,10 @@ export default declareTestCase({
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
 
-    const files = filesIn(copy.dir).filter((path) => path.endsWith(".ts"));
-    expect(files).toHaveLength(SCAFFOLD.filter((path) => path.endsWith(".ts")).length);
+    // A template isn't TypeScript until the measurement renders it.
+    const isModule = (path: string) => path.endsWith(".ts") && !path.endsWith(".template.ts");
+    const files = filesIn(copy.dir).filter(isModule);
+    expect(files).toHaveLength(SCAFFOLD.filter(isModule).length);
     for (const path of files) {
       const module = await import(`${copy.dir}/.thunderjar/${path}`);
       expect(module.default).toBeDefined();

@@ -17,7 +17,7 @@ initialPrompt: plain
 
 Matrix shape: 1/1/1/1/1 (1 permutation)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   cd8a23df  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   c4220635  missing
 `;
 
 describe("0201 minimal existing setup", () => {
