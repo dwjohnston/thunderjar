@@ -16,7 +16,7 @@ export default declareConfig({
 `;
 
 // `allowImportingTsExtensions` because thunderjar ships its TypeScript source. A measurement's
-// template, like `isPrime.test.template.ts`, isn't TypeScript until it's rendered.
+// template named like `*.template.ts` isn't TypeScript until it's rendered (`init`'s own is `*.ts.template`).
 const tsconfig = json({
   compilerOptions: {
     target: "ESNext",
@@ -70,13 +70,13 @@ const measurement = declaration(
 }`,
 );
 
-// Renders isPrime.test.template.ts against the agent's isPrime.ts, runs it with `bun test`, and
+// Renders templates/isPrime.test.ts.template against the agent's isPrime.ts, runs it with `bun test`, and
 // records how many tests pass and fail.
 const templateTestMeasurement = declaration(
   "declareMeasurement",
   `{
   instrument: "templateTest",
-  config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
+  config: { subject: "**/isPrime.ts", template: "./templates/isPrime.test.ts.template" },
   aggregate: ["sum", "mean"],
 }`,
 );
@@ -193,7 +193,7 @@ export function scaffold({ nestedPackage, head }: { nestedPackage: boolean; head
     [`${P}/tasks/is-prime/initial-prompts/plain.ts`]: initialPrompt,
     [`${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`]: measurement,
     [`${P}/tasks/is-prime/measurements/isPrimeTemplateTest.ts`]: templateTestMeasurement,
-    [`${P}/tasks/is-prime/measurements/isPrime.test.template.ts`]: isPrimeTestTemplate,
+    [`${P}/tasks/is-prime/measurements/templates/isPrime.test.ts.template`]: isPrimeTestTemplate,
     [`${P}/tasks/is-prime/measurements/tsIgnoreCount.ts`]: tsIgnoreCountMeasurement,
   };
 }

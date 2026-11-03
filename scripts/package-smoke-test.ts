@@ -23,7 +23,7 @@ const STEPS: { args: string[]; expect: string[] }[] = [
       "promptSets/house-style/files/AGENTS.md",
       "harnessModels/opencode/index.ts",
       "measurements/isPrimeTemplateTest.ts",
-      "measurements/isPrime.test.template.ts",
+      "measurements/templates/isPrime.test.ts.template",
       "measurements/tsIgnoreCount.ts",
     ],
   },
