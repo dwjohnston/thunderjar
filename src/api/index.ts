@@ -28,6 +28,7 @@ export type {
   HarnessDeclaration,
   HarnessModelsDeclaration,
   HarnessVersionsDeclaration,
+  ImageStore,
   InitialPromptDeclaration,
   InstrumentName,
   InstrumentTypes,

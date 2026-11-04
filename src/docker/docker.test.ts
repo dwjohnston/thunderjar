@@ -5,12 +5,16 @@ import { $ } from "bun";
 import { FIXTURES_DIR } from "../testing/scenario.ts";
 import {
   buildImage,
+  checkLogin,
   commitContainer,
   DockerBuildError,
   DockerContainerError,
+  DockerLoginError,
+  DockerPushError,
   DockerUnavailableError,
   execInContainer,
   imagesIn,
+  pushImage,
   readContainerFile,
   removeContainer,
   runContainer,
@@ -144,4 +148,49 @@ test("execInContainer throws a DockerContainerError when there's no such contain
 
   expect(error).toBeInstanceOf(DockerContainerError);
   expect((error as Error).message).toBe("Error response from daemon: No such container: tj-measure-1");
+});
+
+test("checkLogin passes for a registry Docker holds a login for", async () => {
+  await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+  Object.assign(Bun.env, docker.env);
+
+  await checkLogin("ghcr.io");
+  expect(await docker.commands()).toEqual(["docker login ghcr.io"]);
+});
+
+test("checkLogin throws a DockerLoginError, without prompting, for a registry with no login", async () => {
+  await using docker = await fakeDocker();
+  Object.assign(Bun.env, docker.env);
+
+  const error = await checkLogin("ghcr.io").catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(DockerLoginError);
+  expect((error as Error).message).toBe("Cannot perform an interactive login from a non TTY device");
+});
+
+test("checkLogin throws a DockerUnavailableError when the daemon can't be reached", async () => {
+  await using docker = await fakeDocker({ unreachable: true });
+  Object.assign(Bun.env, docker.env);
+
+  await expect(checkLogin("ghcr.io")).rejects.toBeInstanceOf(DockerUnavailableError);
+});
+
+test("pushImage tags the image into the repository, then pushes it", async () => {
+  await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["tj-prerun:aaaaaaaa"] });
+  Object.assign(Bun.env, docker.env);
+
+  await pushImage("tj-prerun:aaaaaaaa", "ghcr.io/acme/images:prerun-haaaaaaaa");
+  expect(await docker.commands()).toEqual([
+    "docker tag tj-prerun:aaaaaaaa ghcr.io/acme/images:prerun-haaaaaaaa",
+    "docker push --quiet ghcr.io/acme/images:prerun-haaaaaaaa",
+  ]);
+  expect(await docker.pushed()).toEqual(["ghcr.io/acme/images:prerun-haaaaaaaa"]);
+});
+
+test("pushImage throws a DockerPushError with the registry's reason", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
+  Object.assign(Bun.env, docker.env);
+
+  const error = await pushImage("tj-prerun:aaaaaaaa", "ghcr.io/acme/images:prerun-haaaaaaaa").catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(DockerPushError);
+  expect((error as Error).message).toStartWith("denied: ");
 });

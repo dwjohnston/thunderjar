@@ -126,7 +126,20 @@ export default declareConfig({
 });
 ```
 
-- **`imageStore`** is the registry repository holding prerun and postrun images.
+- **`imageStore`** is the registry repository holding prerun and postrun images, or `null`.
+  - `null` keeps every image in the local Docker daemon. Nothing is pushed, and no
+    `docker login` is needed. `init` scaffolds `null`, so a new project runs without a
+    registry.
+  - The repository is a Docker repository name without a tag, e.g.
+    `ghcr.io/acme/thunderjar-images`. A tag, or anything Docker wouldn't take, is a config
+    error.
+
+  ```ts
+  export default declareConfig({
+    imageStore: null, // keep images in the local Docker daemon, push nothing
+    runDataStore: sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }),
+  });
+  ```
 - **`runDataStore`** is a pluggable store behind a small interface (record a container run,
   list executions, fetch a run's results, re-measure). v1 ships only `sqliteStore`. A remote
   backend, e.g. `postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })`, is a later drop-in.
@@ -141,6 +154,29 @@ Three rules, all of the same shape: config names things, never holds secrets.
 | Harness (agent API key) | `requiredEnv` on the harness declaration | Passed into that harness's containers |
 | Run data store (remote) | An env var named in the config, holding a connection URL with credentials, e.g. `urlEnv: "THUNDERJAR_DB_URL"` | The Thunderjar process on the host. No container sees it. |
 | Image store | The user's existing `docker login` for the registry. Thunderjar holds no registry credentials. In CI the pipeline logs in first. | Docker |
+
+#### Checking the image store login before a run
+
+With an `imageStore` set, `run` and `build` check the login before building anything, so a
+missing login fails in seconds instead of after the agents have spent their tokens.
+
+- The check is `docker login <registry host>` with its input closed.
+  - With stored credentials, Docker re-validates them against the registry.
+  - With none, Docker would prompt. Its input is closed, so it fails at once instead. It
+    never waits on a TTY.
+- The host is the repository's first component when it looks like one (has a `.` or `:`,
+  or is `localhost`), e.g. `ghcr.io`. Otherwise it's `docker.io`.
+- On failure, nothing is built or run:
+
+  > Error: Can't push to ghcr.io/acme/thunderjar-images: no valid Docker login for ghcr.io
+  > (cannot perform an interactive login from a non-TTY device). Run `docker login ghcr.io`.
+
+- It proves the credentials are valid, not that they can push to this repository. A token
+  without push rights (on ghcr.io, without `write:packages`) passes, and fails at the first
+  push. That error names the repository and the scope to check.
+- A registry that needs no auth still needs a `docker login`, with any credentials it
+  accepts.
+- Dry runs check nothing.
 
 A connection URL (`postgres://user:password@host/db`) is the one near-standard way to
 authenticate to a remote database, and the `DATABASE_URL` convention. Cloud IAM tokens and

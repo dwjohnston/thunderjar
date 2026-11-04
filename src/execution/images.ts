@@ -36,3 +36,16 @@ export const containerName = (
   iteration: number,
   prefix: string = DEFAULT_IMAGE_PREFIX,
 ) => `${prefix}-run-${executionId}-${permutation}-${iteration}`;
+
+// In the image store, both kinds of image share one repository, told apart by their tag's prefix:
+// see project-md/prd/081-docker-tagging.md.
+
+/** Where a prerun image is pushed: `<repository>:prerun-h<abbreviated hash>`. */
+export const storedPrerunImage = (repository: string, hash: string) => `${repository}:prerun-h${abbreviateHash(hash)}`;
+
+/**
+ * Where a postrun image is pushed: `<repository>:postrun-e<execution ID>-h<abbreviated hash>-i<iteration index>`.
+ * `iteration` counts from 1; the tag's index counts from 0, two digits at least.
+ */
+export const storedPostrunImage = (repository: string, executionId: string, hash: string, iteration: number) =>
+  `${repository}:postrun-e${executionId}-h${abbreviateHash(hash)}-i${String(iteration - 1).padStart(2, "0")}`;
