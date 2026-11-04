@@ -9,7 +9,7 @@
     "url": "git+https://github.com/dwjohnston/thunderjar.git"
   },
   "bin": {
-    "thunderjar": "./dist/cli.js"
+    "thunderjar": "./dist/index.js"
   },
   "main": "./src/api/index.ts",
   "types": "./src/api/index.ts",
@@ -26,7 +26,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "bun build src/cli/index.ts --target bun --outfile dist/cli.js",
+    "build": "rm -rf dist && bun build src/cli/index.ts --target bun --outdir dist --entry-naming [name].[ext] --production",
     "lint": "bun scripts/lint-layers.ts --check && oxlint",
     "lint:generate": "bun scripts/lint-layers.ts",
     "typecheck": "tsc --noEmit",
@@ -47,12 +47,16 @@
   },
   "dependencies": {
     "bun": "1.3.14",
-    "commander": "^15.0.0"
+    "commander": "^15.0.0",
+    "react": "19",
+    "react-dom": "19"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "@changesets/get-release-plan": "^4.0.16",
     "@types/bun": "^1.4.3",
+    "@types/react": "19",
+    "@types/react-dom": "19",
     "oxlint": "^1.88.0",
     "typescript": "^7.0.2",
     "vitepress": "^2.0.0-alpha.18"
