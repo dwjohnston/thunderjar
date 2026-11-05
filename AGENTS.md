@@ -218,6 +218,9 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
    - Tests of this type should have the extension `.agent.test.ts`
    - `bun test` skips them. Run them with `bun run test:agent`, with Docker and `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY` set. Each run costs a few cents.
    - Not run in CI yet: an on-demand workflow is still to be added.
+9. The installed package's smoke test
+   - `bun run test:package` packs Thunderjar, installs the tarball into an empty project in a temporary folder, and runs `init`, `generate`, `plan example` and `run example --dry-run` there with the installed `thunderjar`.
+   - Every other test runs Thunderjar from source. This one catches what only the package gets wrong, such as a file left out of `files`.
 
 ## Fixtures 
 

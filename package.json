@@ -33,6 +33,7 @@
     "test": "bun test",
     "test:docker": "THUNDERJAR_DOCKER_TESTS=1 bun test --timeout 600000 .docker.test",
     "test:agent": "THUNDERJAR_AGENT_TESTS=1 bun test --timeout 900000 .agent.test",
+    "test:package": "bun scripts/package-smoke-test.ts",
     "fixture": "bun scripts/fixture.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
