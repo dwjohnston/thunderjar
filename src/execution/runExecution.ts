@@ -123,6 +123,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
           postrunImage: iteration.postrunImage,
           turns: iteration.turns,
           env: permutation.env,
+          runOptions: permutation.runOptions,
           timeoutSeconds: permutation.timeoutSeconds,
           container,
         });

@@ -736,6 +736,39 @@ export default declareHarness({
   });
 });
 
+describe("0206 run options", () => {
+  const SANDBOXER = `if unshare --user --map-root-user --mount --pid --fork true; then reply=sandboxed; else reply="no sandbox"; fi && echo "{\\"reply\\":\\"$reply\\"}" > /thunderjar/result.json`;
+  const OPTIONS = "--security-opt seccomp=unconfined --security-opt apparmor=unconfined";
+
+  test("--dry-run: a base image's run options are printed with each container run they're given to", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "sandboxed", "--dry-run"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Execution <ULID>
+
+${permutation(1, "b801879b", 1, "Sandbox yourself.", SANDBOXER)}
+
+Permutation 2: prerun image thunderjar-prerun:34d42907
+  Iteration 1: postrun image thunderjar-postrun:<ULID>-2-1
+    docker:   ${OPTIONS}
+    prompt:   Sandbox yourself.
+    command:  ${SANDBOXER}
+`);
+  });
+
+  test("they're added to the docker run of that base image's agent containers only", async () => {
+    await using docker = await fakeDocker();
+
+    const { exitCode } = await thunderjar(scenario("0206"), ["run", "sandboxed", "--data-dir", dataDir()], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    const runs = (await docker.commands()).filter((command) => command.startsWith("docker run --name"));
+    expect(runs.map((command) => command.includes(OPTIONS))).toEqual([false, true]);
+    expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:34d42907 -c `);
+  });
+});
+
 describe("0201 minimal existing setup", () => {
   test("example: one permutation, one iteration", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0201"), ["run", "example", "--dry-run"]);

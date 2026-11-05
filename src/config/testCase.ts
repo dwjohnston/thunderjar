@@ -6,6 +6,7 @@ import { foldersIn, PARAMETERS } from "./folders.ts";
 import { ConfigError, existsIn, FOLDER, loadDeclaration, type Problem, problemsError } from "./loader.ts";
 import { checkMeasurements } from "./measurements.ts";
 import { requiredEnvProblem } from "./requiredEnv.ts";
+import { runOptionsProblem } from "./runOptions.ts";
 
 const show = (value: unknown) => JSON.stringify(value) ?? String(value);
 
@@ -90,7 +91,9 @@ class TestCaseChecker {
       for (const name of names[field] ?? []) {
         const index = `${PARAMETERS}/${folder}/${name}/index.ts`;
         if (await this.requires(field, name, index)) {
-          await loadDeclaration(this.root, index, declareFn, this.problems);
+          const declaration = (await loadDeclaration(this.root, index, declareFn, this.problems)) as Record<string, unknown> | undefined;
+          const optionsProblem = field === "baseImage" && declaration && runOptionsProblem(declaration.runOptions);
+          if (optionsProblem) this.problems.push({ file: index, field: "runOptions", message: optionsProblem });
         }
       }
     }

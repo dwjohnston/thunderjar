@@ -121,7 +121,10 @@ if (import.meta.main) {
     return env ? shell.env(env) : shell;
   };
 
-  /** `docker run [--detach] --name <name> --pull never [-e <NAME>]… --entrypoint sh <image> -c <script>`, parsed. */
+  /**
+   * `docker run [--detach] --name <name> --pull never [-e <NAME>]… [<option>]… --entrypoint sh <image> -c <script>`,
+   * parsed. Other options are recorded in `commands`, and otherwise ignored.
+   */
   const parseRun = (runArgs: string[]) => {
     const detach = runArgs[0] === "--detach";
     const rest = detach ? runArgs.slice(1) : runArgs;
@@ -132,7 +135,9 @@ if (import.meta.main) {
       env.push(rest[i + 1] as string);
       i += 2;
     }
-    if (rest[i] !== "--entrypoint" || rest[i + 1] !== "sh" || rest[i + 3] !== "-c" || rest.length !== i + 5) return undefined;
+    // The options end at the --entrypoint five from the end.
+    i = rest.length - 5;
+    if (i < 4 || rest[i] !== "--entrypoint" || rest[i + 1] !== "sh" || rest[i + 3] !== "-c") return undefined;
     return { detach, name: rest[1] as string, env, image: rest[i + 2] as string, script: rest[i + 4] as string };
   };
 
@@ -155,7 +160,7 @@ if (import.meta.main) {
       await Bun.write(state("images"), lines([...(await list("images")), image]));
     }
   } else if (command === "run" && parseRun(args.slice(1))) {
-    // docker run [--detach] --name <name> --pull never [-e <NAME>]… --entrypoint sh <image> -c <script>
+    // docker run [--detach] --name <name> --pull never [-e <NAME>]… [<option>]… --entrypoint sh <image> -c <script>
     const { detach, name, env, image, script } = parseRun(args.slice(1))!;
     if (!dir) fail("fake docker: running a container needs FAKE_DOCKER_DIR");
     if (!(await list("images")).includes(image)) fail(`docker: Error response from daemon: No such image: ${image}`);

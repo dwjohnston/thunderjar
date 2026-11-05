@@ -163,6 +163,23 @@ Wrote <DATA>/runs/<ULID>/
     expect(await inImage(record.postrunImage, `cat "$HOME/.fake-rememberer/${record.sessionId}"`)).toBe("My rubber ducky is called Eli.");
   }, 600_000);
 
+  test("0206 sandboxed: an agent can make a user namespace, as a sandbox does, only with its base image's run options", async () => {
+    const data = `${DATA_DIR}/sandboxed`;
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "sandboxed", "--image-prefix", PREFIX, "--data-dir", data], {
+      docker: "real",
+      paths: { "<PREFIX>": PREFIX, "<DATA>": data },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(`
+ 1/2  iteration 1/1  node20 | fake-sandboxer | plain  ... done (<duration>)
+      sandboxed: false
+ 2/2  iteration 1/1  node20-unconfined | fake-sandboxer | plain  ... done (<duration>)
+      sandboxed: true
+`);
+  }, 600_000);
+
   test("0202 quoting: the prompt reaches the agent byte for byte, through a file", async () => {
     const data = `${DATA_DIR}/quoting`;
     const { stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "quoting", "--image-prefix", PREFIX, "--data-dir", data], {
