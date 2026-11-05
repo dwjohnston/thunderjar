@@ -1,133 +1,130 @@
 # Code State
 
-The codebase applied on top of the base image: a git commit from the user's repository,
+The codebase applied on top of the base image: a repository cloned at a pinned commit,
 plus any setup the codebase needs before the agent starts.
 
-One of the six experiment parameters. Hashing and `applyParameter` are common to all of
+One of the five experiment parameters. Hashing and `applyParameter` are common to all of
 them — see [060-experiment-parameters.md](060-experiment-parameters.md).
 
 ## Declaration
 
-Lives at `experiment-parameters/codeStates/<name>/index.ts`.
+Lives at `test-case-parameters/codeStates/<name>/index.ts`.
 
 ```ts
-// experiment-parameters/codeStates/baseline/index.ts
+// test-case-parameters/codeStates/baseline/index.ts
 export default declareCodeState({
-  commit: "a1b2c3",
-  applyParameter: () => `RUN npm ci`,
+  config: {
+    repo: "https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git",
+    commit: "24dc11c26e2716a12cf33b82fec895a7f02b3e8a",
+  },
+  applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\
+  && git -C /workspace checkout --quiet --detach ${config.commit} \\
+  && git -C /workspace remote remove origin
+RUN npm ci`,
 });
 ```
 
 | Field | What it is |
 |---|---|
-| `commit` | The commit the agent starts from. A SHA, or a function of `ctx` for a floating code state. |
-| `applyParameter` | Returns a Dockerfile fragment run in `/workspace` after the commit is checked out: installing dependencies, seeding fixtures. |
+| `config` | Its settings, typically the repository and the commit the agent starts from. |
+| `resolve` | Optional, for a floating code state: see [below](#following-a-moving-target). |
+| `applyParameter` | Returns a Dockerfile fragment that gets the codebase into `/workspace`, then sets it up: installing dependencies, seeding fixtures. |
 
-A code state is always a git commit. `applyParameter` can add to it, but can't replace it.
+A JavaScript template string needs `\\` to put a line-continuation `\` into the Dockerfile.
+
+A code state with files of its own, such as a fixture script, keeps them in its `files/`
+folder, at `ctx.dir` in the build context:
 
 ```ts
-// experiment-parameters/codeStates/with-fixture/index.ts
+// test-case-parameters/codeStates/with-fixture/index.ts — its script is with-fixture/files/seed-fixture-data.sh
 export default declareCodeState({
-  commit: "a1b2c3",
-  applyParameter: () => `RUN npm ci && ./scripts/seed-fixture-data.sh`,
+  config: { repo: "https://github.com/acme/widgets.git", commit: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0" },
+  applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
+  && git -C /workspace checkout --quiet --detach ${config.commit}
+COPY ${ctx.dir}/seed-fixture-data.sh /tmp/
+RUN npm ci && sh /tmp/seed-fixture-data.sh`,
 });
 ```
 
 ## How the code gets into the image
 
-Thunderjar puts the commit into the image itself. The code state doesn't clone or check
-anything out.
-
-1. On the host, Thunderjar packs the commit and its history into a file in the build
-   context: `git bundle create code.bundle <commit>`.
-2. Straight after the base image's fragment, the prerun build clones that bundle to
-   `/workspace`, checks out the commit detached, removes the remote, and sets a git
-   identity so the agent can commit.
-3. The code state's own fragment runs next, with `/workspace` as the working directory.
+The code state's own fragment gets it there. Thunderjar adds only `WORKDIR /workspace`,
+straight after the base image's fragment, so the code state runs in `/workspace`.
 
 ```dockerfile
-FROM node:20-bookworm                              # base image
-COPY code.bundle /tmp/code.bundle                  # Thunderjar
-RUN git clone /tmp/code.bundle /workspace \
-  && git -C /workspace checkout --detach a1b2c3 \
-  && git -C /workspace remote remove origin \
-  && rm /tmp/code.bundle                           # Thunderjar
-WORKDIR /workspace
-RUN npm ci                                         # code state's fragment
+FROM node:20-bookworm                                       # base image
+RUN git config --system user.name "Thunderjar agent" \
+  && git config --system user.email agent@thunderjar.invalid
+WORKDIR /workspace                                          # Thunderjar
+RUN git clone --quiet https://github.com/acme/widgets.git /workspace \
+  && git -C /workspace checkout --quiet --detach a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0 \
+  && git -C /workspace remote remove origin                # code state
+RUN npm ci                                                  # code state
 ```
 
 _(Referenced by: [060-experiment-parameters.md](060-experiment-parameters.md#declarations-and-applyparameter),
 [063-prompt-set.md](063-prompt-set.md), [090-restore-purge.md](090-restore-purge.md),
 [061-base-image.md](061-base-image.md).)_
 
-- **Only history up to the commit.** The bundle holds the commit and its ancestors, never
-  other branches or later commits. Otherwise the agent could find the commit that solves
-  its task with `git log --all`.
-- **No credentials.** The code comes from the local repository, so a private repository
-  needs nothing in the image build.
+- **Pin the commit.** The commit is in the fragment's text, so it's in the code state's
+  hash: changing it changes only the code state's hash. A branch name in the text would
+  hash the same whatever the branch points at. To follow a branch, use `resolve`.
+- **Detached, with no remote.** So the agent can't fetch, or find the commit that solves
+  its task with `git log --all`. A clone carries the repository's other branches until the
+  remote is removed; a `--single-branch` clone, or a shallow one, carries less.
+- **A git identity.** The base image sets one with `git config --system`, so the agent, and
+  a prompt set that commits, can commit, whichever user they run as.
+- **A private repository** needs a credential at build time: a build secret, mounted for the
+  one `RUN` that clones. It's never in an image layer, the run data or any hash. See
+  [060](060-experiment-parameters.md#build-secrets).
+
+  ```dockerfile
+  RUN --mount=type=secret,id=github \
+    git clone "https://x-access-token:$(cat /run/secrets/github)@github.com/acme/private.git" /workspace
+  ```
+
 - **A real repository.** The agent can use git, and [restore](090-restore-purge.md) can
   fetch the agent's commits back on top of a commit the developer already has.
 
 ## Where the commit comes from
 
-**Thunderjar assumes the environment it runs in has enough git history for every
-parameter it applies.** It reads commits from the repository it is run in, found from the
-`thunderjar/` folder, and never fetches. Keeping that repository up to date is the
-environment's job: a developer pulls, and a CI pipeline checks out with enough history
-(e.g. `fetch-depth: 0`).
+The build fetches it, from wherever the code state's `RUN` clones. The repository the
+project is in doesn't need it, and Thunderjar never reads it.
 
-_(Referenced by: [050-setup-and-configure.md](050-setup-and-configure.md#prerequisites),
-[063-prompt-set.md](063-prompt-set.md).)_
-
-- **A missing commit fails before anything is built**, naming the commit and the
-  parameter that needs it:
-  ```
-  error: commit a1b2c3 (code state "baseline") is not in this repository.
-  Fetch it, or check that it has been pushed.
-  ```
-- **A missing commit can't produce a different run.** A SHA means the same content on
-  every machine, so a commit is either there and correct, or the run stops.
+- **A pinned commit must be pushed** for the build to fetch it.
 - **A commit is only needed to build.** If the permutation's prerun image is already in
-  the image store, it is pulled, and the commit isn't read.
-- **A pinned commit must be pushed** for anyone else, CI included, to build from it.
+  the image store, it is pulled, and nothing is fetched.
 
 ## Following a moving target
 
-A code state can follow a moving target, such as the tip of `main`, by declaring
-`determineHash` and taking its commit from `ctx.resolvedHash` (see
-[060-experiment-parameters.md](060-experiment-parameters.md#parameters-that-follow-a-moving-target)).
+A code state can follow a moving target, such as the tip of `main`, with `resolve`. It
+runs on the host once per execution, before anything is hashed, and its result is
+`ctx.resolved` (see
+[060-experiment-parameters.md](060-experiment-parameters.md#floating-parameters-resolve)).
 This can be called a *floating parameter*.
 
 ```ts
-// experiment-parameters/codeStates/main/index.ts
+// test-case-parameters/codeStates/follow-main/index.ts
 export default declareCodeState({
-  determineHash: () => `git rev-parse origin/main`,
-  commit: (ctx) => ctx.resolvedHash,
-  applyParameter: () => `RUN npm ci`,
+  config: { repo: "https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git", branch: "main" },
+  resolve: async (config, ctx) =>
+    (await ctx.exec(`git ls-remote --exit-code ${config.repo} refs/heads/${config.branch}`)).split("\t")[0] as string,
+  applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
+  && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
+  && git -C /workspace remote remove origin`,
 });
 ```
 
-Resolve against the remote-tracking branch (`origin/main`), not a local one. Every
-machine's local `main` can be at a different commit, so "latest `main`" would mean
-something different on each. Even `origin/main` is only as fresh as the environment's
-last fetch.
+The resolved commit is in the fragment, so the hash changes exactly when `main` moves, and
+Docker can't reuse a layer built from an earlier commit. Each run records the commit it
+resolved to.
 
 ## When it applies
 
-Build time only. Thunderjar's checkout runs after the base image's fragment, and the code
-state's fragment runs after that and before the prompt set's.
-
-## Future
-
-- Experiments kept in a different repository from the code they run against, and
-  Thunderjar fetching a missing commit itself. See
-  [020-goals-non-goals.md](020-goals-non-goals.md#non-goals-v1).
+Build time only. The code state's fragment runs after `WORKDIR /workspace`, and before the
+prompt set's.
 
 ## Open questions
 
-- A parameter folder can bundle files, such as a fixture script, and they count toward
-  its parameter hash (see
-  [051-configuration-folder-structure.md](051-configuration-folder-structure.md)). How a
-  bundled file reaches the image build is not defined.
-- Bundling the commit's full history makes every prerun image carry it. Whether to limit
-  the depth, and how deep restore needs it to be.
+- Whether Thunderjar should check that a code state leaves no remote and no later commits,
+  rather than leave it to the fragment.

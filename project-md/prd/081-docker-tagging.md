@@ -8,7 +8,7 @@ for the run mechanics these tags get attached to.
 ## Tag formats
 
 ```
-prerun-h<permutation hash>
+prerun-h<image hash>
 postrun-e<execution ID>-h<permutation hash>-i<iteration index>
 ```
 
@@ -19,11 +19,14 @@ prerun-h4f9a21c8
 postrun-e01k4x9j2e8mqz3-h4f9a21c8-i00
 ```
 
-- `h<permutation hash>` — an 8-character abbreviated permutation hash (git-style; the full
-  hash lives in the run data store, and any real comparability check should use that, not
-  this truncated copy). Identical on a permutation's prerun tag and on every postrun tag
-  produced from it, so which prerun image a postrun image started from is readable
-  directly off its own tag — no separate lookup needed.
+- `h<image hash>`, on a prerun tag — an 8-character abbreviated image hash: of the
+  Dockerfile and each folder parameter's `files/`, and nothing else. Permutations that build
+  the same image, such as two models of one harness, share one prerun image. See
+  [060](060-experiment-parameters.md#permutation-hash-and-image-hash).
+- `h<permutation hash>`, on a postrun tag — an 8-character abbreviated permutation hash
+  (git-style; the full hash lives in the run data store, and any real comparability check
+  should use that, not this truncated copy). It covers every parameter and the model ID, so
+  it identifies what ran.
 - `e<execution ID>` — the full, untruncated execution ID (a ULID). Kept full length
   because, unlike the hash, it's load-bearing for uniqueness: it's what stops two
   different experiment executions from colliding on the same postrun tag.
@@ -33,8 +36,8 @@ postrun-e01k4x9j2e8mqz3-h4f9a21c8-i00
 Single repository, prefix-discriminated (`prerun-` vs `postrun-`) rather than two
 repositories. _(Referenced by: [070-data-architecture.md](070-data-architecture.md).)_
 No permutation index in the tag: the permutation hash already changes
-whenever any parameter changes — including model, even though model alone doesn't affect
-the image's filesystem — so a separate positional index would be redundant, and worse,
+whenever any parameter changes — including the model ID, even though it doesn't affect
+the prerun image — so a separate positional index would be redundant, and worse,
 unstable in meaning across executions if the matrix ever gets resolved in a different
 order.
 
@@ -43,7 +46,7 @@ order.
 Nothing is pushed, so these tags aren't used. Images keep their local names:
 
 ```
-thunderjar-prerun:<abbreviated hash>
+thunderjar-prerun:<abbreviated image hash>
 thunderjar-postrun:<execution ID>-<permutation number>-<iteration number>
 ```
 

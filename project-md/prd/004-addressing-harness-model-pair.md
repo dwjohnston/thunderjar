@@ -1,9 +1,7 @@
 # Addressing the Harness/Model Pair
 
-**Status: parked.** The design below is agreed in outline. It changes the spec's central
-shape, so it is recorded here and linked from
-[003-critical-issues.md](003-critical-issues.md) until it is applied to the pages it
-affects. Nothing else in the spec has been edited yet.
+**Status: applied.** The pair is one parameter, `<harness>/<model ID>`, and a harness folder
+pins one version (task 3500). Its hashing is in [060](060-experiment-parameters.md#hashing).
 
 ## The problem
 
@@ -36,9 +34,9 @@ export default declareExperiment({
   codeState: ["baseline"],
   promptSet: ["snerk", "glurk"],
   harnessModel: [
-    "claude-code@2.1.283/haiku-4-5",
-    "claude-code@2.2.0/haiku-4-5",
-    "codex@0.9.0/gpt-luna",
+    "claude-code-2.1.311/claude-haiku-4-5-20251001",
+    "claude-code-2.2.0/claude-haiku-4-5-20251001",
+    "codex-0.166.0/gpt-luna",
   ],
   task: "is-prime",
   initialPrompt: ["plain"],
@@ -52,107 +50,63 @@ Keeping `harnesses/` and `models/` as folders while the declaration names a pair
 mean the declaration and the file system describe different parameters. The pair is what
 an experiment varies, so it is the parameter.
 
-## Structure: a harness is a family
+## Structure: a harness folder pins one version
 
-Writing one folder per pair means copying the same `cli`, `collectTokenCosts` and install
-fragment across every model and every version. Writing `models/` inside each harness
-version folder only moves the copying. The repetition has two sources:
-
-- The model-to-ID map differs per harness family (`claude-haiku-4-5-20251001` for Claude
-  Code, `anthropic/claude-haiku-4-5-20251001` for OpenCode). That is information, not
-  duplication.
-- It repeats only across *versions* of one family, because version and model are
-  independent axes.
-
-So a harness is declared once as a **family**. Version and model are values on it.
+A harness is one folder with one `index.ts`, and the folder pins one version of the agent. A
+pair is that folder, then the model ID the agent is given: `<harness>/<model ID>`.
 
 ```
-experiment-parameters/harnessModels/
-  claude-code/
-    index.ts      # install, cli, collectTokenCosts — written once, parameterised by version
-    models.ts     # model name → model ID, written once
-    versions.ts   # the versions, plus any per-version override
-  opencode/
-    ...
+test-case-parameters/harnessModels/
+  claude-code-2.1.311/
+    index.ts      # export default claudeCode({ version: "2.1.311" })
+  opencode-1.19.5/
+    index.ts      # declareHarness({ version: "1.19.5", applyParameter, cli, collectReply, … })
+    files/        # optional: what its fragment copies in, at ctx.dir
 ```
 
-A pair is addressed as `family@version/model`.
+- **To try another version, copy the folder.** The copy is a few lines, or one, with a
+  helper like `claudeCode({ version })`. Name the folder after its version, so a pair reads as
+  what it runs.
+- **Any model ID.** A pair splits at its first `/`, and the rest is the model ID, as the
+  agent takes it, `/`s and all: `opencode-1.19.5/opencode/claude-haiku-5-5`. There is no map
+  from a model's name to its ID, so nothing to keep in step with the agent's own list.
+- **No compatibility machinery.** `thunderjar generate` lists the harness folders, and the
+  pair type is `` `${HarnessName}/${string}` ``: a harness that isn't declared is a type
+  error. Whether the agent knows the model is the agent's to say.
+- **`collectTokenCosts` sits beside `collectReply`** in the declaration. Both read the result
+  file after the run, so neither is in the hash.
 
-Consequences:
+This replaces the earlier "harness family" design, with its `versions.ts` and `models.ts`,
+and pairs written `family@version/model`. It took a hash rule per file to keep adding a
+model or a version from changing any hash. Hashing what a parameter outputs (below) needs no
+such rule, so the maps went.
 
-- **A folder is no longer one parameter.** One family folder yields many parameter values.
-  The unit of identity is the pair string. The folder-structure and terminology pages must
-  say so explicitly.
-- **No compatibility machinery.** A pair exists or it doesn't. The generation step emits
-  the valid pair strings as template-literal types from each family's `versions.ts` and
-  `models.ts`. `claude-code@…/gpt-5` isn't in the union, so it is a type error. The
-  `HarnessModels` map and the cross-product types (`HarnessesFor`, `ModelsForAll`) go away.
-- **`ctx.modelId` is no longer handed to the harness.** `cli` is given the resolved
-  version and model ID for the pair.
-- **Adding things is cheap.** A model is one line in one `models.ts`. A version is one entry
-  in `versions.ts`, with its own override only if a flag changed. A family is a new folder.
+## Hashing
 
-### Not decided
+A harness's parameter hash is of what it outputs, as every parameter's is (see
+[060-experiment-parameters.md](060-experiment-parameters.md#hashing)):
 
-Models could be declared once centrally, with each family only saying how to spell the ID
-(for example `anthropic/${id}` for OpenCode). That removes most of the per-family maps, but
-fails for harnesses whose IDs don't follow a rule. Default is explicit maps, with this as an
-optional shortcut. To settle when the design is applied.
+1. Its rendered fragment, with its version in it.
+2. Its `cli`, rendered with fixed sample values, for the first turn and a later one.
+3. Its `requiredEnv`.
+4. Its `files/` folder.
 
-## Hashing and invalidation
-
-A pair's parameter hash is made of:
-
-1. The family's shared code: `index.ts` and anything bundled with it.
-2. The resolved version, plus any override for that version.
-3. The resolved model ID.
-
-`models.ts` and `versions.ts` are excluded from the family's content hash **by location**.
-This replaces the "`models` is excluded by field" rule in
-[064-harness.md](064-harness.md#hashing), and is the "Future" note on that page made the
-design.
+The model ID isn't in the harness's hash. It joins the permutation hash, beside the five
+parameter hashes, so two models of one harness share a prerun image, and their runs are
+told apart.
 
 | Change | Effect on existing hashes |
 |---|---|
-| Add a model or a version | None. |
-| Change one model's ID | Only that model's pairs. |
-| Edit one version's override | Only that version's pairs. |
-| Edit the family's `cli` or install fragment | Every pair in the family. |
+| Add a harness folder, or use a new model ID | None. |
+| Change a pair's model ID | Only the permutation hash of that pair's permutations. No image. |
+| Change the version, or the install fragment | The harness's hash, and its images. |
+| Change its `cli` or `requiredEnv` | The harness's hash. No image. |
+| Change `collectReply` or `collectTokenCosts`, or a comment | None. |
 | Rename a folder or a pair string | None. Hashes come from content, not names. |
 
-A floating version such as `claude-code@latest` uses the existing `determineHash`
-mechanism. The pair hash uses the resolved version. No new machinery.
+A floating version, such as "Claude Code's latest", resolves with `resolve`, and the
+version it resolved to is hashed through the fragment it ends up in. See
+[060-experiment-parameters.md](060-experiment-parameters.md#floating-parameters-resolve).
 
-### `collectTokenCosts` and the hash
-
-`collectTokenCosts` is currently in the harness's hash as an accepted tradeoff. In the old
-structure a parser fix invalidated one harness version's permutations. In the family
-structure it would invalidate every version and model of the family, though nothing that ran
-differed.
-
-**Leaning:** move it into its own file and exclude it by location, like `models.ts`. Token
-costs stay re-derivable from the result file preserved in the postrun image, so the hash
-would then cover only what affects execution. The alternative is to keep it in the hash and
-accept the larger blast radius. **Undecided.**
-
-Imports from outside the family folder are still not hashed. That is the existing
-non-reproducibility question in
-[060-experiment-parameters.md](060-experiment-parameters.md#open-questions), unchanged here.
-
-## What has to change when this is applied
-
-Concepts, not a file list:
-
-- Every statement that there are six experiment parameters, and the six-array cross
-  product, becomes five, with the pair as one axis.
-- Harness and model stop being separate parameter kinds. Both pages are rewritten around
-  the family, version and model values.
-- Typed names: replace the `HarnessModels` compatibility section with the generated
-  pair-string union.
-- The hashing and permutation-hash descriptions drop the "resolved model ID" special case.
-  It is now just part of the pair hash.
-- The folder-structure and terminology pages state that a harness/model folder is a family,
-  and that the parameter is the pair.
-- Anywhere the path notation reads `<harnesses>/<models>`, it becomes the pair.
-- The `scratchpad/harness-model-types` demo still shows the superseded cross-product
-  option as chosen.
+Imports from outside the harness folder are no longer a reproducibility hole: what they
+contribute is hashed through the text they help render.

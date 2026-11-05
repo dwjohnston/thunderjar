@@ -3,55 +3,54 @@
 A named, reusable action that overlays prompt files (`CLAUDE.md`, skills, rules) into
 the worktree before the harness runs.
 
-One of the six experiment parameters. Hashing and `applyParameter` are common to all of
+One of the five experiment parameters. Hashing and `applyParameter` are common to all of
 them — see [060-experiment-parameters.md](060-experiment-parameters.md).
 
 ## Declaration
 
-Lives at `experiment-parameters/promptSets/<name>/index.ts`.
+Lives at `test-case-parameters/promptSets/<name>/index.ts`, with its prompt files in a
+`files/` folder beside it.
+
+```
+promptSets/house-style/
+  index.ts
+  files/
+    AGENTS.md
+    .agents/skills/review/SKILL.md
+```
 
 ```ts
-// experiment-parameters/promptSets/snerk/index.ts
+// test-case-parameters/promptSets/house-style/index.ts
 export default declarePromptSet({
-  commit: "e4f5a6",
-  files: { "prompts/snerk.md": "CLAUDE.md" },
-  applyParameter: () => ``,
+  applyParameter: (_config, ctx) => `COPY ${ctx.dir}/ /workspace/
+RUN cd /workspace && git add -A && git commit --quiet -m "Thunderjar: apply promptSet"`,
 });
 ```
 
 | Field | What it is |
 |---|---|
-| `commit` | The commit the prompt files are read from. |
-| `files` | Each prompt file's path in the repository, mapped to where it goes in `/workspace`. |
-| `applyParameter` | Returns a Dockerfile fragment run after the files are in place. Usually empty. |
+| `config`, `resolve` | As every parameter has: see [060](060-experiment-parameters.md#floating-parameters-resolve). |
+| `applyParameter` | Returns the Dockerfile fragment that puts its prompt files in `/workspace`, from `ctx.dir`, its `files/` folder in the build context. |
 
-## Prompt files come from a pinned commit
+Committing them, with `git add -A`, lets the agent's changes be told from the prompt set's.
 
-Prompt files are read from a pinned commit, not taken from whatever happens to be in the
-worktree. Otherwise the declaration's parameter hash stays the same while the file it
-applies changes underneath it — the silent drift the hash exists to catch.
+## Prompt files are hashed by content
 
-On the host, Thunderjar reads each file with `git show e4f5a6:prompts/snerk.md` into the
-build context, and the prerun build copies it into `/workspace`:
+Only the prompt set's `files/` folder reaches the build, and it's hashed by content, with
+the fragment. Editing a prompt file changes the prompt set's hash, and nothing else's. A
+file kept in the project tree can be linked into `files/`: links are followed, and their
+targets hashed. See
+[051-configuration-folder-structure.md](051-configuration-folder-structure.md#a-parameters-files-folder).
 
-```dockerfile
-COPY prompt-set/CLAUDE.md /workspace/CLAUDE.md     # Thunderjar
-```
-
-Only the files are copied, never the commit's history, so a prompt set from a later
-commit than the code state doesn't show the agent anything after the code state's commit.
-The commit must be in the local repository, as for a code state — see
-[062-code-state.md](062-code-state.md#where-the-commit-comes-from).
-
-The prompt files themselves stay in the normal project tree (`prompts/snerk.md` above).
-The declaration points at them rather than copying them into `thunderjar/`.
+A prompt set that reads its files from a repository instead, at a commit, clones or fetches
+them in its own `RUN`, as a code state does, with the commit in the text so it's hashed.
 
 ## Independent of code state
 
-The commit is the prompt set's own, independent of the code state's. That keeps the two
+The prompt set is its own parameter, independent of the code state. That keeps the two
 axes orthogonal: a matrix can vary prompt sets while holding code state fixed, which is
 the single most common experiment shape.
 
 ## When it applies
 
-Build time only. Its files are copied in after the code state's fragment, and before the harness's fragment.
+Build time only. Its fragment runs after the code state's, and before the harness's.
