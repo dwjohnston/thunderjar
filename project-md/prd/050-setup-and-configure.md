@@ -141,8 +141,10 @@ export default declareConfig({
   });
   ```
 - **`runDataStore`** is a pluggable store behind a small interface (record a container run,
-  list executions, fetch a run's results, re-measure). v1 ships only `sqliteStore`. A remote
-  backend, e.g. `postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })`, is a later drop-in.
+  list executions, fetch a run's results, re-measure). Two ship:
+  - `sqliteStore({ path })`, a local file, relative to the project folder. `init` scaffolds it.
+  - `postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })`, a shared database, its connection URL in
+    the named variable. `init` scaffolds it as a commented-out example.
 - Container defaults such as concurrency are not in v1.
 
 ### Authentication

@@ -4,6 +4,7 @@
 // hand, e.g. `bun run fixture 0203 executions two-harnesses`.
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
+import { Database } from "bun:sqlite";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
@@ -78,17 +79,30 @@ describe("0203 recorded executions", () => {
     });
   });
 
-  test("a record that isn't JSON is an error naming its file", async () => {
+  test("without --data-dir, the store is the config's runDataStore, relative to the project folder", async () => {
+    await using copy = await copyScenarioProject("0203");
+    await $`mkdir -p ${copy.dir}/elsewhere && mv ${copy.dir}/.thunderjar/.data/runs.sqlite ${copy.dir}/elsewhere/store.sqlite`.quiet();
+    const config = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
+    await Bun.write(config, (await Bun.file(config).text()).replace("./.thunderjar/.data/runs.sqlite", "./elsewhere/store.sqlite"));
+
+    const { stdout, exitCode } = await thunderjar(`${copy.dir}/.thunderjar`, ["executions", "example"]);
+    expect(stdout).toBe("<ULID>  example  2026-10-03 09:05  1 permutation × 1 iteration  running\n");
+    expect(exitCode).toBe(0);
+  });
+
+  test("a record that isn't JSON is an error naming the store and the record", async () => {
     const data = dataDir();
-    await $`mkdir -p ${data}/runs && cp -R ${scenario("0203")}/.thunderjar/.data/runs/. ${data}/runs`.quiet();
-    await Bun.write(`${data}/runs/01m3ygz4g89aqh8yey8em0twpq/execution.json`, '{ "executionId": ');
+    await $`mkdir -p ${data} && cp ${scenario("0203")}/.thunderjar/.data/runs.sqlite ${data}/`.quiet();
+    const db = new Database(`${data}/runs.sqlite`);
+    db.run(`UPDATE executions SET record = '{ "executionId": ' WHERE execution_id = '01m3ygz4g89aqh8yey8em0twpq'`);
+    db.close();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0203"), ["executions", "--data-dir", data], {
       paths: { "<DATA>": data },
     });
 
     expect(stdout).toBe("");
-    expect(stderr).toMatch(/^Error: Can't read <DATA>\/runs\/<ULID>\/execution\.json: .+\n$/);
+    expect(stderr).toMatch(/^Error: Can't read <DATA>\/runs\.sqlite: execution <ULID>: .+\n$/);
     expect(exitCode).toBe(1);
   });
 

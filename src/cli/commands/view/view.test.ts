@@ -3,7 +3,7 @@
 // port; one starts it through the CLI, as a user would. Run it by hand with
 // `bun run fixture 0203 view`.
 import { afterEach, describe, expect, test } from "bun:test";
-import { fileStore } from "../../../store/runDataStore.ts";
+import { sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { scenario } from "../../../testing/scenario.ts";
 import { thunderjar } from "../../../testing/cli.ts";
 import { startViewServer } from "./view.ts";
@@ -14,7 +14,7 @@ const servers: ReturnType<typeof startViewServer>[] = [];
 
 /** A viewer of `dataDir`'s store on a free port, stopped after the test. */
 function serve(dataDir = STORE()) {
-  const server = startViewServer(fileStore(dataDir), 0);
+  const server = startViewServer(sqliteStore(storeFileIn(dataDir)), 0);
   servers.push(server);
   return (path: string) => fetch(new URL(path, server.url));
 }
@@ -92,7 +92,7 @@ describe("through the CLI", () => {
       }
       const [viewing, open] = stdout.trim().split("\n");
 
-      expect(viewing).toBe(`Viewing ${STORE()}`);
+      expect(viewing).toBe(`Viewing ${storeFileIn(STORE())}`);
       expect(open).toMatch(/^Open http:\/\/localhost:\d+\/$/);
       const executions = (await (await fetch(`${open!.slice("Open ".length)}api/executions`)).json()) as unknown[];
       expect(executions).toHaveLength(4);

@@ -5,7 +5,12 @@ themselves are described in [070-data-architecture.md](070-data-architecture.md)
 store interface and `sqliteStore` in
 [050-setup-and-configure.md](050-setup-and-configure.md#thunderjarconfigts).
 
-## Open questions
+## Settled
+
+- **Sharing the run data store between CI and a developer's machine** is `postgresStore`: both
+  point at the same database. `sqliteStore` stays the default for one machine.
+
+## Open questions (from before `postgresStore`)
 
 - **Sharing the run data store between CI and a developer's machine.** With only
   `sqliteStore` in v1, regression triage needs a manual way to share the file. Triage
