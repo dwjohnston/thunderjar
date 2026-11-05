@@ -162,12 +162,65 @@ export function declareInitialPrompt<C = undefined>(declaration: InitialPromptDe
   return declared("declareInitialPrompt", declaration);
 }
 
-export type MeasurementDeclaration = {
-  instrument: string;
-  config: unknown;
-  /** How its values combine across iterations, e.g. `rate`. */
-  aggregate: string[];
+// --- Measurements ---
+
+/** What an instrument gives for one measurement of one container run. */
+export type MeasurementResult<T> =
+  | { outcome: "measured"; data: T }
+  /** Nothing to measure, e.g. no file matched. */
+  | { outcome: "skipped"; reason?: string }
+  /** The instrument itself failed. */
+  | { outcome: "erroredWhileMeasuring"; error: Error };
+
+/**
+ * What an instrument runs against: a measurement container, started from a container run's
+ * postrun image, and discarded once the measure is taken. Relative paths, glob patterns and
+ * commands resolve in `workdir`.
+ */
+export type MeasurementContext = {
+  exec(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, contents: string): Promise<void>;
+  /** The files matching `pattern`, relative to `workdir`, sorted. */
+  glob(pattern: string): Promise<string[]>;
+  /** The text of the result file the harness's `cli` left, or "" if it left none. */
+  harnessResult: string;
+  workdir: string;
 };
+
+/** Each built-in instrument's config and value, by name. */
+export type InstrumentTypes = {
+  /** Did the agent leave a file matching `glob`? */
+  fileCreated: { config: { glob: string }; value: boolean };
+  /** How many lines, across the files matching `glob`, match `pattern`, a JavaScript regular expression? */
+  grep: { config: { glob: string; pattern: string }; value: number };
+  /**
+   * How many tests pass and fail when `template`, a path relative to the measurement's file, is
+   * rendered against each file matching `subject` and run with `bun test`?
+   */
+  templateTest: { config: { subject: string; template: string }; value: { passed: number; failed: number } };
+};
+
+export type InstrumentName = keyof InstrumentTypes;
+
+/** The ways values of type `T` can combine across iterations. */
+export type AggregateFor<T> = [T] extends [boolean]
+  ? "rate" | "count"
+  : [T] extends [number]
+    ? "mean" | "median" | "min" | "max" | "sum"
+    : [T] extends [Record<string, number>]
+      ? "sum" | "mean"
+      : never;
+
+/** An instrument and its config: a `config` that doesn't fit the instrument is a type error. */
+export type MeasurementDeclaration = {
+  [I in InstrumentName]: {
+    instrument: I;
+    config: InstrumentTypes[I]["config"];
+    /** How its values combine across iterations, e.g. `rate`. */
+    aggregate: AggregateFor<InstrumentTypes[I]["value"]>[];
+  };
+}[InstrumentName];
 
 export function declareMeasurement(declaration: MeasurementDeclaration): MeasurementDeclaration {
   return declared("declareMeasurement", declaration);

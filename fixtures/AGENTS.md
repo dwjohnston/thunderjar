@@ -100,14 +100,15 @@ bun run fixture 0202 plan is-prime-baseline
   - `0202_typical_project`: a matrix of two prompt sets, two fake agents and two wordings of the task.
     - Prompt sets `snerk` and `glurk`, each writing its own `FAKE_INSTRUCTIONS.md`.
     - A second fake agent, `fake-harness-beta`, version `1.0.0`, models `fake-model-small` and `fake-model-large`. It writes a correct `isPrime.ts`, where alpha's is buggy.
-    - Task `is-prime` has a second initial prompt, `terse`.
+    - Base image `node20` installs `bun`, which the `templateTest` instrument runs its tests with.
+    - Task `is-prime` has a second initial prompt, `terse`, and two more measurements: `isPrimeTemplateTest`, a `templateTest` of `isPrime.test.template.ts` (5 tests; alpha's `isPrime.ts` passes 3 and fails 2, beta's passes all 5), and `tsIgnoreCount`, a `grep` for `@ts-ignore` (alpha's has 1, beta's none).
     - Test cases: `example`, and `is-prime-baseline`: both prompt sets, `fake-harness-alpha@1.0.0/fake-model-small` and `fake-harness-beta@1.0.0/fake-model-large`, both initial prompts, 5 iterations. Matrix shape 1/1/2/2/2.
   - `0203_recorded_executions`: `0202_typical_project`, with a run data store checked in at `.thunderjar/.data/`, as if three executions had already run. Fixed execution IDs and timestamps, in UTC.
     - `.thunderjar/.gitignore` ignores `.data/`, so its files are force-added.
     - `01m3vf68s54p5eyn5s3t1ygkdj`: `is-prime-baseline`, started 2026-10-01 10:12, complete. All 40 container runs, 8 permutations × 5 iterations, every agent exiting 0.
     - `01m3ygz4g89aqh8yey8em0twpq`: `two-harnesses`, started 2026-10-02 14:40, failed. Both container runs: permutation 1, `fake-harness-alpha`, exits 0; permutation 2, `fake-harness-beta`, exits 3 and leaves no result file.
     - `01m40g5972dza3k7g3d36k55zw`: `example`, started 2026-10-03 09:05, still running. 1 × 1, with no container run recorded yet.
-    - No container run has a measure in its `result` yet.
+    - Its task's measurements are 0202's, and every container run recorded has a measure of each in its `result`, taken by those measurements as they are now: mostly alpha's and beta's usual measures, with a few runs differing, an `erroredWhileMeasuring` measure (`01m3vf68s54p5eyn5s3t1ygkdj` 2-4), and runs that left no `isPrime.ts`, so two measures are `skipped` (`01m3vf68s54p5eyn5s3t1ygkdj` 6-3, and beta's failed run in `01m3ygz4g89aqh8yey8em0twpq`).
 - **03_real_git**: projects whose code states and prompt sets read real commits of this repository. See "Changing a real git scenario's commits" above.
   - `0301_git_project`: a JavaScript project committed twice, whose code states check out each commit and whose prompt sets read a file at each.
     - Real git, through `checkoutCommit` and `ctx.git.show`. Its `project/` is committed to this repository at two pinned states:
@@ -123,6 +124,7 @@ bun run fixture 0202 plan is-prime-baseline
     - Base image `no-default-export`, which exports its declaration under a name.
     - Code states `unwrapped`, a plain object, and `wrongly-wrapped`, wrapped in `declareBaseImage`.
     - Task `fizz-buzz`, whose only initial prompt is `fizzy`.
+    - One task per broken measurement, each with initial prompt `plain` and a test case of its own name: `unknown-instrument` (`fileCraeted`), `misfit-config` (`fileCreated` given a `path`), `unfit-aggregate` (`fileCreated` by `mean`), `missing-template` (a `templateTest` template that isn't there), `invalid-regex` (a `grep` pattern that doesn't parse) and `unwrapped-measurement`.
     - Test cases, instead of `example`: `sound`, as `example` is in the shared setup, and one per mistake: `unknown-prompt-set` (`snirk`), `unknown-task` (`is-even`), `prompt-of-another-task` (`fizzy`), `unexported-base-image`, `unwrapped-code-state`, `wrongly-wrapped-code-state`, `unknown-harness-models` (an unknown version, an unknown model, and a pair not of the form `harness@version/model`), `empty-code-states` (`codeState: []` and 2.5 iterations) and `zero-iterations`.
   - `0403_broken_harness_family`: the shared setup, with a second fake agent, `fake-harness-beta`, whose `versions.ts` isn't wrapped in `declareHarnessVersions`. No `tsconfig.json` or `_generated/`.
     - Test cases: `example`, and `beta`, which names `fake-harness-beta@1.0.0/fake-model-large`.
