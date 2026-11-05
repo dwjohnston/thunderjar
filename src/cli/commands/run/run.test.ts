@@ -132,12 +132,12 @@ Building thunderjar-prerun:44230271 ... done
 ${ALPHA_MEASURES}
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
 ${BETA_MEASURES}
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
 
     const store = await readStore(data);
     const id = store.execution.executionId;
-    expect(store.files).toEqual([`runs/${id}/container-runs/1-1.json`, `runs/${id}/container-runs/2-1.json`, `runs/${id}/execution.json`]);
+    expect(store.files).toEqual(["runs.sqlite"]);
     expect(store.execution).toEqual({
       executionId: expect.stringMatching(/^[0-7][0-9a-z]{25}$/),
       testCase: "two-harnesses",
@@ -275,7 +275,7 @@ Wrote <DATA>/runs/<ULID>/
     expect(stdout).toBe(`Execution <ULID>
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
 ${ALPHA_MEASURES}
-Wrote .thunderjar/.data/runs/<ULID>/
+Recorded in .thunderjar/.data/runs.sqlite
 `);
     const store = await readStore(`${copy.dir}/.thunderjar/.data`);
     expect(store.execution.status).toBe("complete");
@@ -362,7 +362,7 @@ export default declareHarness({ version: "1.0.0", cli: () => "echo partial > isP
       isPrimeTemplateTest: erroredWhileMeasuring (isPrime.ts has no export to bind {{defaultExport}} to)   isPrimeTsExists: true   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: 0
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
 ${BETA_MEASURES}
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
     expect(store.execution.status).toBe("failed");
@@ -401,7 +401,7 @@ export default declareHarness({ version: "1.0.0", cli: () => "true" });
     expect(exitCode).toBe(0);
     expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done, no result file (<duration>)
       isPrimeTemplateTest: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
     const [record] = (await readStore(data)).containerRuns;
     expect(record?.result).toEqual({
@@ -421,7 +421,7 @@ Wrote <DATA>/runs/<ULID>/
     const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
     expect(exitCode).toBe(0);
-    expect(stdout).toMatch(/ 1\/1  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. done \(<duration>, \$0\.061\)\nWrote /);
+    expect(stdout).toMatch(/ 1\/1  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. done \(<duration>, \$0\.061\)\nRecorded in /);
     expect((await readStore(data)).containerRuns[0]?.result).toEqual({});
     expect((await docker.commands()).filter((command) => command.includes("-measure-"))).toEqual([]);
   });
