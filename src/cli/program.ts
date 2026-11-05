@@ -7,6 +7,7 @@ import { createInitCommand } from "./commands/init/init.ts";
 import { createPlanCommand } from "./commands/plan/plan.ts";
 import { createRunCommand } from "./commands/run/run.ts";
 import { createShowCommand } from "./commands/show/show.ts";
+import { createViewCommand } from "./commands/view/view.ts";
 
 export function createProgram(): Command {
   return new Command()
@@ -19,5 +20,6 @@ export function createProgram(): Command {
     .addCommand(createBuildCommand())
     .addCommand(createRunCommand())
     .addCommand(createExecutionsCommand())
-    .addCommand(createShowCommand());
+    .addCommand(createShowCommand())
+    .addCommand(createViewCommand());
 }

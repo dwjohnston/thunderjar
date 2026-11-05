@@ -24,7 +24,7 @@ and a user always installs both together, so there is nothing to gain.
 ```jsonc
 {
   "name": "thunderjar",
-  "bin": { "thunderjar": "./dist/cli.js" },
+  "bin": { "thunderjar": "./dist/index.js" },
   "exports": { ".": "./dist/index.js" },
   "dependencies": { "bun": "<exact version>" }
 }
