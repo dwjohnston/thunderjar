@@ -4,6 +4,8 @@
 import {
   commitContainer,
   DockerContainerError,
+  type DockerRuntime,
+  localRuntime,
   readContainerFile,
   removeContainer,
   runContainer,
@@ -81,6 +83,8 @@ export type ContainerRun = {
   timeoutSeconds: number;
   /** The container's name. */
   container: string;
+  /** Where it runs: the local Docker daemon by default. */
+  runtime?: DockerRuntime;
 };
 
 export type ContainerRunOutcome = {
@@ -127,19 +131,21 @@ export function parseExecution(text: string | undefined, timeoutSeconds: number,
  * DockerContainerError if Docker fails.
  */
 export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
+  const runtime = run.runtime ?? localRuntime();
   try {
     const stop = await runContainer(run.prerunImage, run.container, executionWrapper(run.turns), {
       env: run.env,
       runOptions: run.runOptions,
       timeoutSeconds: run.timeoutSeconds,
+      runtime,
     });
     const killedAt = stop.timedOut ? stop.killedAt : undefined;
-    const execution = parseExecution(await readContainerFile(run.container, RUN_PATH), run.timeoutSeconds, killedAt);
+    const execution = parseExecution(await readContainerFile(run.container, RUN_PATH, runtime), run.timeoutSeconds, killedAt);
     const harnessResults: (string | null)[] = [];
-    for (const { resultPath } of run.turns) harnessResults.push((await readContainerFile(run.container, resultPath)) ?? null);
-    await commitContainer(run.container, run.postrunImage, run.prerunImage);
+    for (const { resultPath } of run.turns) harnessResults.push((await readContainerFile(run.container, resultPath, runtime)) ?? null);
+    await commitContainer(run.container, run.postrunImage, run.prerunImage, runtime);
     return { execution, harnessResults };
   } finally {
-    await removeContainer(run.container).catch(() => {});
+    await removeContainer(run.container, runtime).catch(() => {});
   }
 }

@@ -1,6 +1,6 @@
 // Loads `.thunderjar/thunderjar.config.ts`: where images are pushed, if anywhere, and what prerun
 // builds are given beside their build context.
-import type { BuildOptions, ConfigDeclaration, ImageStore } from "../api/declarations.ts";
+import type { BuildOptions, ConfigDeclaration, ImageStore, RuntimeConfig } from "../api/declarations.ts";
 import { ConfigError, loadDeclaration, type Problem, problemsError } from "./loader.ts";
 import { ENV_NAME } from "./envName.ts";
 
@@ -67,8 +67,24 @@ export function buildOptionsProblem(build: unknown): string | undefined {
   return undefined;
 }
 
+/** Why `runtime`, as loaded, isn't a RuntimeConfig that can be used with `imageStore`, or undefined if it is. */
+export function runtimeProblem(runtime: unknown, imageStore: unknown): string | undefined {
+  if (runtime === undefined) return undefined;
+  if (typeof runtime !== "object" || runtime === null || Array.isArray(runtime)) {
+    return `must be { command: ["docker", "--context", "<context>"] }, got ${show(runtime)}`;
+  }
+  const { command } = runtime as { command?: unknown };
+  if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === "string" && part.length > 0)) {
+    return `command must be a non-empty list of non-empty strings, e.g. ["docker", "--context", "cloud"], got ${show(command)}`;
+  }
+  if (imageStore === null) return "needs an imageStore: the runtime pulls the images it runs from it";
+  return undefined;
+}
+
 export type ProjectConfig = {
   imageStore: ImageStore | null;
+  /** Where `run` runs containers, or `null` for the local Docker daemon. */
+  runtime: RuntimeConfig | null;
   /** What prerun builds are given: no secrets and no SSH agent, unless the config gives them. */
   build: Required<BuildOptions>;
 };
@@ -93,11 +109,14 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
     if (problem) problems.push({ file: CONFIG_FILE, field: "imageStore", message: problem });
     const buildProblem = buildOptionsProblem(config.build);
     if (buildProblem) problems.push({ file: CONFIG_FILE, field: "build", message: buildProblem });
+    const runtime = runtimeProblem(config.runtime, config.imageStore);
+    if (runtime) problems.push({ file: CONFIG_FILE, field: "runtime", message: runtime });
   }
   if (problems.length > 0) throw problemsError(problems);
-  const { imageStore, build } = config as ConfigDeclaration;
+  const { imageStore, build, runtime } = config as ConfigDeclaration;
   return {
     imageStore: imageStore === null ? null : { repository: imageStore.repository },
+    runtime: runtime === undefined ? null : { command: [...runtime.command] },
     build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false },
   };
 }
