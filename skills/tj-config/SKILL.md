@@ -21,7 +21,7 @@ export default declareConfig({
 | Field | What it is | Required |
 |---|---|---|
 | `imageStore` | The registry repository prerun and postrun images are pushed to, or `null` | Yes |
-| `runDataStore` | Where run results are recorded. Only `sqliteStore` exists | Yes |
+| `runDataStore` | The SQLite file run results are recorded in. Only `sqliteStore` exists | Yes |
 | `build` | Secrets and the SSH agent for prerun builds | No |
 | `runtime` | Where `run` runs containers, instead of the local Docker daemon | No |
 
@@ -41,9 +41,19 @@ Then the user runs `docker login ghcr.io`. A repository with no host, e.g. `acme
 
 ## `runDataStore`
 
-Leave it as `init` scaffolded it.
+The SQLite file run results are recorded in. `init` scaffolds `.thunderjar/.data/runs.sqlite`, which it gitignores.
 
-⚠️ The `path` is not read yet. Run data always goes to `.thunderjar/.data/`, or to the folder a command's `--data-dir` names.
+```ts
+runDataStore: sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }),
+```
+
+- `path` is relative to the project folder, the one holding `.thunderjar/`, unless it's absolute.
+- The file and its folder are created on the first `run`.
+- `run`, `executions`, `show` and `view` take `--data-dir <dir>` to use `<dir>/runs.sqlite` instead, for one command.
+
+✅ **Do** keep the file out of git, unless a team means to share results that way.
+
+**Why:** it's a binary file that every `run` rewrites, so concurrent commits conflict.
 
 ## `build`
 

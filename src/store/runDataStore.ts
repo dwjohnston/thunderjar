@@ -1,15 +1,15 @@
 // The run data store: what each execution did, and each of its container runs. A small
-// interface, so another store (SQLite, a shared remote one) can drop in behind it. For now the
-// only store is a folder of JSON files, under `--data-dir`, by default `.thunderjar/.data/`,
-// which `init` gitignores; the config's `runDataStore` isn't read yet.
+// interface, so another store (a shared remote one) can drop in behind it. The store is a SQLite
+// file, by `bun:sqlite`, at the config's `runDataStore` path, by default
+// `.thunderjar/.data/runs.sqlite`, which `init` gitignores, or `runs.sqlite` in `--data-dir`.
 //
-//   <data dir>/runs/<execution ID>/
-//     execution.json                                   its ExecutionRecord
-//     container-runs/<permutation>-<iteration>.json    a ContainerRunRecord each
+//   executions      (execution_id PRIMARY KEY, record)                      its ExecutionRecord
+//   container_runs  (execution_id, permutation, iteration PRIMARY KEY, record)  a ContainerRunRecord each
 //
-// Every file is pretty JSON, written whole to a temporary file then renamed over the old one,
-// so an interrupted write leaves the previous contents rather than half a file.
-import { $, Glob } from "bun";
+// Each record is a JSON column, so a record's shape can grow without a migration; the keys
+// beside it are only for lookups and order. Each write is one statement, so it's atomic.
+// Reads open the file read-only, so reading never creates or changes it.
+import { Database } from "bun:sqlite";
 import type { Reply, Resolved, TokenCosts } from "../api/declarations.ts";
 import type { Axis } from "../config/permutations.ts";
 
@@ -129,16 +129,10 @@ export interface RunDataStore {
   containerRunsOf(executionId: string): Promise<ContainerRunRecord[]>;
 }
 
-/** The folder of execution `executionId`'s records, in the store under `dataDir`. */
-export const executionFolder = (dataDir: string, executionId: string) => `${dataDir}/runs/${executionId}`;
+/** The file of the store in `dataDir`, a `--data-dir`. */
+export const storeFileIn = (dataDir: string) => `${dataDir}/runs.sqlite`;
 
-async function writeJson(path: string, value: unknown): Promise<void> {
-  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
-  await Bun.write(temporary, `${JSON.stringify(value, null, 2)}\n`);
-  await $`mv ${temporary} ${path}`.quiet();
-}
-
-/** A record in the store that can't be read, at `path`. */
+/** A store, or a record in it, that can't be read, in the file at `path`. */
 export class RunDataStoreError extends Error {
   readonly path: string;
 
@@ -148,44 +142,93 @@ export class RunDataStoreError extends Error {
   }
 }
 
-/** Each file in `dir` matching `pattern`, parsed. None if `dir` doesn't exist. Throws a RunDataStoreError for a file that isn't JSON. */
-async function readJsonFiles<T>(dir: string, pattern: string): Promise<T[]> {
-  const isDirectory = await Bun.file(dir)
-    .stat()
-    .then((stat) => stat.isDirectory())
-    .catch(() => false);
-  if (!isDirectory) return [];
-  const files = await Array.fromAsync(new Glob(pattern).scan({ cwd: dir }));
-  return Promise.all(
-    files.map(async (file) => {
-      const path = `${dir}/${file}`;
-      try {
-        return (await Bun.file(path).json()) as T;
-      } catch (error) {
-        throw new RunDataStoreError(path, error instanceof Error ? error.message : String(error));
-      }
-    }),
+const SCHEMA = `
+  CREATE TABLE IF NOT EXISTS executions (
+    execution_id TEXT PRIMARY KEY,
+    record TEXT NOT NULL
   );
-}
+  CREATE TABLE IF NOT EXISTS container_runs (
+    execution_id TEXT NOT NULL,
+    permutation INTEGER NOT NULL,
+    iteration INTEGER NOT NULL,
+    record TEXT NOT NULL,
+    PRIMARY KEY (execution_id, permutation, iteration)
+  );
+`;
 
-/** A store of JSON files under `dataDir`. A missing folder is an empty store. */
-export function fileStore(dataDir: string): RunDataStore {
+/**
+ * The SQLite store in the file at `path`. Reading a missing file is an empty store, and doesn't
+ * create it; the first write creates it, and its folder. Throws a RunDataStoreError for a file
+ * that isn't a store, or a record that isn't JSON.
+ */
+export function sqliteStore(path: string): RunDataStore {
+  let writer: Database | undefined;
+
+  const fail = (error: unknown, what?: string): never => {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new RunDataStoreError(path, what === undefined ? message : `${what}: ${message}`);
+  };
+
+  /** The store, opened to write, created with its folder if it doesn't exist. */
+  const forWriting = async (): Promise<Database> => {
+    if (writer) return writer;
+    await Bun.$`mkdir -p ${path.slice(0, path.lastIndexOf("/")) || "/"}`.quiet();
+    try {
+      const db = new Database(path, { create: true, strict: true });
+      db.exec(SCHEMA);
+      writer = db;
+      return db;
+    } catch (error) {
+      return fail(error);
+    }
+  };
+
+  /** The rows of `sql`, read-only, or none if there's no store yet. Never writes the file. */
+  const read = async <T>(sql: string, params: Record<string, string> = {}): Promise<T[]> => {
+    if (!writer && !(await Bun.file(path).exists())) return [];
+    let db: Database | undefined;
+    try {
+      db = writer ?? new Database(path, { readonly: true, strict: true });
+      return db.query(sql).all(params) as T[];
+    } catch (error) {
+      return fail(error);
+    } finally {
+      if (db && db !== writer) db.close();
+    }
+  };
+
+  const parse = <T>(what: string, record: string): T => {
+    try {
+      return JSON.parse(record) as T;
+    } catch (error) {
+      return fail(error, what);
+    }
+  };
+
   return {
     async recordExecution(record) {
-      await writeJson(`${executionFolder(dataDir, record.executionId)}/execution.json`, record);
+      (await forWriting())
+        .query("INSERT OR REPLACE INTO executions (execution_id, record) VALUES ($id, $record)")
+        .run({ id: record.executionId, record: JSON.stringify(record) });
     },
     async recordContainerRun(record) {
-      const dir = `${executionFolder(dataDir, record.executionId)}/container-runs`;
-      await writeJson(`${dir}/${record.permutation}-${record.iteration}.json`, record);
+      (await forWriting())
+        .query(
+          "INSERT OR REPLACE INTO container_runs (execution_id, permutation, iteration, record) VALUES ($id, $permutation, $iteration, $record)",
+        )
+        .run({ id: record.executionId, permutation: record.permutation, iteration: record.iteration, record: JSON.stringify(record) });
     },
     async listExecutions() {
-      const records = await readJsonFiles<ExecutionRecord>(`${dataDir}/runs`, "*/execution.json");
       // ULIDs sort by time.
-      return records.toSorted((a, b) => (a.executionId < b.executionId ? 1 : a.executionId > b.executionId ? -1 : 0));
+      const rows = await read<{ execution_id: string; record: string }>("SELECT execution_id, record FROM executions ORDER BY execution_id DESC");
+      return rows.map((row) => parse<ExecutionRecord>(`execution ${row.execution_id}`, row.record));
     },
     async containerRunsOf(executionId) {
-      const records = await readJsonFiles<ContainerRunRecord>(`${executionFolder(dataDir, executionId)}/container-runs`, "*.json");
-      return records.toSorted((a, b) => a.permutation - b.permutation || a.iteration - b.iteration);
+      const rows = await read<{ permutation: number; iteration: number; record: string }>(
+        "SELECT permutation, iteration, record FROM container_runs WHERE execution_id = $id ORDER BY permutation, iteration",
+        { id: executionId },
+      );
+      return rows.map((row) => parse<ContainerRunRecord>(`container run ${executionId} ${row.permutation}-${row.iteration}`, row.record));
     },
   };
 }

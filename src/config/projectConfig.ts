@@ -81,10 +81,20 @@ export function runtimeProblem(runtime: unknown, imageStore: unknown): string | 
   return undefined;
 }
 
+/** Why `runDataStore` isn't a run data store, or undefined if it is. */
+export function runDataStoreProblem(runDataStore: unknown): string | undefined {
+  const { kind, path } = (runDataStore ?? {}) as { kind?: unknown; path?: unknown };
+  if (kind !== "sqlite") return "must be a store, e.g. sqliteStore({ path: \"./.thunderjar/.data/runs.sqlite\" })";
+  if (typeof path !== "string" || path === "") return "sqliteStore's path must be a file path";
+  return undefined;
+}
+
 export type ProjectConfig = {
   imageStore: ImageStore | null;
   /** Where `run` runs containers, or `null` for the local Docker daemon. */
   runtime: RuntimeConfig | null;
+  /** The run data store's file, as the config gives it: relative to the project folder, the one holding `.thunderjar/`, unless absolute. */
+  runDataStore: { path: string };
   /** What prerun builds are given: no secrets and no SSH agent, unless the config gives them. */
   build: Required<BuildOptions>;
 };
@@ -111,11 +121,14 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
     if (buildProblem) problems.push({ file: CONFIG_FILE, field: "build", message: buildProblem });
     const runtime = runtimeProblem(config.runtime, config.imageStore);
     if (runtime) problems.push({ file: CONFIG_FILE, field: "runtime", message: runtime });
+    const storeProblem = runDataStoreProblem(config.runDataStore);
+    if (storeProblem) problems.push({ file: CONFIG_FILE, field: "runDataStore", message: storeProblem });
   }
   if (problems.length > 0) throw problemsError(problems);
-  const { imageStore, build, runtime } = config as ConfigDeclaration;
+  const { imageStore, build, runtime, runDataStore } = config as ConfigDeclaration;
   return {
     imageStore: imageStore === null ? null : { repository: imageStore.repository },
+    runDataStore: { path: runDataStore.path },
     runtime: runtime === undefined ? null : { command: [...runtime.command] },
     build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false },
   };

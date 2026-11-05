@@ -7,9 +7,9 @@ import { loadMeasurements, type Measurement } from "../../../config/measurements
 import { AXES, abbreviateHash } from "../../../config/permutations.ts";
 import type { ModelTokenCosts, Reply, TokenCosts } from "../../../api/declarations.ts";
 import { type AggregatedValue, type AggregateMethod, aggregatePermutation } from "../../../execution/aggregate.ts";
-import { type ContainerRunRecord, type ExecutionRecord, fileStore, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, RunDataStoreError, sqliteStore } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
-import { dataDirOf, dataDirOption, displayPath, resolvePath } from "../../dataDir.ts";
+import { dataDirOption, displayPath, storeFileOf } from "../../dataDir.ts";
 import { agentEnd, dollars, showResolved, endedCleanly, knownCost, minute, plural, thousands, totalTokens } from "../../format.ts";
 
 const GAP = "   ";
@@ -259,13 +259,13 @@ function fail(message: string): void {
 }
 
 /**
- * Shows execution `executionId`, or its container run `containerRun`. The store is `dataDir`, or
- * the one in the nearest `.thunderjar/` folder in `cwd` or above it. An execution's aggregates are
+ * Shows execution `executionId`, or its container run `containerRun`. The store is in `dataDir`, or
+ * the one the config names of the nearest `.thunderjar/` folder in `cwd` or above it. An execution's aggregates are
  * by the measurements of that folder's task.
  */
 async function show(cwd: string, executionId: string, containerRun?: string, dataDir?: string): Promise<void> {
   const root = containerRun === undefined || dataDir === undefined ? await findThunderjarRoot(cwd) : undefined;
-  const store = fileStore(dataDir === undefined ? dataDirOf(cwd, root!) : resolvePath(cwd, dataDir));
+  const store = sqliteStore(await storeFileOf(cwd, dataDir, root));
   let execution: ExecutionRecord | undefined;
   let runs: ContainerRunRecord[];
   try {

@@ -81,7 +81,7 @@ describe("0204 misbehaving agents", () => {
       isPrimeTsExists: false
  3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
       isPrimeTsExists: true
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
     expect(store.execution.status).toBe("failed");
@@ -137,7 +137,7 @@ Permutation 1: prerun image thunderjar-prerun:b3d358e4
     expect(stdout).toEndWith(`
  1/1  iteration 1/1  fake-rememberer | tell-then-ask  ... done (<duration>)
       promisedToRemember: true   remembersName: true
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
     const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
     expect(record.execution.turns?.map((turn) => turn.exitCode)).toEqual([0, 0]);
@@ -339,7 +339,7 @@ Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
       isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
-Wrote <REPO>/fixtures/.tmp/data-<UUID>/runs/<ULID>/
+Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     expect(await docker.pushed()).toEqual([PRERUN, postrun]);
     const commands = await docker.commands();
@@ -400,7 +400,7 @@ Pulling ${PRERUN} into the runtime ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
       isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
-Wrote <REPO>/fixtures/.tmp/data-<UUID>/runs/<ULID>/
+Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     const commands = await docker.commands();
     const local = commands.filter((command) => !command.startsWith(REMOTE));

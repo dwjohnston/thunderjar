@@ -2,11 +2,18 @@
 // is committed into its postrun image, and is measured in containers from that. The agents are the fake ones. Skipped by `bun test`;
 // run with `bun run test:docker`. Every image and container is named under a throwaway
 // `--image-prefix`, and removed afterwards, and the store goes to a temporary `--data-dir`.
-import { $, Glob } from "bun";
+import { $ } from "bun";
 import { afterAll, describe, expect, test } from "bun:test";
-import type { ContainerRunRecord, ExecutionRecord } from "../../../store/runDataStore.ts";
+import { type ContainerRunRecord, type ExecutionRecord, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
+
+/** The records of the one execution in the store in `dir`, a `--data-dir`. */
+async function storedRuns(dir: string) {
+  const store = sqliteStore(storeFileIn(dir));
+  const [execution] = (await store.listExecutions()) as [ExecutionRecord];
+  return { execution, containerRuns: await store.containerRunsOf(execution.executionId) };
+}
 
 const PREFIX = `tj-test-${crypto.randomUUID().slice(0, 8)}`;
 const DATA_DIR = `${TMP_DIR}/data-${PREFIX}`;
@@ -48,16 +55,13 @@ Building <PREFIX>-prerun:44230271 ... done
       isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
       isPrimeTemplateTest: {passed: 5, failed: 0}   isPrimeTsExists: true   saysArr: false   tsIgnoreCount: 0
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
 
-    const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: DATA_DIR, onlyFiles: false })];
-    const execution = (await Bun.file(`${DATA_DIR}/${executionDir}/execution.json`).json()) as ExecutionRecord;
+    const { execution, containerRuns } = await storedRuns(DATA_DIR);
     const id = execution.executionId;
     expect(execution).toMatchObject({ testCase: "two-harnesses", status: "complete", matrix: { permutations: 2, iterations: 1 } });
-    const [alpha, beta] = (await Promise.all(
-      ["1-1", "2-1"].map((run) => Bun.file(`${DATA_DIR}/runs/${id}/container-runs/${run}.json`).json()),
-    )) as [ContainerRunRecord, ContainerRunRecord];
+    const [alpha, beta] = containerRuns as [ContainerRunRecord, ContainerRunRecord];
 
     // Each record names its postrun image, which holds what its agent did and how it ran.
     expect([alpha.postrunImage, beta.postrunImage]).toEqual([`${PREFIX}-postrun:${id}-1-1`, `${PREFIX}-postrun:${id}-2-1`]);
@@ -133,8 +137,7 @@ Wrote <DATA>/runs/<ULID>/
  3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
       isPrimeTsExists: true
 `);
-    const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: data, onlyFiles: false })];
-    const sleeper = (await Bun.file(`${data}/${executionDir}/container-runs/1-1.json`).json()) as ContainerRunRecord;
+    const [sleeper] = (await storedRuns(data)).containerRuns as [ContainerRunRecord];
     expect(sleeper.execution).toMatchObject({ exitCode: null, timedOut: true, timeoutSeconds: 2 });
     // Its postrun image holds the wrapper's start, all it wrote before it was killed.
     expect(Object.keys(JSON.parse(await inImage(sleeper.postrunImage, "cat /thunderjar/run.json")))).toEqual(["startedAt"]);
@@ -154,8 +157,7 @@ Wrote <DATA>/runs/<ULID>/
  1/1  iteration 1/1  fake-rememberer | tell-then-ask  ... done (<duration>)
       promisedToRemember: true   remembersName: true
 `);
-    const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: data, onlyFiles: false })];
-    const record = (await Bun.file(`${data}/${executionDir}/container-runs/1-1.json`).json()) as ContainerRunRecord;
+    const [record] = (await storedRuns(data)).containerRuns as [ContainerRunRecord];
     expect(record.turns?.map((turn) => turn.reply)).toEqual([
       { outcome: "collected", text: "I will remember that: My rubber ducky is called Eli." },
       { outcome: "collected", text: "You told me: My rubber ducky is called Eli." },
@@ -188,8 +190,7 @@ Wrote <DATA>/runs/<ULID>/
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: data, onlyFiles: false })];
-    const record = (await Bun.file(`${data}/${executionDir}/container-runs/1-1.json`).json()) as ContainerRunRecord;
+    const [record] = (await storedRuns(data)).containerRuns as [ContainerRunRecord];
     // fake-echo copies the prompt file into its result file.
     expect(record.harnessResult).toBe(AWKWARD);
     expect(await $`docker run --rm ${record.postrunImage} cat /thunderjar/prompt.txt`.text()).toBe(AWKWARD);

@@ -2,10 +2,9 @@
 // JSON API from the store, and serves a client-rendered React app that reads it. The store is
 // read afresh on each request, so a reload shows runs recorded since the page opened.
 import { Command, Option } from "commander";
-import { findThunderjarRoot } from "../../../config/loader.ts";
-import { type RunDataStore, fileStore, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type RunDataStore, RunDataStoreError, sqliteStore } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
-import { dataDirOf, dataDirOption, resolvePath } from "../../dataDir.ts";
+import { dataDirOption, storeFileOf } from "../../dataDir.ts";
 import app from "./app/index.html";
 
 export const DEFAULT_PORT = 4300;
@@ -49,11 +48,11 @@ export function startViewServer(store: RunDataStore, port: number) {
 }
 
 async function view(cwd: string, port: number, dataDir?: string): Promise<void> {
-  const store = dataDir === undefined ? dataDirOf(cwd, await findThunderjarRoot(cwd)) : resolvePath(cwd, dataDir);
+  const store = await storeFileOf(cwd, dataDir);
   // Built into dist/, Bun finds the app's files relative to the working directory rather than to
   // the bundle, on every request. So serve from the bundle's folder. The store's path is absolute.
   process.chdir(import.meta.dir);
-  const server = startViewServer(fileStore(store), port);
+  const server = startViewServer(sqliteStore(store), port);
   console.log(`Viewing ${store}`);
   console.log(`Open ${server.url}`);
 }

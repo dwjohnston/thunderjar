@@ -2,7 +2,7 @@
 // `bun test --parallel` runs them in two workers.
 import { expect } from "bun:test";
 import { $, Glob } from "bun";
-import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure, RecordedOutcome } from "../../../store/runDataStore.ts";
+import { type ContainerRunRecord, type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { TMP_DIR } from "../../../testing/cli.ts";
 import type { FakeDocker } from "../../../testing/fakeDocker.ts";
 
@@ -57,14 +57,12 @@ export const dataDir = () => {
 
 /** The execution record and container run records in the store under `dir`, for its one execution. */
 export async function readStore(dir: string) {
-  const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: dir, onlyFiles: false })];
-  const containerRuns = [...new Glob("container-runs/*.json").scanSync({ cwd: `${dir}/${executionDir}` })].sort();
+  const store = sqliteStore(storeFileIn(dir));
+  const [execution] = await store.listExecutions();
   return {
     files: filesIn(dir),
-    execution: (await Bun.file(`${dir}/${executionDir}/execution.json`).json()) as ExecutionRecord,
-    containerRuns: (await Promise.all(
-      containerRuns.map((file) => Bun.file(`${dir}/${executionDir}/${file}`).json()),
-    )) as ContainerRunRecord[],
+    execution: execution as ExecutionRecord,
+    containerRuns: execution ? await store.containerRunsOf(execution.executionId) : [],
   };
 }
 
