@@ -1,11 +1,9 @@
 // Reads the names declared under `.thunderjar/test-case-parameters/`, and renders them as the
 // global types of `_generated/parameterNames.d.ts`.
-import { Glob } from "bun";
-import { loadDefault } from "../../../config/loader.ts";
+import { foldersIn, PARAMETERS as P, tsFilesIn } from "../../../config/folders.ts";
+import { existsIn, loadDeclaration, type Problem, problemsError } from "../../../config/loader.ts";
 
 export const GENERATED_PATH = "_generated/parameterNames.d.ts";
-
-const P = "test-case-parameters";
 
 export type HarnessNames = { versions: string[]; models: string[] };
 
@@ -19,53 +17,35 @@ export type ParameterNames = {
   harnesses: Record<string, HarnessNames>;
 };
 
-const sorted = (names: Iterable<string>) => [...new Set(names)].toSorted();
-
-/** The folders directly in `dir`, sorted. None if `dir` doesn't exist. */
-async function foldersIn(dir: string): Promise<string[]> {
-  const folders: string[] = [];
-  try {
-    for (const name of new Glob("*").scanSync({ cwd: dir, onlyFiles: false })) {
-      if ((await Bun.file(`${dir}/${name}`).stat()).isDirectory()) folders.push(name);
-    }
-  } catch {
-    return [];
-  }
-  return sorted(folders);
+/** The keys of the map `<root>/<file>` declares with `declareFn`. None if there's no such file. */
+async function keysOfMap(root: string, file: string, declareFn: string, problems: Problem[]): Promise<string[]> {
+  if (!(await existsIn(root, file))) return [];
+  return Object.keys((await loadDeclaration(root, file, declareFn, problems)) ?? {}).toSorted();
 }
 
-/** The names of the `.ts` files directly in `dir`, without `.ts`, sorted. */
-function tsFilesIn(dir: string): string[] {
-  try {
-    return sorted([...new Glob("*.ts").scanSync({ cwd: dir })].map((path) => path.slice(0, -".ts".length)));
-  } catch {
-    return [];
-  }
-}
-
-async function keysOfDefault(root: string, path: string): Promise<string[]> {
-  if (!(await Bun.file(`${root}/${path}`).exists())) return [];
-  return sorted(Object.keys((await loadDefault(root, path)) ?? {}));
-}
-
-/** The names declared in the `.thunderjar/` folder `root`. */
+/**
+ * The names declared in the `.thunderjar/` folder `root`. Every harness's versions and models are
+ * loaded, so one broken map fails it for the whole project.
+ */
 export async function collectParameterNames(root: string): Promise<ParameterNames> {
   const tasks: Record<string, string[]> = {};
-  for (const task of await foldersIn(`${root}/${P}/tasks`)) {
-    tasks[task] = tsFilesIn(`${root}/${P}/tasks/${task}/initial-prompts`);
+  for (const task of await foldersIn(root, `${P}/tasks`)) {
+    tasks[task] = await tsFilesIn(root, `${P}/tasks/${task}/initial-prompts`);
   }
+  const problems: Problem[] = [];
   const harnesses: Record<string, HarnessNames> = {};
-  for (const harness of await foldersIn(`${root}/${P}/harnessModels`)) {
+  for (const harness of await foldersIn(root, `${P}/harnessModels`)) {
     const dir = `${P}/harnessModels/${harness}`;
     harnesses[harness] = {
-      versions: await keysOfDefault(root, `${dir}/versions.ts`),
-      models: await keysOfDefault(root, `${dir}/models.ts`),
+      versions: await keysOfMap(root, `${dir}/versions.ts`, "declareHarnessVersions", problems),
+      models: await keysOfMap(root, `${dir}/models.ts`, "declareHarnessModels", problems),
     };
   }
+  if (problems.length > 0) throw problemsError(problems);
   return {
-    baseImages: await foldersIn(`${root}/${P}/baseImages`),
-    codeStates: await foldersIn(`${root}/${P}/codeStates`),
-    promptSets: await foldersIn(`${root}/${P}/promptSets`),
+    baseImages: await foldersIn(root, `${P}/baseImages`),
+    codeStates: await foldersIn(root, `${P}/codeStates`),
+    promptSets: await foldersIn(root, `${P}/promptSets`),
     tasks,
     harnesses,
   };
