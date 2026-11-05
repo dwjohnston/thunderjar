@@ -10,10 +10,14 @@ promptSet:     snerk
 harnessModel:  fake-harness-alpha@1.0.0/fake-model-small
 task:          is-prime
 initialPrompt: plain
+
+Matrix shape: 1/1/1/1/1 (1 permutation)
+
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   e943919c
 `;
 
 describe("0201 minimal existing setup", () => {
-  test("summarises the parameters the test case names", async () => {
+  test("summarises the parameters the test case names, and its one permutation", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0201"), ["plan", "example"]);
 
     expect(stderr).toBe("");
@@ -41,6 +45,42 @@ describe("0201 minimal existing setup", () => {
 
     expect(stderr).toBe("error: missing required argument 'test case'\n");
     expect(exitCode).toBe(1);
+  });
+});
+
+// The hashes are exact: they only change when the scenario's declarations, or the hashing, change.
+describe("0202 typical project", () => {
+  test("lists every permutation of the matrix, with its hash", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`baseImage:     node20
+codeState:     baseline
+promptSet:     snerk, glurk
+harnessModel:  fake-harness-alpha@1.0.0/fake-model-small, fake-harness-beta@1.0.0/fake-model-large
+task:          is-prime
+initialPrompt: plain, terse
+
+Matrix shape: 1/1/2/2/2 (8 permutations)
+
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be
+ 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fc556cc9
+ 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   90abcb0a
+ 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   775c8f66
+ 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   cda1818b
+ 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   67844e9a
+ 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   df1934bd
+ 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   f4979542
+`);
+  });
+
+  test("a permutation has the same hash in every test case naming it", async () => {
+    const { stdout } = await thunderjar(scenario("0202"), ["plan", "example"]);
+
+    expect(stdout).toEndWith(
+      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   45bcf0be\n",
+    );
   });
 });
 
