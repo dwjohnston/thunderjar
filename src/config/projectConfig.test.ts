@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { copyScenarioProject, thunderjar } from "../testing/cli.ts";
 import { scenario } from "../testing/scenario.ts";
 import { ConfigError, findThunderjarRoot } from "./loader.ts";
-import { buildOptionsProblem, checkBuildSecrets, imageStoreProblem, loadProjectConfig, registryHost, repositoryProblem } from "./projectConfig.ts";
+import { buildOptionsProblem, checkBuildSecrets, imageStoreProblem, loadProjectConfig, registryHost, repositoryProblem, runtimeProblem } from "./projectConfig.ts";
 
 describe("registryHost", () => {
   test.each([
@@ -80,12 +80,13 @@ describe("checkBuildSecrets", () => {
 
 describe("loadProjectConfig", () => {
   test("0201's imageStore is null", async () => {
-    expect(await loadProjectConfig(await findThunderjarRoot(scenario("0201")))).toEqual({ imageStore: null, build: { secrets: [], ssh: false } });
+    expect(await loadProjectConfig(await findThunderjarRoot(scenario("0201")))).toEqual({ imageStore: null, runtime: null, build: { secrets: [], ssh: false } });
   });
 
   test("0207's imageStore names its repository", async () => {
     expect(await loadProjectConfig(await findThunderjarRoot(scenario("0207")))).toEqual({
       imageStore: { repository: "ghcr.io/acme/thunderjar-images" },
+      runtime: null,
       build: { secrets: [], ssh: false },
     });
   });
@@ -117,5 +118,52 @@ export default declareConfig({
       'Error: .thunderjar/thunderjar.config.ts: imageStore: "ghcr.io/acme/images:latest" is not a Docker repository name. Expected e.g. "ghcr.io/acme/thunderjar-images", without a tag.\n',
     );
     expect(exitCode).toBe(1);
+  });
+
+  test("0211's runtime is the command containers run with", async () => {
+    const env = Bun.env.THUNDERJAR_DOCKER;
+    expect((await loadProjectConfig(await findThunderjarRoot(scenario("0211")))).runtime).toEqual({
+      command: [env ?? "docker", "--context", "cloud"],
+    });
+  });
+
+  test("a runtime without an image store is a config error, so run stops before Docker is asked anything", async () => {
+    await using copy = await copyScenarioProject("0207");
+    await Bun.write(
+      `${copy.dir}/.thunderjar/thunderjar.config.ts`,
+      `import { declareConfig, sqliteStore } from "thunderjar";
+
+export default declareConfig({
+  imageStore: null,
+  runDataStore: sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }),
+  runtime: { command: ["docker", "--context", "cloud"] },
+});
+`,
+    );
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"]);
+    expect(stdout).toBe("");
+    expect(stderr).toBe("Error: .thunderjar/thunderjar.config.ts: runtime: needs an imageStore: the runtime pulls the images it runs from it\n");
+    expect(exitCode).toBe(1);
+  });
+});
+
+describe("runtimeProblem", () => {
+  const STORE = { repository: "ghcr.io/acme/images" };
+
+  test("no runtime, or a command with an image store, is fine", () => {
+    expect(runtimeProblem(undefined, null)).toBeUndefined();
+    expect(runtimeProblem({ command: ["docker", "--context", "cloud"] }, STORE)).toBeUndefined();
+  });
+
+  test.each([[null], ["docker"], [{}], [{ command: [] }], [{ command: "docker" }], [{ command: ["docker", ""] }], [{ command: [1] }]])(
+    "%p is not a runtime",
+    (runtime) => {
+      expect(runtimeProblem(runtime, STORE)).toBeString();
+    },
+  );
+
+  test("a runtime needs an image store", () => {
+    expect(runtimeProblem({ command: ["docker"] }, null)).toBe("needs an imageStore: the runtime pulls the images it runs from it");
   });
 });
