@@ -9,6 +9,7 @@ export {
   declareMeasurement,
   declarePromptSet,
   declareTestCase,
+  postgresStore,
   sqliteStore,
 } from "./declarations.ts";
 export type {
@@ -30,10 +31,12 @@ export type {
   MeasurementDeclaration,
   MeasurementResult,
   ModelTokenCosts,
+  PostgresStore,
   PromptSetDeclaration,
   Reply,
-  Resolved,
   ResolveCtx,
+  Resolved,
+  RunDataStoreDeclaration,
   SqliteStore,
   TestCaseDeclaration,
   TokenCostCollector,

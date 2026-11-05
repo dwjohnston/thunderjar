@@ -325,9 +325,23 @@ export function declareTestCase<T extends TaskNames>(declaration: TestCaseDeclar
 
 export type SqliteStore = { kind: "sqlite"; path: string };
 
+/** A SQLite file: `path` is relative to the project folder, the one holding `.thunderjar/`, unless absolute. */
 export function sqliteStore(options: { path: string }): SqliteStore {
   return { kind: "sqlite", ...options };
 }
+
+export type PostgresStore = { kind: "postgres"; urlEnv: string };
+
+/**
+ * A Postgres database, shared by every machine that runs Thunderjar against it. `urlEnv` names
+ * the environment variable holding its connection URL, e.g. `postgres://user:pass@host/db`, so
+ * no credential is ever in the config.
+ */
+export function postgresStore(options: { urlEnv: string }): PostgresStore {
+  return { kind: "postgres", ...options };
+}
+
+export type RunDataStoreDeclaration = SqliteStore | PostgresStore;
 
 export type ImageStore = { repository: string };
 
@@ -367,7 +381,8 @@ export type ConfigDeclaration = {
    * keeps them in the local Docker daemon only: nothing is pushed, and no login is needed.
    */
   imageStore: ImageStore | null;
-  runDataStore: SqliteStore;
+  /** Where run results are recorded: `sqliteStore` for a local file, or `postgresStore` for a shared database. */
+  runDataStore: RunDataStoreDeclaration;
   /** Secrets, and the SSH agent, for prerun builds. None by default. */
   build?: BuildOptions;
   /** Where `run` runs containers. The local Docker daemon by default, or with `run --local`. */

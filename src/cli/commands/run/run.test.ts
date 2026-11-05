@@ -4,12 +4,12 @@
 // copy of the scenario. Any of these can be run by hand, e.g.
 // `bun run fixture 0202 run is-prime-baseline --dry-run`. For real Docker, see run.docker.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
-import { $ } from "bun";
+import { $, SQL } from "bun";
 import type { ContainerRunRecord } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
-import { ALPHA_JSON, ALPHA_MEASURES, AWKWARD, BETA, BETA_MEASURES, ISO, KEY, PLAIN, SHA, TERSE, alphaPermutation, containerCommands, dataDir, filesIn, measure, measured, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
+import { ALPHA_JSON, ALPHA_MEASURES, AWKWARD, BETA, BETA_MEASURES, ISO, KEY, PLAIN, SHA, TERSE, alphaPermutation, containerCommands, dataDir, filesIn, measure, measured, permutation, postgresSchema, readStore, removeDataDirs, usePostgres } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
 
@@ -336,6 +336,43 @@ export default declareTestCase({
       " 1/2  iteration 1/1  fake-harness-beta/fake-model-small-001 | plain  ... done (<duration>)",
       " 2/2  iteration 1/1  fake-harness-beta/fake-model-large-001 | plain  ... done (<duration>)",
     ]);
+  });
+
+  test("with a postgresStore whose variable is unset, nothing runs", async () => {
+    await using copy = await copyScenarioProject("0202");
+    await usePostgres(copy.dir);
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses"], { env: { ...docker.env, ...KEY, THUNDERJAR_DB_URL: "" } });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      "Error: The run data store is Postgres, at the URL in THUNDERJAR_DB_URL, which is not set.\nExport it in the shell that runs thunderjar, or pass --data-dir to use a local SQLite file.\n",
+    );
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
+  });
+
+  // Only with THUNDERJAR_POSTGRES_URL set to a Postgres it may create a schema in.
+  test.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("with a postgresStore, the run is recorded in Postgres, and executions and show read it there", async () => {
+    await using copy = await copyScenarioProject("0202");
+    await usePostgres(copy.dir);
+    await using docker = await fakeDocker();
+    await using database = await postgresSchema();
+    const env = { ...docker.env, ...KEY, THUNDERJAR_DB_URL: database.url };
+
+    const ran = await thunderjar(copy.dir, ["run", "two-harnesses"], { env });
+    expect(ran.stderr).toBe("");
+    expect(ran.stdout).toEndWith("\nRecorded in Postgres at $THUNDERJAR_DB_URL\n");
+
+    const listed = await thunderjar(copy.dir, ["executions"], { env });
+    expect(listed.stdout).toMatch(/^<ULID>  two-harnesses  \d{4}-\d\d-\d\d \d\d:\d\d  2 permutations × 1 iteration  complete\n$/);
+    const [{ executionId }] = (await new SQL(database.url)`SELECT execution_id AS "executionId" FROM thunderjar_executions`) as [{ executionId: string }];
+    const shown = await thunderjar(copy.dir, ["show", executionId, "2-1"], { env });
+    expect(shown.stdout).toStartWith("Container run  2-1\n");
+    expect(shown.exitCode).toBe(0);
+    // Nothing was written locally.
+    expect(await Bun.file(`${copy.dir}/.thunderjar/.data/runs.sqlite`).exists()).toBe(false);
   });
 
   test("an agent exiting non-zero is recorded and the rest still run, but the execution fails", async () => {

@@ -1,6 +1,6 @@
 ---
 name: tj-config
-description: Edit a project's `.thunderjar/thunderjar.config.ts`, i.e. where images are pushed, where run data lives, the secrets or SSH agent that prerun builds get, and where containers run. Use when the user wants to push images to a registry, keep them local, let a code state clone a private repository, or run containers on a remote or cloud Docker host.
+description: Edit a project's `.thunderjar/thunderjar.config.ts`, i.e. where images are pushed, where run data lives (a local SQLite file or a shared Postgres database), the secrets or SSH agent that prerun builds get, and where containers run. Use when the user wants to push images to a registry, keep them local, let a code state clone a private repository, or run containers on a remote or cloud Docker host.
 ---
 
 # Edit `thunderjar.config.ts`
@@ -21,7 +21,7 @@ export default declareConfig({
 | Field | What it is | Required |
 |---|---|---|
 | `imageStore` | The registry repository prerun and postrun images are pushed to, or `null` | Yes |
-| `runDataStore` | The SQLite file run results are recorded in. Only `sqliteStore` exists | Yes |
+| `runDataStore` | Where run results are recorded: `sqliteStore` or `postgresStore` | Yes |
 | `build` | Secrets and the SSH agent for prerun builds | No |
 | `runtime` | Where `run` runs containers, instead of the local Docker daemon | No |
 
@@ -41,7 +41,14 @@ Then the user runs `docker login ghcr.io`. A repository with no host, e.g. `acme
 
 ## `runDataStore`
 
-The SQLite file run results are recorded in. `init` scaffolds `.thunderjar/.data/runs.sqlite`, which it gitignores.
+Where run results are recorded. Two stores exist.
+
+| Store | For | Shared |
+|---|---|---|
+| `sqliteStore({ path })` | One machine. `init` scaffolds this | No |
+| `postgresStore({ urlEnv })` | CI and developers seeing the same runs | Yes |
+
+### `sqliteStore`
 
 ```ts
 runDataStore: sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }),
@@ -49,11 +56,34 @@ runDataStore: sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }),
 
 - `path` is relative to the project folder, the one holding `.thunderjar/`, unless it's absolute.
 - The file and its folder are created on the first `run`.
-- `run`, `executions`, `show` and `view` take `--data-dir <dir>` to use `<dir>/runs.sqlite` instead, for one command.
 
-✅ **Do** keep the file out of git, unless a team means to share results that way.
+✅ **Do** keep the file out of git. `init` gitignores `.thunderjar/.data/`.
 
-**Why:** it's a binary file that every `run` rewrites, so concurrent commits conflict.
+❌ **Don't** put the file on a network share to share it.
+
+**Why:** it's a binary file every `run` rewrites, so commits conflict, and SQLite's locking isn't reliable over NFS or SMB.
+
+### `postgresStore`
+
+```ts
+import { declareConfig, postgresStore } from "thunderjar";
+
+runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL" }),
+```
+
+- `urlEnv` names the variable holding the connection URL, e.g. `postgres://user:pass@host:5432/thunderjar`.
+- Thunderjar creates its two tables, `thunderjar_executions` and `thunderjar_container_runs`, on first use. The database can hold other tables.
+- Errors name the store as `Postgres at $THUNDERJAR_DB_URL`, never by its URL.
+
+✅ **Do** have the user export the variable in the shell, or CI secret store, that runs `thunderjar`. Commands that use the store stop if it's unset.
+
+❌ **Don't** write the URL into the config.
+
+**Why:** the URL holds the database password, and the config is committed.
+
+### `--data-dir`
+
+`run`, `executions`, `show` and `view` take `--data-dir <dir>` to use the SQLite file `<dir>/runs.sqlite` for one command, whichever store the config names.
 
 ## `build`
 
