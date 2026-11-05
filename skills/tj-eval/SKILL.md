@@ -65,6 +65,12 @@ e.g. for "add a --json flag to the list command":
 
 **Why:** Separate checks show where agents fail. One combined check only says that they did.
 
+❌ **Don't** check the contents of generated files, e.g. a `grep` on a file that a `generate` command writes.
+
+Exception: The task genuinely is about changing the behaviour of the generating script. 
+
+**Why:** If that process is failing, it's a problem with the generating script, not of waht the agent did. 
+
 ### 3. Find the trap
 
 Ask: what could the agent skip, or get wrong, and still look done? Measure that directly.
