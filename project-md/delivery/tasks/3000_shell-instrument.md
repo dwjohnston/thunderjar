@@ -1,4 +1,4 @@
-# 2900: The `shell` instrument
+# 3000: The `shell` instrument
 
 A measurement can run any shell command in the measurement container, and pass when it exits 0. So an experiment can measure what no built-in instrument does, like "does it type-check?" or "is the file under 30 lines?".
 
