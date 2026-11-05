@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import pkg from "../../package.json" with { type: "json" };
 import { createBuildCommand } from "./commands/build/build.ts";
+import { createDoctorCommand } from "./commands/doctor/doctor.ts";
 import { createExecutionsCommand } from "./commands/executions/executions.ts";
 import { createGenerateCommand } from "./commands/generate/generate.ts";
 import { createInitCommand } from "./commands/init/init.ts";
@@ -19,6 +20,7 @@ export function createProgram(): Command {
     .addCommand(createPlanCommand())
     .addCommand(createBuildCommand())
     .addCommand(createRunCommand())
+    .addCommand(createDoctorCommand())
     .addCommand(createExecutionsCommand())
     .addCommand(createShowCommand())
     .addCommand(createViewCommand());

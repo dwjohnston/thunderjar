@@ -6,7 +6,8 @@
 //
 //   images        the images that exist, `<repository>:<tag>`, one per line; a build or commit adds one
 //   unreachable   if present, the daemon can't be reached
-//   failing       the images whose build or commit fails, and the references whose push fails, one per line
+//   pull-denied   if present, every pull fails, as for a runtime with no login for the registry
+//   failing       the images whose build or commit fails, and the references whose push or pull fails, one per line
 //   logins        the registry hosts Docker holds a valid login for, one per line
 //   pushed        appended to: each reference pushed, one per line
 //   commands      appended to: one line per command, `docker <args…>`, a newline in an argument as `\n`
@@ -30,6 +31,10 @@
 // without running its script, and `exec` runs a command in it the way `run` runs a script,
 // always in root/workspace. `login <host>` succeeds only for a host in logins/, failing as Docker
 // does with its input closed. `tag` adds an image; `push` records it, if its host is logged in.
+//
+// A leading `--context <name>`, as a runtime's command may give, is recorded and otherwise ignored:
+// the runtime shares the fake's state. `run` takes `--pull missing` as well as `--pull never`.
+// `pull --quiet <reference>` succeeds only for a reference that was pushed.
 //
 // Without FAKE_DOCKER_DIR the daemon is reachable, no image exists, nothing is recorded, and no
 // container can run. Tests make its state with `fakeDocker()`.
@@ -71,12 +76,14 @@ export async function fakeDocker({
   failing = [],
   loggedIn = [],
   unreachable = false,
-}: { images?: string[]; failing?: string[]; loggedIn?: string[]; unreachable?: boolean } = {}): Promise<FakeDocker> {
+  pullDenied = false,
+}: { images?: string[]; failing?: string[]; loggedIn?: string[]; unreachable?: boolean; pullDenied?: boolean } = {}): Promise<FakeDocker> {
   const dir = `${FIXTURES_DIR}/.tmp/docker-${crypto.randomUUID()}`;
   await Bun.write(`${dir}/images`, lines(images));
   await Bun.write(`${dir}/failing`, lines(failing));
   await Bun.write(`${dir}/logins`, lines(loggedIn));
   if (unreachable) await Bun.write(`${dir}/unreachable`, "");
+  if (pullDenied) await Bun.write(`${dir}/pull-denied`, "");
   const commandsFile = Bun.file(`${dir}/commands`);
   const listOf = async (file: string) => (await Bun.file(file).text()).split("\n").filter(Boolean);
   const remove = async () => {
@@ -102,7 +109,8 @@ export async function fakeDocker({
 }
 
 if (import.meta.main) {
-  const args = Bun.argv.slice(2);
+  const recorded = Bun.argv.slice(2);
+  const args = recorded[0] === "--context" ? recorded.slice(2) : recorded;
   const dir = Bun.env.FAKE_DOCKER_DIR;
   const state = (name: string) => Bun.file(`${dir}/${name}`);
   const fail = (message: string): never => {
@@ -113,7 +121,7 @@ if (import.meta.main) {
   if (dir) {
     const commands = state("commands");
     const before = (await commands.exists()) ? await commands.text() : "";
-    await Bun.write(commands, `${before}docker ${args.join(" ").replaceAll("\n", "\\n")}\n`);
+    await Bun.write(commands, `${before}docker ${recorded.join(" ").replaceAll("\n", "\\n")}\n`);
   }
   if (dir && (await state("unreachable").exists())) {
     fail("Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?");
@@ -140,7 +148,7 @@ if (import.meta.main) {
   const parseRun = (runArgs: string[]) => {
     const detach = runArgs[0] === "--detach";
     const rest = detach ? runArgs.slice(1) : runArgs;
-    if (rest[0] !== "--name" || rest[2] !== "--pull" || rest[3] !== "never") return undefined;
+    if (rest[0] !== "--name" || rest[2] !== "--pull" || (rest[3] !== "never" && rest[3] !== "missing")) return undefined;
     const env: string[] = [];
     let i = 4;
     while (rest[i] === "-e" && rest[i + 1] !== undefined) {
@@ -265,6 +273,13 @@ if (import.meta.main) {
       fail("denied: permission_denied: The token provided does not match expected scopes.");
     }
     if (dir) await Bun.write(state("pushed"), lines([...(await list("pushed")), reference]));
+    console.log(reference);
+  } else if (command === "pull" && subcommand === "--quiet" && rest.length === 1) {
+    // docker pull --quiet <reference>
+    const reference = rest[0] as string;
+    if (!(await list("pushed")).includes(reference) || (await list("failing")).includes(reference) || (dir && (await state("pull-denied").exists()))) {
+      fail(`Error response from daemon: pull access denied for ${reference}, repository does not exist or may require 'docker login'`);
+    }
     console.log(reference);
   } else if (command === "rm" && subcommand === "--force" && rest.length === 1) {
     // docker rm --force <name>

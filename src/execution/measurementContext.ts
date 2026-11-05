@@ -2,7 +2,7 @@
 // one measurement, and removed once it's taken. The instrument's logic runs on the host; what it
 // asks of the context runs in the container, so nothing it writes reaches the postrun image.
 import type { MeasurementContext } from "../api/declarations.ts";
-import { execInContainer, removeContainer, startContainer } from "../docker/docker.ts";
+import { type DockerRuntime, execInContainer, localRuntime, removeContainer, startContainer } from "../docker/docker.ts";
 
 /** Where in the container paths, globs and commands resolve: where the agent worked. */
 export const WORKDIR = "/workspace";
@@ -46,14 +46,15 @@ export async function openMeasurementContext(
   postrunImage: string,
   container: string,
   { harnessResult, reply, replies }: Recorded,
+  runtime: DockerRuntime = localRuntime(),
 ): Promise<OpenedMeasurementContext> {
   try {
-    await startContainer(postrunImage, container);
+    await startContainer(postrunImage, container, runtime);
   } catch (error) {
-    await removeContainer(container).catch(() => {});
+    await removeContainer(container, runtime).catch(() => {});
     throw error;
   }
-  const run = (command: string[], stdin?: string) => execInContainer(container, WORKDIR, command, stdin);
+  const run = (command: string[], stdin?: string) => execInContainer(container, WORKDIR, command, stdin, runtime);
   const mustRun = async (what: string, command: string[], stdin?: string) => {
     const result = await run(command, stdin);
     if (result.exitCode !== 0) throw new Error(`${what}: ${result.stderr.trim() || `exited ${result.exitCode}`}`);
@@ -79,6 +80,6 @@ export async function openMeasurementContext(
         .filter((path) => glob.match(path))
         .toSorted();
     },
-    close: () => removeContainer(container),
+    close: () => removeContainer(container, runtime),
   };
 }

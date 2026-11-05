@@ -2,6 +2,9 @@
 // from one, reading files out of it, running commands in it and committing it. It runs the
 // `docker` CLI, or the executable THUNDERJAR_DOCKER names in its place: tests point that at
 // src/testing/fakeDocker.ts.
+//
+// Container commands can go to a runtime instead: a command that takes the `docker` CLI's
+// arguments, e.g. `docker --context cloud`. Builds, and pushes of prerun images, are always local.
 import { $ } from "bun";
 import type { BuildOptions } from "../api/declarations.ts";
 
@@ -20,7 +23,26 @@ export class DockerPushError extends Error {}
 /** Thrown when running, reading from, committing or removing a container fails: the message is Docker's reason. */
 export class DockerContainerError extends Error {}
 
+/** Thrown when a runtime can't pull an image from the image store: the message is Docker's reason. */
+export class DockerPullError extends Error {}
+
 const dockerBinary = () => Bun.env.THUNDERJAR_DOCKER || "docker";
+
+/**
+ * Where containers run: the command put in front of each `docker` subcommand, and whether `run`
+ * may pull a missing image. The local daemon never pulls: its images are built here. A remote
+ * one pulls them from the image store.
+ */
+export type DockerRuntime = { command: string[]; pull: "never" | "missing" };
+
+/** The local Docker daemon. */
+export const localRuntime = (): DockerRuntime => ({ command: [dockerBinary()], pull: "never" });
+
+/** A runtime given by `command`, e.g. `["docker", "--context", "cloud"]`, pulling images it doesn't have. */
+export const remoteRuntime = (command: string[]): DockerRuntime => ({ command, pull: "missing" });
+
+/** How a failed command is named in an error: `docker run`, or the runtime's command and its subcommand. */
+const named = (runtime: DockerRuntime, subcommand: string | undefined) => `\`${[...runtime.command, subcommand].join(" ")}\``;
 
 /** The last line of a failed command's stderr: where Docker puts its reason. */
 const reasonOf = (stderr: { toString(): string }) => stderr.toString().trim().split("\n").at(-1);
@@ -82,22 +104,31 @@ export async function checkLogin(host: string): Promise<void> {
  * Tags the local image `image` as `reference`, in a registry repository, and pushes it there.
  * Throws a DockerPushError with Docker's reason.
  */
-export async function pushImage(image: string, reference: string): Promise<void> {
-  const binary = dockerBinary();
+export async function pushImage(image: string, reference: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
   for (const args of [["tag", image, reference], ["push", "--quiet", reference]]) {
-    const result = await $`${binary} ${args}`.quiet().nothrow();
+    const result = await $`${runtime.command} ${args}`.quiet().nothrow();
     if (result.exitCode !== 0) {
-      throw new DockerPushError(reasonOf(result.stderr) || `\`${binary} ${args[0]}\` exited ${result.exitCode}`);
+      throw new DockerPushError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`);
     }
   }
 }
 
-/** Runs `binary args…`, throwing a DockerContainerError with Docker's reason if it fails. */
-async function mustRun(args: string[]): Promise<string> {
-  const binary = dockerBinary();
-  const result = await $`${binary} ${args}`.quiet().nothrow();
+/**
+ * Pulls `reference` from its registry into `runtime`. Throws a DockerPullError with Docker's
+ * reason, e.g. that the runtime can't reach the registry or has no login for it.
+ */
+export async function pullImage(reference: string, runtime: DockerRuntime): Promise<void> {
+  const result = await $`${runtime.command} pull --quiet ${reference}`.quiet().nothrow();
   if (result.exitCode !== 0) {
-    throw new DockerContainerError(reasonOf(result.stderr) || `\`${binary} ${args[0]}\` exited ${result.exitCode}`);
+    throw new DockerPullError(reasonOf(result.stderr) || `${named(runtime, "pull")} exited ${result.exitCode}`);
+  }
+}
+
+/** Runs `binary args…`, throwing a DockerContainerError with Docker's reason if it fails. */
+async function mustRun(args: string[], runtime: DockerRuntime = localRuntime()): Promise<string> {
+  const result = await $`${runtime.command} ${args}`.quiet().nothrow();
+  if (result.exitCode !== 0) {
+    throw new DockerContainerError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`);
   }
   return result.stdout.toString();
 }
@@ -120,12 +151,16 @@ export async function runContainer(
   image: string,
   name: string,
   script: string,
-  { env = [], runOptions = [], timeoutSeconds }: { env?: string[]; runOptions?: string[]; timeoutSeconds?: number } = {},
+  {
+    env = [],
+    runOptions = [],
+    timeoutSeconds,
+    runtime = localRuntime(),
+  }: { env?: string[]; runOptions?: string[]; timeoutSeconds?: number; runtime?: DockerRuntime } = {},
 ): Promise<ContainerStop> {
-  const binary = dockerBinary();
   const passed = env.flatMap((variable) => ["-e", variable]);
-  const args = ["run", "--name", name, "--pull", "never", ...passed, ...runOptions, "--entrypoint", "sh", image, "-c", script];
-  const child = Bun.spawn([binary, ...args], { env: { ...Bun.env }, stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+  const args = ["run", "--name", name, "--pull", runtime.pull, ...passed, ...runOptions, "--entrypoint", "sh", image, "-c", script];
+  const child = Bun.spawn([...runtime.command, ...args], { env: { ...Bun.env }, stdin: "ignore", stdout: "ignore", stderr: "pipe" });
   let killing: Promise<number | undefined> | undefined;
   const timer =
     timeoutSeconds === undefined
@@ -133,7 +168,7 @@ export async function runContainer(
       : setTimeout(() => {
           const killedAt = Date.now();
           // If it finished just as the time ran out, there's nothing to kill: it didn't time out.
-          killing = mustRun(["kill", name]).then(
+          killing = mustRun(["kill", name], runtime).then(
             () => killedAt,
             () => undefined,
           );
@@ -143,7 +178,7 @@ export async function runContainer(
   const killedAt = await killing;
   if (killedAt !== undefined) return { timedOut: true, killedAt };
   if (exitCode !== 0) {
-    throw new DockerContainerError(reasonOf(stderr) || `\`${binary} run\` exited ${exitCode}`);
+    throw new DockerContainerError(reasonOf(stderr) || `${named(runtime, "run")} exited ${exitCode}`);
   }
   return { timedOut: false };
 }
@@ -152,16 +187,15 @@ export async function runContainer(
  * The text of the file at `path` in the container `name`, or undefined if there's no such file.
  * Throws a DockerContainerError if Docker fails otherwise.
  */
-export async function readContainerFile(name: string, path: string): Promise<string | undefined> {
+export async function readContainerFile(name: string, path: string, runtime: DockerRuntime = localRuntime()): Promise<string | undefined> {
   const dir = `${Bun.env.TMPDIR || "/tmp"}/thunderjar-cp-${crypto.randomUUID()}`;
   await $`mkdir -p ${dir}`.quiet();
   try {
-    const binary = dockerBinary();
-    const result = await $`${binary} cp ${`${name}:${path}`} ${dir}/file`.quiet().nothrow();
+    const result = await $`${runtime.command} cp ${`${name}:${path}`} ${dir}/file`.quiet().nothrow();
     if (result.exitCode !== 0) {
       const reason = reasonOf(result.stderr);
       if (reason?.includes("Could not find the file")) return undefined;
-      throw new DockerContainerError(reason || `\`${binary} cp\` exited ${result.exitCode}`);
+      throw new DockerContainerError(reason || `${named(runtime, "cp")} exited ${result.exitCode}`);
     }
     return await Bun.file(`${dir}/file`).text();
   } finally {
@@ -174,17 +208,17 @@ export async function readContainerFile(name: string, path: string): Promise<str
  * the image `like`, the one it ran from, so starting the new image doesn't run the container's
  * script again. Throws a DockerContainerError.
  */
-export async function commitContainer(name: string, image: string, like: string): Promise<void> {
-  const inspected = await mustRun(["image", "inspect", "--format", "{{json .Config.Entrypoint}}\t{{json .Config.Cmd}}", like]);
+export async function commitContainer(name: string, image: string, like: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
+  const inspected = await mustRun(["image", "inspect", "--format", "{{json .Config.Entrypoint}}\t{{json .Config.Cmd}}", like], runtime);
   const [entrypoint, cmd] = inspected.trim().split("\t");
   // `ENTRYPOINT []` is ignored; `[""]` clears it.
   const changes = [`ENTRYPOINT ${entrypoint === "null" ? '[""]' : entrypoint}`, `CMD ${cmd === "null" ? '["sh"]' : cmd}`];
-  await mustRun(["commit", ...changes.flatMap((change) => ["--change", change]), name, image]);
+  await mustRun(["commit", ...changes.flatMap((change) => ["--change", change]), name, image], runtime);
 }
 
 /** Removes the container `name`, stopped or not. Throws a DockerContainerError. */
-export async function removeContainer(name: string): Promise<void> {
-  await mustRun(["rm", "--force", name]);
+export async function removeContainer(name: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
+  await mustRun(["rm", "--force", name], runtime);
 }
 
 /**
@@ -192,8 +226,8 @@ export async function removeContainer(name: string): Promise<void> {
  * keeps running, doing nothing, until it's removed: for `execInContainer`. Throws a
  * DockerContainerError.
  */
-export async function startContainer(image: string, name: string): Promise<void> {
-  await mustRun(["run", "--detach", "--name", name, "--pull", "never", "--entrypoint", "sh", image, "-c", "exec sleep 2147483647"]);
+export async function startContainer(image: string, name: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
+  await mustRun(["run", "--detach", "--name", name, "--pull", runtime.pull, "--entrypoint", "sh", image, "-c", "exec sleep 2147483647"], runtime);
 }
 
 export type ExecResult = { stdout: string; stderr: string; exitCode: number };
@@ -203,8 +237,14 @@ export type ExecResult = { stdout: string; stderr: string; exitCode: number };
  * with `stdin` as its input if given, and returns how it went, however it exited. Throws a
  * DockerContainerError if Docker itself fails, e.g. there's no such container.
  */
-export async function execInContainer(name: string, workdir: string, command: string[], stdin?: string): Promise<ExecResult> {
-  const binary = dockerBinary();
+export async function execInContainer(
+  name: string,
+  workdir: string,
+  command: string[],
+  stdin?: string,
+  runtime: DockerRuntime = localRuntime(),
+): Promise<ExecResult> {
+  const binary = runtime.command;
   const args = ["exec", ...(stdin === undefined ? [] : ["--interactive"]), "--workdir", workdir, name, ...command];
   const result =
     stdin === undefined
@@ -212,7 +252,7 @@ export async function execInContainer(name: string, workdir: string, command: st
       : await $`${binary} ${args} < ${new Response(stdin)}`.quiet().nothrow();
   // `docker exec` exits as the command did, or 1 or 127 when Docker fails, saying why.
   if (result.exitCode !== 0 && /^(Error response from daemon|OCI runtime exec failed|Cannot connect to the Docker daemon)/.test(result.stderr.toString())) {
-    throw new DockerContainerError(reasonOf(result.stderr) || `\`${binary} exec\` exited ${result.exitCode}`);
+    throw new DockerContainerError(reasonOf(result.stderr) || `${named(runtime, "exec")} exited ${result.exitCode}`);
   }
   return { stdout: result.stdout.toString(), stderr: result.stderr.toString(), exitCode: result.exitCode };
 }
