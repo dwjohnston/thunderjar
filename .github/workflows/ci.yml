@@ -10,6 +10,14 @@ jobs:
   check:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # For postgresStore's tests, which are skipped without THUNDERJAR_POSTGRES_URL.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 15
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
@@ -17,6 +25,8 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run test
+        env:
+          THUNDERJAR_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
       # Ubuntu 24.04's AppArmor stops unconfined processes making user namespaces, whatever
       # docker run is told. Scenario 0206's sandboxing agent needs them, as Claude Code's
       # bubblewrap sandbox does.

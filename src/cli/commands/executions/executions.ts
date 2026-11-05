@@ -1,9 +1,9 @@
 import { Command } from "commander";
 import { FOLDER } from "../../../config/loader.ts";
-import { type ExecutionRecord, RunDataStoreError, sqliteStore } from "../../../store/runDataStore.ts";
+import { type ExecutionRecord, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, padEnd, painter, plain, printError } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
-import { dataDirOption, displayPath, storeFileOf } from "../../dataDir.ts";
+import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { minute, paintStatus, plural } from "../../format.ts";
 
 /** One line per execution, in the order given: its ID, test case, when it started, its matrix and its status, in aligned columns. */
@@ -26,10 +26,10 @@ export function renderExecutions(executions: ExecutionRecord[], paint: Paint = p
  * first. The store is in `dataDir`, or the one the config of the nearest `.thunderjar/` folder in `cwd` or above it names.
  */
 async function executions(cwd: string, testCase?: string, dataDir?: string): Promise<void> {
-  const store = await storeFileOf(cwd, dataDir);
+  const { store } = await openStore(cwd, dataDir);
   let listed: ExecutionRecord[];
   try {
-    listed = await sqliteStore(store).listExecutions();
+    listed = await store.listExecutions();
   } catch (error) {
     if (!(error instanceof RunDataStoreError)) throw error;
     printError(`Can't read ${displayPath(cwd, error.path)}: ${error.message}`);

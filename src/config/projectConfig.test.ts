@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { copyScenarioProject, thunderjar } from "../testing/cli.ts";
 import { scenario } from "../testing/scenario.ts";
 import { ConfigError, findThunderjarRoot } from "./loader.ts";
-import { buildOptionsProblem, checkBuildSecrets, imageStoreProblem, loadProjectConfig, registryHost, repositoryProblem, runtimeProblem } from "./projectConfig.ts";
+import { buildOptionsProblem, checkBuildSecrets, imageStoreProblem, loadProjectConfig, registryHost, repositoryProblem, runDataStoreProblem, runtimeProblem } from "./projectConfig.ts";
 
 describe("registryHost", () => {
   test.each([
@@ -82,7 +82,7 @@ describe("loadProjectConfig", () => {
   test("0201's imageStore is null", async () => {
     expect(await loadProjectConfig(await findThunderjarRoot(scenario("0201")))).toEqual({
       imageStore: null,
-      runDataStore: { path: "./.thunderjar/.data/runs.sqlite" },
+      runDataStore: { kind: "sqlite", path: "./.thunderjar/.data/runs.sqlite" },
       runtime: null,
       build: { secrets: [], ssh: false },
     });
@@ -92,7 +92,7 @@ describe("loadProjectConfig", () => {
     expect(await loadProjectConfig(await findThunderjarRoot(scenario("0207")))).toEqual({
       imageStore: { repository: "ghcr.io/acme/thunderjar-images" },
       runtime: null,
-      runDataStore: { path: "./.thunderjar/.data/runs.sqlite" },
+      runDataStore: { kind: "sqlite", path: "./.thunderjar/.data/runs.sqlite" },
       build: { secrets: [], ssh: false },
     });
   });
@@ -192,8 +192,22 @@ export default declareConfig({
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["executions"]);
     expect(stdout).toBe("");
     expect(stderr).toBe(
-      'Error: .thunderjar/thunderjar.config.ts: runDataStore: must be a store, e.g. sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" })\n',
+      'Error: .thunderjar/thunderjar.config.ts: runDataStore: must be a store, e.g. sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }) or postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })\n',
     );
     expect(exitCode).toBe(1);
   });
+});
+
+describe("runDataStoreProblem", () => {
+  test("a sqliteStore with a path, or a postgresStore naming a variable, is fine", () => {
+    expect(runDataStoreProblem({ kind: "sqlite", path: "./runs.sqlite" })).toBeUndefined();
+    expect(runDataStoreProblem({ kind: "postgres", urlEnv: "THUNDERJAR_DB_URL" })).toBeUndefined();
+  });
+
+  test.each([[undefined], ["./runs.sqlite"], [{ kind: "sqlite" }], [{ kind: "sqlite", path: "" }], [{ kind: "postgres" }], [{ kind: "postgres", urlEnv: "postgres://u:p@host/db" }], [{ kind: "mysql" }]])(
+    "%p is not a store",
+    (store) => {
+      expect(runDataStoreProblem(store)).toBeString();
+    },
+  );
 });

@@ -7,10 +7,10 @@ import { loadMeasurements, type Measurement } from "../../../config/measurements
 import { AXES, abbreviateHash } from "../../../config/permutations.ts";
 import type { ModelTokenCosts, Reply, TokenCosts } from "../../../api/declarations.ts";
 import { type AggregatedValue, type AggregateMethod, aggregatePermutation } from "../../../execution/aggregate.ts";
-import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, RunDataStoreError, sqliteStore } from "../../../store/runDataStore.ts";
+import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, padEnd, painter, plain, printError, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
-import { dataDirOption, displayPath, storeFileOf } from "../../dataDir.ts";
+import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { agentEnd, dollars, showResolved, endedCleanly, knownCost, minute, paintStatus, plural, thousands, totalTokens } from "../../format.ts";
 
 const GAP = "   ";
@@ -291,7 +291,7 @@ function fail(message: string): void {
  */
 async function show(cwd: string, executionId: string, containerRun?: string, dataDir?: string): Promise<void> {
   const root = containerRun === undefined || dataDir === undefined ? await findThunderjarRoot(cwd) : undefined;
-  const store = sqliteStore(await storeFileOf(cwd, dataDir, root));
+  const { store } = await openStore(cwd, dataDir, root);
   let execution: ExecutionRecord | undefined;
   let runs: ContainerRunRecord[];
   try {

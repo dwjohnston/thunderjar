@@ -2,7 +2,8 @@ import { $ } from "bun";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { TMP_DIR } from "../testing/cli.ts";
-import { type ContainerRunRecord, type ExecutionRecord, RunDataStoreError, sqliteStore, storeFileIn } from "./runDataStore.ts";
+import { SQL } from "bun";
+import { type ContainerRunRecord, type ExecutionRecord, postgresStore, RunDataStoreError, sqliteStore, storeFileIn } from "./runDataStore.ts";
 
 const dirs: string[] = [];
 const dataDir = () => {
@@ -138,4 +139,63 @@ describe("sqliteStore", () => {
     expect(await sqliteStore(file).listExecutions().catch(errorOf)).toEqual({ path: file, message: expect.any(String) });
     expect(await sqliteStore(file).recordExecution(execution("01kfa1bgz0aaaaaaaaaaaaaaaa")).catch(errorOf)).toEqual({ path: file, message: expect.any(String) });
   });
+});
+
+// Against a real Postgres, only with THUNDERJAR_POSTGRES_URL set to one it may create and drop
+// schemas in, e.g. `THUNDERJAR_POSTGRES_URL=postgres://postgres@localhost/postgres bun test runDataStore`.
+// Each test gets its own schema, so they don't see each other's records.
+const POSTGRES_URL = Bun.env.THUNDERJAR_POSTGRES_URL;
+
+describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
+  const schemas: string[] = [];
+  /** A URL for a fresh, empty schema of the test database, dropped after the test. */
+  const freshDatabase = async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+    const admin = new SQL(POSTGRES_URL!);
+    await admin.unsafe(`CREATE SCHEMA ${schema}`);
+    await admin.close();
+    const url = new URL(POSTGRES_URL!);
+    url.searchParams.set("options", `-c search_path=${schema}`);
+    return url.toString();
+  };
+
+  afterEach(async () => {
+    const admin = new SQL(POSTGRES_URL!);
+    for (const schema of schemas.splice(0)) await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.close();
+  });
+
+  test("an empty database is an empty store", async () => {
+    const store = postgresStore(await freshDatabase(), "test db");
+
+    expect(await store.listExecutions()).toEqual([]);
+    expect(await store.containerRunsOf("01kxxxxxxxxxxxxxxxxxxxxxxx")).toEqual([]);
+  });
+
+  test("records and replaces executions and container runs; another store of the database reads them, in order", async () => {
+    const url = await freshDatabase();
+    const store = postgresStore(url, "test db");
+    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+    const other = "01kfa1bgz1aaaaaaaaaaaaaaaa";
+
+    await store.recordExecution(execution(id, "running"));
+    await store.recordExecution(execution(id, "complete"));
+    await store.recordExecution(execution(other));
+    for (const [p, i] of [[10, 1], [2, 1], [1, 10], [1, 2]] as const) await store.recordContainerRun(containerRun(id, p, i));
+    await store.recordContainerRun({ ...containerRun(id, 2, 1), postrunImage: "again" });
+    await store.recordContainerRun(containerRun(other, 1, 1));
+
+    const reopened = postgresStore(url, "test db");
+    expect(await reopened.listExecutions()).toEqual([execution(other), execution(id, "complete")]);
+    const runs = await reopened.containerRunsOf(id);
+    expect(runs.map((record) => [record.permutation, record.iteration])).toEqual([[1, 2], [1, 10], [2, 1], [10, 1]]);
+    expect(runs[2]).toEqual({ ...containerRun(id, 2, 1), postrunImage: "again" });
+  });
+});
+
+test("a Postgres that can't be reached is a RunDataStoreError named by its label, not its URL", async () => {
+  const store = postgresStore("postgres://user:secret@127.0.0.1:1/none", "Postgres at $THUNDERJAR_DB_URL");
+
+  expect(await store.listExecutions().catch(errorOf)).toEqual({ path: "Postgres at $THUNDERJAR_DB_URL", message: expect.any(String) });
 });
