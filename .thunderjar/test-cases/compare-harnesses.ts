@@ -4,7 +4,7 @@ import { declareTestCase } from "thunderjar";
 // Each harness needs its own key: ANTHROPIC_API_KEY, COPILOT_GITHUB_TOKEN and OPENCODE_API_KEY.
 export default declareTestCase({
   baseImage: ["node20"],
-  codeState: ["baseline"],
+  codeState: ["thunderjar-start"],
   promptSet: ["none"],
   harnessModel: [
     "claude-code-2.1.311/claude-haiku-5-5",

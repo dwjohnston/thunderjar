@@ -4,7 +4,7 @@ import { declareTestCase } from "thunderjar";
 // harness folder, then the model ID its agent is given.
 export default declareTestCase({
   baseImage: ["node20"],
-  codeState: ["baseline"],
+  codeState: ["thunderjar-start"],
   promptSet: ["none"],
   harnessModel: ["claude-code-2.1.311/claude-haiku-4-5-20251001", "claude-code-2.1.311/claude-haiku-5-5"],
   task: "is-prime",
