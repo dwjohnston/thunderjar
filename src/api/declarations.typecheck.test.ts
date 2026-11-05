@@ -64,6 +64,7 @@ test("a measurement's config and aggregate are typed by its instrument", () => {
     config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
     aggregate: ["sum", "mean"],
   });
+  declareMeasurement({ instrument: "shell", config: { command: "bunx tsc --noEmit" }, aggregate: ["rate"] });
   // @ts-expect-error - not an instrument
   declareMeasurement({ instrument: "fileCraeted", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] });
   // @ts-expect-error - fileCreated's config is a glob
@@ -74,6 +75,10 @@ test("a measurement's config and aggregate are typed by its instrument", () => {
   declareMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["mean"] });
   // @ts-expect-error - a count has no rate
   declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts", pattern: "x" }, aggregate: ["rate"] });
+  // @ts-expect-error - shell needs a command
+  declareMeasurement({ instrument: "shell", config: { cmd: "true" }, aggregate: ["rate"] });
+  // @ts-expect-error - a shell command's pass or fail has no sum
+  declareMeasurement({ instrument: "shell", config: { command: "true" }, aggregate: ["sum"] });
   // @ts-expect-error - pass and fail counts have no median
   declareMeasurement({ instrument: "templateTest", config: { subject: "*.ts", template: "./t.ts" }, aggregate: ["median"] });
 });

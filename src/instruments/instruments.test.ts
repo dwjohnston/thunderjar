@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
 import type { MeasurementContext, Reply } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { aggregateMethods, fileCreated, grep, instruments, isInstrumentName, replyMatches, templateTest } from "./instruments.ts";
+import { aggregateMethods, fileCreated, grep, instruments, isInstrumentName, replyMatches, shell, templateTest } from "./instruments.ts";
 
 const ROOT = `${TMP_DIR}/instruments-${crypto.randomUUID()}`;
 
@@ -78,6 +78,31 @@ describe("replyMatches", () => {
     expect(replyMatches.checkConfig({ pattern: "Eli(" })).toEqual([["config.pattern", '"Eli(" is not a valid regular expression: missing )']]);
     expect(replyMatches.checkConfig({})).toEqual([["config.pattern", "must be a JavaScript regular expression, got undefined"]]);
     expect(replyMatches.checkConfig({ pattern: "Eli" })).toEqual([]);
+  });
+});
+
+describe("shell", () => {
+  test("is whether the command exits 0", async () => {
+    const ctx = await contextWith({ "isPrime.ts": "export const isPrime = (n: number) => n > 1;\n" });
+    expect(await shell.evaluate({ command: "test -f isPrime.ts" }, ctx)).toEqual({ outcome: "measured", data: true });
+    expect(await shell.evaluate({ command: "test -f isEven.ts" }, ctx)).toEqual({ outcome: "measured", data: false });
+    expect(await shell.evaluate({ command: "exit 3" }, ctx)).toEqual({ outcome: "measured", data: false });
+  });
+
+  test("runs any shell command, with pipes and quotes, in the workdir", async () => {
+    const ctx = await contextWith({ "src/isPrime.ts": "line 1\nline 2\nline 3\n" });
+    expect(await shell.evaluate({ command: `test "$(wc -l < src/isPrime.ts)" -lt 5` }, ctx)).toEqual({ outcome: "measured", data: true });
+    expect(await shell.evaluate({ command: "cat src/isPrime.ts | grep -q 'line 4'" }, ctx)).toEqual({ outcome: "measured", data: false });
+  });
+
+  test("a command that isn't found is a fail, not an error", async () => {
+    expect(await shell.evaluate({ command: "no-such-command" }, await contextWith([]))).toEqual({ outcome: "measured", data: false });
+  });
+
+  test("checks its config is a command", () => {
+    expect(shell.checkConfig({ command: "bunx tsc --noEmit" })).toEqual([]);
+    expect(shell.checkConfig({})).toEqual([["config.command", "must be a shell command, got undefined"]]);
+    expect(shell.checkConfig({ command: "" })).toEqual([["config.command", 'must be a shell command, got ""']]);
   });
 });
 

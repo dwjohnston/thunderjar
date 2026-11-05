@@ -212,10 +212,26 @@ export const templateTest: Instrument<{ subject: string; template: string }, { p
   bundledFiles: ["template"],
 };
 
+/**
+ * Whether `command`, any shell command, exits 0 in the measurement container. The escape hatch
+ * for whatever no other instrument measures, such as `bunx tsc --noEmit` or
+ * `test "$(wc -l < src/isPrime.ts)" -lt 30`. Never `skipped`: a non-zero exit is the answer
+ * `false`.
+ */
+export const shell: Instrument<{ command: string }, boolean> = {
+  async evaluate({ command }, ctx) {
+    const { exitCode } = await ctx.exec(command);
+    return { outcome: "measured", data: exitCode === 0 };
+  },
+  checkConfig(config) {
+    return checkString("config.command", (config as { command?: unknown } | undefined)?.command, "a shell command");
+  },
+};
+
 /** Every built-in instrument, by the name a measurement gives as its `instrument`. */
 export const instruments: {
   [I in InstrumentName]: Instrument<InstrumentTypes[I]["config"], InstrumentTypes[I]["value"]>;
-} = { fileCreated, grep, templateTest, replyMatches };
+} = { fileCreated, grep, templateTest, replyMatches, shell };
 
 /** The ways each instrument's values can combine: AggregateFor, at runtime, to check a measurement with. */
 export const aggregateMethods: { [I in InstrumentName]: readonly AggregateFor<InstrumentTypes[I]["value"]>[] } = {
@@ -223,6 +239,7 @@ export const aggregateMethods: { [I in InstrumentName]: readonly AggregateFor<In
   grep: ["mean", "median", "min", "max", "sum"],
   templateTest: ["sum", "mean"],
   replyMatches: ["rate", "count"],
+  shell: ["rate", "count"],
 };
 
 export const isInstrumentName = (name: unknown): name is InstrumentName => typeof name === "string" && Object.hasOwn(instruments, name);
