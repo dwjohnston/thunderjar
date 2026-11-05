@@ -80,13 +80,19 @@ describe("checkBuildSecrets", () => {
 
 describe("loadProjectConfig", () => {
   test("0201's imageStore is null", async () => {
-    expect(await loadProjectConfig(await findThunderjarRoot(scenario("0201")))).toEqual({ imageStore: null, runtime: null, build: { secrets: [], ssh: false } });
+    expect(await loadProjectConfig(await findThunderjarRoot(scenario("0201")))).toEqual({
+      imageStore: null,
+      runDataStore: { path: "./.thunderjar/.data/runs.sqlite" },
+      runtime: null,
+      build: { secrets: [], ssh: false },
+    });
   });
 
   test("0207's imageStore names its repository", async () => {
     expect(await loadProjectConfig(await findThunderjarRoot(scenario("0207")))).toEqual({
       imageStore: { repository: "ghcr.io/acme/thunderjar-images" },
       runtime: null,
+      runDataStore: { path: "./.thunderjar/.data/runs.sqlite" },
       build: { secrets: [], ssh: false },
     });
   });
@@ -165,5 +171,29 @@ describe("runtimeProblem", () => {
 
   test("a runtime needs an image store", () => {
     expect(runtimeProblem({ command: ["docker"] }, null)).toBe("needs an imageStore: the runtime pulls the images it runs from it");
+  });
+});
+
+describe("runDataStore", () => {
+  test("a runDataStore that isn't a store is a config error", async () => {
+    await using copy = await copyScenarioProject("0201");
+    await Bun.write(
+      `${copy.dir}/.thunderjar/thunderjar.config.ts`,
+      `import { declareConfig } from "thunderjar";
+
+export default declareConfig({
+  imageStore: null,
+  // @ts-expect-error: not a store
+  runDataStore: "./runs.sqlite",
+});
+`,
+    );
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["executions"]);
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      'Error: .thunderjar/thunderjar.config.ts: runDataStore: must be a store, e.g. sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" })\n',
+    );
+    expect(exitCode).toBe(1);
   });
 });

@@ -4,6 +4,7 @@
 // by hand, e.g. `bun run fixture 0203 show 01m3vf68s54p5eyn5s3t1ygkdj`.
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
+import { Database } from "bun:sqlite";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
@@ -24,6 +25,13 @@ async function copyOfStore(): Promise<string> {
   dirs.push(dir);
   await $`mkdir -p ${dir} && cp -R ${scenario("0203")}/.thunderjar/.data/. ${dir}`.quiet();
   return dir;
+}
+
+/** Runs `sql` on the store in `dataDir`, a copy of a scenario's. */
+function changeStore(dataDir: string, sql: string, params: Record<string, string> = {}) {
+  const db = new Database(`${dataDir}/runs.sqlite`, { strict: true });
+  db.query(sql).run(params);
+  db.close();
 }
 
 afterEach(async () => {
@@ -217,7 +225,7 @@ Measures
 
   test("--data-dir reads the store there; a permutation without container runs says so, and with none varying, every parameter shows", async () => {
     const data = await copyOfStore();
-    await $`rm ${data}/runs/${TWO_HARNESSES}/container-runs/1-1.json`.quiet();
+    changeStore(data, "DELETE FROM container_runs WHERE execution_id = $id AND permutation = 1 AND iteration = 1", { id: TWO_HARNESSES });
 
     const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "--data-dir", data]);
 
@@ -275,16 +283,16 @@ export default declareMeasurement({
     expect(exitCode).toBe(0);
   });
 
-  test("a record that isn't JSON is an error naming its file", async () => {
+  test("a record that isn't JSON is an error naming the store and the record", async () => {
     const data = await copyOfStore();
-    await Bun.write(`${data}/runs/${TWO_HARNESSES}/container-runs/1-1.json`, '{ "executionId": ');
+    changeStore(data, "UPDATE container_runs SET record = '{ \"executionId\": ' WHERE execution_id = $id AND permutation = 1 AND iteration = 1", { id: TWO_HARNESSES });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "--data-dir", data], {
       paths: { "<DATA>": data },
     });
 
     expect(stdout).toBe("");
-    expect(stderr).toMatch(/^Error: Can't read <DATA>\/runs\/<ULID>\/container-runs\/1-1\.json: .+\n$/);
+    expect(stderr).toMatch(/^Error: Can't read <DATA>\/runs\.sqlite: container run <ULID> 1-1: .+\n$/);
     expect(exitCode).toBe(1);
   });
 });

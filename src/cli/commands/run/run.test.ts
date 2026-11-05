@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
 import type { Reply } from "../../../api/declarations.ts";
-import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure, RecordedOutcome } from "../../../store/runDataStore.ts";
+import { type ContainerRunRecord, type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
@@ -164,16 +164,14 @@ afterEach(async () => {
   for (const dir of dataDirs.splice(0)) await $`rm -rf ${dir}`.quiet();
 });
 
-/** The execution record and container run records in the store under `dir`, for its one execution. */
+/** The files in the store's folder `dir`, and the execution record and container run records in its one execution. */
 async function readStore(dir: string) {
-  const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: dir, onlyFiles: false })];
-  const containerRuns = [...new Glob("container-runs/*.json").scanSync({ cwd: `${dir}/${executionDir}` })].sort();
+  const store = sqliteStore(storeFileIn(dir));
+  const [execution] = await store.listExecutions();
   return {
     files: filesIn(dir),
-    execution: (await Bun.file(`${dir}/${executionDir}/execution.json`).json()) as ExecutionRecord,
-    containerRuns: (await Promise.all(
-      containerRuns.map((file) => Bun.file(`${dir}/${executionDir}/${file}`).json()),
-    )) as ContainerRunRecord[],
+    execution: execution as ExecutionRecord,
+    containerRuns: execution ? await store.containerRunsOf(execution.executionId) : [],
   };
 }
 
@@ -213,12 +211,12 @@ Building thunderjar-prerun:44230271 ... done
 ${ALPHA_MEASURES}
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
 ${BETA_MEASURES}
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
 
     const store = await readStore(data);
     const id = store.execution.executionId;
-    expect(store.files).toEqual([`runs/${id}/container-runs/1-1.json`, `runs/${id}/container-runs/2-1.json`, `runs/${id}/execution.json`]);
+    expect(store.files).toEqual(["runs.sqlite"]);
     expect(store.execution).toEqual({
       executionId: expect.stringMatching(/^[0-7][0-9a-z]{25}$/),
       testCase: "two-harnesses",
@@ -356,7 +354,7 @@ Wrote <DATA>/runs/<ULID>/
     expect(stdout).toBe(`Execution <ULID>
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
 ${ALPHA_MEASURES}
-Wrote .thunderjar/.data/runs/<ULID>/
+Recorded in .thunderjar/.data/runs.sqlite
 `);
     const store = await readStore(`${copy.dir}/.thunderjar/.data`);
     expect(store.execution.status).toBe("complete");
@@ -440,7 +438,7 @@ export default declareHarness({ version: "1.0.0", cli: () => "echo partial > isP
       isPrimeTemplateTest: erroredWhileMeasuring (isPrime.ts has no export to bind {{defaultExport}} to)   isPrimeTsExists: true   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: 0
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
 ${BETA_MEASURES}
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
     expect(store.execution.status).toBe("failed");
@@ -479,7 +477,7 @@ export default declareHarness({ version: "1.0.0", cli: () => "true" });
     expect(exitCode).toBe(0);
     expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done, no result file (<duration>)
       isPrimeTemplateTest: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
     const [record] = (await readStore(data)).containerRuns;
     expect(record?.result).toEqual({
@@ -499,7 +497,7 @@ Wrote <DATA>/runs/<ULID>/
     const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
     expect(exitCode).toBe(0);
-    expect(stdout).toMatch(/ 1\/1  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. done \(<duration>, \$0\.061\)\nWrote /);
+    expect(stdout).toMatch(/ 1\/1  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. done \(<duration>, \$0\.061\)\nRecorded in /);
     expect((await readStore(data)).containerRuns[0]?.result).toEqual({});
     expect((await docker.commands()).filter((command) => command.includes("-measure-"))).toEqual([]);
   });
@@ -628,7 +626,7 @@ describe("0204 misbehaving agents", () => {
       isPrimeTsExists: false
  3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
       isPrimeTsExists: true
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
     expect(store.execution.status).toBe("failed");
@@ -684,7 +682,7 @@ Permutation 1: prerun image thunderjar-prerun:b3d358e4
     expect(stdout).toEndWith(`
  1/1  iteration 1/1  fake-rememberer | tell-then-ask  ... done (<duration>)
       promisedToRemember: true   remembersName: true
-Wrote <DATA>/runs/<ULID>/
+Recorded in <DATA>/runs.sqlite
 `);
     const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
     expect(record.execution.turns?.map((turn) => turn.exitCode)).toEqual([0, 0]);
@@ -886,7 +884,7 @@ Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
       isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
-Wrote <REPO>/fixtures/.tmp/data-<UUID>/runs/<ULID>/
+Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     expect(await docker.pushed()).toEqual([PRERUN, postrun]);
     const commands = await docker.commands();
@@ -947,7 +945,7 @@ Pulling ${PRERUN} into the runtime ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
       isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
-Wrote <REPO>/fixtures/.tmp/data-<UUID>/runs/<ULID>/
+Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     const commands = await docker.commands();
     const local = commands.filter((command) => !command.startsWith(REMOTE));

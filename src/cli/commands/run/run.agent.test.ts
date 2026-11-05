@@ -6,9 +6,9 @@
 //
 // Behind a proxy that re-signs TLS, as in a cloud sandbox, the base image must trust the proxy's CA
 // for npm and the agent to reach the internet. That's the machine's setup, not the scenario's.
-import { $, Glob } from "bun";
+import { $ } from "bun";
 import { afterAll, describe, expect, test } from "bun:test";
-import type { ContainerRunRecord } from "../../../store/runDataStore.ts";
+import { type ContainerRunRecord, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
@@ -51,10 +51,12 @@ describe.skipIf(!Bun.env.THUNDERJAR_AGENT_TESTS || TEST_CASES.length === 0)("run
       expect(run.stdout).toMatch(new RegExp(` ${ordinal}  iteration 1/1  ${label}  \\.\\.\\. done \\(<duration>, (\\$[\\d.]+|[\\d,]+ tokens)\\)\\n`));
     });
 
-    const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: data, onlyFiles: false })];
+    const store = sqliteStore(storeFileIn(data));
+    const [execution] = await store.listExecutions();
+    const stored = await store.containerRunsOf(execution!.executionId);
     const records: ContainerRunRecord[] = [];
     for (const [index] of labels.entries()) {
-      const record = (await Bun.file(`${data}/${executionDir}/container-runs/${index + 1}-1.json`).json()) as ContainerRunRecord;
+      const record = stored[index]!;
       records.push(record);
       expect(record.execution).toMatchObject({ exitCode: 0, timedOut: false });
       // Claude Code's own report: its reply, and the tokens it spent.
