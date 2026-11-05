@@ -74,34 +74,26 @@ type InitialPromptNames = { "is-prime": "plain" | "terse" };
 the prompts of the task named in `task`. A prompt that belongs to another task is a type
 error.
 
-## Harness and model must be compatible
+## Harness model pairs
 
-The generation step also reads each harness's
-[`models` map](064-harness.md#models-which-models-it-runs) and emits which models each
-harness can run:
+The generation step lists the harness folders, and a pair is one of them, then any model ID:
 
 ```ts
-// _generated/parameter-names.d.ts
-type HarnessModels = {
-  "claude-code-2-1-283": "sonnet-5-5" | "haiku-4-5";
-  "opencode-1-4-0": "sonnet-5-5" | "gpt-5";
-};
+// _generated/parameterNames.d.ts
+type HarnessName = "claude-code-2.1.311" | "opencode-1.19.5";
+type HarnessModelName = `${HarnessName}/${string}`;
 ```
 
-`harness` and `model` form a cross product, so every listed model must be runnable by
-every listed harness. Anything else is a type error on the `model` array:
+A pair naming a harness that isn't declared is a type error. The model ID is the agent's to
+accept: there is no list of the models a harness runs, so any mix of pairs is allowed. See
+[004](004-addressing-harness-model-pair.md).
 
 ```ts
-export default declareExperiment({
-  harness: ["claude-code-2-1-283", "opencode-1-4-0"],
-  model: ["sonnet-5-5", "gpt-5"],
-  //                    ~~~~~~~ Type '"gpt-5"' is not assignable to type '"sonnet-5-5"'.
+export default declareTestCase({
+  harnessModel: ["claude-code-2.1.311/claude-sonnet-5-5", "opencode-1.19.5/openai/gpt-5"],
   // …
 });
 ```
-
-An experiment that needs different models on different harnesses is declared as two
-experiments.
 
 ## Open questions
 

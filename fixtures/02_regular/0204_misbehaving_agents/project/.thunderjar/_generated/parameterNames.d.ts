@@ -7,10 +7,8 @@ type TaskName = "is-prime";
 type InitialPromptNames = {
   "is-prime": "plain";
 };
-type HarnessModelName =
-  | `fake-crasher@${"1.0.0"}/${"fake-model-small"}`
-  | `fake-silent@${"1.0.0"}/${"fake-model-small"}`
-  | `fake-sleeper@${"1.0.0"}/${"fake-model-small"}`;
+type HarnessName = "fake-crasher" | "fake-silent" | "fake-sleeper";
+type HarnessModelName = `${HarnessName}/${string}`;
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;

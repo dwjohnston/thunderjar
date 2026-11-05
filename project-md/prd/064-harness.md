@@ -2,61 +2,77 @@
 
 A named, version-pinned definition of an agent tool. The harness is the only parameter
 involved in all three phases of a container run: it is installed into the image,
-invoked to do the work, and read back afterwards for what the run cost.
+invoked to do the work, and read back afterwards for its reply and what the run cost.
 
-One of the six experiment parameters. Hashing and `applyParameter` are common to all of
-them — see [060-experiment-parameters.md](060-experiment-parameters.md).
+With a model ID, it is one of the five experiment parameters, the
+[harness model pair](004-addressing-harness-model-pair.md). Hashing and `applyParameter`
+are common to all of them — see [060-experiment-parameters.md](060-experiment-parameters.md).
 
 ## Declaration
 
-Lives at `experiment-parameters/harnesses/<name>/index.ts`.
+A harness is a folder, `test-case-parameters/harnessModels/<harness>/`, with one `index.ts`,
+and optionally a `files/` folder for its fragment to copy in. The folder pins one version:
+name it after the version, and copy it to try another. A test case names a pair as
+`<harness>/<model ID>`, e.g. `claude-code-2.1.311/claude-haiku-5-5`.
+
+For Claude Code, the library has the whole declaration:
 
 ```ts
-// experiment-parameters/harnesses/claude-code-2-1-283/index.ts
-const version = "2.1.283";
+// test-case-parameters/harnessModels/claude-code-2.1.311/index.ts
+import { claudeCode } from "thunderjar";
+
+export default claudeCode({ version: "2.1.311" });
+```
+
+`claudeCode({ version, cli? })` installs Claude Code as root, then runs it as the image's
+non-root `node` user, which it needs to skip its permission prompts. It starts the session
+with `--session-id` on the first turn, and `--resume`s it after. It reads the reply and
+token costs from `--output-format json`, and needs `ANTHROPIC_API_KEY`. `cli` replaces the
+command that runs it.
+
+Any other agent is declared in full:
+
+```ts
+// test-case-parameters/harnessModels/opencode-1.19.5/index.ts
+import { declareHarness } from "thunderjar";
 
 export default declareHarness({
-  version,
+  version: "1.19.5",
 
-  // build: layer the tool into the prerun image
-  applyParameter: () =>
-    `COPY --from=thunderjar/harness-claude-code:${version} /opt/claude /opt/claude`,
+  // build: install the tool into the prerun image
+  applyParameter: (_config, ctx) => `RUN npm install -g opencode-ai@${ctx.version}
+RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
+USER node`,
 
   // run: execute the agent, and write the result file
   cli: (ctx) =>
-    `claude -p "${ctx.initialPrompt}" --model ${ctx.modelId} ` +
-    `--allowedTools "Write,Edit,Read,Bash" --output-format json > ${ctx.resultPath}`,
+    `opencode run --model ${ctx.modelId} --format json${ctx.turn === 0 ? "" : " --continue"}` +
+    ` "$(cat ${ctx.promptPath})" > ${ctx.resultPath}`,
 
-  // interpret: turn that file's contents into normalised token costs
-  collectTokenCosts: (raw) => { /* … */ },
+  // interpret: the agent's reply, and normalised token costs, from that file
+  collectReply: (raw) => { /* … */ },
+  collectTokenCosts: (raw, ctx) => { /* … */ },
 
   // env vars the agent needs at run time; the user supplies the values
-  requiredEnv: ["ANTHROPIC_API_KEY"],
-
-  // which models this harness runs, and the ID it passes for each
-  models: {
-    "sonnet-5-5": "claude-sonnet-5-5",
-    "haiku-4-5": "claude-haiku-4-5-20251001",
-  },
+  requiredEnv: ["OPENCODE_API_KEY"],
 });
 ```
 
 | Field | Phase | What it is |
 |---|---|---|
-| `version` | — | The pinned version of the agent tool. |
+| `version` | — | The pinned version of the agent tool: `ctx.version`. |
+| `config`, `resolve` | — | As every parameter has: see [060](060-experiment-parameters.md#floating-parameters-resolve). |
 | `applyParameter` | Build | Returns the Dockerfile fragment that installs the tool. |
-| `cli` | Run | Returns the command that runs the agent. |
-| `collectTokenCosts` | Interpret | Turns the result file into normalised token costs. |
+| `cli` | Run | Returns the command that runs the agent, for one turn. |
 | `requiredEnv` | Run | Names of the environment variables the agent needs, e.g. its API key. |
-| `models` | Run | Which models this harness runs, and the ID it passes for each. |
+| `collectReply` | Interpret | Reads the agent's final reply from the result file. |
+| `collectTokenCosts` | Interpret | Turns the result file into normalised token costs. Without it, `notReported`. |
 
 ## `applyParameter`: installing the tool
 
-The fragment layers the agent tool into the prerun image. The example copies it from a
-pre-built harness image. A declaration is free to `RUN npm install` instead.
-
-Where the pre-built harness images come from is unresolved — see
-[020-goals-non-goals.md](020-goals-non-goals.md#to-revisit).
+The fragment installs the agent tool into the prerun image, at `ctx.version`. It can
+`RUN npm install`, or copy an installer from its `files/` folder, at `ctx.dir`:
+`COPY ${ctx.dir}/install.sh /tmp/`.
 
 ## `cli`: running the agent
 
@@ -64,13 +80,16 @@ Where the pre-built harness images come from is unresolved — see
 
 | Context field | What it is |
 |---|---|
-| `ctx.initialPrompt` | The experiment's [initial prompt](066-task.md#initial-prompts). |
-| `ctx.modelId` | The ID this harness passes for the permutation's model — see [`models`](#models-which-models-it-runs). |
-| `ctx.resultPath` | Where the command must write its result file. |
+| `ctx.version` | The harness's `version`. |
+| `ctx.modelId` | The pair's model ID, as the agent takes it. |
+| `ctx.initialPrompt`, `ctx.promptPath` | The turn's [initial prompt](066-task.md#initial-prompts), and a file holding it exactly. |
+| `ctx.resultPath` | Where the command must write the turn's result file. |
+| `ctx.turn`, `ctx.sessionId` | The turn, from 0, and a session ID its turns share. |
+| `ctx.resolved` | What the harness's `resolve` returned, if it has one. |
 
 `cli` carries a contract: **the command it returns must both run the agent and leave a
 file at `ctx.resultPath`.** Thunderjar supplies the path and never parses the file
-itself. It hands the bytes to that same harness's `collectTokenCosts`.
+itself. It hands the text to that same harness's `collectReply` and `collectTokenCosts`.
 
 Thunderjar also wraps the command to record start time, finish time and exit code. The
 harness author does nothing for that — see
@@ -78,9 +97,9 @@ harness author does nothing for that — see
 
 ## `collectTokenCosts`: reading back the cost
 
-Receives the raw contents of the result file and returns normalised token costs. See
-[087-collecting-token-costs.md](087-collecting-token-costs.md) for the `TokenCosts`
-contract and what happens when the file is missing or malformed.
+Receives the raw contents of the result file, and `{ version, modelId }`, and returns
+normalised token costs. See [087-collecting-token-costs.md](087-collecting-token-costs.md)
+for the `TokenCosts` contract and what happens when the file is missing or malformed.
 
 ## `requiredEnv`: credentials
 
@@ -102,62 +121,42 @@ A harness whose needed variables depend on the model's provider (Claude Code on 
 needs AWS variables, not `ANTHROPIC_API_KEY`) is not handled in v1. Declare one harness
 per provider for now.
 
-## `models`: which models it runs
+A credential needed only to build, e.g. to install from a private registry, is a build
+secret instead: see [060](060-experiment-parameters.md#build-secrets).
 
-`models` is the only place that says which models a harness can run. Each key is a
-[model](065-model.md) folder name under `experiment-parameters/models/`, and its value
-is the ID this harness passes for that model, as `ctx.modelId`.
+## Models
 
-Different harnesses spell the same model differently:
+There is no list of the models a harness runs. A pair names any model ID, which the
+agent is given as `ctx.modelId`, and whether the agent knows it is the agent's to say.
+Different agents spell the same model differently, so a pair names it as its agent does:
+`claude-code-2.1.311/claude-sonnet-5-5`, `opencode-1.19.5/anthropic/claude-sonnet-5-5`.
 
-```ts
-// experiment-parameters/harnesses/opencode-1-4-0/index.ts
-  models: {
-    "sonnet-5-5": "anthropic/claude-sonnet-5-5",
-    "gpt-5": "openai/gpt-5",
-  },
-```
+## Hashing
 
-An experiment listing a model that one of its harnesses can't run is a type error — see
-[055-declaring-experiments.md](055-declaring-experiments.md#harness-and-model-must-be-compatible).
+A harness's parameter hash is of what it outputs:
 
-### Hashing
+- its fragment, rendered, with its version
+- its `cli`, rendered with fixed sample values, for the first turn and a later one
+- its `requiredEnv`
+- its `files/` folder
 
-`models` is excluded from the harness's parameter hash. The resolved model ID goes into
-the permutation's permutation hash instead.
+The model ID isn't in it. It joins the permutation hash, so two models of one harness share
+a prerun image, and their runs are told apart.
 
-For `claude-code-2-1-283` with `sonnet-5-5`, the permutation hash includes:
-
-```
-harness parameter hash     (everything in the folder except `models`)
-model parameter hash       (sonnet-5-5)
-resolved model ID        "claude-sonnet-5-5"
-…the other four parameters' parameter hashes
-```
-
-| Change | Effect on existing permutation hashes |
+| Change | Effect |
 |---|---|
-| Add a model to `models` | None. |
-| Change one model's ID | Only that model's permutations change. |
-| Change `cli` or `version` | Every permutation using this harness changes. |
+| Use a new model ID | Only the permutations naming it. No image is rebuilt. |
+| Change `version`, or the install fragment | Every permutation using this harness, and its images. |
+| Change `cli` or `requiredEnv` | Every permutation using this harness. No image is rebuilt. |
+| Change `collectReply` or `collectTokenCosts`, or a comment | Nothing. |
 
-> **Future:** the mapping may move to a separate file in the harness folder, excluded
-> from hashing by location rather than by field.
+`collectReply` and `collectTokenCosts` interpret a run after the fact, so they aren't
+hashed: correcting a parser bug doesn't mark old runs as not comparable. Replies and token
+costs stay re-derivable, since the raw result file is preserved in the postrun image.
 
 ## Comparing versions of a tool
 
-Comparing two versions of the same tool (Claude Code 2.1.283 against 2.2.0) is
-comparing two harness declarations with different pinned versions. It is not a special
-case. This is why harness stays separate from base image rather than being folded into
-it.
-
-## Accepted tradeoffs
-
-- **`collectTokenCosts` is part of the harness's parameter hash, though it doesn't
-  determine what runs.** Strictly it belongs with measurements — it interprets a run
-  after the fact. Because the declaration folder is hashed, correcting a parser bug
-  changes the harness's parameter hash, and so the permutation hash, marking old runs as not
-  directly comparable even though nothing about what executed changed. Accepted for
-  now: keeping the harness's three phases in one declaration is worth more than the
-  hash precision, and a hash change is a warning rather than an error. Token costs stay
-  re-derivable regardless, since the raw result file is preserved in the postrun image.
+Comparing two versions of the same tool (Claude Code 2.1.311 against 2.2.0) is comparing
+two harness folders with different pinned versions, e.g. `claude-code-2.1.311/` and
+`claude-code-2.2.0/`. It is not a special case. This is why harness stays separate from
+base image rather than being folded into it.

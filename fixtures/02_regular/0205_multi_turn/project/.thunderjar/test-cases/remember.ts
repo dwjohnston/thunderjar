@@ -4,7 +4,7 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-rememberer@1.0.0/fake-model-small"],
+  harnessModel: ["fake-rememberer/fake-model-small-001"],
   task: "rubber-ducky",
   initialPrompt: ["tell-then-ask"],
   iterations: 1,

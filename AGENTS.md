@@ -171,54 +171,34 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
    - For commands that only read the project
      -`plan` or `show`, or commands with a `--dry-run`
    - Run on the scenario unchanged, and assert on stdout. 
-3. Real git tests 
-   - For parameters that read real commits: code states that use `checkoutCommit`, and prompt sets that use `ctx.git.show`.
-     - eg. `build`, `build --dry-run`
-   - The scenarios live in `03_real_git/`. Each one's project is committed to this repository several times, and its declarations pin those commits by hash.
-     - e.g.
-       ```ts
-       export default declareCodeState({
-         config: { commit: "65bcb92cc069821e4695433b11582962ee6d68bd" },
-         applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),
-       });
-       ```
-   - Run on the scenario unchanged, and assert that each file comes from its own commit, not from the worktree.
-     - The worktree's copy of each file has moved on from every pinned commit, so a file read from the worktree fails the test.
-     - With real Docker, also assert that `/workspace` is detached at the commit, with no remote and nothing after it.
-   - Include a commit this repository doesn't have, and assert that the build stops before anything is built.
-   - Pinned commits must stay reachable:
-     - ✅ Add a new commit for a new state, tag it `fixture-<scenario>-<name>`, and push the tag.
-     - ❌ Don't amend, squash or rebase away a pinned commit, or move its tag.
-     - CI checks out with full history and tags (`fetch-depth: 0`).
-     - **Why:** a commit that's only on a branch disappears when the branch is squash-merged or deleted. Then the scenario breaks on every fresh clone, CI included.
-4. Create docker image tests
+3. Create docker image tests
     - eg. `build`
    - Uses real docker 
    - Run the command, assert on the created docker image, then clean up docker image.
    - Tests of this type should have the extension `.docker.test.ts`
    - `bun test` skips them. Run them with `bun run test:docker`, which CI runs too.
    - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
-5. Read from docker image tests
+4. Read from docker image tests
    - For commands that read from an existing image, but do not need to act on it 
     - e.g. `remeasure`, 
    - The image is presumed to already exist 
    - Tests of this type should have the extension `.docker.test.ts`
    - `bun test` skips them. Run them with `bun run test:docker`, which CI runs too.
    - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
-6. Run on docker container tests
+5. Run on docker container tests
    - eg. `run`. Start
    -  containers from an existing image, execute some behaviour, then assert on effects both inside the container and out.
    - Tests of this type should have the extension `.docker.test.ts`
    - `bun test` skips them. Run them with `bun run test:docker`, which CI runs too.
    - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
-7. Regular unit tests
+6. Regular unit tests
    - For comprehensive business logic
-8. Real agent tests
+7. Real agent tests
    - Run a real agent, against a real model, through `run`, e.g. scenario `0501` running Claude Code.
    - Tests of this type should have the extension `.agent.test.ts`
    - `bun test` skips them. Run them with `bun run test:agent`, with Docker and `ANTHROPIC_API_KEY` set. Each run costs a few cents.
    - Not run in CI yet: an on-demand workflow is still to be added.
-9. The installed package's smoke test
+8. The installed package's smoke test
    - `bun run test:package` packs Thunderjar, installs the tarball into an empty project in a temporary folder, and runs `init`, `generate`, `plan example` and `run example --dry-run` there with the installed `thunderjar`.
    - Every other test runs Thunderjar from source. This one catches what only the package gets wrong, such as a file left out of `files`.
 
@@ -239,10 +219,6 @@ fixtures/
   02_regular/
     0201_minimal_existing_setup/
       tsconfig.json 
-      project/
-  03_real_git/
-    0301_git_project/
-      tsconfig.json
       project/
   04_unhappy/ 
 ```

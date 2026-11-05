@@ -5,7 +5,7 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-echo@1.0.0/fake-model-small"],
+  harnessModel: ["fake-echo/fake-model-small-001"],
   task: "is-prime",
   initialPrompt: ["awkward"],
   iterations: 1,

@@ -127,8 +127,8 @@ type ContainerRunRecord = {
 
   task: string; // the experiment's task, by name
 
-  // each resolved parameter, by name and parameter hash
-  parameters: Record<ParameterKind, { name: string; parameterHash: string }>;
+  // each parameter, by name and parameter hash, and what its `resolve` returned, if it has one
+  parameters: Record<ParameterKind, { name: string; parameterHash: string; resolved?: Resolved }>;
 
   result: Result;
   tokenCosts: TokenCosts; // see 087
@@ -146,10 +146,9 @@ type ContainerRunRecord = {
   ranAt: "2026-09-29T14:30:55Z",
   parameters: {
     baseImage:       { name: "node20",      parameterHash: "a01f…" },
-    codeState:       { name: "baseline",    parameterHash: "b92c…" },
+    codeState:       { name: "follow-main", parameterHash: "b92c…", resolved: "24dc11c2…" },
     promptSet:       { name: "snerk",       parameterHash: "c7d4…" },
-    harness:         { name: "claude-code", parameterHash: "d5e1…" },
-    model:           { name: "haiku",       parameterHash: "e3a8…" },
+    harnessModel:    { name: "claude-code-2.1.311/claude-haiku-5-5", parameterHash: "d5e1…" },
     initialPrompt:   { name: "plain",       parameterHash: "f20b…" },
   },
   result: { /* as above */ },
@@ -161,7 +160,8 @@ type ContainerRunRecord = {
 Parameters are stored **by name and by parameter hash**, not just by hash. The hash is what
 proves comparability; the name is what makes a report readable. Keeping both means a
 report can say "prompt set `snerk`" while still detecting that `snerk` means something
-different than it did last month.
+different than it did last month. A floating parameter also records what it resolved to,
+e.g. the commit `main` was at, so a report can say which, not only that the hash changed.
 
 ## Execution
 

@@ -9,10 +9,10 @@ them — see [060-experiment-parameters.md](060-experiment-parameters.md).
 
 ## Declaration
 
-Lives at `experiment-parameters/baseImages/<name>/index.ts`.
+Lives at `test-case-parameters/baseImages/<name>/index.ts`.
 
 ```ts
-// experiment-parameters/baseImages/node20/index.ts
+// test-case-parameters/baseImages/node20/index.ts
 export default declareBaseImage({
   applyParameter: () => `FROM node:20-bookworm`,
 });

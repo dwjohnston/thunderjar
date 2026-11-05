@@ -5,7 +5,7 @@
 // container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
 // recorded and measured, and the rest still run, but the execution is `failed`.
-import type { ImageStore, Reply, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
+import type { BuildOptions, ImageStore, Reply, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
 import type {
@@ -49,19 +49,21 @@ export type ExecutionToRun = {
   imagePrefix?: string;
   /** Where its images are pushed, or `null` (the default) to keep them local. Its login is checked before this runs. */
   imageStore?: ImageStore | null;
+  /** The secrets and SSH agent its prerun builds are given. Their variables are checked before this runs. */
+  build?: BuildOptions;
 };
 
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
 function containerRunRecord(
   { plan, name, testCase }: ExecutionToRun,
-  { number: permutationNumber, permutation }: PlannedPermutation,
+  { number: permutationNumber, permutation, version }: PlannedPermutation,
   iteration: PlannedIteration,
   execution: Execution,
   turns: { harnessResult: string | null; reply: Reply }[],
   tokenCosts: TokenCosts,
 ): ContainerRunRecord {
   const last = turns.at(-1) as { harnessResult: string | null; reply: Reply };
-  const { harness, version, model } = parsePair(permutation.harnessModel);
+  const { harness } = parsePair(permutation.harnessModel);
   return {
     executionId: plan.executionId,
     testCase: name,
@@ -72,9 +74,16 @@ function containerRunRecord(
     postrunImage: iteration.postrunImage,
     ranAt: new Date(execution.startedAt).toISOString(),
     parameters: Object.fromEntries(
-      AXES.map((axis) => [axis, { name: permutation[axis], parameterHash: permutation.parameterHashes[axis] }]),
+      AXES.map((axis) => [
+        axis,
+        {
+          name: permutation[axis],
+          parameterHash: permutation.parameterHashes[axis],
+          ...(permutation.resolved[axis] !== undefined && { resolved: permutation.resolved[axis] }),
+        },
+      ]),
     ) as ContainerRunRecord["parameters"],
-    harnessModel: { harness, version, model, modelId: permutation.modelId },
+    harnessModel: { harness, version, modelId: permutation.modelId },
     execution,
     harnessResult: last.harnessResult,
     reply: last.reply,
@@ -95,10 +104,10 @@ function containerRunRecord(
  * recording the execution as `failed`.
  */
 export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks = {}): Promise<ExecutionRecord> {
-  const { root, testCase, plan, imagePrefix, imageStore = null } = run;
+  const { root, testCase, plan, imagePrefix, imageStore = null, build = {} } = run;
   const measurements = await loadMeasurements(root, testCase.task);
   const permutations = plan.permutations.map(({ permutation }) => permutation);
-  await buildPrerunImages(root, testCase.task, permutations, imagePrefix, hooks);
+  await buildPrerunImages(root, permutations, imagePrefix, hooks, build);
   await pushPrerunImages(permutations, imageStore, imagePrefix, hooks);
 
   const startedAt = new Date().toISOString();

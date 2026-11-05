@@ -1,6 +1,8 @@
-// Loads `.thunderjar/thunderjar.config.ts`: where images are pushed, if anywhere.
-import type { ConfigDeclaration, ImageStore } from "../api/declarations.ts";
-import { loadDeclaration, type Problem, problemsError } from "./loader.ts";
+// Loads `.thunderjar/thunderjar.config.ts`: where images are pushed, if anywhere, and what prerun
+// builds are given beside their build context.
+import type { BuildOptions, ConfigDeclaration, ImageStore } from "../api/declarations.ts";
+import { ConfigError, loadDeclaration, type Problem, problemsError } from "./loader.ts";
+import { ENV_NAME } from "./envName.ts";
 
 export const CONFIG_FILE = "thunderjar.config.ts";
 
@@ -41,7 +43,46 @@ export function imageStoreProblem(imageStore: unknown): string | undefined {
   return repositoryProblem(repository);
 }
 
-export type ProjectConfig = { imageStore: ImageStore | null };
+// A build secret's ID, as `docker build --secret id=…` takes it.
+const SECRET_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** Why `build`, as loaded, isn't BuildOptions, or undefined if it is. */
+export function buildOptionsProblem(build: unknown): string | undefined {
+  if (build === undefined) return undefined;
+  if (typeof build !== "object" || build === null || Array.isArray(build)) {
+    return `must be { secrets: [{ id, env }], ssh: true }, either of them left out, got ${show(build)}`;
+  }
+  const { secrets, ssh } = build as { secrets?: unknown; ssh?: unknown };
+  if (ssh !== undefined && typeof ssh !== "boolean") return `ssh must be true or false, got ${show(ssh)}`;
+  if (secrets === undefined) return undefined;
+  if (!Array.isArray(secrets)) return `secrets must be a list of { id, env }, got ${show(secrets)}`;
+  const ids = new Set<string>();
+  for (const secret of secrets) {
+    const { id, env } = (secret ?? {}) as { id?: unknown; env?: unknown };
+    if (typeof id !== "string" || !SECRET_ID.test(id)) return `secrets: ${show(id)} is not a secret ID: letters, digits, ".", "_" and "-"`;
+    if (typeof env !== "string" || !ENV_NAME.test(env)) return `secrets: ${show(env)}, secret ${show(id)}'s env, is not an environment variable name`;
+    if (ids.has(id)) return `secrets: ${show(id)} is given twice`;
+    ids.add(id);
+  }
+  return undefined;
+}
+
+export type ProjectConfig = {
+  imageStore: ImageStore | null;
+  /** What prerun builds are given: no secrets and no SSH agent, unless the config gives them. */
+  build: Required<BuildOptions>;
+};
+
+/**
+ * Checks that the variable of each of `build`'s secrets is set in `env`. Throws a ConfigError
+ * naming each that isn't, so it can be called before anything is built. An empty value counts as unset.
+ */
+export function checkBuildSecrets(build: Required<BuildOptions>, env: Record<string, string | undefined> = Bun.env): void {
+  const missing = build.secrets.filter(({ env: name }) => !env[name]).map(({ id, env: name }) => `Build secret "${id}" needs ${name}, which is not set.`);
+  if (missing.length === 0) return;
+  const hint = `Export ${missing.length === 1 ? "it" : "them"} in the shell that runs thunderjar.`;
+  throw new ConfigError(...missing.slice(0, -1), `${missing.at(-1)}\n${hint}`);
+}
 
 /** The project's config, from `<root>/thunderjar.config.ts`. Throws a ConfigError if it's missing or wrong. */
 export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
@@ -50,8 +91,13 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
   if (config) {
     const problem = imageStoreProblem(config.imageStore);
     if (problem) problems.push({ file: CONFIG_FILE, field: "imageStore", message: problem });
+    const buildProblem = buildOptionsProblem(config.build);
+    if (buildProblem) problems.push({ file: CONFIG_FILE, field: "build", message: buildProblem });
   }
   if (problems.length > 0) throw problemsError(problems);
-  const { imageStore } = config as ConfigDeclaration;
-  return { imageStore: imageStore === null ? null : { repository: imageStore.repository } };
+  const { imageStore, build } = config as ConfigDeclaration;
+  return {
+    imageStore: imageStore === null ? null : { repository: imageStore.repository },
+    build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false },
+  };
 }

@@ -52,10 +52,6 @@
                 "message": "src/testing may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
-                "regex": "^\\.\\./git(/|$)",
-                "message": "src/testing may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./store(/|$)",
                 "message": "src/testing may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -99,10 +95,6 @@
               {
                 "regex": "^\\.\\./\\.\\./docker(/|$)",
                 "message": "src/testing may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./git(/|$)",
-                "message": "src/testing may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./\\.\\./store(/|$)",
@@ -150,10 +142,6 @@
                 "message": "src/testing may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
-                "regex": "^\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/testing may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./\\.\\./store(/|$)",
                 "message": "src/testing may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -199,10 +187,6 @@
                 "message": "src/testing may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
-                "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/testing may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./store(/|$)",
                 "message": "src/testing may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -242,10 +226,6 @@
               {
                 "regex": "^\\.\\./docker(/|$)",
                 "message": "src/api may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./git(/|$)",
-                "message": "src/api may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./store(/|$)",
@@ -289,10 +269,6 @@
                 "message": "src/api may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
-                "regex": "^\\.\\./\\.\\./git(/|$)",
-                "message": "src/api may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./store(/|$)",
                 "message": "src/api may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -332,10 +308,6 @@
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./docker(/|$)",
                 "message": "src/api may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/api may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./store(/|$)",
@@ -379,10 +351,6 @@
                 "message": "src/api may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
-                "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/api may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./store(/|$)",
                 "message": "src/api may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -418,10 +386,6 @@
               {
                 "regex": "^\\.\\./docker(/|$)",
                 "message": "src/instruments may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./git(/|$)",
-                "message": "src/instruments may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./store(/|$)",
@@ -461,10 +425,6 @@
                 "message": "src/instruments may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
-                "regex": "^\\.\\./\\.\\./git(/|$)",
-                "message": "src/instruments may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./store(/|$)",
                 "message": "src/instruments may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -500,10 +460,6 @@
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./docker(/|$)",
                 "message": "src/instruments may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/instruments may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./store(/|$)",
@@ -543,10 +499,6 @@
                 "message": "src/instruments may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
-                "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/instruments may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./store(/|$)",
                 "message": "src/instruments may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -578,10 +530,6 @@
               {
                 "regex": "^\\.\\./docker(/|$)",
                 "message": "src/config may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./git(/|$)",
-                "message": "src/config may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./store(/|$)",
@@ -617,10 +565,6 @@
                 "message": "src/config may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
-                "regex": "^\\.\\./\\.\\./git(/|$)",
-                "message": "src/config may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./store(/|$)",
                 "message": "src/config may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -652,10 +596,6 @@
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./docker(/|$)",
                 "message": "src/config may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/config may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./store(/|$)",
@@ -691,10 +631,6 @@
                 "message": "src/config may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
-                "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/config may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./store(/|$)",
                 "message": "src/config may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -722,10 +658,6 @@
             "patterns": [
               {
                 "regex": "^node:"
-              },
-              {
-                "regex": "^\\.\\./git(/|$)",
-                "message": "src/docker may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./store(/|$)",
@@ -757,10 +689,6 @@
                 "regex": "^node:"
               },
               {
-                "regex": "^\\.\\./\\.\\./git(/|$)",
-                "message": "src/docker may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./store(/|$)",
                 "message": "src/docker may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -788,10 +716,6 @@
             "patterns": [
               {
                 "regex": "^node:"
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/docker may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./store(/|$)",
@@ -823,10 +747,6 @@
                 "regex": "^node:"
               },
               {
-                "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./git(/|$)",
-                "message": "src/docker may not import from src/git: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
                 "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./store(/|$)",
                 "message": "src/docker may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
               },
@@ -837,122 +757,6 @@
               {
                 "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)",
                 "message": "src/docker may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "files": [
-        "src/git/*"
-      ],
-      "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "patterns": [
-              {
-                "regex": "^node:"
-              },
-              {
-                "regex": "^\\.\\./store(/|$)",
-                "message": "src/git may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./execution(/|$)",
-                "message": "src/git may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./cli(/|$)",
-                "message": "src/git may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "files": [
-        "src/git/*/*"
-      ],
-      "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "patterns": [
-              {
-                "regex": "^node:"
-              },
-              {
-                "regex": "^\\.\\./\\.\\./store(/|$)",
-                "message": "src/git may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./execution(/|$)",
-                "message": "src/git may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./cli(/|$)",
-                "message": "src/git may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "files": [
-        "src/git/*/*/*"
-      ],
-      "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "patterns": [
-              {
-                "regex": "^node:"
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./store(/|$)",
-                "message": "src/git may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)",
-                "message": "src/git may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)",
-                "message": "src/git may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "files": [
-        "src/git/*/*/*/*"
-      ],
-      "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "patterns": [
-              {
-                "regex": "^node:"
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./store(/|$)",
-                "message": "src/git may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)",
-                "message": "src/git may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts."
-              },
-              {
-                "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)",
-                "message": "src/git may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
               }
             ]
           }

@@ -10,7 +10,7 @@
 // Every file is pretty JSON, written whole to a temporary file then renamed over the old one,
 // so an interrupted write leaves the previous contents rather than half a file.
 import { $, Glob } from "bun";
-import type { Reply, TokenCosts } from "../api/declarations.ts";
+import type { Reply, Resolved, TokenCosts } from "../api/declarations.ts";
 import type { Axis } from "../config/permutations.ts";
 
 /** `running` until its last container run finishes, or if it was interrupted. */
@@ -86,9 +86,16 @@ export type ContainerRunRecord = {
   postrunImage: string;
   /** ISO timestamp of when the agent started. */
   ranAt: string;
-  /** Each parameter, by name and parameter hash. */
-  parameters: Record<Axis, { name: string; parameterHash: string }>;
-  harnessModel: { harness: string; version: string; model: string; modelId: string };
+  /**
+   * Each parameter, by name and parameter hash, and, for one with a `resolve`, what it resolved
+   * to for this run's execution.
+   */
+  parameters: Record<Axis, { name: string; parameterHash: string; resolved?: Resolved }>;
+  /**
+   * Its harness folder, the version that harness pins, and the model ID it was given. `model` is
+   * the model's name in runs recorded before pairs named model IDs, `<harness>@<version>/<model>`.
+   */
+  harnessModel: { harness: string; version: string; modelId: string; model?: string };
   execution: Execution;
   /** The text of the result file the harness's `cli` left, or null if it left none. */
   harnessResult: string | null;

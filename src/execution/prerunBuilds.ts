@@ -5,15 +5,16 @@
 // project, and removed afterwards, whether or not the build succeeds:
 //
 //   Dockerfile
-//   parameters/<role>/     each folder parameter, at its ctx.dir: see PARAMETER_DIRS
-//   code.bundle, git/      what its fragments read from the repository: see prerunDockerfile.ts
+//   parameters/<role>/     each folder parameter's files/ folder, at its ctx.dir: see PARAMETER_DIRS.
+//                          Its index.ts, and anything else beside files/, is never copied.
 import { $ } from "bun";
-import { PARAMETERS } from "../config/folders.ts";
+import type { BuildOptions } from "../api/declarations.ts";
+import { FILES, PARAMETERS } from "../config/folders.ts";
+import { existsIn } from "../config/loader.ts";
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
 import { buildImage, imagesIn } from "../docker/docker.ts";
-import { checkGitNeeds, writeGitNeeds } from "./gitNeeds.ts";
 import { prerunImage, prerunRepository } from "./images.ts";
-import { type FolderRole, loadPrerunParameters, PARAMETER_DIRS, renderPrerun } from "./prerunDockerfile.ts";
+import { type FolderRole, PARAMETER_DIRS } from "./prerunDockerfile.ts";
 
 /** Where each folder parameter of `permutation` is, relative to `.thunderjar/`. */
 const parameterFolders = (permutation: HashedPermutation): Record<FolderRole, string> => ({
@@ -30,13 +31,18 @@ async function temporaryFolder(): Promise<string> {
   return dir;
 }
 
-/** Copies each folder parameter of `permutation`, under `root`, into `contextDir`, following symlinks. */
+/**
+ * Copies the `files/` folder of each folder parameter of `permutation`, under `root`, into
+ * `contextDir`, following symlinks. A parameter without one copies nothing.
+ */
 async function copyParameters(root: string, permutation: HashedPermutation, contextDir: string): Promise<void> {
   const folders = parameterFolders(permutation);
   for (const role of Object.keys(PARAMETER_DIRS) as FolderRole[]) {
+    const files = `${folders[role]}/${FILES}/`;
+    if (!(await existsIn(root, files))) continue;
     const dest = `${contextDir}/${PARAMETER_DIRS[role]}`;
     await $`mkdir -p ${dest}`.quiet();
-    await $`cp -RL ${root}/${folders[role]}/. ${dest}`.quiet();
+    await $`cp -RL ${root}/${files}. ${dest}`.quiet();
   }
 }
 
@@ -55,42 +61,32 @@ export type PrerunBuildResult = {
 };
 
 /**
- * Builds the prerun image of each of `permutations`, of a test case of `task` under `root` (the
- * `.thunderjar/` folder), that doesn't exist yet. Permutations with the same hash share one image.
- * Every Dockerfile is rendered, and every commit they read checked, before the first build, so a
- * configuration error or a missing commit builds nothing.
+ * Builds the prerun image of each of `permutations`, of a test case under `root` (the
+ * `.thunderjar/` folder), that doesn't exist yet, from its Dockerfile. Permutations with the same
+ * image hash share one image. Each build is given `build`'s secrets and SSH agent.
  *
  * Throws a DockerUnavailableError if Docker can't be asked which images exist, a ConfigError, or
  * a DockerBuildError if a build fails, after which no other image is built.
  */
 export async function buildPrerunImages(
   root: string,
-  task: string,
   permutations: HashedPermutation[],
   imagePrefix?: string,
   hooks: PrerunBuildHooks = {},
+  build: BuildOptions = {},
 ): Promise<PrerunBuildResult> {
-  const unique = [...new Map(permutations.map((permutation) => [permutation.hash, permutation])).values()];
+  const unique = [...new Map(permutations.map((permutation) => [permutation.imageHash, permutation])).values()];
   const existing = await imagesIn(prerunRepository(imagePrefix));
-  const images = unique.map((permutation) => ({ permutation, image: prerunImage(permutation.hash, imagePrefix) }));
-  const missing = images.filter(({ image }) => !existing.has(image));
-  const builds = await Promise.all(
-    missing.map(async ({ permutation, image }) => ({
-      permutation,
-      image,
-      ...renderPrerun(await loadPrerunParameters(root, task, permutation)),
-    })),
-  );
-  const repository = await checkGitNeeds(root, builds.flatMap(({ git }) => git));
+  const images = unique.map((permutation) => ({ permutation, image: prerunImage(permutation.imageHash, imagePrefix) }));
+  const builds = images.filter(({ image }) => !existing.has(image));
 
-  for (const { permutation, image, dockerfile, git } of builds) {
+  for (const { permutation, image } of builds) {
     hooks.onBuilding?.(image);
     const contextDir = await temporaryFolder();
     try {
       await copyParameters(root, permutation, contextDir);
-      await writeGitNeeds(repository, git, contextDir);
-      await Bun.write(`${contextDir}/Dockerfile`, dockerfile);
-      await buildImage(contextDir, image);
+      await Bun.write(`${contextDir}/Dockerfile`, permutation.dockerfile);
+      await buildImage(contextDir, image, build);
     } finally {
       await $`rm -rf ${contextDir}`.quiet();
     }

@@ -72,39 +72,42 @@ costs back afterwards. See
 
 ### Parameter hash
 
-Each experiment parameter has its own **parameter hash**:
+Each experiment parameter has its own **parameter hash**, of what it outputs rather than its
+source:
 
-1. **Usually it is taken from the content of the parameter's declaration folder** —
-   `index.ts` plus anything bundled alongside it.
-2. **Some exclusions apply.** For example A task's `measurements/` folder and a harness's `models`
-   map are left out, because changing them doesn't change what runs.
-3. **A declaration can set the value itself**, with `additionalHash` or `determineHash`
-   — see [Floating parameter](#floating-parameter).
+1. **The text it renders**: its Dockerfile fragment, once `resolve` and `applyParameter` have
+   run, and for a harness its `cli` rendered with sample values and its `requiredEnv`, for an
+   initial prompt its prompt and timeout.
+2. **Its `files/` folder**, by content: what its fragment can copy into the image.
+3. **Nothing else.** Comments, helpers and names aren't hashed. A task's measurements aren't
+   in any parameter hash, because changing them doesn't change what runs.
+
+See [060-experiment-parameters.md](060-experiment-parameters.md#hashing).
 
 ### Permutation hash
 
-A permutation's **permutation hash** combines the parameter hashes of its six parameters
-(base image, code state, prompt set, harness, model, initial prompt), plus the model ID the
-harness resolves the model to. This hash tags the permutation's prerun and postrun
-images and proves two container runs are comparable — if any parameter hash
-changes, the permutation hash changes, so two runs are only directly comparable if they
-share the same hash. See
-[060-experiment-parameters.md](060-experiment-parameters.md#parameter-hashing-and-identity).
+A permutation's **permutation hash** combines the parameter hashes of its five parameters
+(base image, code state, prompt set, harness model pair, initial prompt), plus the pair's
+model ID. It tags the permutation's postrun images and proves two container runs are
+comparable — if any parameter hash changes, the permutation hash changes, so two runs are
+only directly comparable if they share the same hash.
+
+Its prerun image is tagged with a separate **image hash**, of its Dockerfile and `files/`
+alone, so permutations that build the same image share it. See
+[060-experiment-parameters.md](060-experiment-parameters.md#permutation-hash-and-image-hash).
 
 ### Floating parameter
 
 A **floating parameter** is an experiment parameter that follows a moving target, such as
 the tip of `main`, instead of a pinned value. It is not a separate kind of parameter: it
-is a declaration that uses `determineHash`, a command Thunderjar runs at the start of
-each experiment execution, whose output replaces the folder's content as the source of
-its parameter hash. When the target has moved, the parameter hash changes, so the
-permutation hash changes too.
+is a declaration with a `resolve`, which Thunderjar runs on the host once per execution,
+before anything is hashed. What it returns reaches the fragment as `ctx.resolved`, so the
+parameter hash changes exactly when the text it ends up in does.
 
 A floating parameter is still deterministic. The value may differ from one execution to
 the next, but any one resolved value must always mean the same thing: the same commit
-SHA is always the same codebase. The command should not make API calls or read anything
-else that could give two answers for the same state. See
-[060-experiment-parameters.md](060-experiment-parameters.md#parameters-that-follow-a-moving-target).
+SHA is always the same codebase. `resolve` should only read, never build or write. See
+[060-experiment-parameters.md](060-experiment-parameters.md#floating-parameters-resolve).
 
 ### Permutation
 

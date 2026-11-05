@@ -26,6 +26,7 @@ test("config is typed from the declaration's own config", () => {
     applyParameter: (config) => config.files.map((file) => `COPY ${file} /workspace/`).join("\n"),
   });
   declareHarness({
+    version: "2.1.283",
     config: { packageName: "@anthropic-ai/claude-code" },
     applyParameter: (config, ctx) => `RUN npm install -g ${config.packageName}@${ctx.version}`,
     cli: (ctx) => `claude -p "${ctx.initialPrompt}"`,
@@ -42,12 +43,57 @@ test("config is undefined when the declaration has none", () => {
 });
 
 test("ctx carries dir for folder parameters, and version for harnesses", () => {
-  declareCodeState({ applyParameter: (_config, ctx) => `COPY ${ctx.dir}/files/ /workspace/` });
-  declareHarness({ applyParameter: (_config, ctx) => `COPY ${ctx.dir}/install.sh /tmp/\nRUN /tmp/install.sh ${ctx.version}`, cli: () => "" });
+  declareCodeState({ applyParameter: (_config, ctx) => `COPY ${ctx.dir}/ /workspace/` });
+  declareHarness({ version: "2.1.283", applyParameter: (_config, ctx) => `COPY ${ctx.dir}/install.sh /tmp/\nRUN /tmp/install.sh ${ctx.version}`, cli: () => "" });
   // @ts-expect-error - only a harness gets a version
   declarePromptSet({ applyParameter: (_config, ctx) => ctx.version });
   // @ts-expect-error - an initial prompt is a file, not a folder: it has no dir
   declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: (_config, ctx) => ctx.dir });
+});
+
+test("ctx.resolved is typed from what resolve returns, awaited", () => {
+  declareCodeState({
+    config: { repo: "https://github.com/acme/widgets.git", branch: "main" },
+    resolve: (config, ctx) => {
+      assertType<string>(config.branch);
+      return ctx.exec(`git ls-remote --exit-code ${config.repo} refs/heads/${config.branch}`);
+    },
+    applyParameter: (_config, ctx) => {
+      assertType<string>(ctx.resolved);
+      assertType<string>(ctx.dir);
+      return `RUN echo ${ctx.resolved.slice(0, 8)}`;
+    },
+  });
+  declarePromptSet({
+    resolve: () => ({ skills: ["review"], count: 1 }),
+    applyParameter: (_config, ctx) => {
+      assertType<string[]>(ctx.resolved.skills);
+      // @ts-expect-error - not in what resolve returned
+      return ctx.resolved.agents;
+    },
+  });
+  declareHarness({
+    version: "2.1.283",
+    resolve: async () => "2.1.311",
+    applyParameter: (_config, ctx) => `RUN npm install -g @anthropic-ai/claude-code@${ctx.resolved}`,
+    cli: (ctx) => {
+      assertType<string>(ctx.resolved);
+      return `claude --model ${ctx.modelId}`;
+    },
+  });
+});
+
+test("ctx.resolved is undefined without a resolve, and resolve must return what JSON can hold", () => {
+  declareCodeState({
+    applyParameter: (_config, ctx) => {
+      assertType<undefined>(ctx.resolved);
+      return "";
+    },
+  });
+  // @ts-expect-error - a function isn't something JSON can hold
+  declareCodeState({ resolve: () => () => "main" });
+  // @ts-expect-error - nor is a Date
+  declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, resolve: () => new Date() });
 });
 
 test("a base image must say how it is applied: it carries the FROM", () => {

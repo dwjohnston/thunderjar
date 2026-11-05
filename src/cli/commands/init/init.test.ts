@@ -18,8 +18,7 @@ const P = "test-case-parameters";
  */
 const init = (dir: string) => thunderjar(dir, ["init"], { env: { GIT_CEILING_DIRECTORIES: TMP_DIR } });
 
-const HARNESS_FILES = ["index.ts", "models.ts", "versions.ts", "collectTokenCosts.ts"];
-const HARNESSES = ["claude-code", "copilot", "codex", "opencode"];
+const HARNESSES = ["claude-code-2.1.311", "copilot-1.0.105", "codex-0.166.0", "opencode-1.19.5"];
 
 /** What `init` scaffolds in any project, in the order it prints them, after the nested package.json. */
 const SCAFFOLD = [
@@ -33,7 +32,7 @@ const SCAFFOLD = [
   `${P}/promptSets/snerk/index.ts`,
   `${P}/promptSets/house-style/index.ts`,
   `${P}/promptSets/house-style/files/AGENTS.md`,
-  ...HARNESSES.flatMap((harness) => HARNESS_FILES.map((file) => `${P}/harnessModels/${harness}/${file}`)),
+  ...HARNESSES.map((harness) => `${P}/harnessModels/${harness}/index.ts`),
   `${P}/tasks/is-prime/initial-prompts/plain.ts`,
   `${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`,
   `${P}/tasks/is-prime/measurements/isPrimeTemplateTest.ts`,
@@ -73,12 +72,13 @@ export default declareConfig({
 `);
     expect(await read(copy.dir, "test-cases/compare-models.ts")).toBe(`import { declareTestCase } from "thunderjar";
 
-// The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5.
+// The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5. Each pair is a
+// harness folder, then the model ID its agent is given.
 export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5", "claude-code@2.1.283/haiku-5-5"],
+  harnessModel: ["claude-code-2.1.311/claude-haiku-4-5-20251001", "claude-code-2.1.311/claude-haiku-5-5"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -92,7 +92,11 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-5-5", "copilot@1.0.105/haiku-5-5", "opencode@1.19.5/haiku-5-5"],
+  harnessModel: [
+    "claude-code-2.1.311/claude-haiku-5-5",
+    "copilot-1.0.105/claude-haiku-5.5",
+    "opencode-1.19.5/opencode/claude-haiku-5-5",
+  ],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -100,14 +104,30 @@ export default declareTestCase({
 `);
   });
 
-  test("outside a git repository, its code state leaves /workspace empty, and says how to check a commit out", async () => {
+  test("outside a git repository, its code state leaves /workspace empty, and says how to clone one", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
 
     const baseline = await read(copy.dir, `${P}/codeStates/baseline/index.ts`);
     expect(baseline).toContain("export default declareCodeState({});");
-    expect(baseline).toContain("//     applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),");
-    expect(await read(copy.dir, `${P}/promptSets/snerk/index.ts`)).toContain('commit: "<a commit hash>"');
+    expect(baseline).toContain("//     applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\\\\n");
+  });
+
+  test("its Claude Code harness is the library's, pinned by its folder", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const harness = await read(copy.dir, `${P}/harnessModels/claude-code-2.1.311/index.ts`);
+    expect(harness).toStartWith('import { claudeCode } from "thunderjar";\n');
+    expect(harness).toEndWith('\nexport default claudeCode({ version: "2.1.311" });\n');
+  });
+
+  test("its base image gives every user a git identity", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    expect(await read(copy.dir, `${P}/baseImages/node20/index.ts`)).toContain(`RUN git config --system user.name "Thunderjar agent" \\\\
+  && git config --system user.email agent@thunderjar.invalid\``);
   });
 
   test("every TypeScript file it scaffolds imports thunderjar and loads", async () => {
@@ -173,43 +193,54 @@ describe("0102 JavaScript project", () => {
 });
 
 describe("0101 empty project, made a git repository", () => {
-  test("its code state checks out the project's commit, and its prompt set copies files from it", async () => {
+  const git = (dir: string, args: string[]) => $`git ${args}`.cwd(dir).env({ ...Bun.env, GIT_CEILING_DIRECTORIES: TMP_DIR }).quiet();
+  const commit = async (dir: string) => {
+    await git(dir, ["init", "--quiet"]);
+    await git(dir, ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "first"]);
+    return (await git(dir, ["rev-parse", "HEAD"])).stdout.toString().trim();
+  };
+
+  test("with an origin, its code state clones it at the project's commit", async () => {
     await using copy = await copyScenarioProject("0101");
-    const git = (args: string[]) => $`git ${args}`.cwd(copy.dir).env({ ...Bun.env, GIT_CEILING_DIRECTORIES: TMP_DIR }).quiet();
-    await git(["init", "--quiet"]);
-    await git(["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "first"]);
-    const head = (await git(["rev-parse", "HEAD"])).stdout.toString().trim();
+    const head = await commit(copy.dir);
+    await git(copy.dir, ["remote", "add", "origin", "https://github.com/acme/widgets.git"]);
 
     const { stderr, exitCode } = await init(copy.dir);
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(await read(copy.dir, `${P}/codeStates/baseline/index.ts`)).toBe(`import { checkoutCommit, declareCodeState } from "thunderjar";
+    expect(await read(copy.dir, `${P}/codeStates/baseline/index.ts`)).toBe(`import { declareCodeState } from "thunderjar";
 
-// The project's repository at a commit, checked out into /workspace. The commit must be in the
-// repository: commit it, or Thunderjar can't build it.
+// The project's repository, cloned into /workspace at a commit. The commit must be pushed, so the
+// build can fetch it. Pin a commit, never a branch: the same text must always build the same thing.
 export default declareCodeState({
-  config: { commit: "${head}" },
-  applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),
+  config: {
+    repo: "https://github.com/acme/widgets.git",
+    commit: "${head}",
+  },
+  applyParameter: (config) => \`RUN git clone --quiet \${config.repo} /workspace \\\\
+  && git -C /workspace checkout --quiet --detach \${config.commit} \\\\
+  && git -C /workspace remote remove origin\`,
 });
 `);
-    expect(await read(copy.dir, `${P}/promptSets/snerk/index.ts`)).toContain(`commit: "${head}"`);
   });
 
-  test("before its first commit, it's treated as outside one", async () => {
-    await using copy = await copyScenarioProject("0101");
-    await $`git init --quiet`.cwd(copy.dir).quiet();
+  test("without an origin, or before its first commit, it's treated as outside one", async () => {
+    await using noOrigin = await copyScenarioProject("0101");
+    await commit(noOrigin.dir);
+    await using noCommit = await copyScenarioProject("0101");
+    await git(noCommit.dir, ["init", "--quiet"]);
 
-    const { exitCode } = await init(copy.dir);
-
-    expect(exitCode).toBe(0);
-    expect(await read(copy.dir, `${P}/codeStates/baseline/index.ts`)).toContain("export default declareCodeState({});");
+    for (const dir of [noOrigin.dir, noCommit.dir]) {
+      expect((await init(dir)).exitCode).toBe(0);
+      expect(await read(dir, `${P}/codeStates/baseline/index.ts`)).toContain("export default declareCodeState({});");
+    }
   });
 });
 
 describe("0201 minimal existing setup", () => {
   const ALPHA = `${P}/harnessModels/fake-harness-alpha/`;
-  const CLAUDE_CODE = `${P}/harnessModels/claude-code/`;
+  const CLAUDE_CODE = `${P}/harnessModels/claude-code-2.1.311/`;
   const GENERATED = "_generated/parameterNames.d.ts";
   // What a minimal setup leaves out: every harness but Claude Code, the second prompt set, and init's
   // test cases, which use real harnesses. 0201 has one test case of its own, `example`, instead.

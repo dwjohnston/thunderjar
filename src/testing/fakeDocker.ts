@@ -16,6 +16,9 @@
 //     root/         its files: only what was written to /workspace and /thunderjar
 //   filesystems/  the root/ of each committed container, by image (URI-encoded)
 //
+// `build` takes `--secret id=<id>,env=<env>`, failing as Docker does if `<env>` is unset in its own
+// environment, and `--ssh default`.
+//
 // `run` runs the container's script on the host, with /workspace and /thunderjar in it mapped to
 // the container's root/, and root/workspace its working directory. Its environment is only the
 // variables passed with `-e NAME`, from the fake's own, beside PATH and HOME, as a container sees
@@ -157,9 +160,16 @@ if (import.meta.main) {
     for (const image of await list("images")) {
       if (image.slice(0, image.lastIndexOf(":")) === repository) console.log(image);
     }
-  } else if (command === "build" && subcommand === "-t" && rest.length === 2) {
-    // docker build -t <image> <context>
-    const [image, context] = rest as [string, string];
+  } else if (command === "build" && args.at(-3) === "-t") {
+    // docker build [--secret id=<id>,env=<env>]… [--ssh default] -t <image> <context>
+    const [image, context] = args.slice(-2) as [string, string];
+    const options = args.slice(1, -3);
+    for (let i = 0; i < options.length; i += 2) {
+      const [flag, value] = [options[i], options[i + 1] ?? ""];
+      const secret = flag === "--secret" && /^id=[^,]+,env=([A-Za-z_]\w*)$/.exec(value);
+      if (secret && !Bun.env[secret[1] as string]) fail(`ERROR: failed to build: secret ${value}: env ${secret[1]} is not set`);
+      if (!secret && !(flag === "--ssh" && value === "default")) fail(`fake docker: unknown build option ${flag} ${value}`);
+    }
     if (!(await Bun.file(`${context}/Dockerfile`).exists())) fail(`fake docker: no Dockerfile in the build context ${context}`);
     if ((await list("failing")).includes(image)) {
       fail(`ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1`);

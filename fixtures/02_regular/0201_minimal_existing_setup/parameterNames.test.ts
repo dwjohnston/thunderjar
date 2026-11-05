@@ -38,13 +38,13 @@ describe("generated parameter names", () => {
   });
 
   it("HarnessModelName", () => {
-    assertType<HarnessModelName>("fake-harness-alpha@1.0.0/fake-model-small");
-    // @ts-expect-error - not a declared version
-    assertType<HarnessModelName>("fake-harness-alpha@9.9.9/fake-model-small");
-    // @ts-expect-error - not a declared model
-    assertType<HarnessModelName>("fake-harness-alpha@1.0.0/fake-model-large");
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-small-001");
+    // Any model ID: the agent decides which it takes.
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-large-001");
+    // @ts-expect-error - no model ID
+    assertType<HarnessModelName>("fake-harness-alpha");
     // @ts-expect-error - not a declared harness
-    assertType<HarnessModelName>("claude-code@1.0.0/fake-model-small");
+    assertType<HarnessModelName>("claude-code/fake-model-small-001");
   });
 });
 
@@ -54,7 +54,7 @@ describe("declareTestCase", () => {
       baseImage: ["node20"],
       codeState: ["baseline"],
       promptSet: ["snerk"],
-      harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
+      harnessModel: ["fake-harness-alpha/fake-model-small-001"],
       task: "is-prime",
       initialPrompt: ["plain"],
       iterations: 1,
@@ -67,7 +67,7 @@ describe("declareTestCase", () => {
       baseImage: ["node22"],
       codeState: ["baseline"],
       promptSet: ["snerk"],
-      harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
+      harnessModel: ["fake-harness-alpha/fake-model-small-001"],
       task: "is-prime",
       initialPrompt: ["plain"],
       iterations: 1,
@@ -80,7 +80,7 @@ describe("declareTestCase", () => {
       // @ts-expect-error - "baselinee" is not a declared code state
       codeState: ["baselinee"],
       promptSet: ["snerk"],
-      harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
+      harnessModel: ["fake-harness-alpha/fake-model-small-001"],
       task: "is-prime",
       initialPrompt: ["plain"],
       iterations: 1,
@@ -93,20 +93,20 @@ describe("declareTestCase", () => {
       codeState: ["baseline"],
       // @ts-expect-error - "snerkaa" is not a declared prompt set
       promptSet: ["snerkaa"],
-      harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
+      harnessModel: ["fake-harness-alpha/fake-model-small-001"],
       task: "is-prime",
       initialPrompt: ["plain"],
       iterations: 1,
     });
   });
 
-  it("rejects an undeclared harness/model pair", () => {
+  it("rejects a pair of an undeclared harness", () => {
     declareTestCase({
       baseImage: ["node20"],
       codeState: ["baseline"],
       promptSet: ["snerk"],
-      // @ts-expect-error - "fake-model-large" is not a declared model
-      harnessModel: ["fake-harness-alpha@1.0.0/fake-model-large"],
+      // @ts-expect-error - "fake-harness-gamma" is not a declared harness
+      harnessModel: ["fake-harness-gamma/fake-model-small-001"],
       task: "is-prime",
       initialPrompt: ["plain"],
       iterations: 1,
@@ -118,7 +118,7 @@ describe("declareTestCase", () => {
       baseImage: ["node20"],
       codeState: ["baseline"],
       promptSet: ["snerk"],
-      harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
+      harnessModel: ["fake-harness-alpha/fake-model-small-001"],
       // @ts-expect-error - "is-even" is not a declared task
       task: "is-even",
       initialPrompt: ["plain"],
@@ -131,7 +131,7 @@ describe("declareTestCase", () => {
       baseImage: ["node20"],
       codeState: ["baseline"],
       promptSet: ["snerk"],
-      harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
+      harnessModel: ["fake-harness-alpha/fake-model-small-001"],
       task: "is-prime",
       // @ts-expect-error - "terse" is not an initial prompt of is-prime
       initialPrompt: ["terse"],

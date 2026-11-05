@@ -10,7 +10,7 @@ import { type AggregatedValue, type AggregateMethod, aggregatePermutation } from
 import { type ContainerRunRecord, type ExecutionRecord, fileStore, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath, resolvePath } from "../../dataDir.ts";
-import { agentEnd, dollars, endedCleanly, knownCost, minute, plural, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, showResolved, endedCleanly, knownCost, minute, plural, thousands, totalTokens } from "../../format.ts";
 
 const GAP = "   ";
 
@@ -229,11 +229,16 @@ export function renderContainerRun(record: ContainerRunRecord): string {
     ]),
     "",
     "Parameters",
-    ...columns(AXES.map((axis) => [axis, parameters[axis].name, abbreviateHash(parameters[axis].parameterHash)])),
+    ...columns(
+      AXES.map((axis) => {
+        const { name, parameterHash, resolved } = parameters[axis];
+        return [axis, name, abbreviateHash(parameterHash), ...(resolved === undefined ? [] : [`resolved ${showResolved(resolved)}`])];
+      }),
+    ),
     "",
     ...labelled([
       ["Harness", `${harnessModel.harness} ${harnessModel.version}`],
-      ["Model", `${harnessModel.model}  (${harnessModel.modelId})`],
+      ["Model", harnessModel.model === undefined ? harnessModel.modelId : `${harnessModel.model}  (${harnessModel.modelId})`],
       ["Duration", duration(execution.finishedAt - execution.startedAt)],
       ["Exit", execution.timedOut ? `timed out after ${execution.timeoutSeconds}s` : String(execution.exitCode)],
       ...turnsRan,

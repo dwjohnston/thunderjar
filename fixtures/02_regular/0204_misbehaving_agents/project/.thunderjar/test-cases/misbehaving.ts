@@ -5,7 +5,7 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-sleeper@1.0.0/fake-model-small", "fake-crasher@1.0.0/fake-model-small", "fake-silent@1.0.0/fake-model-small"],
+  harnessModel: ["fake-sleeper/fake-model-small-001", "fake-crasher/fake-model-small-001", "fake-silent/fake-model-small-001"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,

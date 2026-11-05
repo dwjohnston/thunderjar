@@ -4,15 +4,14 @@
 import type {
   BaseImageDeclaration,
   HarnessDeclaration,
-  HarnessModelsDeclaration,
-  HarnessVersionsDeclaration,
   InitialPromptDeclaration,
   TestCaseDeclaration,
   TokenCostCollector,
 } from "../api/declarations.ts";
 import { PARAMETERS } from "../config/folders.ts";
 import { loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
-import { type HashedPermutation, hashPermutations, parsePair } from "../config/permutations.ts";
+import { type HashedPermutation, parsePair } from "../config/permutations.ts";
+import { type HashOptions, hashPermutations } from "./hashPermutations.ts";
 import { requiredEnvOf } from "../config/requiredEnv.ts";
 import { DEFAULT_IMAGE_PREFIX, postrunImage, prerunImage } from "./images.ts";
 
@@ -67,9 +66,9 @@ export type PlannedPermutation = {
   timeoutSeconds: number;
   /** Its harness's `cli` and `collectReply`. */
   harness: HarnessDeclaration;
-  /** Its harness's `collectTokenCosts`. */
+  /** Its harness's `collectTokenCosts`, or one that reports none. */
   collectTokenCosts: TokenCostCollector;
-  /** The pair's version, and the model ID its model resolves to, as `cli` and `collectTokenCosts` get them. */
+  /** Its harness's version, and the pair's model ID, as `cli` and `collectTokenCosts` get them. */
   version: string;
   modelId: string;
   iterations: PlannedIteration[];
@@ -79,6 +78,9 @@ export type PlannedExecution = {
   executionId: string;
   permutations: PlannedPermutation[];
 };
+
+/** The token costs of a harness without `collectTokenCosts`. */
+const NOT_REPORTED: TokenCostCollector = () => ({ outcome: "unavailable", reason: "notReported" });
 
 /** What a permutation's harness, harness model pair and initial prompt are, loaded. */
 type Loaded = {
@@ -92,27 +94,23 @@ type Loaded = {
 
 /** `permutation`'s harness and initial prompt, or undefined after adding to `problems` (`loadTestCase` already checked the files). */
 async function loadHarness(root: string, task: string, permutation: HashedPermutation, problems: Problem[]): Promise<Loaded | undefined> {
-  const { harness: name, version, model } = parsePair(permutation.harnessModel);
-  const dir = `${PARAMETERS}/harnessModels/${name}`;
-  const [baseImage, harness, collectTokenCosts, versions, models, initialPrompt] = (await Promise.all([
+  const { harness: name } = parsePair(permutation.harnessModel);
+  const [baseImage, harness, initialPrompt] = (await Promise.all([
     loadDeclaration(root, `${PARAMETERS}/baseImages/${permutation.baseImage}/index.ts`, "declareBaseImage", problems),
-    loadDeclaration(root, `${dir}/index.ts`, "declareHarness", problems),
-    loadDeclaration(root, `${dir}/collectTokenCosts.ts`, "declareTokenCostCollector", problems),
-    loadDeclaration(root, `${dir}/versions.ts`, "declareHarnessVersions", problems),
-    loadDeclaration(root, `${dir}/models.ts`, "declareHarnessModels", problems),
+    loadDeclaration(root, `${PARAMETERS}/harnessModels/${name}/index.ts`, "declareHarness", problems),
     loadDeclaration(root, `${PARAMETERS}/tasks/${task}/initial-prompts/${permutation.initialPrompt}.ts`, "declareInitialPrompt", problems),
-  ])) as [BaseImageDeclaration?, HarnessDeclaration?, TokenCostCollector?, HarnessVersionsDeclaration?, HarnessModelsDeclaration?, InitialPromptDeclaration?];
-  if (!baseImage || !harness || !collectTokenCosts || !versions || !models || !initialPrompt) return undefined;
-  const pinned = (versions[version] as { version: string }).version;
-  return { baseImage, harness, collectTokenCosts, version: pinned, modelId: models[model] as string, initialPrompt };
+  ])) as [BaseImageDeclaration?, HarnessDeclaration?, InitialPromptDeclaration?];
+  if (!baseImage || !harness || !initialPrompt) return undefined;
+  const collectTokenCosts = harness.collectTokenCosts ?? NOT_REPORTED;
+  return { baseImage, harness, collectTokenCosts, version: harness.version, modelId: permutation.modelId, initialPrompt };
 }
 
-/** Each turn of a container run in session `sessionId`, with the harness command for it. */
-function planTurns({ harness, version, modelId, initialPrompt }: Loaded, sessionId: string): PlannedTurn[] {
+/** Each turn of a container run in session `sessionId`, with the harness command for it, given what the harness resolved to. */
+function planTurns({ harness, version, modelId, initialPrompt }: Loaded, sessionId: string, resolved: unknown): PlannedTurn[] {
   const prompts = promptsOf(initialPrompt);
   return prompts.map((prompt, turn) => {
     const paths = turnPaths(turn, prompts.length);
-    const command = harness.cli({ version, modelId, initialPrompt: prompt, ...paths, turn, sessionId });
+    const command = harness.cli({ version, modelId, initialPrompt: prompt, ...paths, turn, sessionId, resolved });
     return { prompt, ...paths, command };
   });
 }
@@ -127,8 +125,9 @@ export async function planExecution(
   testCase: TestCaseDeclaration,
   executionId: string,
   imagePrefix: string = DEFAULT_IMAGE_PREFIX,
+  options: HashOptions = {},
 ): Promise<PlannedExecution> {
-  const hashed = await hashPermutations(root, testCase);
+  const hashed = await hashPermutations(root, testCase, options);
   const problems: Problem[] = [];
   const loaded = await Promise.all(hashed.map((permutation) => loadHarness(root, testCase.task, permutation, problems)));
   if (problems.length > 0) throw problemsError(problems);
@@ -139,7 +138,7 @@ export async function planExecution(
       return {
         number: p + 1,
         permutation,
-        prerunImage: prerunImage(permutation.hash, imagePrefix),
+        prerunImage: prerunImage(permutation.imageHash, imagePrefix),
         env: requiredEnvOf(harnessed.harness),
         runOptions: harnessed.baseImage.runOptions ?? [],
         timeoutSeconds: harnessed.initialPrompt.timeoutSeconds,
@@ -153,7 +152,7 @@ export async function planExecution(
             number: i + 1,
             postrunImage: postrunImage(executionId, p + 1, i + 1, imagePrefix),
             sessionId,
-            turns: planTurns(harnessed, sessionId),
+            turns: planTurns(harnessed, sessionId, permutation.resolved.harnessModel),
           };
         }),
       };

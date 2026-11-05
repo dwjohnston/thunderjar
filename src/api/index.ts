@@ -1,33 +1,27 @@
 // The `thunderjar` library: what a project's `.thunderjar/` files import.
-export { checkoutCommit } from "./checkoutCommit.ts";
-export { claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
+export { claudeCode, claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
 export {
   declareBaseImage,
   declareCodeState,
   declareConfig,
   declareHarness,
-  declareHarnessModels,
-  declareHarnessVersions,
   declareInitialPrompt,
   declareMeasurement,
   declarePromptSet,
   declareTestCase,
-  declareTokenCostCollector,
   sqliteStore,
 } from "./declarations.ts";
 export type {
   AggregateFor,
   ApplyParameterCtx,
   BaseImageDeclaration,
+  BuildOptions,
   CodeStateDeclaration,
   ConfigDeclaration,
   FragmentCtx,
-  GitCtx,
   HarnessApplyCtx,
   HarnessCliCtx,
   HarnessDeclaration,
-  HarnessModelsDeclaration,
-  HarnessVersionsDeclaration,
   ImageStore,
   InitialPromptDeclaration,
   InstrumentName,
@@ -38,6 +32,8 @@ export type {
   ModelTokenCosts,
   PromptSetDeclaration,
   Reply,
+  Resolved,
+  ResolveCtx,
   SqliteStore,
   TestCaseDeclaration,
   TokenCostCollector,

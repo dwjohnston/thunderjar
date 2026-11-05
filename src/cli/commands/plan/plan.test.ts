@@ -2,6 +2,7 @@
 // unchanged. Any of these can be run by hand, e.g. `bun run fixture 0402 plan unknown-prompt-set`.
 import { describe, expect, test } from "bun:test";
 import { thunderjar } from "../../../testing/cli.ts";
+import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
@@ -11,13 +12,13 @@ const KEY = { FAKE_HARNESS_KEY: "fake-key" };
 const EXAMPLE_PLAN = `baseImage:     node20
 codeState:     baseline
 promptSet:     snerk
-harnessModel:  fake-harness-alpha@1.0.0/fake-model-small
+harnessModel:  fake-harness-alpha/fake-model-small-001
 task:          is-prime
 initialPrompt: plain
 
 Matrix shape: 1/1/1/1/1 (1 permutation)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   c4220635  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   b7b0c69c  missing
 `;
 
 describe("0201 minimal existing setup", () => {
@@ -62,53 +63,54 @@ describe("0202 typical project", () => {
     expect(stdout).toBe(`baseImage:     node20
 codeState:     baseline
 promptSet:     snerk, glurk
-harnessModel:  fake-harness-alpha@1.0.0/fake-model-small, fake-harness-beta@1.0.0/fake-model-large
+harnessModel:  fake-harness-alpha/fake-model-small-001, fake-harness-beta/fake-model-large-001
 task:          is-prime
 initialPrompt: plain, terse
 
 Matrix shape: 1/1/2/2/2 (8 permutations)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   f64ca35b  missing
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   0d453aa8  missing
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   24b0ab67  missing
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   2afab26b  missing
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   0914dc34  missing
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   6258d091  missing
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   a0b5ce88  missing
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   774a325c  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  missing
+ 2  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | terse   fe8d47cc  missing
+ 3  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | plain   9ca648c2  missing
+ 4  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | terse   81e5b063  missing
+ 5  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   6bcdf9f3  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | terse   15846748  missing
+ 7  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | plain   d1e2fa39  missing
+ 8  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | terse   65f3bfb0  missing
 `);
   });
 
+  // Each pair of permutations differing only in their initial prompt, which has no fragment, shares a prerun image.
   test("says which prerun images are built, asking Docker once", async () => {
     await using docker = await fakeDocker({
-      images: ["thunderjar-prerun:f64ca35b", "thunderjar-prerun:2afab26b", "other-prerun:0d453aa8", "thunderjar-postrun:774a325c"],
+      images: ["thunderjar-prerun:b9cd78e6", "thunderjar-prerun:44230271", "other-prerun:e01991db", "thunderjar-postrun:65f3bfb0"],
     });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"], { env: { ...docker.env, ...KEY } });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   f64ca35b  built
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   0d453aa8  missing
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   24b0ab67  missing
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   2afab26b  built
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   0914dc34  missing
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   6258d091  missing
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   a0b5ce88  missing
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   774a325c  missing
+    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  built
+ 2  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | terse   fe8d47cc  built
+ 3  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | plain   9ca648c2  built
+ 4  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | terse   81e5b063  built
+ 5  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   6bcdf9f3  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | terse   15846748  missing
+ 7  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | plain   d1e2fa39  missing
+ 8  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | terse   65f3bfb0  missing
 `);
     expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun"]);
   });
 
   test("--image-prefix looks for the images under that prefix", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:f64ca35b", "other-prerun:0d453aa8"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:b9cd78e6", "other-prerun:e01991db"] });
 
     const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline", "--image-prefix", "other"], {
       env: { ...docker.env, ...KEY },
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout.match(/(?<=[0-9a-f]{8}  )\w+$/gm)).toEqual(["missing", "built", ...Array(6).fill("missing")]);
+    expect(stdout.match(/(?<=[0-9a-f]{8}  )\w+$/gm)).toEqual(["missing", "missing", "missing", "missing", "missing", "missing", "built", "built"]);
     expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} other-prerun"]);
   });
 
@@ -123,7 +125,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
   });
 
   test("when Docker can't be reached, it still plans, with each image's status unknown, and says why", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:f64ca35b"], unreachable: true });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:b9cd78e6"], unreachable: true });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example"], { env: { ...docker.env, ...KEY } });
 
@@ -131,7 +133,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
       "Warning: Docker can't be reached, so whether each prerun image is built is unknown: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   f64ca35b  unknown\n");
+    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  unknown\n");
   });
 
   test("without a docker command, it still plans, with each image's status unknown", async () => {
@@ -143,14 +145,14 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
       "Warning: Docker can't be reached, so whether each prerun image is built is unknown: bun: command not found: no-such-docker\n",
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith("plain   f64ca35b  unknown\n");
+    expect(stdout).toEndWith("plain   6274bd13  unknown\n");
   });
 
   test("a permutation has the same hash in every test case naming it", async () => {
     const { stdout } = await thunderjar(scenario("0202"), ["plan", "example"], { env: KEY });
 
     expect(stdout).toEndWith(
-      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   f64ca35b  missing\n",
+      " 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  missing\n",
     );
   });
 });
@@ -239,12 +241,12 @@ describe("0402 broken declarations", () => {
       ],
     ],
     [
-      "harness models naming a version or model their harness doesn't declare, or not of the form",
+      "harness models naming a harness that isn't declared, in the old form, or with no model ID",
       "unknown-harness-models",
       [
-        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha@9.9.9/fake-model-small": version "9.9.9" is not in ${parameter("harnessModels/fake-harness-alpha/versions.ts")}`,
-        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha@1.0.0/fake-model-huge": model "fake-model-huge" is not in ${parameter("harnessModels/fake-harness-alpha/models.ts")}`,
-        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha-1.0.0" is not of the form harness@version/model`,
+        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-gamma/fake-model-small-001" has no matching ${parameter("harnessModels/fake-harness-gamma/")}`,
+        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha@1.0.0/fake-model-small" is in the old form, <harness>@<version>/<model>. Name a harness folder, which pins its version, then the model ID its agent takes, e.g. "fake-harness-alpha/<model ID>"`,
+        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha" is not of the form <harness>/<model ID>`,
       ],
     ],
     [
@@ -330,7 +332,7 @@ describe("0403 broken harness family", () => {
     const beta = await thunderjar(scenario("0403"), ["plan", "beta"]);
     expect(beta.stdout).toBe("");
     expect(beta.stderr).toBe(
-      "Error: .thunderjar/test-case-parameters/harnessModels/fake-harness-beta/versions.ts: default export is not wrapped in declareHarnessVersions(...).\n",
+      'Error: .thunderjar/test-case-parameters/harnessModels/fake-harness-beta/index.ts: version: must be the version of the agent the harness installs, e.g. "2.1.311", got undefined\n',
     );
     expect(beta.exitCode).toBe(1);
 
@@ -353,5 +355,65 @@ Error: .thunderjar/test-case-parameters/harnessModels/ has no harnesses
 Error: .thunderjar/test-case-parameters/tasks/ has no tasks
 `);
     expect(exitCode).toBe(1);
+  });
+});
+
+describe("0209 floating code state", () => {
+  const MAIN = "24dc11c26e2716a12cf33b82fec895a7f02b3e8a";
+
+  test("shows what each parameter with a resolve resolved to, after the matrix", async () => {
+    await using git = await fakeCommand("git", { stdout: `${MAIN}\trefs/heads/main` });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0209"), ["plan", "follow-main"], { env: git.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith(`| plain   ${stdout.match(/[0-9a-f]{8}(?=  missing)/)?.[0]}  missing
+
+Resolved
+  codeState  follow-main  ${MAIN}
+`);
+    expect(await git.calls()).toEqual(["ls-remote --exit-code https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git refs/heads/main"]);
+  });
+
+  test("a new commit on the branch gives a new hash", async () => {
+    await using main = await fakeCommand("git", { stdout: `${MAIN}\trefs/heads/main` });
+    await using later = await fakeCommand("git", { stdout: "0123456789abcdef0123456789abcdef01234567\trefs/heads/main" });
+
+    const hashOf = async (env: Record<string, string>) => (await thunderjar(scenario("0209"), ["plan", "follow-main"], { env })).stdout.match(/[0-9a-f]{8}(?=  missing)/)?.[0];
+
+    expect(await hashOf(main.env)).not.toBe(await hashOf(later.env));
+    expect(await hashOf(main.env)).toBe(await hashOf(main.env));
+  });
+
+  test("a resolve whose command fails is an error naming the parameter", async () => {
+    await using git = await fakeCommand("git", { exitCode: 2 });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0209"), ["plan", "follow-main"], { env: git.env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      'Error: code state "follow-main": resolve threw: `git ls-remote --exit-code https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git refs/heads/main` exited with 2\n',
+    );
+    expect(exitCode).toBe(1);
+  });
+});
+
+describe("0210 build secrets", () => {
+  test("stops if a build secret's variable is unset", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0210"), ["plan", "example"], { env: { GITHUB_TOKEN: "" } });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe('Error: Build secret "github" needs GITHUB_TOKEN, which is not set.\nExport it in the shell that runs thunderjar.\n');
+    expect(exitCode).toBe(1);
+  });
+
+  test("a secret's value is in no hash", async () => {
+    const plan = (token: string) => thunderjar(scenario("0210"), ["plan", "example"], { env: { GITHUB_TOKEN: token } });
+
+    const [one, other] = [await plan("one-token"), await plan("another-token")];
+
+    expect(one.exitCode).toBe(0);
+    expect(one.stdout).toBe(other.stdout);
   });
 });

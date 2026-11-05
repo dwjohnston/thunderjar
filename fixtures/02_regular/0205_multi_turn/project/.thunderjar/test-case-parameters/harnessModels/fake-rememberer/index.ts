@@ -4,6 +4,7 @@ import { declareHarness } from "thunderjar";
 // after the session ID, and replies that it will remember it. Each later turn resumes the session,
 // and replies with what it was told, or with nothing if the session isn't there.
 export default declareHarness({
+  version: "1.0.0",
   cli: (ctx) =>
     ctx.turn === 0
       ? `mkdir -p "$HOME/.fake-rememberer" && cp ${ctx.promptPath} "$HOME/.fake-rememberer/${ctx.sessionId}"` +

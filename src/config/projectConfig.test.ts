@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { copyScenarioProject, thunderjar } from "../testing/cli.ts";
 import { scenario } from "../testing/scenario.ts";
 import { ConfigError, findThunderjarRoot } from "./loader.ts";
-import { imageStoreProblem, loadProjectConfig, registryHost, repositoryProblem } from "./projectConfig.ts";
+import { buildOptionsProblem, checkBuildSecrets, imageStoreProblem, loadProjectConfig, registryHost, repositoryProblem } from "./projectConfig.ts";
 
 describe("registryHost", () => {
   test.each([
@@ -44,14 +44,56 @@ describe("imageStoreProblem", () => {
   });
 });
 
+describe("buildOptionsProblem", () => {
+  test.each([[undefined], [{}], [{ ssh: true }], [{ secrets: [] }], [{ secrets: [{ id: "github", env: "GITHUB_TOKEN" }, { id: "npm.rc", env: "NPM_TOKEN" }], ssh: false }]])(
+    "%p is build options",
+    (build: unknown) => {
+      expect(buildOptionsProblem(build)).toBeUndefined();
+    },
+  );
+
+  test.each([
+    [null, "must be { secrets: [{ id, env }], ssh: true }, either of them left out, got null"],
+    [{ ssh: "yes" }, 'ssh must be true or false, got "yes"'],
+    [{ secrets: { id: "github" } }, 'secrets must be a list of { id, env }, got {"id":"github"}'],
+    [{ secrets: [{ id: "git hub", env: "GITHUB_TOKEN" }] }, 'secrets: "git hub" is not a secret ID: letters, digits, ".", "_" and "-"'],
+    [{ secrets: [{ id: "github", env: "GITHUB TOKEN" }] }, 'secrets: "GITHUB TOKEN", secret "github"\'s env, is not an environment variable name'],
+    [{ secrets: [{ id: "github", env: "A" }, { id: "github", env: "B" }] }, 'secrets: "github" is given twice'],
+  ])("%p is not: %s", (build: unknown, problem: string) => {
+    expect(buildOptionsProblem(build)).toBe(problem);
+  });
+});
+
+describe("checkBuildSecrets", () => {
+  const build = { secrets: [{ id: "github", env: "GITHUB_TOKEN" }, { id: "npm", env: "NPM_TOKEN" }], ssh: false };
+
+  test("passes when every secret's variable is set", () => {
+    expect(() => checkBuildSecrets(build, { GITHUB_TOKEN: "x", NPM_TOKEN: "y" })).not.toThrow();
+  });
+
+  test("names each unset or empty variable, and the secret that needs it", () => {
+    expect(() => checkBuildSecrets(build, { NPM_TOKEN: "" })).toThrow(
+      'Build secret "github" needs GITHUB_TOKEN, which is not set.\nBuild secret "npm" needs NPM_TOKEN, which is not set.\nExport them in the shell that runs thunderjar.',
+    );
+  });
+});
+
 describe("loadProjectConfig", () => {
   test("0201's imageStore is null", async () => {
-    expect(await loadProjectConfig(await findThunderjarRoot(scenario("0201")))).toEqual({ imageStore: null });
+    expect(await loadProjectConfig(await findThunderjarRoot(scenario("0201")))).toEqual({ imageStore: null, build: { secrets: [], ssh: false } });
   });
 
   test("0207's imageStore names its repository", async () => {
     expect(await loadProjectConfig(await findThunderjarRoot(scenario("0207")))).toEqual({
       imageStore: { repository: "ghcr.io/acme/thunderjar-images" },
+      build: { secrets: [], ssh: false },
+    });
+  });
+
+  test("0210's build gives a secret and the SSH agent", async () => {
+    expect((await loadProjectConfig(await findThunderjarRoot(scenario("0210")))).build).toEqual({
+      secrets: [{ id: "github", env: "GITHUB_TOKEN" }],
+      ssh: true,
     });
   });
 

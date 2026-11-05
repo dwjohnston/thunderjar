@@ -34,45 +34,56 @@ export function declaredBy(value: unknown): string | undefined {
 // to the prerun image; see src/execution/prerunDockerfile.ts for the order they are built in.
 // `config` is the declaration's own `config`, as written (undefined if it has none).
 
-/**
- * Reads the repository the project is in, without fetching. Each commit is a hash, full or
- * abbreviated, and must already be in the repository, or nothing is built.
- */
-export type GitCtx = {
-  /**
-   * Puts `path`'s content at `commit` into the build context, and returns where it is there, to
-   * COPY: `COPY ${ctx.git.show("e4f5a6", "prompts/snerk.md")} /workspace/CLAUDE.md`. `path` is
-   * relative to the repository's root.
-   */
-  show(commit: string, path: string): string;
-};
-
 /** What every fragment gets. */
-export type FragmentCtx = {
-  git: GitCtx;
-};
+export type FragmentCtx = Record<never, never>;
 
 /**
- * What a fragment gets when its parameter is a folder. `dir` is that folder's path in the build
- * context, so files kept beside the declaration can be copied in: `COPY ${ctx.dir}/files/ /workspace/`.
+ * What a fragment gets when its parameter is a folder. `dir` is where the folder's `files/` folder
+ * is in the build context, so the files kept there can be copied in: `COPY ${ctx.dir}/ /workspace/`,
+ * or `COPY ${ctx.dir}/scripts/ /opt/agent/` for `files/scripts/`. Nothing else of the folder is in the
+ * build context, not even its `index.ts`, and nothing of any other parameter's folder.
  * It names the parameter's role, not its folder, so renaming the folder changes nothing.
  */
 export type ApplyParameterCtx = FragmentCtx & {
   dir: string;
 };
 
-/**
- * A parameter declaration's `config`, and the `applyParameter` that receives it. A method, so a
- * declaration with any `config` is still a `XDeclaration<unknown>` once loaded.
- */
-type Applies<C, Ctx> = {
-  config?: C;
-  applyParameter?(config: C, ctx: Ctx): string;
+/** What `resolve` gets, to look up what a floating parameter currently means. */
+export type ResolveCtx = {
+  /**
+   * Runs `command` with `sh -c` on the host, in the root of the repository the project is in (or
+   * the project's folder, outside one). Returns its stdout, trimmed. Throws on a non-zero exit.
+   */
+  exec(command: string): Promise<string>;
 };
 
+/** What `resolve` can return: anything JSON can hold, so it can be recorded with each run. */
+export type Resolved = string | number | boolean | null | Resolved[] | { [key: string]: Resolved };
+
+/**
+ * A parameter declaration's `config`, its optional `resolve`, and the `applyParameter` that
+ * receives them. Methods, so a declaration with any `config` is still a `XDeclaration<unknown>`
+ * once loaded.
+ *
+ * `resolve` is for a floating parameter, such as a branch's latest commit. Thunderjar calls it on
+ * the host, once per execution (`plan`, `run`, `build`), before anything is hashed, and passes its
+ * result to `applyParameter` as `ctx.resolved`, and to a harness's `cli`. It must only read: a `git
+ * fetch` is fine, building or writing anything isn't. It isn't hashed itself: only the text it ends
+ * up in is, so a value no fragment uses changes nothing. Each run records it beside the parameter.
+ * Declare it before `applyParameter`, so `ctx.resolved`'s type is inferred from it.
+ */
+type Applies<C, Ctx, R> = {
+  config?: C;
+  resolve?(config: C, ctx: ResolveCtx): R | Promise<R>;
+  applyParameter?(config: C, ctx: Ctx & { resolved: R }): string;
+};
+
+/** What a declaration's `resolve` returns, or undefined if it has none. */
+type ResolvedOf = Resolved | undefined;
+
 /** A base image's fragment is required: it carries the prerun image's `FROM`. */
-export type BaseImageDeclaration<C = unknown> = Applies<C, ApplyParameterCtx> & {
-  applyParameter(config: C, ctx: ApplyParameterCtx): string;
+export type BaseImageDeclaration<C = unknown, R = unknown> = Applies<C, ApplyParameterCtx, R> & {
+  applyParameter(config: C, ctx: ApplyParameterCtx & { resolved: R }): string;
   /**
    * More `docker run` options for the agent's containers, for agents that need more of the
    * kernel than Docker allows by default, e.g. Claude Code's bubblewrap sandbox, which needs user
@@ -86,23 +97,23 @@ export type BaseImageDeclaration<C = unknown> = Applies<C, ApplyParameterCtx> & 
   runOptions?: string[];
 };
 
-export function declareBaseImage<C = undefined>(declaration: BaseImageDeclaration<C>): BaseImageDeclaration<C> {
+export function declareBaseImage<C = undefined, R extends ResolvedOf = undefined>(declaration: BaseImageDeclaration<C, R>): BaseImageDeclaration<C, R> {
   return declared("declareBaseImage", declaration);
 }
 
-export type CodeStateDeclaration<C = unknown> = Applies<C, ApplyParameterCtx>;
+export type CodeStateDeclaration<C = unknown, R = unknown> = Applies<C, ApplyParameterCtx, R>;
 
-export function declareCodeState<C = undefined>(declaration: CodeStateDeclaration<C>): CodeStateDeclaration<C> {
+export function declareCodeState<C = undefined, R extends ResolvedOf = undefined>(declaration: CodeStateDeclaration<C, R>): CodeStateDeclaration<C, R> {
   return declared("declareCodeState", declaration);
 }
 
-export type PromptSetDeclaration<C = unknown> = Applies<C, ApplyParameterCtx>;
+export type PromptSetDeclaration<C = unknown, R = unknown> = Applies<C, ApplyParameterCtx, R>;
 
-export function declarePromptSet<C = undefined>(declaration: PromptSetDeclaration<C>): PromptSetDeclaration<C> {
+export function declarePromptSet<C = undefined, R extends ResolvedOf = undefined>(declaration: PromptSetDeclaration<C, R>): PromptSetDeclaration<C, R> {
   return declared("declarePromptSet", declaration);
 }
 
-/** `dir` is the harness's folder; `version` is the pair's version, as its `versions.ts` entry gives it. */
+/** `dir` is where the harness's `files/` folder is; `version` is the harness's own `version`. */
 export type HarnessApplyCtx = ApplyParameterCtx & {
   version: string;
 };
@@ -112,7 +123,9 @@ export type HarnessApplyCtx = ApplyParameterCtx & {
  * several turns runs `cli` once per turn, in the same container, one after another.
  */
 export type HarnessCliCtx = {
+  /** The harness's own `version`. */
   version: string;
+  /** The model ID the test case's pair names, `<harness>/<model ID>`, as the agent is given it. */
   modelId: string;
   /**
    * The turn's prompt text. Pasted into a shell command it breaks on the first quote, `$` or
@@ -135,13 +148,25 @@ export type HarnessCliCtx = {
   sessionId: string;
 };
 
-export type HarnessDeclaration<C = unknown> = Applies<C, HarnessApplyCtx> & {
-  cli: (ctx: HarnessCliCtx) => string;
+export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApplyCtx, R> & {
+  /**
+   * The version of the agent this harness installs, e.g. `"2.1.311"`: `ctx.version` for its
+   * fragment and `cli`. One harness folder pins one version, so name the folder after it, e.g.
+   * `claude-code-2.1.311/`, and copy the folder to try another.
+   */
+  version: string;
+  /** The command that runs the agent for one turn. `ctx.resolved` is what `resolve` returned. */
+  cli(ctx: HarnessCliCtx & { resolved: R }): string;
   /**
    * The agent's final reply, read from the text of the result file its `cli` left, for
    * instruments such as `replyMatches` to measure. Without it, a run has no reply.
    */
   collectReply?: (raw: string) => string;
+  /**
+   * The run's token costs, read from the text of each turn's result file, once per turn, and
+   * summed. A throw is `unparseable`. Without it, every run's are `notReported`.
+   */
+  collectTokenCosts?: TokenCostCollector;
   /**
    * The names of the environment variables the agent needs, e.g. its API key. Each is passed into
    * this harness's containers only, as `docker run -e NAME`, so its value comes from the shell that
@@ -150,22 +175,8 @@ export type HarnessDeclaration<C = unknown> = Applies<C, HarnessApplyCtx> & {
   requiredEnv?: string[];
 };
 
-export function declareHarness<C = undefined>(declaration: HarnessDeclaration<C>): HarnessDeclaration<C> {
+export function declareHarness<C = undefined, R extends ResolvedOf = undefined>(declaration: HarnessDeclaration<C, R>): HarnessDeclaration<C, R> {
   return declared("declareHarness", declaration);
-}
-
-/** A harness's models: the name a test case uses, to the ID the agent is given. */
-export type HarnessModelsDeclaration = Record<string, string>;
-
-export function declareHarnessModels(models: HarnessModelsDeclaration): HarnessModelsDeclaration {
-  return declared("declareHarnessModels", models);
-}
-
-/** A harness's versions, by the name a test case uses. */
-export type HarnessVersionsDeclaration = Record<string, { version: string }>;
-
-export function declareHarnessVersions(versions: HarnessVersionsDeclaration): HarnessVersionsDeclaration {
-  return declared("declareHarnessVersions", versions);
 }
 
 /** One model's tokens, in four buckets priced differently, and its cost if the harness reports one. */
@@ -195,10 +206,6 @@ export type TokenCosts =
  */
 export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: string }) => TokenCosts;
 
-export function declareTokenCostCollector(collector: TokenCostCollector): TokenCostCollector {
-  return declared("declareTokenCostCollector", collector);
-}
-
 /**
  * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. It is used when
  * the harness runs, so its fragment is usually left out.
@@ -207,11 +214,13 @@ export function declareTokenCostCollector(collector: TokenCostCollector): TokenC
  * same container and agent session, so a later turn can ask about an earlier one. Its
  * `timeoutSeconds` covers every turn together.
  */
-export type InitialPromptDeclaration<C = unknown> = Applies<C, FragmentCtx> & {
+export type InitialPromptDeclaration<C = unknown, R = unknown> = Applies<C, FragmentCtx, R> & {
   timeoutSeconds: number;
 } & ({ prompt: string; turns?: never } | { turns: string[]; prompt?: never });
 
-export function declareInitialPrompt<C = undefined>(declaration: InitialPromptDeclaration<C>): InitialPromptDeclaration<C> {
+export function declareInitialPrompt<C = undefined, R extends ResolvedOf = undefined>(
+  declaration: InitialPromptDeclaration<C, R>,
+): InitialPromptDeclaration<C, R> {
   return declared("declareInitialPrompt", declaration);
 }
 
@@ -322,6 +331,23 @@ export function sqliteStore(options: { path: string }): SqliteStore {
 
 export type ImageStore = { repository: string };
 
+/**
+ * What prerun builds are given beside their build context, for a fragment that needs a credential
+ * at build time only, e.g. to clone a private repository. Never in an image layer, the run data, or
+ * any hash: Docker reads each secret from Thunderjar's environment as it builds.
+ */
+export type BuildOptions = {
+  /**
+   * Each passed as `docker build --secret id=<id>,env=<env>`, for a fragment to mount for one
+   * `RUN`, at `/run/secrets/<id>`: `RUN --mount=type=secret,id=github git clone
+   * "https://x-access-token:$(cat /run/secrets/github)@github.com/acme/private.git" /workspace`.
+   * `plan`, `build` and `run` stop if `env` is unset.
+   */
+  secrets?: { id: string; env: string }[];
+  /** Passes the host's SSH agent as `docker build --ssh default`, for `RUN --mount=type=ssh git clone git@github.com:…`. */
+  ssh?: boolean;
+};
+
 export type ConfigDeclaration = {
   /**
    * The registry repository prerun and postrun images are pushed to, e.g.
@@ -330,6 +356,8 @@ export type ConfigDeclaration = {
    */
   imageStore: ImageStore | null;
   runDataStore: SqliteStore;
+  /** Secrets, and the SSH agent, for prerun builds. None by default. */
+  build?: BuildOptions;
 };
 
 export function declareConfig(config: ConfigDeclaration): ConfigDeclaration {

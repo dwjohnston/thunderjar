@@ -1,18 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { CHECKOUT_COMMIT, checkoutCommit } from "../api/checkoutCommit.ts";
 import {
-  type ApplyParameterCtx,
   declareBaseImage,
   declareCodeState,
   declareHarness,
   declareInitialPrompt,
   declarePromptSet,
 } from "../api/declarations.ts";
-import { ConfigError, FOLDER } from "../config/loader.ts";
-import { loadTestCase } from "../config/testCase.ts";
-import { expandPermutations } from "../config/permutations.ts";
-import { scenario } from "../testing/scenario.ts";
-import { loadPrerunParameters, PARAMETER_DIRS, type PrerunParameters, renderPrerun } from "./prerunDockerfile.ts";
+import { ConfigError } from "../config/loader.ts";
+import { PARAMETER_DIRS, type PrerunParameters, renderPrerun } from "./prerunDockerfile.ts";
 
 const parameters = (overrides: Partial<PrerunParameters> = {}): PrerunParameters => ({
   baseImage: { file: "baseImages/node20/index.ts", declaration: declareBaseImage({ applyParameter: () => "FROM node:20-bookworm" }) },
@@ -20,8 +15,7 @@ const parameters = (overrides: Partial<PrerunParameters> = {}): PrerunParameters
   promptSet: { file: "promptSets/snerk/index.ts", declaration: declarePromptSet({ applyParameter: () => "COPY CLAUDE.md /workspace/" }) },
   harness: {
     file: "harnessModels/claude-code/index.ts",
-    declaration: declareHarness({ applyParameter: () => "RUN npm install -g claude", cli: () => "claude" }),
-    version: "2.1.283",
+    declaration: declareHarness({ version: "2.1.283", applyParameter: () => "RUN npm install -g claude", cli: () => "claude" }),
   },
   initialPrompt: { file: "tasks/is-prime/initial-prompts/plain.ts", declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60 }) },
   ...overrides,
@@ -43,7 +37,7 @@ describe("renderPrerun", () => {
       file: "tasks/is-prime/initial-prompts/plain.ts",
       declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: () => "RUN touch /workspace/PROMPT" }),
     };
-    expect(renderPrerun(parameters({ initialPrompt })).dockerfile).toBe(
+    expect(renderPrerun(parameters({ initialPrompt }))).toBe(
       [
         "FROM node:20-bookworm",
         "WORKDIR /workspace",
@@ -57,7 +51,7 @@ describe("renderPrerun", () => {
   });
 
   test("a missing or empty fragment adds no line, and surrounding whitespace is trimmed", () => {
-    const { dockerfile } = renderPrerun(
+    const dockerfile = renderPrerun(
       parameters({
         codeState: { file: "codeStates/baseline/index.ts", declaration: declareCodeState({}) },
         promptSet: { file: "promptSets/snerk/index.ts", declaration: declarePromptSet({ applyParameter: () => "  \n" }) },
@@ -69,7 +63,7 @@ describe("renderPrerun", () => {
 
   test("each fragment gets its declaration's config, and a ctx with its role's dir", () => {
     const seen: Record<string, unknown> = {};
-    const { dockerfile } = renderPrerun(
+    const dockerfile = renderPrerun(
       parameters({
         baseImage: {
           file: "baseImages/node20/index.ts",
@@ -79,7 +73,7 @@ describe("renderPrerun", () => {
           file: "codeStates/baseline/index.ts",
           declaration: declareCodeState({
             config: { install: "npm ci" },
-            applyParameter: (config, ctx) => ((seen.codeState = ctx), `COPY ${ctx.dir}/files/ /workspace/\nRUN ${config.install}`),
+            applyParameter: (config, ctx) => ((seen.codeState = ctx), `COPY ${ctx.dir}/ /workspace/\nRUN ${config.install}`),
           }),
         },
         promptSet: {
@@ -89,11 +83,11 @@ describe("renderPrerun", () => {
         harness: {
           file: "harnessModels/claude-code/index.ts",
           declaration: declareHarness({
+            version: "2.1.283",
             config: { packageName: "@anthropic-ai/claude-code" },
             applyParameter: (config, ctx) => ((seen.harness = ctx), `RUN npm install -g ${config.packageName}@${ctx.version}`),
             cli: () => "claude",
           }),
-          version: "2.1.283",
         },
         initialPrompt: {
           file: "tasks/is-prime/initial-prompts/plain.ts",
@@ -106,19 +100,18 @@ describe("renderPrerun", () => {
       [
         "FROM node:20-bookworm",
         "WORKDIR /workspace",
-        "COPY parameters/codeState/files/ /workspace/",
+        "COPY parameters/codeState/ /workspace/",
         "RUN npm ci",
         "RUN npm install -g @anthropic-ai/claude-code@2.1.283",
         "",
       ].join("\n"),
     );
-    const git = { show: expect.any(Function) };
     expect(seen).toEqual({
-      baseImage: { dir: PARAMETER_DIRS.baseImage, git },
-      codeState: { dir: "parameters/codeState", git, [CHECKOUT_COMMIT]: expect.any(Function) },
-      promptSet: [undefined, { dir: "parameters/promptSet", git }],
-      harness: { dir: "parameters/harness", git, version: "2.1.283" },
-      initialPrompt: { git },
+      baseImage: { dir: PARAMETER_DIRS.baseImage },
+      codeState: { dir: "parameters/codeState" },
+      promptSet: [undefined, { dir: "parameters/promptSet" }],
+      harness: { dir: "parameters/harness", version: "2.1.283" },
+      initialPrompt: {},
     });
   });
 
@@ -159,122 +152,56 @@ describe("renderPrerun", () => {
   });
 });
 
-describe("renderPrerun, reading the repository", () => {
-  const COMMIT = "65bcb92cc069821e4695433b11582962ee6d68bd";
-  const codeState = (applyParameter: (config: unknown, ctx: ApplyParameterCtx) => string) => ({
-    file: "test-case-parameters/codeStates/baseline/index.ts",
-    declaration: declareCodeState({ applyParameter }),
-  });
-  const promptSet = (applyParameter: (config: unknown, ctx: ApplyParameterCtx) => string) => ({
-    file: "test-case-parameters/promptSets/snerk/index.ts",
-    declaration: declarePromptSet({ applyParameter }),
-  });
-
-  test("checkoutCommit: Thunderjar clones the bundle straight after the base image, then WORKDIR, then the code state's own lines", () => {
-    const { dockerfile, git } = renderPrerun(
-      parameters({ codeState: codeState((_config, ctx) => `${checkoutCommit(ctx, COMMIT)}\nRUN npm ci`) }),
-    );
-
-    expect(dockerfile).toBe(`FROM node:20-bookworm
-COPY code.bundle /tmp/code.bundle
-RUN git clone --quiet /tmp/code.bundle /workspace \\
-  && git -C /workspace checkout --quiet --detach ${COMMIT} \\
-  && git -C /workspace branch --quiet --delete --force code-state \\
-  && git -C /workspace remote remove origin \\
-  && git -C /workspace config user.name "Thunderjar agent" \\
-  && git -C /workspace config user.email agent@thunderjar.invalid \\
-  && rm /tmp/code.bundle
-WORKDIR /workspace
-RUN npm ci
-COPY CLAUDE.md /workspace/
-RUN npm install -g claude
-`);
-    expect(git).toEqual([{ kind: "bundle", owner: 'code state "baseline"', commit: COMMIT, path: "code.bundle" }]);
-  });
-
-  test("ctx.git.show: the file's path in the build context, recorded with its commit", () => {
-    const { dockerfile, git } = renderPrerun(
-      parameters({
-        promptSet: promptSet((_config, ctx) => `COPY ${ctx.git.show("e4f5a6", "./prompts//snerk.md")} /workspace/CLAUDE.md`),
+describe("renderPrerun, the build context", () => {
+  test("a fragment may name its own folder, and paths that only look like another's", () => {
+    const harness = {
+      file: "test-case-parameters/harnessModels/claude-code/index.ts",
+      declaration: declareHarness({
+        version: "2.1.283",
+        applyParameter: (_config, ctx) => `COPY ${ctx.dir}/scripts/ /opt/parameters/promptSet/\nRUN ls parameters/harnessy`,
+        cli: () => "claude",
       }),
-    );
+    };
 
-    expect(dockerfile).toContain("\nCOPY git/e4f5a6/prompts/snerk.md /workspace/CLAUDE.md\n");
-    expect(git).toEqual([
-      { kind: "file", owner: 'prompt set "snerk"', commit: "e4f5a6", file: "prompts/snerk.md", path: "git/e4f5a6/prompts/snerk.md" },
-    ]);
+    expect(renderPrerun(parameters({ harness }))).toContain("\nCOPY parameters/harness/scripts/ /opt/parameters/promptSet/\n");
   });
 
-  test("a fragment that reads nothing from the repository needs nothing from it", () => {
-    expect(renderPrerun(parameters()).git).toEqual([]);
-  });
+  test("a fragment naming another parameter's folder is an error naming its file, the initial prompt's included", () => {
+    const codeState = {
+      file: "test-case-parameters/codeStates/baseline/index.ts",
+      declaration: declareCodeState({ applyParameter: () => "COPY parameters/baseImage/ /workspace/\nCOPY ./parameters/promptSet/AGENTS.md /workspace/" }),
+    };
+    const initialPrompt = {
+      file: "test-case-parameters/tasks/is-prime/initial-prompts/plain.ts",
+      declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: () => "COPY parameters/harness/PROMPT.md /workspace/" }),
+    };
 
-  test("a commit that isn't a hash, a path outside the repository, and checkoutCommit outside a code state are errors", () => {
-    expect(
-      problemsOf(() =>
-        renderPrerun(
-          parameters({
-            codeState: codeState((_config, ctx) => checkoutCommit(ctx, "main")),
-            promptSet: promptSet((_config, ctx) => `COPY ${ctx.git.show(COMMIT, "../secrets.md")} /workspace/`),
-            harness: {
-              file: "test-case-parameters/harnessModels/claude-code/index.ts",
-              declaration: declareHarness({ applyParameter: (_config, ctx) => checkoutCommit(ctx, COMMIT), cli: () => "claude" }),
-              version: "2.1.283",
-            },
-          }),
-        ),
-      ),
-    ).toEqual([
-      '.thunderjar/test-case-parameters/codeStates/baseline/index.ts: applyParameter: threw: checkoutCommit needs a commit hash, got "main".',
-      '.thunderjar/test-case-parameters/promptSets/snerk/index.ts: applyParameter: threw: ctx.git.show needs a path inside the repository, got "../secrets.md".',
-      ".thunderjar/test-case-parameters/harnessModels/claude-code/index.ts: applyParameter: threw: checkoutCommit is only for a code state's applyParameter.",
-    ]);
-  });
-
-  test("a code state checks out one commit", () => {
-    expect(
-      problemsOf(() => renderPrerun(parameters({ codeState: codeState((_config, ctx) => checkoutCommit(ctx, "a1b2c3") + checkoutCommit(ctx, "d4e5f6")) }))),
-    ).toEqual([
-      ".thunderjar/test-case-parameters/codeStates/baseline/index.ts: applyParameter: threw: checkoutCommit was already called, with a1b2c3: a code state checks out one commit.",
+    expect(problemsOf(() => renderPrerun(parameters({ codeState, initialPrompt })))).toEqual([
+      ".thunderjar/test-case-parameters/codeStates/baseline/index.ts: applyParameter: uses another parameter's folder in the build context: the base image's, parameters/baseImage, and the prompt set's, parameters/promptSet. A fragment can only use its own files/, through ctx.dir.",
+      ".thunderjar/test-case-parameters/tasks/is-prime/initial-prompts/plain.ts: applyParameter: uses another parameter's folder in the build context: the harness's, parameters/harness. A fragment can only use its own files/, through ctx.dir.",
     ]);
   });
 });
 
-describe("loadPrerunParameters", () => {
-  test("renders each permutation of a scenario from its own declarations", async () => {
-    const root = `${scenario("0202")}/${FOLDER}`;
-    const testCase = await loadTestCase(root, "is-prime-baseline");
-    const dockerfiles = await Promise.all(
-      expandPermutations(testCase).map(async (permutation) =>
-        renderPrerun(await loadPrerunParameters(root, testCase.task, permutation)).dockerfile,
-      ),
-    );
+describe("renderPrerun, a code state that clones a repository", () => {
+  test("its RUN follows WORKDIR, its line continuations intact", () => {
+    const codeState = {
+      file: "test-case-parameters/codeStates/baseline/index.ts",
+      declaration: declareCodeState({
+        config: { repo: "https://github.com/acme/widgets.git", commit: "24dc11c26e2716a12cf33b82fec895a7f02b3e8a" },
+        applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\
+  && git -C /workspace checkout --quiet --detach ${config.commit} \\
+  && git -C /workspace remote remove origin`,
+      }),
+    };
 
-    expect(dockerfiles[0]).toBe(
-      [
-        "FROM node:20-bookworm",
-        "RUN npm install --global bun@1.3.14",
-        "WORKDIR /workspace",
-        'RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md',
-        'RUN echo "install fake-harness-alpha@1.0.0"',
-        "",
-      ].join("\n"),
-    );
-    expect(new Set(dockerfiles)).toEqual(
-      new Set(
-        ["Write small functions, and say what each one is for.", "Prefer one clear expression to a loop."].flatMap((instructions) =>
-          ["alpha", "beta"].map((harness) =>
-            [
-              "FROM node:20-bookworm",
-              "RUN npm install --global bun@1.3.14",
-              "WORKDIR /workspace",
-              `RUN echo "${instructions}" > /workspace/FAKE_INSTRUCTIONS.md`,
-              `RUN echo "install fake-harness-${harness}@1.0.0"`,
-              "",
-            ].join("\n"),
-          ),
-        ),
-      ),
-    );
+    expect(renderPrerun(parameters({ codeState }))).toBe(`FROM node:20-bookworm
+WORKDIR /workspace
+RUN git clone --quiet https://github.com/acme/widgets.git /workspace \\
+  && git -C /workspace checkout --quiet --detach 24dc11c26e2716a12cf33b82fec895a7f02b3e8a \\
+  && git -C /workspace remote remove origin
+COPY CLAUDE.md /workspace/
+RUN npm install -g claude
+`);
   });
 });

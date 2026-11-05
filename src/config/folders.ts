@@ -4,6 +4,12 @@ import { ConfigError, existsIn, FOLDER } from "./loader.ts";
 
 export const PARAMETERS = "test-case-parameters";
 
+/**
+ * The folder, in a folder parameter's folder, that holds what its fragment can copy into the
+ * image, at `ctx.dir`. Only it is copied into the build context, and hashed with the fragment.
+ */
+export const FILES = "files";
+
 const sorted = (names: Iterable<string>) => [...new Set(names)].toSorted();
 
 /** The names in `<root>/<dir>` that match `pattern`, sorted. None if the folder doesn't exist. */
