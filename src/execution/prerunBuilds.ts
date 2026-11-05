@@ -13,7 +13,7 @@ import { existsIn } from "../config/loader.ts";
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
 import { buildImage, imagesIn } from "../docker/docker.ts";
 import { prerunImage, prerunRepository } from "./images.ts";
-import { type FolderRole, loadPrerunParameters, PARAMETER_DIRS, renderPrerun } from "./prerunDockerfile.ts";
+import { type FolderRole, PARAMETER_DIRS } from "./prerunDockerfile.ts";
 
 /** Where each folder parameter of `permutation` is, relative to `.thunderjar/`. */
 const parameterFolders = (permutation: HashedPermutation): Record<FolderRole, string> => ({
@@ -60,38 +60,30 @@ export type PrerunBuildResult = {
 };
 
 /**
- * Builds the prerun image of each of `permutations`, of a test case of `task` under `root` (the
- * `.thunderjar/` folder), that doesn't exist yet. Permutations with the same hash share one image.
- * Every Dockerfile is rendered before the first build, so a configuration error builds nothing.
+ * Builds the prerun image of each of `permutations`, of a test case under `root` (the
+ * `.thunderjar/` folder), that doesn't exist yet, from its Dockerfile. Permutations with the same
+ * image hash share one image.
  *
  * Throws a DockerUnavailableError if Docker can't be asked which images exist, a ConfigError, or
  * a DockerBuildError if a build fails, after which no other image is built.
  */
 export async function buildPrerunImages(
   root: string,
-  task: string,
   permutations: HashedPermutation[],
   imagePrefix?: string,
   hooks: PrerunBuildHooks = {},
 ): Promise<PrerunBuildResult> {
-  const unique = [...new Map(permutations.map((permutation) => [permutation.hash, permutation])).values()];
+  const unique = [...new Map(permutations.map((permutation) => [permutation.imageHash, permutation])).values()];
   const existing = await imagesIn(prerunRepository(imagePrefix));
-  const images = unique.map((permutation) => ({ permutation, image: prerunImage(permutation.hash, imagePrefix) }));
-  const missing = images.filter(({ image }) => !existing.has(image));
-  const builds = await Promise.all(
-    missing.map(async ({ permutation, image }) => ({
-      permutation,
-      image,
-      dockerfile: renderPrerun(await loadPrerunParameters(root, task, permutation)),
-    })),
-  );
+  const images = unique.map((permutation) => ({ permutation, image: prerunImage(permutation.imageHash, imagePrefix) }));
+  const builds = images.filter(({ image }) => !existing.has(image));
 
-  for (const { permutation, image, dockerfile } of builds) {
+  for (const { permutation, image } of builds) {
     hooks.onBuilding?.(image);
     const contextDir = await temporaryFolder();
     try {
       await copyParameters(root, permutation, contextDir);
-      await Bun.write(`${contextDir}/Dockerfile`, dockerfile);
+      await Bun.write(`${contextDir}/Dockerfile`, permutation.dockerfile);
       await buildImage(contextDir, image);
     } finally {
       await $`rm -rf ${contextDir}`.quiet();

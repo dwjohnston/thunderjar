@@ -17,7 +17,7 @@ initialPrompt: plain
 
 Matrix shape: 1/1/1/1/1 (1 permutation)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   83405d8a  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   b7b0c69c  missing
 `;
 
 describe("0201 minimal existing setup", () => {
@@ -68,47 +68,48 @@ initialPrompt: plain, terse
 
 Matrix shape: 1/1/2/2/2 (8 permutations)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   f64ca35b  missing
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   0d453aa8  missing
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   24b0ab67  missing
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   2afab26b  missing
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   0914dc34  missing
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   6258d091  missing
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   a0b5ce88  missing
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   774a325c  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   6274bd13  missing
+ 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fe8d47cc  missing
+ 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   9ca648c2  missing
+ 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   81e5b063  missing
+ 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   6bcdf9f3  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   15846748  missing
+ 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   d1e2fa39  missing
+ 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   65f3bfb0  missing
 `);
   });
 
+  // Each pair of permutations differing only in their initial prompt, which has no fragment, shares a prerun image.
   test("says which prerun images are built, asking Docker once", async () => {
     await using docker = await fakeDocker({
-      images: ["thunderjar-prerun:f64ca35b", "thunderjar-prerun:2afab26b", "other-prerun:0d453aa8", "thunderjar-postrun:774a325c"],
+      images: ["thunderjar-prerun:b9cd78e6", "thunderjar-prerun:44230271", "other-prerun:e01991db", "thunderjar-postrun:65f3bfb0"],
     });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"], { env: { ...docker.env, ...KEY } });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   f64ca35b  built
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   0d453aa8  missing
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   24b0ab67  missing
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   2afab26b  built
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   0914dc34  missing
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   6258d091  missing
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   a0b5ce88  missing
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   774a325c  missing
+    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   6274bd13  built
+ 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fe8d47cc  built
+ 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   9ca648c2  built
+ 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   81e5b063  built
+ 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   6bcdf9f3  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   15846748  missing
+ 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   d1e2fa39  missing
+ 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   65f3bfb0  missing
 `);
     expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun"]);
   });
 
   test("--image-prefix looks for the images under that prefix", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:f64ca35b", "other-prerun:0d453aa8"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:b9cd78e6", "other-prerun:e01991db"] });
 
     const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline", "--image-prefix", "other"], {
       env: { ...docker.env, ...KEY },
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout.match(/(?<=[0-9a-f]{8}  )\w+$/gm)).toEqual(["missing", "built", ...Array(6).fill("missing")]);
+    expect(stdout.match(/(?<=[0-9a-f]{8}  )\w+$/gm)).toEqual(["missing", "missing", "missing", "missing", "missing", "missing", "built", "built"]);
     expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} other-prerun"]);
   });
 
@@ -123,7 +124,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
   });
 
   test("when Docker can't be reached, it still plans, with each image's status unknown, and says why", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:f64ca35b"], unreachable: true });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:b9cd78e6"], unreachable: true });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example"], { env: { ...docker.env, ...KEY } });
 
@@ -131,7 +132,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
       "Warning: Docker can't be reached, so whether each prerun image is built is unknown: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   f64ca35b  unknown\n");
+    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   6274bd13  unknown\n");
   });
 
   test("without a docker command, it still plans, with each image's status unknown", async () => {
@@ -143,14 +144,14 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
       "Warning: Docker can't be reached, so whether each prerun image is built is unknown: bun: command not found: no-such-docker\n",
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith("plain   f64ca35b  unknown\n");
+    expect(stdout).toEndWith("plain   6274bd13  unknown\n");
   });
 
   test("a permutation has the same hash in every test case naming it", async () => {
     const { stdout } = await thunderjar(scenario("0202"), ["plan", "example"], { env: KEY });
 
     expect(stdout).toEndWith(
-      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   f64ca35b  missing\n",
+      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   6274bd13  missing\n",
     );
   });
 });

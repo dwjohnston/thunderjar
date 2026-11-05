@@ -6,11 +6,8 @@ import {
   declareInitialPrompt,
   declarePromptSet,
 } from "../api/declarations.ts";
-import { ConfigError, FOLDER } from "../config/loader.ts";
-import { loadTestCase } from "../config/testCase.ts";
-import { expandPermutations } from "../config/permutations.ts";
-import { scenario } from "../testing/scenario.ts";
-import { loadPrerunParameters, PARAMETER_DIRS, type PrerunParameters, renderPrerun } from "./prerunDockerfile.ts";
+import { ConfigError } from "../config/loader.ts";
+import { PARAMETER_DIRS, type PrerunParameters, renderPrerun } from "./prerunDockerfile.ts";
 
 const parameters = (overrides: Partial<PrerunParameters> = {}): PrerunParameters => ({
   baseImage: { file: "baseImages/node20/index.ts", declaration: declareBaseImage({ applyParameter: () => "FROM node:20-bookworm" }) },
@@ -207,44 +204,5 @@ RUN git clone --quiet https://github.com/acme/widgets.git /workspace \\
 COPY CLAUDE.md /workspace/
 RUN npm install -g claude
 `);
-  });
-});
-
-describe("loadPrerunParameters", () => {
-  test("renders each permutation of a scenario from its own declarations", async () => {
-    const root = `${scenario("0202")}/${FOLDER}`;
-    const testCase = await loadTestCase(root, "is-prime-baseline");
-    const dockerfiles = await Promise.all(
-      expandPermutations(testCase).map(async (permutation) =>
-        renderPrerun(await loadPrerunParameters(root, testCase.task, permutation)),
-      ),
-    );
-
-    expect(dockerfiles[0]).toBe(
-      [
-        "FROM node:20-bookworm",
-        "RUN npm install --global bun@1.3.14",
-        "WORKDIR /workspace",
-        'RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md',
-        'RUN echo "install fake-harness-alpha@1.0.0"',
-        "",
-      ].join("\n"),
-    );
-    expect(new Set(dockerfiles)).toEqual(
-      new Set(
-        ["Write small functions, and say what each one is for.", "Prefer one clear expression to a loop."].flatMap((instructions) =>
-          ["alpha", "beta"].map((harness) =>
-            [
-              "FROM node:20-bookworm",
-              "RUN npm install --global bun@1.3.14",
-              "WORKDIR /workspace",
-              `RUN echo "${instructions}" > /workspace/FAKE_INSTRUCTIONS.md`,
-              `RUN echo "install fake-harness-${harness}@1.0.0"`,
-              "",
-            ].join("\n"),
-          ),
-        ),
-      ),
-    );
   });
 });

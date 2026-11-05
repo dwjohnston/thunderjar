@@ -98,7 +98,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   const { root, testCase, plan, imagePrefix, imageStore = null } = run;
   const measurements = await loadMeasurements(root, testCase.task);
   const permutations = plan.permutations.map(({ permutation }) => permutation);
-  await buildPrerunImages(root, testCase.task, permutations, imagePrefix, hooks);
+  await buildPrerunImages(root, permutations, imagePrefix, hooks);
   await pushPrerunImages(permutations, imageStore, imagePrefix, hooks);
 
   const startedAt = new Date().toISOString();

@@ -19,13 +19,10 @@ import type {
   FragmentCtx,
   HarnessApplyCtx,
   HarnessDeclaration,
-  HarnessVersionsDeclaration,
   InitialPromptDeclaration,
   PromptSetDeclaration,
 } from "../api/declarations.ts";
-import { PARAMETERS } from "../config/folders.ts";
-import { loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
-import { type Permutation, parsePair } from "../config/permutations.ts";
+import { type Problem, problemsError } from "../config/loader.ts";
 
 /** The parameters copied into the build context as folders. */
 export type FolderRole = "baseImage" | "codeState" | "promptSet" | "harness";
@@ -52,7 +49,7 @@ const trespasses = (role: string, fragment: string): FolderRole[] =>
   );
 
 /** One parameter's declaration, and the file it came from, relative to `.thunderjar/`, for messages. */
-type Loaded<D> = { file: string; declaration: D };
+export type Loaded<D> = { file: string; declaration: D };
 
 /** What a permutation's prerun Dockerfile is rendered from. */
 export type PrerunParameters = {
@@ -64,7 +61,7 @@ export type PrerunParameters = {
 };
 
 /** The ctx `applyParameter` gets, by parameter. */
-type Ctxs = {
+export type Ctxs = {
   baseImage: ApplyParameterCtx;
   codeState: ApplyParameterCtx;
   promptSet: ApplyParameterCtx;
@@ -72,87 +69,70 @@ type Ctxs = {
   initialPrompt: FragmentCtx;
 };
 
+export type Role = keyof Ctxs;
 
 /**
- * The prerun Dockerfile for `parameters`. A parameter with no `applyParameter`, or an empty
- * fragment, adds no line. Throws a ConfigError naming each declaration whose fragment is missing
- * where required, isn't a string, throws, names another parameter's folder in the build context,
- * or, for the base image, doesn't start with `FROM`.
+ * The fragment of `role`'s parameter, declared in `file`, rendered with `ctx`, and trimmed. A
+ * parameter with no `applyParameter` renders "". Undefined, after adding to `problems`, if its
+ * fragment is missing where required, isn't a string, throws, names another parameter's folder in
+ * the build context, or, for the base image, doesn't start with `FROM`.
  */
-export function renderPrerun(parameters: PrerunParameters): string {
-  const problems: Problem[] = [];
-  // undefined after adding a problem.
-  const fragment = <R extends keyof Ctxs>(role: R, ctx: Ctxs[R]): string | undefined => {
-    const { file, declaration } = parameters[role];
-    const problem = (message: string) => problems.push({ file, field: "applyParameter", message });
-    const applyParameter = declaration.applyParameter as ((config: unknown, ctx: Ctxs[R]) => unknown) | undefined;
-    if (!applyParameter) {
-      if (role !== "baseImage") return "";
-      problem("is missing. A base image's fragment provides the FROM.");
-      return undefined;
-    }
-    let result: unknown;
-    try {
-      result = applyParameter(declaration.config, ctx);
-    } catch (error) {
-      problem(`threw: ${error instanceof Error ? error.message : String(error)}`);
-      return undefined;
-    }
-    if (typeof result !== "string") {
-      problem(`must return a Dockerfile fragment, a string, got ${typeof result}.`);
-      return undefined;
-    }
-    if (role === "baseImage" && !/^FROM\s/i.test(result.trim())) {
-      problem(`must return a fragment that starts with FROM, got ${JSON.stringify(result.trim().split("\n")[0])}.`);
-      return undefined;
-    }
-    const others = trespasses(role, result);
-    if (others.length > 0) {
-      const named = others.map((other) => `the ${ROLE_NAMES[other]}'s, ${PARAMETER_DIRS[other]}`).join(", and ");
-      problem(`uses another parameter's folder in the build context: ${named}. A fragment can only use its own files/, through ctx.dir.`);
-      return undefined;
-    }
-    return result.trim();
-  };
+export function renderFragment<R extends Role>(
+  role: R,
+  { file, declaration }: Loaded<{ config?: unknown; applyParameter?: unknown }>,
+  ctx: Ctxs[R],
+  problems: Problem[],
+): string | undefined {
+  const problem = (message: string) => problems.push({ file, field: "applyParameter", message });
+  const applyParameter = declaration.applyParameter as ((config: unknown, ctx: Ctxs[R]) => unknown) | undefined;
+  if (!applyParameter) {
+    if (role !== "baseImage") return "";
+    problem("is missing. A base image's fragment provides the FROM.");
+    return undefined;
+  }
+  let result: unknown;
+  try {
+    result = applyParameter(declaration.config, ctx);
+  } catch (error) {
+    problem(`threw: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  }
+  if (typeof result !== "string") {
+    problem(`must return a Dockerfile fragment, a string, got ${typeof result}.`);
+    return undefined;
+  }
+  if (role === "baseImage" && !/^FROM\s/i.test(result.trim())) {
+    problem(`must return a fragment that starts with FROM, got ${JSON.stringify(result.trim().split("\n")[0])}.`);
+    return undefined;
+  }
+  const others = trespasses(role, result);
+  if (others.length > 0) {
+    const named = others.map((other) => `the ${ROLE_NAMES[other]}'s, ${PARAMETER_DIRS[other]}`).join(", and ");
+    problem(`uses another parameter's folder in the build context: ${named}. A fragment can only use its own files/, through ctx.dir.`);
+    return undefined;
+  }
+  return result.trim();
+}
 
-  const steps = [
-    fragment("baseImage", { dir: PARAMETER_DIRS.baseImage }),
-    "WORKDIR /workspace",
-    fragment("codeState", { dir: PARAMETER_DIRS.codeState }),
-    fragment("promptSet", { dir: PARAMETER_DIRS.promptSet }),
-    fragment("harness", { dir: PARAMETER_DIRS.harness, version: parameters.harness.version }),
-    fragment("initialPrompt", {}),
-  ];
-  if (problems.length > 0) throw problemsError(problems);
+/** The prerun Dockerfile of a permutation's fragments, each already rendered, in build order. An empty one adds no line. */
+export function joinFragments(fragments: Record<Role, string>): string {
+  const steps = [fragments.baseImage, "WORKDIR /workspace", fragments.codeState, fragments.promptSet, fragments.harness, fragments.initialPrompt];
   return `${steps.filter((step) => step !== "").join("\n")}\n`;
 }
 
 /**
- * The declarations `permutation`'s prerun Dockerfile is rendered from, under `root` (the
- * `.thunderjar/` folder). `permutation` is of a test case of `task` already checked by `loadTestCase`.
+ * The prerun Dockerfile for `parameters`. Throws a ConfigError naming each declaration whose
+ * fragment `renderFragment` finds wrong.
  */
-export async function loadPrerunParameters(root: string, task: string, permutation: Permutation): Promise<PrerunParameters> {
+export function renderPrerun(parameters: PrerunParameters): string {
   const problems: Problem[] = [];
-  const load = async <D>(file: string, declareFn: string): Promise<Loaded<D>> => ({
-    file,
-    declaration: (await loadDeclaration(root, file, declareFn, problems)) as D,
-  });
-  const { harness, version } = parsePair(permutation.harnessModel);
-  const harnessDir = `${PARAMETERS}/harnessModels/${harness}`;
-  const [baseImage, codeState, promptSet, harnessDeclaration, versions, initialPrompt] = await Promise.all([
-    load<BaseImageDeclaration>(`${PARAMETERS}/baseImages/${permutation.baseImage}/index.ts`, "declareBaseImage"),
-    load<CodeStateDeclaration>(`${PARAMETERS}/codeStates/${permutation.codeState}/index.ts`, "declareCodeState"),
-    load<PromptSetDeclaration>(`${PARAMETERS}/promptSets/${permutation.promptSet}/index.ts`, "declarePromptSet"),
-    load<HarnessDeclaration>(`${harnessDir}/index.ts`, "declareHarness"),
-    load<HarnessVersionsDeclaration>(`${harnessDir}/versions.ts`, "declareHarnessVersions"),
-    load<InitialPromptDeclaration>(`${PARAMETERS}/tasks/${task}/initial-prompts/${permutation.initialPrompt}.ts`, "declareInitialPrompt"),
-  ]);
-  if (problems.length > 0) throw problemsError(problems);
-  return {
-    baseImage,
-    codeState,
-    promptSet,
-    harness: { ...harnessDeclaration, version: (versions.declaration[version] as { version: string }).version },
-    initialPrompt,
+  const fragments = {
+    baseImage: renderFragment("baseImage", parameters.baseImage, { dir: PARAMETER_DIRS.baseImage }, problems),
+    codeState: renderFragment("codeState", parameters.codeState, { dir: PARAMETER_DIRS.codeState }, problems),
+    promptSet: renderFragment("promptSet", parameters.promptSet, { dir: PARAMETER_DIRS.promptSet }, problems),
+    harness: renderFragment("harness", parameters.harness, { dir: PARAMETER_DIRS.harness, version: parameters.harness.version }, problems),
+    initialPrompt: renderFragment("initialPrompt", parameters.initialPrompt, {}, problems),
   };
+  if (problems.length > 0) throw problemsError(problems);
+  return joinFragments(fragments as Record<Role, string>);
 }

@@ -21,13 +21,13 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("build, against real Docker", 
   });
 
   test("0202 example: builds the image from the fragments, and a second build finds it present", async () => {
-    const image = `${REPOSITORY}:f64ca35b`;
+    const image = `${REPOSITORY}:b9cd78e6`;
 
     const first = await build(scenario("0202"), "example");
 
     expect(first.stderr).toBe("");
     expect(first.exitCode).toBe(0);
-    expect(first.stdout).toBe("Building <PREFIX>-prerun:f64ca35b ... done\n1 built, 0 already present\n");
+    expect(first.stdout).toBe("Building <PREFIX>-prerun:b9cd78e6 ... done\n1 built, 0 already present\n");
     expect(await inImage(image, "pwd && cat FAKE_INSTRUCTIONS.md")).toBe(
       "/workspace\nWrite small functions, and say what each one is for.",
     );

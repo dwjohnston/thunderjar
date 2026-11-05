@@ -12,7 +12,8 @@ import type {
 } from "../api/declarations.ts";
 import { PARAMETERS } from "../config/folders.ts";
 import { loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
-import { type HashedPermutation, hashPermutations, parsePair } from "../config/permutations.ts";
+import { type HashedPermutation, parsePair } from "../config/permutations.ts";
+import { hashPermutations } from "./hashPermutations.ts";
 import { requiredEnvOf } from "../config/requiredEnv.ts";
 import { DEFAULT_IMAGE_PREFIX, postrunImage, prerunImage } from "./images.ts";
 
@@ -139,7 +140,7 @@ export async function planExecution(
       return {
         number: p + 1,
         permutation,
-        prerunImage: prerunImage(permutation.hash, imagePrefix),
+        prerunImage: prerunImage(permutation.imageHash, imagePrefix),
         env: requiredEnvOf(harnessed.harness),
         runOptions: harnessed.baseImage.runOptions ?? [],
         timeoutSeconds: harnessed.initialPrompt.timeoutSeconds,

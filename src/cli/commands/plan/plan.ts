@@ -5,12 +5,12 @@ import {
   AXES,
   abbreviateHash,
   type HashedPermutation,
-  hashPermutations,
   matrixShape,
 } from "../../../config/permutations.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerUnavailableError, imagesIn } from "../../../docker/docker.ts";
+import { hashPermutations } from "../../../execution/hashPermutations.ts";
 import { prerunImage, prerunRepository } from "../../../execution/images.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
@@ -58,7 +58,7 @@ async function imageStatuses(
 ): Promise<{ statuses: ImageStatus[]; unavailable?: string }> {
   try {
     const images = await imagesIn(prerunRepository(imagePrefix));
-    return { statuses: permutations.map((p) => (images.has(prerunImage(p.hash, imagePrefix)) ? "built" : "missing")) };
+    return { statuses: permutations.map((p) => (images.has(prerunImage(p.imageHash, imagePrefix)) ? "built" : "missing")) };
   } catch (error) {
     if (!(error instanceof DockerUnavailableError)) throw error;
     return { statuses: permutations.map(() => "unknown"), unavailable: error.message };
