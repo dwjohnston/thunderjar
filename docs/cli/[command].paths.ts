@@ -1,5 +1,10 @@
 import type { Command } from "commander";
-import { createProgram } from "../../src/cli/program.ts";
+
+// Imported at runtime, not bundled: see the note in .vitepress/config.ts.
+const programPath = new URL("../../src/cli/program.ts", import.meta.url).href;
+const { createProgram } = (await import(/* @vite-ignore */ programPath)) as {
+  createProgram: () => Command;
+};
 
 function commandPage(cmd: Command, parent: Command): string {
   return [
