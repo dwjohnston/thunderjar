@@ -1,4 +1,4 @@
-import { declareHarness } from "thunderjar";
+import { declareHarness } from "thunderjar-published";
 
 // OpenCode, on OpenCode Zen. OPENCODE_API_KEY is an OpenCode Zen key.
 // A test case names a model by the ID the agent takes, e.g. "opencode-1.19.5/opencode/claude-haiku-5-5", "opencode-1.19.5/opencode/gpt-5.5".

@@ -1,4 +1,4 @@
-import { declareConfig, sqliteStore } from "thunderjar";
+import { declareConfig, sqliteStore } from "thunderjar-published";
 
 export default declareConfig({
   // Images stay in the local Docker daemon. To push them to a registry, name its repository,

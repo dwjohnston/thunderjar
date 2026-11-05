@@ -1,4 +1,4 @@
-import { declareCodeState } from "thunderjar";
+import { declareCodeState } from "thunderjar-published";
 
 // The project's repository, cloned into /workspace at a commit. The commit must be pushed, so the
 // build can fetch it. Pin a commit, never a branch: the same text must always build the same thing.

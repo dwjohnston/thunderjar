@@ -1,4 +1,4 @@
-import { declareMeasurement } from "thunderjar";
+import { declareMeasurement } from "thunderjar-published";
 
 // The expected line: export default declareHarness(claudeCode({ version: "2.1.311" }));
 export default declareMeasurement({

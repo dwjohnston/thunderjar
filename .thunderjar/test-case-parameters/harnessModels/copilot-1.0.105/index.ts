@@ -1,4 +1,4 @@
-import { declareHarness } from "thunderjar";
+import { declareHarness } from "thunderjar-published";
 
 // GitHub Copilot CLI. COPILOT_GITHUB_TOKEN is a GitHub token with Copilot access: a fine-grained
 // personal access token with the "Copilot Requests" permission.

@@ -17,6 +17,7 @@
         "@types/react": "19",
         "@types/react-dom": "19",
         "oxlint": "^1.88.0",
+        "thunderjar-published": "npm:thunderjar@0.2.0-preview-cb023da",
         "typescript": "^7.0.2",
         "vitepress": "^2.0.0-alpha.18",
       },
@@ -568,6 +569,8 @@
     "tabbable": ["tabbable@6.5.0", "", {}, "sha512-wieBHXygIm7OyQOu5hQlkk62/WyCFYGlWg7L6/ZCUZwx0o398Zkn4pVmMyfYhfMG8kGrj/Krt8eIk6UKC6VzwA=="],
 
     "term-size": ["term-size@2.2.1", "", {}, "sha512-wK0Ri4fOGjv/XPy8SBHZChl8CM7uMc5VML7SqiQ0zG7+J5Vr+RMQDoHa2CNT6KHUnTGIXH34UDMkPzAUyapBZg=="],
+
+    "thunderjar-published": ["thunderjar@0.2.0-preview-cb023da", "", { "dependencies": { "bun": "1.3.14", "commander": "^15.0.0", "react": "19", "react-dom": "19" }, "bin": { "thunderjar": "dist/index.js" } }, "sha512-6AQLQWc2pSw0U9wv64DeTK3BiJZDP0tgPr1M95nZ3tUYtvS2xOExbQneaIlcmBNTLlts4/MQdXTleNZNZ223ug=="],
 
     "tinyglobby": ["tinyglobby@0.2.17", "", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" } }, "sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g=="],
 
