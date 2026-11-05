@@ -81,7 +81,7 @@ async function contentOf(root: string, path: string, exclude = new Set<string>()
 }
 
 /** A harness model pair `harness@version/model`, split into its parts. */
-function parsePair(pair: string): { harness: string; version: string; model: string } {
+export function parsePair(pair: string): { harness: string; version: string; model: string } {
   const at = pair.indexOf("@");
   const slash = pair.indexOf("/", at);
   return { harness: pair.slice(0, at), version: pair.slice(at + 1, slash), model: pair.slice(slash + 1) };
