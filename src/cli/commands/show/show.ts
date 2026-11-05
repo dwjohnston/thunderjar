@@ -9,7 +9,7 @@ import { type AggregatedValue, type AggregateMethod, aggregatePermutation } from
 import { type ContainerRunRecord, type ExecutionRecord, fileStore, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath, resolvePath } from "../../dataDir.ts";
-import { minute, plural } from "../../format.ts";
+import { agentEnd, endedCleanly, minute, plural } from "../../format.ts";
 
 const GAP = "   ";
 
@@ -69,9 +69,10 @@ function varyingAxes(runs: ContainerRunRecord[]) {
 
 /**
  * The execution's table: a header naming each measurement above its methods, then a row per
- * permutation, `<n>  <its varying parameters>`, with its container runs and each aggregate. An
- * aggregate that leaves an iteration out is starred, and the iterations left out listed below. A
- * measure whose recorded values its methods can't combine shows `?`, and why below.
+ * permutation, `<n>  <its varying parameters>`, with its container runs and each aggregate. The
+ * container runs whose agent exited non-zero, timed out or left no result file are listed below.
+ * An aggregate that leaves an iteration out is starred, and the iterations left out listed below.
+ * A measure whose recorded values its methods can't combine shows `?`, and why below.
  */
 function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[], measurements: Measurement[]): string[] {
   const axes = varyingAxes(runs);
@@ -127,6 +128,10 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
   const names = methodColumns.reduce((text, { name, first }, i) => (first ? `${text.padEnd(column(3 + i))}${name}` : text), "");
 
   const lines = [...(measurements.length > 0 ? [names] : []), line(header), ...rows.map(line)];
+  const unclean = runs.filter(({ execution, harnessResult }) => !endedCleanly(execution, harnessResult));
+  if (unclean.length > 0) {
+    lines.push("", "! Agents that didn't end cleanly:", ...columns(unclean.map((run) => [runName(run), agentEnd(run.execution, run.harnessResult)])));
+  }
   if (leftOut.length > 0) lines.push("", "* Left out of the aggregate:", ...columns(leftOut));
   if (incompatible.size > 0) {
     const reasons = [...incompatible].flatMap(([name, why]) => [...why].map((reason) => [`${name}:`, `${reason} (remeasure)`]));
@@ -152,7 +157,8 @@ export function renderExecution(execution: ExecutionRecord, runs: ContainerRunRe
 
 /** One container run: where it sits, its parameters, how the agent ran, and its measures. */
 export function renderContainerRun(record: ContainerRunRecord): string {
-  const { executionId, testCase, permutation, permutationHash, iteration, postrunImage, ranAt, parameters, harnessModel, execution, result } = record;
+  const { executionId, testCase, permutation, permutationHash, iteration, postrunImage, ranAt, parameters, harnessModel, execution, harnessResult, result } =
+    record;
   const names = Object.keys(result).toSorted();
   return [
     ...labelled([
@@ -170,7 +176,8 @@ export function renderContainerRun(record: ContainerRunRecord): string {
       ["Harness", `${harnessModel.harness} ${harnessModel.version}`],
       ["Model", `${harnessModel.model}  (${harnessModel.modelId})`],
       ["Duration", duration(execution.finishedAt - execution.startedAt)],
-      ["Exit code", String(execution.exitCode)],
+      ["Exit", execution.timedOut ? `timed out after ${execution.timeoutSeconds}s` : String(execution.exitCode)],
+      ["Result file", harnessResult === null ? "none" : plural(new TextEncoder().encode(harnessResult).length, "byte")],
     ]),
     "",
     "Measures",

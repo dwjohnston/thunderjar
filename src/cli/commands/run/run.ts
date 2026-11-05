@@ -11,6 +11,7 @@ import { ulid } from "../../../execution/ulid.ts";
 import { executionFolder, fileStore, type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath } from "../../dataDir.ts";
+import { agentEnd } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
@@ -93,7 +94,7 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  * Runs test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it: builds its
  * missing prerun images, then runs each iteration in a container, writing a line for each as it
  * finishes, and one of its measures once they're taken, and records them in the run data store
- * under `dataDir`. Exits 1 if any agent exits non-zero, or with an error if Docker fails, or if a
+ * under `dataDir`. Exits 1 if any agent exits non-zero or times out, or with an error if Docker fails, or if a
  * variable a harness needs is unset, before anything is built.
  */
 async function run(cwd: string, name: string, imagePrefix: string, dataDir?: string): Promise<void> {
@@ -126,9 +127,10 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
           ` ${ordinal(permutation.number, permutations)}  iteration ${ordinal(iteration.number, testCase.iterations)}  ${label(testCase, permutation)}  ... `,
         );
       },
-      onRan: (_permutation, _iteration, { startedAt, finishedAt, exitCode }) => {
+      onRan: (_permutation, _iteration, execution, harnessResult) => {
         lineOpen = false;
-        console.log(exitCode === 0 ? `done (${duration(finishedAt - startedAt)})` : `failed (exit ${exitCode})`);
+        const ended = agentEnd(execution, harnessResult);
+        console.log(execution.timedOut ? ended : `${ended} (${duration(execution.finishedAt - execution.startedAt)})`);
       },
       onMeasured: (permutation, _iteration, result) => {
         // Under the iteration, lined up with it.

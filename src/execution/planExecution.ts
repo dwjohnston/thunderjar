@@ -37,6 +37,8 @@ export type PlannedPermutation = {
   env: string[];
   /** Its initial prompt's text, written to PROMPT_PATH in each of its containers. */
   prompt: string;
+  /** How long its agent may run, from its initial prompt, before it's killed. */
+  timeoutSeconds: number;
   iterations: PlannedIteration[];
 };
 
@@ -44,6 +46,9 @@ export type PlannedExecution = {
   executionId: string;
   permutations: PlannedPermutation[];
 };
+
+/** What a permutation's harness and initial prompt give each of its container runs. */
+type Harnessed = Pick<PlannedPermutation, "env" | "prompt" | "timeoutSeconds"> & { command: string };
 
 /**
  * The harness `cli` command `permutation` runs, and the variables its harness needs, or undefined
@@ -54,7 +59,7 @@ async function harnessCommand(
   task: string,
   permutation: HashedPermutation,
   problems: Problem[],
-): Promise<{ command: string; env: string[]; prompt: string } | undefined> {
+): Promise<Harnessed | undefined> {
   const { harness: name, version, model } = parsePair(permutation.harnessModel);
   const dir = `${PARAMETERS}/harnessModels/${name}`;
   const [harness, versions, models, initialPrompt] = (await Promise.all([
@@ -71,7 +76,7 @@ async function harnessCommand(
     promptPath: PROMPT_PATH,
     resultPath: RESULT_PATH,
   });
-  return { command, env: requiredEnvOf(harness), prompt: initialPrompt.prompt };
+  return { command, env: requiredEnvOf(harness), prompt: initialPrompt.prompt, timeoutSeconds: initialPrompt.timeoutSeconds };
 }
 
 /**
@@ -88,7 +93,7 @@ export async function planExecution(
   const problems: Problem[] = [];
   const harnesses = await Promise.all(hashed.map((permutation) => harnessCommand(root, testCase.task, permutation, problems)));
   if (problems.length > 0) throw problemsError(problems);
-  const commands = harnesses as { command: string; env: string[]; prompt: string }[];
+  const commands = harnesses as Harnessed[];
   return {
     executionId,
     permutations: hashed.map((permutation, p) => ({
@@ -97,6 +102,7 @@ export async function planExecution(
       prerunImage: prerunImage(permutation.hash, imagePrefix),
       env: commands[p]!.env,
       prompt: commands[p]!.prompt,
+      timeoutSeconds: commands[p]!.timeoutSeconds,
       iterations: Array.from({ length: testCase.iterations }, (_, i) => ({
         number: i + 1,
         postrunImage: postrunImage(executionId, p + 1, i + 1, imagePrefix),

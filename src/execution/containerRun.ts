@@ -35,7 +35,8 @@ export const NOW_MS_FUNCTION = [
 /**
  * The execution wrapper: writes `prompt` to PROMPT_PATH, exactly, runs `command`, and writes when
  * it started and finished (ms since the epoch) and how it exited to RUN_PATH, which is committed
- * into the postrun image with the rest.
+ * into the postrun image with the rest. When it starts, RUN_PATH holds only its start, so a run
+ * killed for taking too long still says when it started.
  */
 export const executionWrapper = (command: string, prompt: string) =>
   [
@@ -43,6 +44,7 @@ export const executionWrapper = (command: string, prompt: string) =>
     `printf '%s' ${shellQuote(prompt)} > ${PROMPT_PATH}`,
     NOW_MS_FUNCTION,
     "start=$(now_ms)",
+    `echo "{\\"startedAt\\":$start}" > ${RUN_PATH}`,
     `sh -c ${shellQuote(command)}`,
     "code=$?",
     "end=$(now_ms)",
@@ -58,6 +60,8 @@ export type ContainerRun = {
   env: string[];
   /** The initial prompt, written to PROMPT_PATH before `command` runs. */
   prompt: string;
+  /** How long `command` may run before it's killed. */
+  timeoutSeconds: number;
   /** The container's name. */
   container: string;
 };
@@ -72,8 +76,12 @@ export type ContainerRunOutcome = {
 const isEpochMs = (value: unknown): value is number =>
   Number.isInteger(value) && (value as number) >= 1e12 && (value as number) < 1e13;
 
-/** The Execution in the text of RUN_PATH. Throws a DockerContainerError if it isn't a valid one. */
-export function parseExecution(text: string | undefined): Execution {
+/**
+ * The Execution in the text of RUN_PATH, of a run with a limit of `timeoutSeconds`. If it was
+ * killed at `killedAt`, RUN_PATH holds only its start, and it finished when it was killed. Throws
+ * a DockerContainerError if it isn't a valid one.
+ */
+export function parseExecution(text: string | undefined, timeoutSeconds: number, killedAt?: number): Execution {
   let parsed: Partial<Execution> | undefined;
   try {
     parsed = text === undefined ? undefined : (JSON.parse(text) as Partial<Execution>);
@@ -81,20 +89,24 @@ export function parseExecution(text: string | undefined): Execution {
     parsed = undefined;
   }
   const { startedAt, finishedAt, exitCode } = parsed ?? {};
-  if (!isEpochMs(startedAt) || !isEpochMs(finishedAt) || typeof exitCode !== "number") {
-    throw new DockerContainerError(`The execution wrapper left no valid ${RUN_PATH}: ${text === undefined ? "there is none" : text.trim()}`);
-  }
-  return { startedAt, finishedAt, exitCode };
+  const invalid = () =>
+    new DockerContainerError(`The execution wrapper left no valid ${RUN_PATH}: ${text === undefined ? "there is none" : text.trim()}`);
+  if (!isEpochMs(startedAt)) throw invalid();
+  if (killedAt !== undefined) return { startedAt, finishedAt: killedAt, exitCode: null, timedOut: true, timeoutSeconds };
+  if (!isEpochMs(finishedAt) || typeof exitCode !== "number") throw invalid();
+  return { startedAt, finishedAt, exitCode, timedOut: false, timeoutSeconds };
 }
 
 /**
  * Runs `run`, commits its container into its postrun image, even when the agent exits
- * non-zero, and removes the container. Throws a DockerContainerError if Docker fails.
+ * non-zero or is killed for taking longer than its timeout, and removes the container. Throws a
+ * DockerContainerError if Docker fails.
  */
 export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
   try {
-    await runContainer(run.prerunImage, run.container, executionWrapper(run.command, run.prompt), run.env);
-    const execution = parseExecution(await readContainerFile(run.container, RUN_PATH));
+    const stop = await runContainer(run.prerunImage, run.container, executionWrapper(run.command, run.prompt), run.env, run.timeoutSeconds);
+    const killedAt = stop.timedOut ? stop.killedAt : undefined;
+    const execution = parseExecution(await readContainerFile(run.container, RUN_PATH), run.timeoutSeconds, killedAt);
     const harnessResult = (await readContainerFile(run.container, RESULT_PATH)) ?? null;
     await commitContainer(run.container, run.postrunImage, run.prerunImage);
     return { execution, harnessResult };
