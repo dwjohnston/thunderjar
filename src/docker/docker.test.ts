@@ -1,7 +1,9 @@
 // The Docker module, running the fake Docker in place of `docker`.
 import { afterEach, expect, test } from "bun:test";
 import { FAKE_DOCKER, fakeDocker } from "../testing/fakeDocker.ts";
-import { DockerUnavailableError, imagesIn } from "./docker.ts";
+import { $ } from "bun";
+import { FIXTURES_DIR } from "../testing/scenario.ts";
+import { buildImage, DockerBuildError, DockerUnavailableError, imagesIn } from "./docker.ts";
 
 const saved = { THUNDERJAR_DOCKER: Bun.env.THUNDERJAR_DOCKER, FAKE_DOCKER_DIR: Bun.env.FAKE_DOCKER_DIR };
 
@@ -35,4 +37,36 @@ test("imagesIn throws a DockerUnavailableError when there's no docker command", 
   Bun.env.THUNDERJAR_DOCKER = `${FAKE_DOCKER}.missing`;
 
   await expect(imagesIn("tj-prerun")).rejects.toBeInstanceOf(DockerUnavailableError);
+});
+
+test("buildImage builds the context's Dockerfile and tags the image", async () => {
+  await using docker = await fakeDocker();
+  Object.assign(Bun.env, docker.env);
+  const context = `${FIXTURES_DIR}/.tmp/context-${crypto.randomUUID()}`;
+  await Bun.write(`${context}/Dockerfile`, "FROM scratch\n");
+
+  try {
+    await buildImage(context, "tj-prerun:aaaaaaaa");
+  } finally {
+    await $`rm -rf ${context}`.quiet();
+  }
+
+  expect(await docker.commands()).toEqual([`docker build -t tj-prerun:aaaaaaaa ${context}`]);
+  expect(await imagesIn("tj-prerun")).toEqual(new Set(["tj-prerun:aaaaaaaa"]));
+});
+
+test("buildImage throws a DockerBuildError with Docker's reason when the build fails", async () => {
+  await using docker = await fakeDocker({ failing: ["tj-prerun:aaaaaaaa"] });
+  Object.assign(Bun.env, docker.env);
+  const context = `${FIXTURES_DIR}/.tmp/context-${crypto.randomUUID()}`;
+  await Bun.write(`${context}/Dockerfile`, "FROM scratch\n");
+
+  const error = await buildImage(context, "tj-prerun:aaaaaaaa").catch((e: unknown) => e);
+  await $`rm -rf ${context}`.quiet();
+
+  expect(error).toBeInstanceOf(DockerBuildError);
+  expect((error as Error).message).toBe(
+    'ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1',
+  );
+  expect(await imagesIn("tj-prerun")).toEqual(new Set());
 });
