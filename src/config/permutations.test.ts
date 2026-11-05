@@ -70,10 +70,24 @@ describe("abbreviateHash", () => {
 describe("hashPermutations", () => {
   const root = `${scenario("0202")}/.thunderjar`;
 
-  test("gives each permutation a full SHA-256 hash", async () => {
+  test("gives each permutation a full SHA-256 hash, a hash per parameter, and its model ID", async () => {
+    const sha = expect.stringMatching(/^[0-9a-f]{64}$/);
     expect(await hashPermutations(root, TWO_PAIRS)).toEqual(
-      expandPermutations(TWO_PAIRS).map((permutation) => ({ ...permutation, hash: expect.stringMatching(/^[0-9a-f]{64}$/) })),
+      expandPermutations(TWO_PAIRS).map((permutation) => ({
+        ...permutation,
+        hash: sha,
+        parameterHashes: { baseImage: sha, codeState: sha, promptSet: sha, harnessModel: sha, initialPrompt: sha },
+        modelId: permutation.harnessModel.startsWith("fake-harness-alpha") ? "fake-model-small-001" : "fake-model-large-001",
+      })),
     );
+  });
+
+  test("permutations sharing a parameter share its parameter hash", async () => {
+    const [snerkAlphaPlain, snerkAlphaTerse, , , glurkAlphaPlain] = await hashPermutations(root, TWO_PAIRS);
+
+    expect(snerkAlphaPlain?.parameterHashes.promptSet).toBe(snerkAlphaTerse?.parameterHashes.promptSet as string);
+    expect(snerkAlphaPlain?.parameterHashes.promptSet).not.toBe(glurkAlphaPlain?.parameterHashes.promptSet as string);
+    expect(snerkAlphaPlain?.parameterHashes.harnessModel).toBe(glurkAlphaPlain?.parameterHashes.harnessModel as string);
   });
 
   test("is stable: the same files give the same hashes, wherever they are", async () => {
