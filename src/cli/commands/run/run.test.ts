@@ -15,6 +15,9 @@ const KEY = { FAKE_HARNESS_KEY: "fake-key" };
 
 const PLAIN = "Create a file isPrime.ts exporting a function that tests for primality.";
 const TERSE = "isPrime.ts: export a primality test.";
+/** 0202's `awkward` initial prompt, full of shell syntax. */
+const AWKWARD = `Say "hello", then print $HOME and \`whoami\`.
+Don't stop at 'single quotes', a backslash \\ or 100%.`;
 
 /** 0201's fake-harness-alpha, which needs nothing. */
 const ALPHA_0201 = (prompt: string) =>
@@ -25,20 +28,21 @@ const ALPHA = (prompt: string) => `${ALPHA_0201(prompt)}${KEY_CHECK}`;
 const BETA = (prompt: string) =>
   `printf '%s\\n' '// ${prompt}' 'export const isPrime = (n: number) => n > 1 && Array.from({ length: n - 2 }, (_, i) => i + 2).every((d) => n % d !== 0);' > isPrime.ts && echo '{"model":"fake-model-large-001"}' > /thunderjar/result.json${KEY_CHECK}`;
 
-/** The dry run's lines for permutation `n`, with its `iterations`, each given `env` and running `command`. */
-const permutation = (n: number, hash: string, iterations: number, command: string, env?: string) =>
+/** The dry run's lines for permutation `n`, with its `iterations`, each given `env` and `prompt`, and running `command`. */
+const permutation = (n: number, hash: string, iterations: number, prompt: string, command: string, env?: string) =>
   [
     `Permutation ${n}: prerun image thunderjar-prerun:${hash}`,
     ...Array.from({ length: iterations }, (_, i) => [
       `  Iteration ${i + 1}: postrun image thunderjar-postrun:<ULID>-${n}-${i + 1}`,
       ...(env ? [`    env:      ${env}`] : []),
+      `    prompt:   ${prompt}`,
       `    command:  ${command}`,
     ]).flat(),
   ].join("\n");
 
 /** A permutation of 0202's fake-harness-alpha, given its key. */
 const alphaPermutation = (n: number, hash: string, iterations: number, prompt: string) =>
-  permutation(n, hash, iterations, ALPHA(prompt), "FAKE_HARNESS_KEY");
+  permutation(n, hash, iterations, prompt, ALPHA(prompt), "FAKE_HARNESS_KEY");
 
 const filesIn = (dir: string) => [...new Glob("**").scanSync({ cwd: dir, dot: true })].sort();
 
@@ -65,17 +69,17 @@ ${alphaPermutation(1, "e4a5b2ee", 5, PLAIN)}
 
 ${alphaPermutation(2, "03784781", 5, TERSE)}
 
-${permutation(3, "2a7ea4db", 5, BETA(PLAIN))}
+${permutation(3, "2a7ea4db", 5, PLAIN, BETA(PLAIN))}
 
-${permutation(4, "12540fdc", 5, BETA(TERSE))}
+${permutation(4, "12540fdc", 5, TERSE, BETA(TERSE))}
 
 ${alphaPermutation(5, "6060998e", 5, PLAIN)}
 
 ${alphaPermutation(6, "1669ec38", 5, TERSE)}
 
-${permutation(7, "597e293d", 5, BETA(PLAIN))}
+${permutation(7, "597e293d", 5, PLAIN, BETA(PLAIN))}
 
-${permutation(8, "635376a2", 5, BETA(TERSE))}
+${permutation(8, "635376a2", 5, TERSE, BETA(TERSE))}
 `);
   });
 
@@ -113,6 +117,21 @@ ${alphaPermutation(1, "e4a5b2ee", 1, PLAIN).replaceAll("thunderjar-", "throwaway
     expect(exitCode).toBe(1);
   });
 
+  test("quoting: the prompt file's contents are shown beside the command that reads it, each line lined up", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "quoting", "--dry-run"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Execution <ULID>
+
+Permutation 1: prerun image thunderjar-prerun:3d0d7c95
+  Iteration 1: postrun image thunderjar-postrun:<ULID>-1-1
+    prompt:   Say "hello", then print $HOME and \`whoami\`.
+              Don't stop at 'single quotes', a backslash \\ or 100%.
+    command:  cat /thunderjar/prompt.txt > /thunderjar/result.json
+`);
+  });
+
   test("two-harnesses: one permutation per fake harness, one iteration each", async () => {
     const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--dry-run"], { env: KEY });
 
@@ -121,7 +140,7 @@ ${alphaPermutation(1, "e4a5b2ee", 1, PLAIN).replaceAll("thunderjar-", "throwaway
 
 ${alphaPermutation(1, "e4a5b2ee", 1, PLAIN)}
 
-${permutation(2, "2a7ea4db", 1, BETA(PLAIN))}
+${permutation(2, "2a7ea4db", 1, PLAIN, BETA(PLAIN))}
 `);
   });
 });
@@ -281,6 +300,20 @@ Wrote <DATA>/runs/<ULID>/
     // Alpha's container was given its key. Beta's, of another harness, wasn't.
     expect(await docker.fileIn(`thunderjar-postrun:${id}-1-1`, "/thunderjar/fake-harness-key")).toBe("set\n");
     expect(await docker.fileIn(`thunderjar-postrun:${id}-2-1`, "/thunderjar/fake-harness-key")).toBe("\n");
+  });
+
+  test("quoting: the prompt reaches the agent byte for byte, through a file", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "quoting", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [record] = (await readStore(data)).containerRuns;
+    // fake-echo copies the prompt file into its result file.
+    expect(record?.harnessResult).toBe(AWKWARD);
+    expect(await docker.fileIn(record?.postrunImage as string, "/thunderjar/prompt.txt")).toBe(AWKWARD);
   });
 
   test("by default, the store is .thunderjar/.data/, and existing prerun images are reused", async () => {
@@ -554,7 +587,7 @@ describe("0201 minimal existing setup", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "e943919c", 1, ALPHA_0201(PLAIN))}
+${permutation(1, "e943919c", 1, PLAIN, ALPHA_0201(PLAIN))}
 `);
   });
 });

@@ -100,7 +100,16 @@ export type HarnessApplyCtx = ApplyParameterCtx & {
 export type HarnessCliCtx = {
   version: string;
   modelId: string;
+  /**
+   * The initial prompt's text. Pasted into a shell command it breaks on the first quote, `$` or
+   * backtick, so read `promptPath` instead.
+   */
   initialPrompt: string;
+  /**
+   * A file in the container holding the initial prompt, exactly, with no newline added: pass it
+   * to the agent as `"$(cat ${ctx.promptPath})"`, or as a file if it takes one.
+   */
+  promptPath: string;
   /** Where the agent's own report of the run goes. */
   resultPath: string;
 };

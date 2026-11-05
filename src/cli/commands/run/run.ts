@@ -23,7 +23,8 @@ const field = (label: string, value: string) =>
 
 /**
  * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
- * the environment variables its container is given, by name, and its harness command.
+ * the environment variables its container is given, by name, the prompt file's contents, and its
+ * harness command.
  */
 export function renderExecution({ executionId, permutations }: PlannedExecution): string {
   const blocks = permutations.map((permutation) =>
@@ -32,6 +33,7 @@ export function renderExecution({ executionId, permutations }: PlannedExecution)
       ...permutation.iterations.flatMap((iteration) => [
         `  Iteration ${iteration.number}: postrun image ${iteration.postrunImage}`,
         ...(permutation.env.length > 0 ? [field("env", permutation.env.join(", "))] : []),
+        field("prompt", permutation.prompt),
         field("command", iteration.command),
       ]),
     ].join("\n"),
@@ -161,7 +163,7 @@ export function createRunCommand(): Command {
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(
       "--dry-run",
-      "print the images, environment variables and harness commands the execution would use, without running anything",
+      "print the images, environment variables, prompts and harness commands the execution would use, without running anything",
     )
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())

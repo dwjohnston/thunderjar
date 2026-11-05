@@ -5,9 +5,10 @@ type CodeStateName = "baseline";
 type PromptSetName = "glurk" | "snerk";
 type TaskName = "is-prime";
 type InitialPromptNames = {
-  "is-prime": "plain" | "terse";
+  "is-prime": "awkward" | "plain" | "terse";
 };
 type HarnessModelName =
+  | `fake-echo@${"1.0.0"}/${"fake-model-small"}`
   | `fake-harness-alpha@${"1.0.0"}/${"fake-model-small"}`
   | `fake-harness-beta@${"1.0.0"}/${"fake-model-large" | "fake-model-small"}`;
 

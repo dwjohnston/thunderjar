@@ -12,6 +12,9 @@ const PREFIX = `tj-test-${crypto.randomUUID().slice(0, 8)}`;
 const DATA_DIR = `${TMP_DIR}/data-${PREFIX}`;
 
 const PLAIN = "Create a file isPrime.ts exporting a function that tests for primality.";
+/** 0202's `awkward` initial prompt, full of shell syntax. */
+const AWKWARD = `Say "hello", then print $HOME and \`whoami\`.
+Don't stop at 'single quotes', a backslash \\ or 100%.`;
 
 /** What `script` prints, run with sh in a throwaway container from `image`. */
 const inImage = async (image: string, script: string) => (await $`docker run --rm ${image} sh -c ${script}`.text()).trim();
@@ -103,5 +106,20 @@ Wrote <DATA>/runs/<ULID>/
 
     // Every container was removed.
     expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${PREFIX}-`}`.text())).toEqual([]);
+  }, 600_000);
+
+  test("0202 quoting: the prompt reaches the agent byte for byte, through a file", async () => {
+    const data = `${DATA_DIR}/quoting`;
+    const { stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "quoting", "--image-prefix", PREFIX, "--data-dir", data], {
+      docker: "real",
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: data, onlyFiles: false })];
+    const record = (await Bun.file(`${data}/${executionDir}/container-runs/1-1.json`).json()) as ContainerRunRecord;
+    // fake-echo copies the prompt file into its result file.
+    expect(record.harnessResult).toBe(AWKWARD);
+    expect(await $`docker run --rm ${record.postrunImage} cat /thunderjar/prompt.txt`.text()).toBe(AWKWARD);
   }, 600_000);
 });
