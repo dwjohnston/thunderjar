@@ -1,7 +1,8 @@
 // The Claude Code readers, against a real `claude -p --output-format json` result, from Claude Code
 // 2.1.316 run on DeepSeek's Anthropic-compatible API, whose model its price table doesn't know.
 import { describe, expect, test } from "bun:test";
-import { claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
+import { claudeCode, claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
+import { declaredBy } from "./declarations.ts";
 
 const REAL = await Bun.file(`${import.meta.dir}/claudeCode.deepseek.result.json`).text();
 
@@ -72,5 +73,50 @@ describe("claudeCodeTokenCosts", () => {
     expect(
       claudeCodeTokenCosts(changed((result) => ((result.modelUsage as Record<string, Record<string, unknown>>)["deepseek-chat"]!.inputTokens = "many"))),
     ).toEqual({ outcome: "unavailable", reason: "unparseable" });
+  });
+});
+
+describe("claudeCode", () => {
+  const harness = claudeCode({ version: "2.1.311" });
+  const ctx = {
+    version: "2.1.311",
+    modelId: "claude-haiku-5-5",
+    initialPrompt: "Go.",
+    promptPath: "/thunderjar/prompt.txt",
+    resultPath: "/thunderjar/result.json",
+    sessionId: "0b9e8a52-2a4b-4c3e-9d3e-6f1c2b7a8d90",
+    resolved: undefined,
+  };
+
+  test("is a harness declaration, pinning its version", () => {
+    expect(declaredBy(harness)).toBe("declareHarness");
+    expect(harness.version).toBe("2.1.311");
+    expect(harness.requiredEnv).toEqual(["ANTHROPIC_API_KEY"]);
+  });
+
+  test("installs Claude Code as root, then runs as node", () => {
+    expect(harness.applyParameter?.(undefined, { dir: "parameters/harness", version: "2.1.311", resolved: undefined })).toBe(
+      `RUN npm install -g @anthropic-ai/claude-code@2.1.311
+RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
+USER node`,
+    );
+  });
+
+  test("starts the session on the first turn, and resumes it after", () => {
+    expect(harness.cli({ ...ctx, turn: 0 })).toBe(
+      'claude -p "$(cat /thunderjar/prompt.txt)" --model claude-haiku-5-5 --output-format json --dangerously-skip-permissions --session-id 0b9e8a52-2a4b-4c3e-9d3e-6f1c2b7a8d90 > /thunderjar/result.json',
+    );
+    expect(harness.cli({ ...ctx, turn: 1 })).toEndWith(" --resume 0b9e8a52-2a4b-4c3e-9d3e-6f1c2b7a8d90 > /thunderjar/result.json");
+  });
+
+  test("reads its reply and token costs with the library's readers", () => {
+    expect(harness.collectReply?.(REAL)).toBe("pong");
+    expect(harness.collectTokenCosts?.(REAL, { version: "2.1.311", modelId: "deepseek-v4-pro" })).toEqual(claudeCodeTokenCosts(REAL));
+  });
+
+  test("cli can be replaced", () => {
+    const custom = claudeCode({ version: "2.1.311", cli: (c) => `claude -p hi --model ${c.modelId} > ${c.resultPath}` });
+
+    expect(custom.cli({ ...ctx, turn: 0 })).toBe("claude -p hi --model claude-haiku-5-5 > /thunderjar/result.json");
   });
 });

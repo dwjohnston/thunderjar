@@ -5,28 +5,25 @@ const declarations = (text: string) => text.slice(text.indexOf("type BaseImageNa
 
 describe("renderParameterNames", () => {
   test("a kind with no names is never, and an empty task list is {}", () => {
-    const text = renderParameterNames({ baseImages: [], codeStates: [], promptSets: [], tasks: {}, harnesses: {} });
+    const text = renderParameterNames({ baseImages: [], codeStates: [], promptSets: [], tasks: {}, harnesses: [] });
 
     expect(declarations(text)).toBe(`type BaseImageName = never;
 type CodeStateName = never;
 type PromptSetName = never;
 type TaskName = never;
 type InitialPromptNames = {};
-type HarnessModelName = never;
+type HarnessName = never;
+type HarnessModelName = \`\${HarnessName}/\${string}\`;
 `);
   });
 
-  test("each task gets its own initial prompts, and each harness its own versions and models", () => {
+  test("each task gets its own initial prompts, and a pair is any harness folder, then any model ID", () => {
     const text = renderParameterNames({
       baseImages: ["node20", "node22"],
       codeStates: ["baseline"],
       promptSets: ["glurk", "snerk"],
       tasks: { "fizz-buzz": ["fizzy"], "is-prime": ["plain", "terse"], "no-prompts": [] },
-      harnesses: {
-        "fake-harness-alpha": { versions: ["1.0.0"], models: ["fake-model-small"] },
-        "fake-harness-beta": { versions: ["1.0.0", "2.0.0"], models: ["fake-model-large", "fake-model-small"] },
-        "no-models": { versions: ["1.0.0"], models: [] },
-      },
+      harnesses: ["claude-code-2.1.311", "fake-harness-alpha"],
     });
 
     expect(declarations(text)).toBe(`type BaseImageName = "node20" | "node22";
@@ -38,9 +35,8 @@ type InitialPromptNames = {
   "is-prime": "plain" | "terse";
   "no-prompts": never;
 };
-type HarnessModelName =
-  | \`fake-harness-alpha@\${"1.0.0"}/\${"fake-model-small"}\`
-  | \`fake-harness-beta@\${"1.0.0" | "2.0.0"}/\${"fake-model-large" | "fake-model-small"}\`;
+type HarnessName = "claude-code-2.1.311" | "fake-harness-alpha";
+type HarnessModelName = \`\${HarnessName}/\${string}\`;
 `);
   });
 });

@@ -1,11 +1,8 @@
 // Reads the names declared under `.thunderjar/test-case-parameters/`, and renders them as the
 // global types of `_generated/parameterNames.d.ts`.
 import { foldersIn, PARAMETERS as P, tsFilesIn } from "../../../config/folders.ts";
-import { existsIn, loadDeclaration, type Problem, problemsError } from "../../../config/loader.ts";
 
 export const GENERATED_PATH = "_generated/parameterNames.d.ts";
-
-export type HarnessNames = { versions: string[]; models: string[] };
 
 export type ParameterNames = {
   baseImages: string[];
@@ -13,54 +10,26 @@ export type ParameterNames = {
   promptSets: string[];
   /** Each task's initial prompts, by task name. */
   tasks: Record<string, string[]>;
-  /** Each harness's versions and models, by harness name. */
-  harnesses: Record<string, HarnessNames>;
+  /** The harness folders. A pair is one of them, then any model ID: `<harness>/<model ID>`. */
+  harnesses: string[];
 };
 
-/** The keys of the map `<root>/<file>` declares with `declareFn`. None if there's no such file. */
-async function keysOfMap(root: string, file: string, declareFn: string, problems: Problem[]): Promise<string[]> {
-  if (!(await existsIn(root, file))) return [];
-  return Object.keys((await loadDeclaration(root, file, declareFn, problems)) ?? {}).toSorted();
-}
-
-/**
- * The names declared in the `.thunderjar/` folder `root`. Every harness's versions and models are
- * loaded, so one broken map fails it for the whole project.
- */
+/** The names declared in the `.thunderjar/` folder `root`, from its folders and files alone: nothing is loaded. */
 export async function collectParameterNames(root: string): Promise<ParameterNames> {
   const tasks: Record<string, string[]> = {};
   for (const task of await foldersIn(root, `${P}/tasks`)) {
     tasks[task] = await tsFilesIn(root, `${P}/tasks/${task}/initial-prompts`);
   }
-  const problems: Problem[] = [];
-  const harnesses: Record<string, HarnessNames> = {};
-  for (const harness of await foldersIn(root, `${P}/harnessModels`)) {
-    const dir = `${P}/harnessModels/${harness}`;
-    harnesses[harness] = {
-      versions: await keysOfMap(root, `${dir}/versions.ts`, "declareHarnessVersions", problems),
-      models: await keysOfMap(root, `${dir}/models.ts`, "declareHarnessModels", problems),
-    };
-  }
-  if (problems.length > 0) throw problemsError(problems);
   return {
     baseImages: await foldersIn(root, `${P}/baseImages`),
     codeStates: await foldersIn(root, `${P}/codeStates`),
     promptSets: await foldersIn(root, `${P}/promptSets`),
     tasks,
-    harnesses,
+    harnesses: await foldersIn(root, `${P}/harnessModels`),
   };
 }
 
 const union = (names: string[]) => (names.length === 0 ? "never" : names.map((name) => JSON.stringify(name)).join(" | "));
-
-/** Every `<harness>@<version>/<model>` the harnesses declare, to follow `type HarnessModelName =`: one on the same line, more on lines of their own. */
-function harnessModelType(harnesses: Record<string, HarnessNames>): string {
-  const pairs = Object.entries(harnesses)
-    .filter(([, { versions, models }]) => versions.length > 0 && models.length > 0)
-    .map(([harness, { versions, models }]) => `\`${harness}@\${${union(versions)}}/\${${union(models)}}\``);
-  if (pairs.length <= 1) return ` ${pairs[0] ?? "never"}`;
-  return pairs.map((pair) => `\n  | ${pair}`).join("");
-}
 
 function initialPromptType(tasks: Record<string, string[]>): string {
   const entries = Object.entries(tasks);
@@ -77,7 +46,8 @@ type CodeStateName = ${union(names.codeStates)};
 type PromptSetName = ${union(names.promptSets)};
 type TaskName = ${union(Object.keys(names.tasks))};
 type InitialPromptNames = ${initialPromptType(names.tasks)};
-type HarnessModelName =${harnessModelType(names.harnesses)};
+type HarnessName = ${union(names.harnesses)};
+type HarnessModelName = \`\${HarnessName}/\${string}\`;
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;

@@ -18,8 +18,7 @@ const P = "test-case-parameters";
  */
 const init = (dir: string) => thunderjar(dir, ["init"], { env: { GIT_CEILING_DIRECTORIES: TMP_DIR } });
 
-const HARNESS_FILES = ["index.ts", "models.ts", "versions.ts", "collectTokenCosts.ts"];
-const HARNESSES = ["claude-code", "copilot", "codex", "opencode"];
+const HARNESSES = ["claude-code-2.1.311", "copilot-1.0.105", "codex-0.166.0", "opencode-1.19.5"];
 
 /** What `init` scaffolds in any project, in the order it prints them, after the nested package.json. */
 const SCAFFOLD = [
@@ -33,7 +32,7 @@ const SCAFFOLD = [
   `${P}/promptSets/snerk/index.ts`,
   `${P}/promptSets/house-style/index.ts`,
   `${P}/promptSets/house-style/files/AGENTS.md`,
-  ...HARNESSES.flatMap((harness) => HARNESS_FILES.map((file) => `${P}/harnessModels/${harness}/${file}`)),
+  ...HARNESSES.map((harness) => `${P}/harnessModels/${harness}/index.ts`),
   `${P}/tasks/is-prime/initial-prompts/plain.ts`,
   `${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`,
   `${P}/tasks/is-prime/measurements/isPrimeTemplateTest.ts`,
@@ -73,12 +72,13 @@ export default declareConfig({
 `);
     expect(await read(copy.dir, "test-cases/compare-models.ts")).toBe(`import { declareTestCase } from "thunderjar";
 
-// The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5.
+// The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5. Each pair is a
+// harness folder, then the model ID its agent is given.
 export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5", "claude-code@2.1.283/haiku-5-5"],
+  harnessModel: ["claude-code-2.1.311/claude-haiku-4-5-20251001", "claude-code-2.1.311/claude-haiku-5-5"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -92,7 +92,11 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-5-5", "copilot@1.0.105/haiku-5-5", "opencode@1.19.5/haiku-5-5"],
+  harnessModel: [
+    "claude-code-2.1.311/claude-haiku-5-5",
+    "copilot-1.0.105/claude-haiku-5.5",
+    "opencode-1.19.5/opencode/claude-haiku-5-5",
+  ],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -107,6 +111,15 @@ export default declareTestCase({
     const baseline = await read(copy.dir, `${P}/codeStates/baseline/index.ts`);
     expect(baseline).toContain("export default declareCodeState({});");
     expect(baseline).toContain("//     applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\\\\n");
+  });
+
+  test("its Claude Code harness is the library's, pinned by its folder", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const harness = await read(copy.dir, `${P}/harnessModels/claude-code-2.1.311/index.ts`);
+    expect(harness).toStartWith('import { claudeCode } from "thunderjar";\n');
+    expect(harness).toEndWith('\nexport default claudeCode({ version: "2.1.311" });\n');
   });
 
   test("its base image gives every user a git identity", async () => {
@@ -227,7 +240,7 @@ export default declareCodeState({
 
 describe("0201 minimal existing setup", () => {
   const ALPHA = `${P}/harnessModels/fake-harness-alpha/`;
-  const CLAUDE_CODE = `${P}/harnessModels/claude-code/`;
+  const CLAUDE_CODE = `${P}/harnessModels/claude-code-2.1.311/`;
   const GENERATED = "_generated/parameterNames.d.ts";
   // What a minimal setup leaves out: every harness but Claude Code, the second prompt set, and init's
   // test cases, which use real harnesses. 0201 has one test case of its own, `example`, instead.

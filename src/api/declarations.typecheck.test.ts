@@ -26,6 +26,7 @@ test("config is typed from the declaration's own config", () => {
     applyParameter: (config) => config.files.map((file) => `COPY ${file} /workspace/`).join("\n"),
   });
   declareHarness({
+    version: "2.1.283",
     config: { packageName: "@anthropic-ai/claude-code" },
     applyParameter: (config, ctx) => `RUN npm install -g ${config.packageName}@${ctx.version}`,
     cli: (ctx) => `claude -p "${ctx.initialPrompt}"`,
@@ -43,7 +44,7 @@ test("config is undefined when the declaration has none", () => {
 
 test("ctx carries dir for folder parameters, and version for harnesses", () => {
   declareCodeState({ applyParameter: (_config, ctx) => `COPY ${ctx.dir}/ /workspace/` });
-  declareHarness({ applyParameter: (_config, ctx) => `COPY ${ctx.dir}/install.sh /tmp/\nRUN /tmp/install.sh ${ctx.version}`, cli: () => "" });
+  declareHarness({ version: "2.1.283", applyParameter: (_config, ctx) => `COPY ${ctx.dir}/install.sh /tmp/\nRUN /tmp/install.sh ${ctx.version}`, cli: () => "" });
   // @ts-expect-error - only a harness gets a version
   declarePromptSet({ applyParameter: (_config, ctx) => ctx.version });
   // @ts-expect-error - an initial prompt is a file, not a folder: it has no dir
@@ -72,6 +73,7 @@ test("ctx.resolved is typed from what resolve returns, awaited", () => {
     },
   });
   declareHarness({
+    version: "2.1.283",
     resolve: async () => "2.1.311",
     applyParameter: (_config, ctx) => `RUN npm install -g @anthropic-ai/claude-code@${ctx.resolved}`,
     cli: (ctx) => {

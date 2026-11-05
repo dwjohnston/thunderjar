@@ -1,6 +1,7 @@
 import { declareHarness } from "thunderjar";
 
-// A fake agent: writes a correct isPrime.ts, without a @ts-ignore, and a result file.
+// A fake agent: writes a correct isPrime.ts, without a @ts-ignore, and a result file. Broken: it
+// declares no version, which every harness must.
 export default declareHarness({
   applyParameter: (_config, ctx) => `RUN echo "install fake-harness-beta@${ctx.version}"`,
   cli: (ctx) =>

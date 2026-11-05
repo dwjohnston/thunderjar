@@ -5,7 +5,7 @@ export default declareTestCase({
   baseImage: ["node20", "node20-unconfined"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-sandboxer@1.0.0/fake-model-small"],
+  harnessModel: ["fake-sandboxer/fake-model-small-001"],
   task: "sandbox",
   initialPrompt: ["plain"],
   iterations: 1,

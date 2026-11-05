@@ -11,7 +11,7 @@ const ONE: TestCaseDeclaration = {
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
+  harnessModel: ["fake-harness-alpha/fake-model-small-001"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -20,12 +20,12 @@ const ONE: TestCaseDeclaration = {
 const TWO_PAIRS: TestCaseDeclaration = {
   ...ONE,
   promptSet: ["snerk", "glurk"],
-  harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small", "fake-harness-beta@1.0.0/fake-model-large"],
+  harnessModel: ["fake-harness-alpha/fake-model-small-001", "fake-harness-beta/fake-model-large-001"],
   initialPrompt: ["plain", "terse"],
 };
 
 /** Beta on both its models. */
-const TWO_MODELS: TestCaseDeclaration = { ...ONE, harnessModel: ["fake-harness-beta@1.0.0/fake-model-small", "fake-harness-beta@1.0.0/fake-model-large"] };
+const TWO_MODELS: TestCaseDeclaration = { ...ONE, harnessModel: ["fake-harness-beta/fake-model-small-001", "fake-harness-beta/fake-model-large-001"] };
 
 const AXES = ["baseImage", "codeState", "promptSet", "harnessModel", "initialPrompt"] as const;
 
@@ -114,7 +114,7 @@ describe("hashPermutations", () => {
   });
 
   test("every permutation differing on any axis has its own hash", async () => {
-    const all = await hashes(root, { ...TWO_PAIRS, harnessModel: [...TWO_PAIRS.harnessModel, "fake-harness-beta@1.0.0/fake-model-small"] });
+    const all = await hashes(root, { ...TWO_PAIRS, harnessModel: [...TWO_PAIRS.harnessModel, "fake-harness-beta/fake-model-small-001"] });
 
     expect(all).toHaveLength(2 * 3 * 2);
     expect(new Set(all).size).toBe(all.length);
@@ -150,29 +150,30 @@ describe("hashPermutations", () => {
         baseImage: ["node20-renamed"],
         codeState: ["baseline-renamed"],
         promptSet: ["snerk-renamed"],
-        harnessModel: ["fake-harness-renamed@1.0.0/fake-model-small"],
+        harnessModel: ["fake-harness-renamed/fake-model-small-001"],
         initialPrompt: ["plain-renamed"],
       }),
     ).toEqual(await hashes(root, ONE));
   });
 
-  test("adding a model or a version to a harness changes no hash", async () => {
-    const { copy, root: copied, parameters } = await copy0202();
-    await using _ = copy;
-    const harness = `${parameters}/harnessModels/fake-harness-alpha`;
-    await edit(`${harness}/models.ts`, (text) => text.replace(/\n\}\);/, '\n  "fake-model-huge": "fake-model-huge-001",\n});'));
-    await edit(`${harness}/versions.ts`, (text) => text.replace(/\n\}\);/, '\n  "2.0.0": { version: "2.0.0" },\n});'));
+  test("a pair's model ID is in the permutation hash alone, not the harness's or the image's", async () => {
+    const [small, large] = await hashPermutations(root, TWO_MODELS);
 
-    expect(await hashes(copied, TWO_PAIRS)).toEqual(await hashes(root, TWO_PAIRS));
+    expect(small?.modelId).toBe("fake-model-small-001");
+    expect(large?.modelId).toBe("fake-model-large-001");
+    expect(changes([small as HashedPermutation], [large as HashedPermutation])).toEqual([{ parameters: [], hash: true, image: false }]);
   });
 
-  test("changing the chosen model's ID changes only the hashes of the permutations using it, and no image", async () => {
+  test("changing a harness's version changes its parameter hash and its image", async () => {
     const { copy, root: copied, parameters } = await copy0202();
     await using _ = copy;
     const before = await hashPermutations(root, TWO_MODELS);
-    await edit(`${parameters}/harnessModels/fake-harness-beta/models.ts`, (text) => text.replace("fake-model-large-001", "fake-model-large-002"));
+    await edit(`${parameters}/harnessModels/fake-harness-beta/index.ts`, (text) => text.replace('version: "1.0.0"', 'version: "1.0.1"'));
 
-    expect(changes(before, await hashPermutations(copied, TWO_MODELS))).toEqual([UNCHANGED, { parameters: [], hash: true, image: false }]);
+    const after = await hashPermutations(copied, TWO_MODELS);
+
+    expect(changes(before, after)).toEqual(before.map(() => ({ parameters: ["harnessModel"], hash: true, image: true })));
+    expect(after[0]?.dockerfile).toContain('RUN echo "install fake-harness-beta@1.0.1"');
   });
 
   // An edit to a comment of each parameter's declaration, on its own axis.

@@ -1,4 +1,4 @@
-import { claudeCodeReply, declareHarness } from "thunderjar";
+import { claudeCodeReply, claudeCodeTokenCosts, declareHarness } from "thunderjar";
 
 // A fake agent: writes a buggy isPrime.ts (2 isn't prime, 15 is) with a @ts-ignore, and a result file
 // shaped like Claude Code's, whose reply talks like a pirate, and which spent 12,480 tokens and $0.061.
@@ -14,6 +14,7 @@ const result = (modelId: string) => ({
 });
 
 export default declareHarness({
+  version: "1.0.0",
   applyParameter: (_config, ctx) => `RUN echo "install fake-harness-alpha@${ctx.version}"`,
   cli: (ctx) =>
     `printf '%s\\n' '// ${ctx.initialPrompt}' '// @ts-ignore' 'export const isPrime = (n: number) => n > 1 && n % 2 !== 0;' > isPrime.ts` +
@@ -21,4 +22,5 @@ export default declareHarness({
     ` && echo "\${FAKE_HARNESS_KEY+set}" > /thunderjar/fake-harness-key`,
   requiredEnv: ["FAKE_HARNESS_KEY"],
   collectReply: claudeCodeReply,
+  collectTokenCosts: claudeCodeTokenCosts,
 });

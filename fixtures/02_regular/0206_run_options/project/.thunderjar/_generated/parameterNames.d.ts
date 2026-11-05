@@ -7,7 +7,8 @@ type TaskName = "sandbox";
 type InitialPromptNames = {
   "sandbox": "plain";
 };
-type HarnessModelName = `fake-sandboxer@${"1.0.0"}/${"fake-model-small"}`;
+type HarnessName = "fake-sandboxer";
+type HarnessModelName = `${HarnessName}/${string}`;
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;

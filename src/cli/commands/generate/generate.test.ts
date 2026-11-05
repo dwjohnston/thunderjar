@@ -26,7 +26,8 @@ type TaskName = "is-prime";
 type InitialPromptNames = {
   "is-prime": "plain";
 };
-type HarnessModelName = \`fake-harness-alpha@\${"1.0.0"}/\${"fake-model-small"}\`;
+type HarnessName = "fake-harness-alpha";
+type HarnessModelName = \`\${HarnessName}/\${string}\`;
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;
@@ -76,18 +77,15 @@ describe("0101 empty project", () => {
   });
 });
 
-// Every harness's versions and models are loaded, so one broken map fails it for the whole project.
+// Harnesses are listed by folder, never loaded, so a broken one doesn't stop it.
 describe("0403 broken harness family", () => {
-  test("names the map not wrapped in its declareX, and writes nothing", async () => {
+  test("lists every harness folder, the broken one too", async () => {
     await using copy = await copyScenarioProject("0403");
 
-    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["generate"]);
+    const { stderr, exitCode } = await thunderjar(copy.dir, ["generate"]);
 
-    expect(stdout).toBe("");
-    expect(stderr).toBe(
-      "Error: .thunderjar/test-case-parameters/harnessModels/fake-harness-beta/versions.ts: default export is not wrapped in declareHarnessVersions(...).\n",
-    );
-    expect(exitCode).toBe(1);
-    expect(await Bun.file(`${copy.dir}/${GENERATED}`).exists()).toBe(false);
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(await Bun.file(`${copy.dir}/${GENERATED}`).text()).toContain('type HarnessName = "fake-harness-alpha" | "fake-harness-beta";\n');
   });
 });

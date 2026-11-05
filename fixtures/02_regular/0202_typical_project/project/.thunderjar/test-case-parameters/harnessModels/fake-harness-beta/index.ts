@@ -4,6 +4,7 @@ import { declareHarness } from "thunderjar";
 // says it tested it.
 // It needs nothing, but records in /thunderjar/fake-harness-key whether it saw alpha's FAKE_HARNESS_KEY: "set", or nothing.
 export default declareHarness({
+  version: "1.0.0",
   applyParameter: (_config, ctx) => `RUN echo "install fake-harness-beta@${ctx.version}"`,
   cli: (ctx) =>
     `printf '%s\\n' '// ${ctx.initialPrompt}' 'export const isPrime = (n: number) => n > 1 && Array.from({ length: n - 2 }, (_, i) => i + 2).every((d) => n % d !== 0);' > isPrime.ts` +

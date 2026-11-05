@@ -1,6 +1,6 @@
 // What `thunderjar init` writes into `.thunderjar/`: two runnable test cases, one comparing models
 // and one comparing harnesses, the parameters they use, and a second prompt set to copy and edit.
-import { STARTER_HARNESSES } from "./starterHarnesses.ts";
+import { STARTER_FOLDERS, STARTER_HARNESSES } from "./starterHarnesses.ts";
 
 /** A repository to clone: its URL, and a commit of it. */
 export type Repository = { url: string; commit: string };
@@ -42,12 +42,13 @@ const tsconfig = json({
 // The same harness, Claude Code, on two models.
 const compareModels = `import { declareTestCase } from "thunderjar";
 
-// The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5.
+// The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5. Each pair is a
+// harness folder, then the model ID its agent is given.
 export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5", "claude-code@2.1.283/haiku-5-5"],
+  harnessModel: ["${STARTER_FOLDERS.claudeCode}/claude-haiku-4-5-20251001", "${STARTER_FOLDERS.claudeCode}/claude-haiku-5-5"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -63,7 +64,11 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-5-5", "copilot@1.0.105/haiku-5-5", "opencode@1.19.5/haiku-5-5"],
+  harnessModel: [
+    "${STARTER_FOLDERS.claudeCode}/claude-haiku-5-5",
+    "${STARTER_FOLDERS.copilot}/claude-haiku-5.5",
+    "${STARTER_FOLDERS.opencode}/opencode/claude-haiku-5-5",
+  ],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -219,11 +224,7 @@ export function scaffold({ nestedPackage, repository }: { nestedPackage: boolean
     [`${P}/promptSets/snerk/index.ts`]: snerk,
     [`${P}/promptSets/house-style/index.ts`]: houseStyle,
     [`${P}/promptSets/house-style/files/AGENTS.md`]: houseStyleAgentsMd,
-    ...Object.fromEntries(
-      Object.entries(STARTER_HARNESSES).flatMap(([harness, files]) =>
-        Object.entries(files).map(([file, content]) => [`${P}/harnessModels/${harness}/${file}`, content]),
-      ),
-    ),
+    ...Object.fromEntries(Object.entries(STARTER_HARNESSES).map(([harness, index]) => [`${P}/harnessModels/${harness}/index.ts`, index])),
     [`${P}/tasks/is-prime/initial-prompts/plain.ts`]: initialPrompt,
     [`${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`]: measurement,
     [`${P}/tasks/is-prime/measurements/isPrimeTemplateTest.ts`]: templateTestMeasurement,

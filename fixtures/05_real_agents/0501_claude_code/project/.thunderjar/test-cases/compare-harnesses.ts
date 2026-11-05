@@ -6,7 +6,11 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-5-5", "copilot@1.0.105/haiku-5-5", "opencode@1.19.5/haiku-5-5"],
+  harnessModel: [
+    "claude-code-2.1.311/claude-haiku-5-5",
+    "copilot-1.0.105/claude-haiku-5.5",
+    "opencode-1.19.5/opencode/claude-haiku-5-5",
+  ],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,

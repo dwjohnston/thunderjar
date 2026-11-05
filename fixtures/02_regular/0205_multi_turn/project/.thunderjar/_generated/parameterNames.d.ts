@@ -7,7 +7,8 @@ type TaskName = "rubber-ducky";
 type InitialPromptNames = {
   "rubber-ducky": "tell-then-ask";
 };
-type HarnessModelName = `fake-rememberer@${"1.0.0"}/${"fake-model-small"}`;
+type HarnessName = "fake-rememberer";
+type HarnessModelName = `${HarnessName}/${string}`;
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;

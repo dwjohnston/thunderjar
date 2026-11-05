@@ -54,14 +54,14 @@ export type ExecutionToRun = {
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
 function containerRunRecord(
   { plan, name, testCase }: ExecutionToRun,
-  { number: permutationNumber, permutation }: PlannedPermutation,
+  { number: permutationNumber, permutation, version }: PlannedPermutation,
   iteration: PlannedIteration,
   execution: Execution,
   turns: { harnessResult: string | null; reply: Reply }[],
   tokenCosts: TokenCosts,
 ): ContainerRunRecord {
   const last = turns.at(-1) as { harnessResult: string | null; reply: Reply };
-  const { harness, version, model } = parsePair(permutation.harnessModel);
+  const { harness } = parsePair(permutation.harnessModel);
   return {
     executionId: plan.executionId,
     testCase: name,
@@ -81,7 +81,7 @@ function containerRunRecord(
         },
       ]),
     ) as ContainerRunRecord["parameters"],
-    harnessModel: { harness, version, model, modelId: permutation.modelId },
+    harnessModel: { harness, version, modelId: permutation.modelId },
     execution,
     harnessResult: last.harnessResult,
     reply: last.reply,

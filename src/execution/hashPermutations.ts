@@ -19,8 +19,6 @@ import type {
   CodeStateDeclaration,
   HarnessCliCtx,
   HarnessDeclaration,
-  HarnessModelsDeclaration,
-  HarnessVersionsDeclaration,
   InitialPromptDeclaration,
   PromptSetDeclaration,
   Resolved,
@@ -178,21 +176,19 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
     return declaration && { key: `${axis}\0${name}`, label: `${ROLE_NAMES[axis]} ${JSON.stringify(name)}`, file, dir, declaration };
   };
   const harnessParameter = async (pair: string) => {
-    const { harness: name, version, model } = parsePair(pair);
+    const { harness: name, modelId } = parsePair(pair);
     const dir = `${PARAMETERS}/harnessModels/${name}`;
     const file = `${dir}/index.ts`;
     const declaration = await load<HarnessDeclaration>(file, "declareHarness");
-    const versions = await load<HarnessVersionsDeclaration>(`${dir}/versions.ts`, "declareHarnessVersions");
-    const models = await load<HarnessModelsDeclaration>(`${dir}/models.ts`, "declareHarnessModels");
-    if (!declaration || !versions || !models) return undefined;
+    if (!declaration) return undefined;
     return {
-      key: `harnessModel\0${name}@${version}`,
+      key: `harnessModel\0${name}`,
       label: `${ROLE_NAMES.harnessModel} ${JSON.stringify(name)}`,
       file,
       dir,
       declaration,
-      version: (versions[version] as { version: string }).version,
-      modelId: models[model] as string,
+      version: declaration.version,
+      modelId,
     };
   };
   const initialPromptParameter = async (name: string) => {

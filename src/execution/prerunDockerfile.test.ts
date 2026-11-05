@@ -15,8 +15,7 @@ const parameters = (overrides: Partial<PrerunParameters> = {}): PrerunParameters
   promptSet: { file: "promptSets/snerk/index.ts", declaration: declarePromptSet({ applyParameter: () => "COPY CLAUDE.md /workspace/" }) },
   harness: {
     file: "harnessModels/claude-code/index.ts",
-    declaration: declareHarness({ applyParameter: () => "RUN npm install -g claude", cli: () => "claude" }),
-    version: "2.1.283",
+    declaration: declareHarness({ version: "2.1.283", applyParameter: () => "RUN npm install -g claude", cli: () => "claude" }),
   },
   initialPrompt: { file: "tasks/is-prime/initial-prompts/plain.ts", declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60 }) },
   ...overrides,
@@ -84,11 +83,11 @@ describe("renderPrerun", () => {
         harness: {
           file: "harnessModels/claude-code/index.ts",
           declaration: declareHarness({
+            version: "2.1.283",
             config: { packageName: "@anthropic-ai/claude-code" },
             applyParameter: (config, ctx) => ((seen.harness = ctx), `RUN npm install -g ${config.packageName}@${ctx.version}`),
             cli: () => "claude",
           }),
-          version: "2.1.283",
         },
         initialPrompt: {
           file: "tasks/is-prime/initial-prompts/plain.ts",
@@ -158,10 +157,10 @@ describe("renderPrerun, the build context", () => {
     const harness = {
       file: "test-case-parameters/harnessModels/claude-code/index.ts",
       declaration: declareHarness({
+        version: "2.1.283",
         applyParameter: (_config, ctx) => `COPY ${ctx.dir}/scripts/ /opt/parameters/promptSet/\nRUN ls parameters/harnessy`,
         cli: () => "claude",
       }),
-      version: "2.1.283",
     };
 
     expect(renderPrerun(parameters({ harness }))).toContain("\nCOPY parameters/harness/scripts/ /opt/parameters/promptSet/\n");

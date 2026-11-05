@@ -242,10 +242,10 @@ Wrote <DATA>/runs/<ULID>/
         baseImage: { name: "node20", parameterHash: SHA },
         codeState: { name: "baseline", parameterHash: SHA },
         promptSet: { name: "snerk", parameterHash: SHA },
-        harnessModel: { name: "fake-harness-alpha@1.0.0/fake-model-small", parameterHash: SHA },
+        harnessModel: { name: "fake-harness-alpha/fake-model-small-001", parameterHash: SHA },
         initialPrompt: { name: "plain", parameterHash: SHA },
       },
-      harnessModel: { harness: "fake-harness-alpha", version: "1.0.0", model: "fake-model-small", modelId: "fake-model-small-001" },
+      harnessModel: { harness: "fake-harness-alpha", version: "1.0.0", modelId: "fake-model-small-001" },
       execution: { startedAt: expect.any(Number), finishedAt: expect.any(Number), exitCode: 0, timedOut: false, timeoutSeconds: 600 },
       harnessResult: `${ALPHA_JSON}\n`,
       reply: { outcome: "collected", text: "Arr, isPrime.ts be written." },
@@ -398,7 +398,7 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-harness-beta@1.0.0/fake-model-small", "fake-harness-beta@1.0.0/fake-model-large"],
+  harnessModel: ["fake-harness-beta/fake-model-small-001", "fake-harness-beta/fake-model-large-001"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -411,8 +411,8 @@ export default declareTestCase({
 
     expect(exitCode).toBe(0);
     expect(stdout.split("\n").filter((line) => line.includes("iteration"))).toEqual([
-      " 1/2  iteration 1/1  fake-harness-beta@1.0.0/fake-model-small | plain  ... done (<duration>)",
-      " 2/2  iteration 1/1  fake-harness-beta@1.0.0/fake-model-large | plain  ... done (<duration>)",
+      " 1/2  iteration 1/1  fake-harness-beta/fake-model-small-001 | plain  ... done (<duration>)",
+      " 2/2  iteration 1/1  fake-harness-beta/fake-model-large-001 | plain  ... done (<duration>)",
     ]);
   });
 
@@ -422,7 +422,7 @@ export default declareTestCase({
       `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness } from "thunderjar";
 
-export default declareHarness({ cli: () => "echo partial > isPrime.ts && exit 3" });
+export default declareHarness({ version: "1.0.0", cli: () => "echo partial > isPrime.ts && exit 3" });
 `,
     );
     await using docker = await fakeDocker();
@@ -464,7 +464,7 @@ Wrote <DATA>/runs/<ULID>/
       `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness } from "thunderjar";
 
-export default declareHarness({ cli: () => "true" });
+export default declareHarness({ version: "1.0.0", cli: () => "true" });
 `,
     );
     await using docker = await fakeDocker();
@@ -511,7 +511,7 @@ Wrote <DATA>/runs/<ULID>/
       `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness } from "thunderjar";
 
-export default declareHarness({ cli: () => "rm -rf /thunderjar" });
+export default declareHarness({ version: "1.0.0", cli: () => "rm -rf /thunderjar" });
 `,
     );
     await using docker = await fakeDocker({ images: ["thunderjar-prerun:44230271"] });
@@ -593,7 +593,7 @@ export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["fake-harness-beta@1.0.0/fake-model-large"],
+  harnessModel: ["fake-harness-beta/fake-model-large-001"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -718,6 +718,7 @@ Reply
       `import { declareHarness } from "thunderjar";
 
 export default declareHarness({
+  version: "1.0.0",
   cli: (ctx) => (ctx.turn === 0 ? "exit 2" : \`echo '{"reply":"Eli"}' > \${ctx.resultPath}\`),
   collectReply: (raw) => (JSON.parse(raw) as { reply: string }).reply,
 });
@@ -820,7 +821,7 @@ describe("0209 floating code state", () => {
     expect(record.parameters.promptSet).toEqual({ name: "snerk", parameterHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
 
     const show = await thunderjar(scenario("0209"), ["show", record.executionId, "1-1", "--data-dir", data]);
-    expect(show.stdout).toContain(`\n  codeState      follow-main                                ${record.parameters.codeState.parameterHash.slice(0, 8)}  resolved ${MAIN}\n`);
+    expect(show.stdout).toContain(`\n  codeState      follow-main                              ${record.parameters.codeState.parameterHash.slice(0, 8)}  resolved ${MAIN}\n`);
   });
 });
 

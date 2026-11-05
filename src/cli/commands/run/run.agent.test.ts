@@ -22,7 +22,7 @@ const TEST_CASES = [
   {
     testCase: "compare-models",
     key: "ANTHROPIC_API_KEY",
-    labels: ["claude-code@2.1.283/haiku-4-5 | plain", "claude-code@2.1.283/haiku-5-5 | plain"],
+    labels: ["claude-code-2.1.311/claude-haiku-4-5-20251001 | plain", "claude-code-2.1.311/claude-haiku-5-5 | plain"],
   },
 ].filter(({ key }) => Bun.env[key]);
 

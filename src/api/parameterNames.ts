@@ -15,5 +15,5 @@ export type PromptSetNames = Generated<"promptSet", string>;
 export type TaskNames = Generated<"task", string>;
 /** The initial prompts of each task, by task name. */
 export type InitialPromptNamesByTask = Generated<"initialPrompt", Record<string, string>>;
-/** `<harness>@<version>/<model>`. */
+/** `<harness>/<model ID>`: a harness folder, and the model ID its agent is given. */
 export type HarnessModelNames = Generated<"harnessModel", string>;

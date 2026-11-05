@@ -40,13 +40,11 @@ const ARRAY_FIELDS = ["baseImage", "codeState", "promptSet", "harnessModel", "in
 
 type ArrayField = (typeof ARRAY_FIELDS)[number];
 
-const HARNESS_MODEL = /^([^@/]+)@([^/]+)\/(.+)$/;
-
-type Harness = { versions: unknown; models: unknown };
+const HARNESS_MODEL = /^([^/]+)\/(.+)$/;
 
 class TestCaseChecker {
   readonly problems: Problem[] = [];
-  private readonly harnesses = new Map<string, Harness>();
+  private readonly harnesses = new Set<string>();
 
   constructor(
     private readonly root: string,
@@ -145,46 +143,43 @@ class TestCaseChecker {
     }
   }
 
-  /** The harness's declarations, loaded once however many of the test case's pairs name it. */
-  private async harness(name: string): Promise<Harness> {
-    const loaded = this.harnesses.get(name);
-    if (loaded) return loaded;
-    const dir = `${PARAMETERS}/harnessModels/${name}`;
-    const declaration = (await loadDeclaration(this.root, `${dir}/index.ts`, "declareHarness", this.problems)) as
-      | Record<string, unknown>
-      | undefined;
-    const envProblem = declaration && requiredEnvProblem(declaration.requiredEnv);
-    if (envProblem) this.problems.push({ file: `${dir}/index.ts`, field: "requiredEnv", message: envProblem });
-    if (declaration && declaration.collectReply !== undefined && typeof declaration.collectReply !== "function") {
-      this.problems.push({ file: `${dir}/index.ts`, field: "collectReply", message: `must be a function of the result file's text, got ${show(declaration.collectReply)}` });
+  /** Checks harness `name`'s declaration, once however many of the test case's pairs name it. */
+  private async checkHarness(name: string) {
+    if (this.harnesses.has(name)) return;
+    this.harnesses.add(name);
+    const file = `${PARAMETERS}/harnessModels/${name}/index.ts`;
+    const declaration = (await loadDeclaration(this.root, file, "declareHarness", this.problems)) as Record<string, unknown> | undefined;
+    if (!declaration) return;
+    const problem = (field: string, message: string) => this.problems.push({ file, field, message });
+    if (typeof declaration.version !== "string" || declaration.version.trim() === "") {
+      problem("version", `must be the version of the agent the harness installs, e.g. "2.1.311", got ${show(declaration.version)}`);
     }
-    await loadDeclaration(this.root, `${dir}/collectTokenCosts.ts`, "declareTokenCostCollector", this.problems);
-    const harness = {
-      versions: await loadDeclaration(this.root, `${dir}/versions.ts`, "declareHarnessVersions", this.problems),
-      models: await loadDeclaration(this.root, `${dir}/models.ts`, "declareHarnessModels", this.problems),
-    };
-    this.harnesses.set(name, harness);
-    return harness;
+    const envProblem = requiredEnvProblem(declaration.requiredEnv);
+    if (envProblem) problem("requiredEnv", envProblem);
+    for (const field of ["collectReply", "collectTokenCosts"]) {
+      if (declaration[field] !== undefined && typeof declaration[field] !== "function") {
+        problem(field, `must be a function of the result file's text, got ${show(declaration[field])}`);
+      }
+    }
   }
 
   private async checkHarnessModels(pairs: string[]) {
     for (const pair of pairs) {
       const match = HARNESS_MODEL.exec(pair);
       if (!match) {
-        this.problem("harnessModel", `${show(pair)} is not of the form harness@version/model`);
+        this.problem("harnessModel", `${show(pair)} is not of the form <harness>/<model ID>`);
         continue;
       }
-      const [, name, version, model] = match as unknown as [string, string, string, string];
-      const dir = `${PARAMETERS}/harnessModels/${name}`;
-      if (!(await this.requires("harnessModel", pair, `${dir}/`))) continue;
-
-      const { versions, models } = await this.harness(name);
-      if (versions && !Object.hasOwn(versions, version)) {
-        this.problem("harnessModel", `${show(pair)}: version ${show(version)} is not in ${FOLDER}/${dir}/versions.ts`);
+      const name = match[1] as string;
+      if (name.includes("@") && !(await existsIn(this.root, `${PARAMETERS}/harnessModels/${name}/`))) {
+        const folder = name.slice(0, name.indexOf("@"));
+        this.problem(
+          "harnessModel",
+          `${show(pair)} is in the old form, <harness>@<version>/<model>. Name a harness folder, which pins its version, then the model ID its agent takes, e.g. "${folder}/<model ID>"`,
+        );
+        continue;
       }
-      if (models && !Object.hasOwn(models, model)) {
-        this.problem("harnessModel", `${show(pair)}: model ${show(model)} is not in ${FOLDER}/${dir}/models.ts`);
-      }
+      if (await this.requires("harnessModel", pair, `${PARAMETERS}/harnessModels/${name}/`)) await this.checkHarness(name);
     }
   }
 

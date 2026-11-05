@@ -50,9 +50,11 @@ export function expandPermutations(testCase: TestCaseDeclaration): Permutation[]
 /** The abbreviation `plan` shows and image tags carry. */
 export const abbreviateHash = (hash: string) => hash.slice(0, 8);
 
-/** A harness model pair `harness@version/model`, split into its parts. */
-export function parsePair(pair: string): { harness: string; version: string; model: string } {
-  const at = pair.indexOf("@");
-  const slash = pair.indexOf("/", at);
-  return { harness: pair.slice(0, at), version: pair.slice(at + 1, slash), model: pair.slice(slash + 1) };
+/**
+ * A harness model pair `<harness>/<model ID>`, split at its first `/`: a harness folder's name has
+ * none, and a model ID may, e.g. `opencode-1.19.5/opencode/claude-haiku-5-5`.
+ */
+export function parsePair(pair: string): { harness: string; modelId: string } {
+  const slash = pair.indexOf("/");
+  return { harness: pair.slice(0, slash), modelId: pair.slice(slash + 1) };
 }

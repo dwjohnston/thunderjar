@@ -12,13 +12,13 @@ const KEY = { FAKE_HARNESS_KEY: "fake-key" };
 const EXAMPLE_PLAN = `baseImage:     node20
 codeState:     baseline
 promptSet:     snerk
-harnessModel:  fake-harness-alpha@1.0.0/fake-model-small
+harnessModel:  fake-harness-alpha/fake-model-small-001
 task:          is-prime
 initialPrompt: plain
 
 Matrix shape: 1/1/1/1/1 (1 permutation)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   b7b0c69c  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   b7b0c69c  missing
 `;
 
 describe("0201 minimal existing setup", () => {
@@ -63,20 +63,20 @@ describe("0202 typical project", () => {
     expect(stdout).toBe(`baseImage:     node20
 codeState:     baseline
 promptSet:     snerk, glurk
-harnessModel:  fake-harness-alpha@1.0.0/fake-model-small, fake-harness-beta@1.0.0/fake-model-large
+harnessModel:  fake-harness-alpha/fake-model-small-001, fake-harness-beta/fake-model-large-001
 task:          is-prime
 initialPrompt: plain, terse
 
 Matrix shape: 1/1/2/2/2 (8 permutations)
 
- 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   6274bd13  missing
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fe8d47cc  missing
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   9ca648c2  missing
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   81e5b063  missing
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   6bcdf9f3  missing
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   15846748  missing
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   d1e2fa39  missing
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   65f3bfb0  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  missing
+ 2  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | terse   fe8d47cc  missing
+ 3  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | plain   9ca648c2  missing
+ 4  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | terse   81e5b063  missing
+ 5  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   6bcdf9f3  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | terse   15846748  missing
+ 7  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | plain   d1e2fa39  missing
+ 8  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | terse   65f3bfb0  missing
 `);
   });
 
@@ -90,14 +90,14 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   6274bd13  built
- 2  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   fe8d47cc  built
- 3  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | plain   9ca648c2  built
- 4  node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large  | terse   81e5b063  built
- 5  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   6bcdf9f3  missing
- 6  node20 | baseline | glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   15846748  missing
- 7  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | plain   d1e2fa39  missing
- 8  node20 | baseline | glurk | fake-harness-beta@1.0.0/fake-model-large  | terse   65f3bfb0  missing
+    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  built
+ 2  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | terse   fe8d47cc  built
+ 3  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | plain   9ca648c2  built
+ 4  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | terse   81e5b063  built
+ 5  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   6bcdf9f3  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | terse   15846748  missing
+ 7  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | plain   d1e2fa39  missing
+ 8  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | terse   65f3bfb0  missing
 `);
     expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun"]);
   });
@@ -133,7 +133,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
       "Warning: Docker can't be reached, so whether each prerun image is built is unknown: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   6274bd13  unknown\n");
+    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  unknown\n");
   });
 
   test("without a docker command, it still plans, with each image's status unknown", async () => {
@@ -152,7 +152,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
     const { stdout } = await thunderjar(scenario("0202"), ["plan", "example"], { env: KEY });
 
     expect(stdout).toEndWith(
-      " 1  node20 | baseline | snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   6274bd13  missing\n",
+      " 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  missing\n",
     );
   });
 });
@@ -241,12 +241,12 @@ describe("0402 broken declarations", () => {
       ],
     ],
     [
-      "harness models naming a version or model their harness doesn't declare, or not of the form",
+      "harness models naming a harness that isn't declared, in the old form, or with no model ID",
       "unknown-harness-models",
       [
-        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha@9.9.9/fake-model-small": version "9.9.9" is not in ${parameter("harnessModels/fake-harness-alpha/versions.ts")}`,
-        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha@1.0.0/fake-model-huge": model "fake-model-huge" is not in ${parameter("harnessModels/fake-harness-alpha/models.ts")}`,
-        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha-1.0.0" is not of the form harness@version/model`,
+        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-gamma/fake-model-small-001" has no matching ${parameter("harnessModels/fake-harness-gamma/")}`,
+        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha@1.0.0/fake-model-small" is in the old form, <harness>@<version>/<model>. Name a harness folder, which pins its version, then the model ID its agent takes, e.g. "fake-harness-alpha/<model ID>"`,
+        `${testCase("unknown-harness-models")}: harnessModel: "fake-harness-alpha" is not of the form <harness>/<model ID>`,
       ],
     ],
     [
@@ -332,7 +332,7 @@ describe("0403 broken harness family", () => {
     const beta = await thunderjar(scenario("0403"), ["plan", "beta"]);
     expect(beta.stdout).toBe("");
     expect(beta.stderr).toBe(
-      "Error: .thunderjar/test-case-parameters/harnessModels/fake-harness-beta/versions.ts: default export is not wrapped in declareHarnessVersions(...).\n",
+      'Error: .thunderjar/test-case-parameters/harnessModels/fake-harness-beta/index.ts: version: must be the version of the agent the harness installs, e.g. "2.1.311", got undefined\n',
     );
     expect(beta.exitCode).toBe(1);
 

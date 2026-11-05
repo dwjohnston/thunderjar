@@ -91,7 +91,11 @@ export type ContainerRunRecord = {
    * to for this run's execution.
    */
   parameters: Record<Axis, { name: string; parameterHash: string; resolved?: Resolved }>;
-  harnessModel: { harness: string; version: string; model: string; modelId: string };
+  /**
+   * Its harness folder, the version that harness pins, and the model ID it was given. `model` is
+   * the model's name in runs recorded before pairs named model IDs, `<harness>@<version>/<model>`.
+   */
+  harnessModel: { harness: string; version: string; modelId: string; model?: string };
   execution: Execution;
   /** The text of the result file the harness's `cli` left, or null if it left none. */
   harnessResult: string | null;

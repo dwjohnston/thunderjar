@@ -56,7 +56,7 @@ export type PrerunParameters = {
   baseImage: Loaded<BaseImageDeclaration>;
   codeState: Loaded<CodeStateDeclaration>;
   promptSet: Loaded<PromptSetDeclaration>;
-  harness: Loaded<HarnessDeclaration> & { version: string };
+  harness: Loaded<HarnessDeclaration>;
   initialPrompt: Loaded<InitialPromptDeclaration>;
 };
 
@@ -130,7 +130,7 @@ export function renderPrerun(parameters: PrerunParameters): string {
     baseImage: renderFragment("baseImage", parameters.baseImage, { dir: PARAMETER_DIRS.baseImage }, problems),
     codeState: renderFragment("codeState", parameters.codeState, { dir: PARAMETER_DIRS.codeState }, problems),
     promptSet: renderFragment("promptSet", parameters.promptSet, { dir: PARAMETER_DIRS.promptSet }, problems),
-    harness: renderFragment("harness", parameters.harness, { dir: PARAMETER_DIRS.harness, version: parameters.harness.version }, problems),
+    harness: renderFragment("harness", parameters.harness, { dir: PARAMETER_DIRS.harness, version: parameters.harness.declaration.version }, problems),
     initialPrompt: renderFragment("initialPrompt", parameters.initialPrompt, {}, problems),
   };
   if (problems.length > 0) throw problemsError(problems);

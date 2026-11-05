@@ -113,7 +113,7 @@ export function declarePromptSet<C = undefined, R extends ResolvedOf = undefined
   return declared("declarePromptSet", declaration);
 }
 
-/** `dir` is the harness's folder; `version` is the pair's version, as its `versions.ts` entry gives it. */
+/** `dir` is where the harness's `files/` folder is; `version` is the harness's own `version`. */
 export type HarnessApplyCtx = ApplyParameterCtx & {
   version: string;
 };
@@ -123,7 +123,9 @@ export type HarnessApplyCtx = ApplyParameterCtx & {
  * several turns runs `cli` once per turn, in the same container, one after another.
  */
 export type HarnessCliCtx = {
+  /** The harness's own `version`. */
   version: string;
+  /** The model ID the test case's pair names, `<harness>/<model ID>`, as the agent is given it. */
   modelId: string;
   /**
    * The turn's prompt text. Pasted into a shell command it breaks on the first quote, `$` or
@@ -147,6 +149,12 @@ export type HarnessCliCtx = {
 };
 
 export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApplyCtx, R> & {
+  /**
+   * The version of the agent this harness installs, e.g. `"2.1.311"`: `ctx.version` for its
+   * fragment and `cli`. One harness folder pins one version, so name the folder after it, e.g.
+   * `claude-code-2.1.311/`, and copy the folder to try another.
+   */
+  version: string;
   /** The command that runs the agent for one turn. `ctx.resolved` is what `resolve` returned. */
   cli(ctx: HarnessCliCtx & { resolved: R }): string;
   /**
@@ -154,6 +162,11 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * instruments such as `replyMatches` to measure. Without it, a run has no reply.
    */
   collectReply?: (raw: string) => string;
+  /**
+   * The run's token costs, read from the text of each turn's result file, once per turn, and
+   * summed. A throw is `unparseable`. Without it, every run's are `notReported`.
+   */
+  collectTokenCosts?: TokenCostCollector;
   /**
    * The names of the environment variables the agent needs, e.g. its API key. Each is passed into
    * this harness's containers only, as `docker run -e NAME`, so its value comes from the shell that
@@ -164,20 +177,6 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
 
 export function declareHarness<C = undefined, R extends ResolvedOf = undefined>(declaration: HarnessDeclaration<C, R>): HarnessDeclaration<C, R> {
   return declared("declareHarness", declaration);
-}
-
-/** A harness's models: the name a test case uses, to the ID the agent is given. */
-export type HarnessModelsDeclaration = Record<string, string>;
-
-export function declareHarnessModels(models: HarnessModelsDeclaration): HarnessModelsDeclaration {
-  return declared("declareHarnessModels", models);
-}
-
-/** A harness's versions, by the name a test case uses. */
-export type HarnessVersionsDeclaration = Record<string, { version: string }>;
-
-export function declareHarnessVersions(versions: HarnessVersionsDeclaration): HarnessVersionsDeclaration {
-  return declared("declareHarnessVersions", versions);
 }
 
 /** One model's tokens, in four buckets priced differently, and its cost if the harness reports one. */
@@ -206,10 +205,6 @@ export type TokenCosts =
  * it only for a result file that exists, once per turn, and sums them. A throw is `unparseable`.
  */
 export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: string }) => TokenCosts;
-
-export function declareTokenCostCollector(collector: TokenCostCollector): TokenCostCollector {
-  return declared("declareTokenCostCollector", collector);
-}
 
 /**
  * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. It is used when

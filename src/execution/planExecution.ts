@@ -4,8 +4,6 @@
 import type {
   BaseImageDeclaration,
   HarnessDeclaration,
-  HarnessModelsDeclaration,
-  HarnessVersionsDeclaration,
   InitialPromptDeclaration,
   TestCaseDeclaration,
   TokenCostCollector,
@@ -68,9 +66,9 @@ export type PlannedPermutation = {
   timeoutSeconds: number;
   /** Its harness's `cli` and `collectReply`. */
   harness: HarnessDeclaration;
-  /** Its harness's `collectTokenCosts`. */
+  /** Its harness's `collectTokenCosts`, or one that reports none. */
   collectTokenCosts: TokenCostCollector;
-  /** The pair's version, and the model ID its model resolves to, as `cli` and `collectTokenCosts` get them. */
+  /** Its harness's version, and the pair's model ID, as `cli` and `collectTokenCosts` get them. */
   version: string;
   modelId: string;
   iterations: PlannedIteration[];
@@ -80,6 +78,9 @@ export type PlannedExecution = {
   executionId: string;
   permutations: PlannedPermutation[];
 };
+
+/** The token costs of a harness without `collectTokenCosts`. */
+const NOT_REPORTED: TokenCostCollector = () => ({ outcome: "unavailable", reason: "notReported" });
 
 /** What a permutation's harness, harness model pair and initial prompt are, loaded. */
 type Loaded = {
@@ -93,19 +94,15 @@ type Loaded = {
 
 /** `permutation`'s harness and initial prompt, or undefined after adding to `problems` (`loadTestCase` already checked the files). */
 async function loadHarness(root: string, task: string, permutation: HashedPermutation, problems: Problem[]): Promise<Loaded | undefined> {
-  const { harness: name, version, model } = parsePair(permutation.harnessModel);
-  const dir = `${PARAMETERS}/harnessModels/${name}`;
-  const [baseImage, harness, collectTokenCosts, versions, models, initialPrompt] = (await Promise.all([
+  const { harness: name } = parsePair(permutation.harnessModel);
+  const [baseImage, harness, initialPrompt] = (await Promise.all([
     loadDeclaration(root, `${PARAMETERS}/baseImages/${permutation.baseImage}/index.ts`, "declareBaseImage", problems),
-    loadDeclaration(root, `${dir}/index.ts`, "declareHarness", problems),
-    loadDeclaration(root, `${dir}/collectTokenCosts.ts`, "declareTokenCostCollector", problems),
-    loadDeclaration(root, `${dir}/versions.ts`, "declareHarnessVersions", problems),
-    loadDeclaration(root, `${dir}/models.ts`, "declareHarnessModels", problems),
+    loadDeclaration(root, `${PARAMETERS}/harnessModels/${name}/index.ts`, "declareHarness", problems),
     loadDeclaration(root, `${PARAMETERS}/tasks/${task}/initial-prompts/${permutation.initialPrompt}.ts`, "declareInitialPrompt", problems),
-  ])) as [BaseImageDeclaration?, HarnessDeclaration?, TokenCostCollector?, HarnessVersionsDeclaration?, HarnessModelsDeclaration?, InitialPromptDeclaration?];
-  if (!baseImage || !harness || !collectTokenCosts || !versions || !models || !initialPrompt) return undefined;
-  const pinned = (versions[version] as { version: string }).version;
-  return { baseImage, harness, collectTokenCosts, version: pinned, modelId: models[model] as string, initialPrompt };
+  ])) as [BaseImageDeclaration?, HarnessDeclaration?, InitialPromptDeclaration?];
+  if (!baseImage || !harness || !initialPrompt) return undefined;
+  const collectTokenCosts = harness.collectTokenCosts ?? NOT_REPORTED;
+  return { baseImage, harness, collectTokenCosts, version: harness.version, modelId: permutation.modelId, initialPrompt };
 }
 
 /** Each turn of a container run in session `sessionId`, with the harness command for it, given what the harness resolved to. */

@@ -238,7 +238,7 @@ export function renderContainerRun(record: ContainerRunRecord): string {
     "",
     ...labelled([
       ["Harness", `${harnessModel.harness} ${harnessModel.version}`],
-      ["Model", `${harnessModel.model}  (${harnessModel.modelId})`],
+      ["Model", harnessModel.model === undefined ? harnessModel.modelId : `${harnessModel.model}  (${harnessModel.modelId})`],
       ["Duration", duration(execution.finishedAt - execution.startedAt)],
       ["Exit", execution.timedOut ? `timed out after ${execution.timeoutSeconds}s` : String(execution.exitCode)],
       ...turnsRan,
