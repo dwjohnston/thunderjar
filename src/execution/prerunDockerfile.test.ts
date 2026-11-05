@@ -77,7 +77,7 @@ describe("renderPrerun", () => {
           file: "codeStates/baseline/index.ts",
           declaration: declareCodeState({
             config: { install: "npm ci" },
-            applyParameter: (config, ctx) => ((seen.codeState = ctx), `COPY ${ctx.dir}/files/ /workspace/\nRUN ${config.install}`),
+            applyParameter: (config, ctx) => ((seen.codeState = ctx), `COPY ${ctx.dir}/ /workspace/\nRUN ${config.install}`),
           }),
         },
         promptSet: {
@@ -104,7 +104,7 @@ describe("renderPrerun", () => {
       [
         "FROM node:20-bookworm",
         "WORKDIR /workspace",
-        "COPY parameters/codeState/files/ /workspace/",
+        "COPY parameters/codeState/ /workspace/",
         "RUN npm ci",
         "RUN npm install -g @anthropic-ai/claude-code@2.1.283",
         "",
@@ -152,6 +152,37 @@ describe("renderPrerun", () => {
     expect(problemsOf(() => renderPrerun(parameters({ codeState, promptSet })))).toEqual([
       ".thunderjar/test-case-parameters/codeStates/baseline/index.ts: applyParameter: threw: no commit configured",
       ".thunderjar/test-case-parameters/promptSets/snerk/index.ts: applyParameter: must return a Dockerfile fragment, a string, got undefined.",
+    ]);
+  });
+});
+
+describe("renderPrerun, the build context", () => {
+  test("a fragment may name its own folder, and paths that only look like another's", () => {
+    const harness = {
+      file: "test-case-parameters/harnessModels/claude-code/index.ts",
+      declaration: declareHarness({
+        applyParameter: (_config, ctx) => `COPY ${ctx.dir}/scripts/ /opt/parameters/promptSet/\nRUN ls parameters/harnessy`,
+        cli: () => "claude",
+      }),
+      version: "2.1.283",
+    };
+
+    expect(renderPrerun(parameters({ harness }))).toContain("\nCOPY parameters/harness/scripts/ /opt/parameters/promptSet/\n");
+  });
+
+  test("a fragment naming another parameter's folder is an error naming its file, the initial prompt's included", () => {
+    const codeState = {
+      file: "test-case-parameters/codeStates/baseline/index.ts",
+      declaration: declareCodeState({ applyParameter: () => "COPY parameters/baseImage/ /workspace/\nCOPY ./parameters/promptSet/AGENTS.md /workspace/" }),
+    };
+    const initialPrompt = {
+      file: "test-case-parameters/tasks/is-prime/initial-prompts/plain.ts",
+      declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: () => "COPY parameters/harness/PROMPT.md /workspace/" }),
+    };
+
+    expect(problemsOf(() => renderPrerun(parameters({ codeState, initialPrompt })))).toEqual([
+      ".thunderjar/test-case-parameters/codeStates/baseline/index.ts: applyParameter: uses another parameter's folder in the build context: the base image's, parameters/baseImage, and the prompt set's, parameters/promptSet. A fragment can only use its own files/, through ctx.dir.",
+      ".thunderjar/test-case-parameters/tasks/is-prime/initial-prompts/plain.ts: applyParameter: uses another parameter's folder in the build context: the harness's, parameters/harness. A fragment can only use its own files/, through ctx.dir.",
     ]);
   });
 });

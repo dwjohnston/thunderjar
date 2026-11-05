@@ -9,9 +9,9 @@
 //   initial prompt fragment    usually left out: the prompt is used when the harness runs
 //
 // The build context is a folder Thunderjar assembles for the image. Each folder parameter's
-// folder is copied into it at its `ctx.dir`, `PARAMETER_DIRS[role]`, named by role rather than
-// by parameter, so the Dockerfile depends on what a parameter contains, never on its name: the
-// same as its hash.
+// `files/` folder is copied into it at its `ctx.dir`, `PARAMETER_DIRS[role]`, named by role rather
+// than by parameter, so the Dockerfile depends on what a parameter contains, never on its name:
+// the same as its hash. A fragment may only use its own: naming another's is a config error.
 import type {
   ApplyParameterCtx,
   BaseImageDeclaration,
@@ -30,13 +30,26 @@ import { type Permutation, parsePair } from "../config/permutations.ts";
 /** The parameters copied into the build context as folders. */
 export type FolderRole = "baseImage" | "codeState" | "promptSet" | "harness";
 
-/** Each folder parameter's `ctx.dir`, relative to the build context. */
+/** Each folder parameter's `ctx.dir`, relative to the build context: where its `files/` folder is copied. */
 export const PARAMETER_DIRS: Record<FolderRole, string> = {
   baseImage: "parameters/baseImage",
   codeState: "parameters/codeState",
   promptSet: "parameters/promptSet",
   harness: "parameters/harness",
 };
+
+const ROLE_NAMES: Record<FolderRole, string> = {
+  baseImage: "base image",
+  codeState: "code state",
+  promptSet: "prompt set",
+  harness: "harness",
+};
+
+/** The other parameters' folders in the build context that `fragment`, of `role`'s, names. */
+const trespasses = (role: string, fragment: string): FolderRole[] =>
+  (Object.keys(PARAMETER_DIRS) as FolderRole[]).filter(
+    (other) => other !== role && new RegExp(`(^|[^\\w/.]|\\./)${PARAMETER_DIRS[other]}(?![\\w-])`).test(fragment),
+  );
 
 /** One parameter's declaration, and the file it came from, relative to `.thunderjar/`, for messages. */
 type Loaded<D> = { file: string; declaration: D };
@@ -63,7 +76,8 @@ type Ctxs = {
 /**
  * The prerun Dockerfile for `parameters`. A parameter with no `applyParameter`, or an empty
  * fragment, adds no line. Throws a ConfigError naming each declaration whose fragment is missing
- * where required, isn't a string, throws, or, for the base image, doesn't start with `FROM`.
+ * where required, isn't a string, throws, names another parameter's folder in the build context,
+ * or, for the base image, doesn't start with `FROM`.
  */
 export function renderPrerun(parameters: PrerunParameters): string {
   const problems: Problem[] = [];
@@ -90,6 +104,12 @@ export function renderPrerun(parameters: PrerunParameters): string {
     }
     if (role === "baseImage" && !/^FROM\s/i.test(result.trim())) {
       problem(`must return a fragment that starts with FROM, got ${JSON.stringify(result.trim().split("\n")[0])}.`);
+      return undefined;
+    }
+    const others = trespasses(role, result);
+    if (others.length > 0) {
+      const named = others.map((other) => `the ${ROLE_NAMES[other]}'s, ${PARAMETER_DIRS[other]}`).join(", and ");
+      problem(`uses another parameter's folder in the build context: ${named}. A fragment can only use its own files/, through ctx.dir.`);
       return undefined;
     }
     return result.trim();

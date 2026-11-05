@@ -5,9 +5,11 @@
 // project, and removed afterwards, whether or not the build succeeds:
 //
 //   Dockerfile
-//   parameters/<role>/     each folder parameter, at its ctx.dir: see PARAMETER_DIRS
+//   parameters/<role>/     each folder parameter's files/ folder, at its ctx.dir: see PARAMETER_DIRS.
+//                          Its index.ts, and anything else beside files/, is never copied.
 import { $ } from "bun";
-import { PARAMETERS } from "../config/folders.ts";
+import { FILES, PARAMETERS } from "../config/folders.ts";
+import { existsIn } from "../config/loader.ts";
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
 import { buildImage, imagesIn } from "../docker/docker.ts";
 import { prerunImage, prerunRepository } from "./images.ts";
@@ -28,13 +30,18 @@ async function temporaryFolder(): Promise<string> {
   return dir;
 }
 
-/** Copies each folder parameter of `permutation`, under `root`, into `contextDir`, following symlinks. */
+/**
+ * Copies the `files/` folder of each folder parameter of `permutation`, under `root`, into
+ * `contextDir`, following symlinks. A parameter without one copies nothing.
+ */
 async function copyParameters(root: string, permutation: HashedPermutation, contextDir: string): Promise<void> {
   const folders = parameterFolders(permutation);
   for (const role of Object.keys(PARAMETER_DIRS) as FolderRole[]) {
+    const files = `${folders[role]}/${FILES}/`;
+    if (!(await existsIn(root, files))) continue;
     const dest = `${contextDir}/${PARAMETER_DIRS[role]}`;
     await $`mkdir -p ${dest}`.quiet();
-    await $`cp -RL ${root}/${folders[role]}/. ${dest}`.quiet();
+    await $`cp -RL ${root}/${files}. ${dest}`.quiet();
   }
 }
 

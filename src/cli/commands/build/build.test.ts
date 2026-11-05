@@ -229,6 +229,46 @@ RUN echo "install fake-harness-alpha@1.0.0"
   });
 });
 
+describe("0208 parameter files", () => {
+  test("a fragment copies from its own files/ folder, at ctx.dir", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0208"), ["build", "example", "--dry-run"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith("WORKDIR /workspace\nCOPY parameters/harness/scripts/ /opt/fake-scripted/\n");
+  });
+
+  test("only each parameter's files/ folder goes into the build context", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0208"), ["build", "example"], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const image = (stdout.match(/^Building (\S+) \.\.\. done$/m) as RegExpMatchArray)[1] as string;
+    const context = docker.contextOf(image);
+    expect([...new Bun.Glob("**/*").scanSync({ cwd: context, dot: true })].toSorted()).toEqual(["Dockerfile", "parameters/harness/scripts/agent.sh"]);
+    expect(await Bun.file(`${context}/parameters/harness/scripts/agent.sh`).text()).toStartWith("#!/bin/sh\n");
+  });
+});
+
+describe("0402 broken declarations", () => {
+  test("a fragment naming another parameter's folder in the build context is a config error, and nothing is built", async () => {
+    await using docker = await fakeDocker();
+
+    for (const args of [["--dry-run"], []]) {
+      const { stdout, stderr, exitCode } = await thunderjar(scenario("0402"), ["build", "trespassing-prompt-set", ...args], { env: docker.env });
+
+      expect(stdout).toBe("");
+      expect(stderr).toBe(
+        "Error: .thunderjar/test-case-parameters/promptSets/trespasser/index.ts: applyParameter: uses another parameter's folder in the build context: the harness's, parameters/harness. A fragment can only use its own files/, through ctx.dir.\n",
+      );
+      expect(exitCode).toBe(1);
+    }
+    expect((await docker.commands()).filter((command) => command.startsWith("docker build"))).toEqual([]);
+  });
+});
+
 describe("0207 image store", () => {
   const PRERUN = "ghcr.io/acme/thunderjar-images:prerun-h83405d8a";
   const NOT_LOGGED_IN =

@@ -38,8 +38,10 @@ export function declaredBy(value: unknown): string | undefined {
 export type FragmentCtx = Record<never, never>;
 
 /**
- * What a fragment gets when its parameter is a folder. `dir` is that folder's path in the build
- * context, so files kept beside the declaration can be copied in: `COPY ${ctx.dir}/files/ /workspace/`.
+ * What a fragment gets when its parameter is a folder. `dir` is where the folder's `files/` folder
+ * is in the build context, so the files kept there can be copied in: `COPY ${ctx.dir}/ /workspace/`,
+ * or `COPY ${ctx.dir}/scripts/ /opt/agent/` for `files/scripts/`. Nothing else of the folder is in the
+ * build context, not even its `index.ts`, and nothing of any other parameter's folder.
  * It names the parameter's role, not its folder, so renaming the folder changes nothing.
  */
 export type ApplyParameterCtx = FragmentCtx & {

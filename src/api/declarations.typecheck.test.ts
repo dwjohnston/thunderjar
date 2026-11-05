@@ -42,7 +42,7 @@ test("config is undefined when the declaration has none", () => {
 });
 
 test("ctx carries dir for folder parameters, and version for harnesses", () => {
-  declareCodeState({ applyParameter: (_config, ctx) => `COPY ${ctx.dir}/files/ /workspace/` });
+  declareCodeState({ applyParameter: (_config, ctx) => `COPY ${ctx.dir}/ /workspace/` });
   declareHarness({ applyParameter: (_config, ctx) => `COPY ${ctx.dir}/install.sh /tmp/\nRUN /tmp/install.sh ${ctx.version}`, cli: () => "" });
   // @ts-expect-error - only a harness gets a version
   declarePromptSet({ applyParameter: (_config, ctx) => ctx.version });
