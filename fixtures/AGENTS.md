@@ -116,6 +116,10 @@ bun run fixture 0202 plan is-prime-baseline
   - `0204_misbehaving_agents`: the shared setup, with three misbehaving fake agents in place of `fake-harness-alpha`, and initial prompt `plain`'s `timeoutSeconds` cut to 2.
     - `fake-sleeper` sleeps 300s before doing anything, so it's killed at the timeout. `fake-crasher` writes a result file, then exits 1. `fake-silent` writes `isPrime.ts` and exits 0, but no result file.
     - Test case `misbehaving`, instead of `example`: one container run of each.
+  - `0205_multi_turn`: the shared setup, with a fake agent that remembers, and a task of two turns in place of `is-prime`.
+    - `fake-rememberer`: on turn 0, keeps its prompt in `$HOME/.fake-rememberer/<session ID>` and replies `I will remember that: <prompt>`. On later turns, replies `You told me: <what it kept>`, which is empty unless the session carried over.
+    - Task `rubber-ducky`, with initial prompt `tell-then-ask` of two turns, `My rubber ducky is called Eli.` then `What is my rubber ducky called?`, and two `replyMatches` measurements: `remembersName` (`Eli`, in the last reply) and `promisedToRemember` (`remember`, in turn 1's reply).
+    - Test case `remember`, instead of `example`: one container run.
 - **03_real_git**: projects whose code states and prompt sets read real commits of this repository. See "Changing a real git scenario's commits" above.
   - `0301_git_project`: a JavaScript project committed twice, whose code states check out each commit and whose prompt sets read a file at each.
     - Real git, through `checkoutCommit` and `ctx.git.show`. Its `project/` is committed to this repository at two pinned states:
@@ -132,8 +136,8 @@ bun run fixture 0202 plan is-prime-baseline
     - Code states `unwrapped`, a plain object, and `wrongly-wrapped`, wrapped in `declareBaseImage`.
     - Task `fizz-buzz`, whose only initial prompt is `fizzy`.
     - One task per broken measurement, each with initial prompt `plain` and a test case of its own name: `unknown-instrument` (`fileCraeted`), `misfit-config` (`fileCreated` given a `path`), `unfit-aggregate` (`fileCreated` by `mean`), `missing-template` (a `templateTest` template that isn't there), `invalid-regex` (a `grep` pattern that doesn't parse) and `unwrapped-measurement`.
-    - Harness `fake-harness-bad-env`, whose `requiredEnv` is `["API KEY", 3]`, and initial prompt `untimed`, whose `timeoutSeconds` is 0.
-    - Test cases, instead of `example`: `sound`, as `example` is in the shared setup, and one per mistake: `bad-required-env` (names `fake-harness-bad-env`), `zero-timeout` (names `untimed`), `unknown-prompt-set` (`snirk`), `unknown-task` (`is-even`), `prompt-of-another-task` (`fizzy`), `unexported-base-image`, `unwrapped-code-state`, `wrongly-wrapped-code-state`, `unknown-harness-models` (an unknown version, an unknown model, and a pair not of the form `harness@version/model`), `empty-code-states` (`codeState: []` and 2.5 iterations) and `zero-iterations`.
+    - Harness `fake-harness-bad-env`, whose `requiredEnv` is `["API KEY", 3]`, initial prompt `untimed`, whose `timeoutSeconds` is 0, and initial prompt `muddled`.
+    - Test cases, instead of `example`: `sound`, as `example` is in the shared setup, and one per mistake: `bad-required-env` (names `fake-harness-bad-env`), `zero-timeout` (names `untimed`), `muddled-prompt` (names `muddled`, which has both a `prompt` and `turns`), `unknown-prompt-set` (`snirk`), `unknown-task` (`is-even`), `prompt-of-another-task` (`fizzy`), `unexported-base-image`, `unwrapped-code-state`, `wrongly-wrapped-code-state`, `unknown-harness-models` (an unknown version, an unknown model, and a pair not of the form `harness@version/model`), `empty-code-states` (`codeState: []` and 2.5 iterations) and `zero-iterations`.
   - `0403_broken_harness_family`: the shared setup, with a second fake agent, `fake-harness-beta`, whose `versions.ts` isn't wrapped in `declareHarnessVersions`. No `tsconfig.json` or `_generated/`.
     - Test cases: `example`, and `beta`, which names `fake-harness-beta@1.0.0/fake-model-large`.
   - `0404_empty_parameter_folders`: the shared setup with every declaration deleted: each parameter folder holds only a `.gitkeep`. Test case `example` is left. No `tsconfig.json` or `_generated/`.

@@ -26,6 +26,7 @@ function opener(files: Record<string, string>, log: string[]) {
       workdir: "/workspace",
       harnessResult: "",
       reply: { outcome: "unavailable", reason: "its harness has no collectReply" },
+      replies: [{ outcome: "unavailable", reason: "its harness has no collectReply" }],
       exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
       readFile: async (path) => {
         const text = written[path] ?? files[path];

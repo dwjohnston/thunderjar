@@ -48,6 +48,11 @@ export type Execution = {
   timedOut?: boolean;
   /** Its initial prompt's limit, in seconds. Absent from runs recorded before timeouts were. */
   timeoutSeconds?: number;
+  /**
+   * How each turn ran, of an initial prompt of several turns: those that ran, which stop at the
+   * first that exited non-zero. Absent for a single prompt.
+   */
+  turns?: { startedAt: number; finishedAt: number; exitCode: number }[];
 };
 
 /** A MeasurementResult as the store keeps it: an error by its message. */
@@ -89,6 +94,13 @@ export type ContainerRunRecord = {
   harnessResult: string | null;
   /** The agent's final reply, read from the result file by its harness's `collectReply`, or why there's none. Absent from runs recorded before replies were. */
   reply?: Reply;
+  /** The session ID its turns shared. Absent from runs recorded before sessions were. */
+  sessionId?: string;
+  /**
+   * Each turn's result file and reply, of an initial prompt of several turns. `harnessResult` and
+   * `reply` are its last turn's. Absent for a single prompt.
+   */
+  turns?: { harnessResult: string | null; reply: Reply }[];
   /** The run's measures, by measurement name. Empty until it has been measured. */
   result: Record<string, RecordedMeasure>;
 };
