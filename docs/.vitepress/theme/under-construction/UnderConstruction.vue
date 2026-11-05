@@ -367,8 +367,8 @@
 
 .uc-tape-text::before {
   left: 0;
-  right: -686px;
-  background: url("./tape.svg") 0 0 / 686px 28px repeat-x;
+  right: -924px;
+  background: url("./tape.svg") 0 0 / 924px 28px repeat-x;
   animation: uc-tape-text 22s linear infinite;
 }
 
@@ -830,7 +830,7 @@
 
 @keyframes uc-tape-text {
   to {
-    transform: translateX(-686px);
+    transform: translateX(-924px);
   }
 }
 
