@@ -3,14 +3,14 @@
   "testCase": "is-prime-baseline",
   "task": "is-prime",
   "permutation": 5,
-  "permutationHash": "69114039b478befdb1c3882f8aa169c94529e701a1fbfbf2c6b251e3f42aca35",
+  "permutationHash": "8fb2a445a50384bf6882047492fba15fe726615b01a0ef3237f9dbeffe5bb00d",
   "iteration": 1,
   "postrunImage": "thunderjar-postrun:01m3vf68s54p5eyn5s3t1ygkdj-5-1",
   "ranAt": "2026-10-01T10:27:18.217Z",
   "parameters": {
     "baseImage": {
       "name": "node20",
-      "parameterHash": "f71eef28e0f6a0387ed6b6315879f2957e5545b15215768e0de63d55748335d2"
+      "parameterHash": "b16132e55a406b255e03961242cbe8b179488323db4f17c895d64144df73457a"
     },
     "codeState": {
       "name": "baseline",
@@ -42,9 +42,9 @@
   },
   "harnessResult": "{\"model\":\"fake-model-small-001\"}\n",
   "result": {
-    "isPrimeTemplateTest": {
-      "instrument": "templateTest",
-      "contentHash": "1fbb81a5b5c137b717829b19709f9f6a3b863948b27462a5ca510c3f95bf6c70",
+    "isPrimeTests": {
+      "instrument": "bunTestFile",
+      "contentHash": "c881fcdf445606b27ce4cddd831870ea090589bd926138fed0f4e5748eeae198",
       "measuredAt": "2026-10-01T10:28:01.217Z",
       "outcome": {
         "outcome": "measured",

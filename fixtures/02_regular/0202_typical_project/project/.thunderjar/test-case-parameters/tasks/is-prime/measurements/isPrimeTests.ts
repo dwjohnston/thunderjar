@@ -1,7 +1,7 @@
 import { declareMeasurement } from "thunderjar";
 
 export default declareMeasurement({
-  instrument: "templateTest",
-  config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
+  instrument: "bunTestFile",
+  config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
   aggregate: ["sum", "mean"],
 });

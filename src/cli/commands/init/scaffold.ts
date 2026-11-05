@@ -14,8 +14,7 @@ export default declareConfig({
 });
 `;
 
-// `allowImportingTsExtensions` because thunderjar ships its TypeScript source. A measurement's
-// template, like `isPrime.test.template.ts`, isn't TypeScript until it's rendered.
+// `allowImportingTsExtensions` because thunderjar ships its TypeScript source.
 const tsconfig = json({
   compilerOptions: {
     target: "ESNext",
@@ -27,7 +26,7 @@ const tsconfig = json({
     allowImportingTsExtensions: true,
   },
   include: ["**/*.ts"],
-  exclude: ["node_modules", ".data", "**/*.template.ts"],
+  exclude: ["node_modules", ".data"],
 });
 
 const testCase = declaration(

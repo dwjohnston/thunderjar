@@ -255,10 +255,11 @@ export type InstrumentTypes = {
   /** How many lines, across the files matching `glob`, match `pattern`, a JavaScript regular expression? */
   grep: { config: { glob: string; pattern: string }; value: number };
   /**
-   * How many tests pass and fail when `template`, a path relative to the measurement's file, is
-   * rendered against each file matching `subject` and run with `bun test`?
+   * How many tests pass and fail when `test`, a Bun test file at a path relative to the
+   * measurement's file, is run with `bun test` against each file matching `subject`? The test
+   * finds the subject's absolute path in `Bun.env.THUNDERJAR_SUBJECT`.
    */
-  templateTest: { config: { subject: string; template: string }; value: { passed: number; failed: number } };
+  bunTestFile: { config: { subject: string; test: string }; value: { passed: number; failed: number } };
   /**
    * Does the agent's reply match `pattern`, a JavaScript regular expression? Its reply to `turn`,
    * counting from 1, of an initial prompt of several turns, or by default its last.

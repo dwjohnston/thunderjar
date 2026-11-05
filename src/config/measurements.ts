@@ -1,5 +1,5 @@
 // Loads a task's measurements, `tasks/<task>/measurements/*.ts`, and checks each against its
-// instrument. A file whose name has a further dot, such as `isPrime.test.template.ts`, is a file
+// instrument. A file whose name has a further dot, such as `isPrime.test.ts`, is a file
 // that comes with a measurement, not a measurement.
 import { CryptoHasher } from "bun";
 import type { MeasurementDeclaration } from "../api/declarations.ts";
@@ -12,8 +12,8 @@ export type Measurement = {
   name: string;
   declaration: MeasurementDeclaration;
   /**
-   * The declaration's config, with each file its instrument brings, like a `templateTest`
-   * template, as an absolute path on the host.
+   * The declaration's config, with each file its instrument brings, like a `bunTestFile`
+   * test, as an absolute path on the host.
    */
   config: Record<string, string>;
   /** Of its instrument, config and the files its instrument brings; not of its name or aggregate. */

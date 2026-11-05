@@ -82,22 +82,23 @@ describe("measureContainerRun", () => {
   });
 
   test("an instrument's own erroredWhileMeasuring is recorded by its message", async () => {
-    const templateTest = measurement("tests", {
-      instrument: "templateTest",
-      config: { subject: "isPrime.ts", template: "./isPrime.test.template.ts" },
+    const bunTestFile = measurement("tests", {
+      instrument: "bunTestFile",
+      config: { subject: "isPrime.ts", test: "./isPrime.test.ts" },
       aggregate: ["sum"],
     });
-    const template = `${import.meta.dir}/measure.test.ts`;
+    const test = `${import.meta.dir}/measure.test.ts`;
 
+    // The fake context's `bun test` writes no report.
     const result = await measureContainerRun(
-      [{ ...templateTest, config: { ...templateTest.config, template } }],
-      opener({ "isPrime.ts": "const notExported = 1;\n" }, []),
+      [{ ...bunTestFile, config: { ...bunTestFile.config, test } }],
+      opener({ "isPrime.ts": "export const isPrime = (n: number) => n > 1;\n" }, []),
       () => NOW,
     );
 
     expect(result.tests?.outcome).toEqual({
       outcome: "erroredWhileMeasuring",
-      error: { message: "isPrime.ts has no export to bind {{defaultExport}} to" },
+      error: { message: "measure.test.ts didn't run against isPrime.ts" },
     });
   });
 

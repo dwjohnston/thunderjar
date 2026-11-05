@@ -118,7 +118,7 @@ verdicts. Verdicts, where wanted, are derived from a measure by the user (e.g.
 
 | Term | Definition | Example |
 |---|---|---|
-| **Measuring instrument** | Single-purpose, reusable evaluation logic — built-in or user-defined — parameterised by a config type and a value type. | `grep`, `fileCreated`, `templateTest` |
+| **Measuring instrument** | Single-purpose, reusable evaluation logic — built-in or user-defined — parameterised by a config type and a value type. | `grep`, `fileCreated`, `bunTestFile` |
 | **Measurement** | A measuring instrument plus a specific config, declared on a task. Copied per task, never shared by reference. | `grep` for `@ts-ignore` in `output/*.ts` |
 | **Measure** | The value one measurement produced for one iteration: a `MeasurementResult<T>`. | `{ outcome: 'measured', data: false }` |
 | **Result** | The set of measures for an iteration, keyed by measurement identity. Can grow after the run — new measurements can be backfilled against a preserved artifact without re-running the agent. | 3 measures at run time, 6 after a backfill |

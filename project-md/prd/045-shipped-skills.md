@@ -23,7 +23,7 @@ the skill directly. The skill's description tells the agent which signals to loo
 
 | Scenario | Signal in the session | What the measurements should do |
 |---|---|---|
-| Clean pass | The user accepted the result without corrections. | Lock in today's good behavior, e.g. `fileCreated` plus a `templateTest`. |
+| Clean pass | The user accepted the result without corrections. | Lock in today's good behavior, e.g. `fileCreated` plus a `bunTestFile`. |
 | Near miss | The user corrected one specific thing. | Isolate that one mistake. It must fail on the session's original output and pass on the corrected one. |
 | Clear, measurable failure | The agent did something detectable mechanically, e.g. added `@ts-ignore`. | Detect the failure directly, usually with `grep`. |
 
@@ -43,7 +43,8 @@ Measurements are the skill's main job. Once the user says yes, the agent:
    measurement, as [declared on the task](066-task.md#task-measurements).
 
 The agent prefers few, cheap, deterministic measurements over broad ones. For a
-`templateTest` it also writes the template file beside it.
+`bunTestFile` it also writes the test file beside it, and a reference implementation
+the test passes against, taken from the session's output.
 
 ### What it creates
 
