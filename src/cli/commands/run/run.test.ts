@@ -4,7 +4,7 @@
 // copy of the scenario. Any of these can be run by hand, e.g.
 // `bun run fixture 0202 run is-prime-baseline --dry-run`. For real Docker, see run.docker.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
-import { $, Glob } from "bun";
+import { $, Glob, SQL } from "bun";
 import type { Reply } from "../../../api/declarations.ts";
 import { type ContainerRunRecord, type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
@@ -172,6 +172,34 @@ async function readStore(dir: string) {
     files: filesIn(dir),
     execution: execution as ExecutionRecord,
     containerRuns: execution ? await store.containerRunsOf(execution.executionId) : [],
+  };
+}
+
+/** Points the config of the project in `dir` at a postgresStore, its URL in THUNDERJAR_DB_URL. */
+async function usePostgres(dir: string) {
+  const config = `${dir}/.thunderjar/thunderjar.config.ts`;
+  const text = await Bun.file(config).text();
+  await Bun.write(
+    config,
+    text
+      .replace("import { declareConfig, sqliteStore }", "import { declareConfig, postgresStore }")
+      .replace(/runDataStore: sqliteStore\(\{[^}]*\}\)/, 'runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })'),
+  );
+}
+
+/** A fresh schema of the Postgres at THUNDERJAR_POSTGRES_URL, and a URL that uses it; dropped when disposed. */
+async function postgresSchema() {
+  const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+  const admin = new SQL(Bun.env.THUNDERJAR_POSTGRES_URL!);
+  await admin.unsafe(`CREATE SCHEMA ${schema}`);
+  const url = new URL(Bun.env.THUNDERJAR_POSTGRES_URL!);
+  url.searchParams.set("options", `-c search_path=${schema}`);
+  return {
+    url: url.toString(),
+    async [Symbol.asyncDispose]() {
+      await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`);
+      await admin.close();
+    },
   };
 }
 
@@ -412,6 +440,43 @@ export default declareTestCase({
       " 1/2  iteration 1/1  fake-harness-beta/fake-model-small-001 | plain  ... done (<duration>)",
       " 2/2  iteration 1/1  fake-harness-beta/fake-model-large-001 | plain  ... done (<duration>)",
     ]);
+  });
+
+  test("with a postgresStore whose variable is unset, nothing runs", async () => {
+    await using copy = await copyScenarioProject("0202");
+    await usePostgres(copy.dir);
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses"], { env: { ...docker.env, ...KEY, THUNDERJAR_DB_URL: "" } });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      "Error: The run data store is Postgres, at the URL in THUNDERJAR_DB_URL, which is not set.\nExport it in the shell that runs thunderjar, or pass --data-dir to use a local SQLite file.\n",
+    );
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
+  });
+
+  // Only with THUNDERJAR_POSTGRES_URL set to a Postgres it may create a schema in.
+  test.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("with a postgresStore, the run is recorded in Postgres, and executions and show read it there", async () => {
+    await using copy = await copyScenarioProject("0202");
+    await usePostgres(copy.dir);
+    await using docker = await fakeDocker();
+    await using database = await postgresSchema();
+    const env = { ...docker.env, ...KEY, THUNDERJAR_DB_URL: database.url };
+
+    const ran = await thunderjar(copy.dir, ["run", "two-harnesses"], { env });
+    expect(ran.stderr).toBe("");
+    expect(ran.stdout).toEndWith("\nRecorded in Postgres at $THUNDERJAR_DB_URL\n");
+
+    const listed = await thunderjar(copy.dir, ["executions"], { env });
+    expect(listed.stdout).toMatch(/^<ULID>  two-harnesses  \d{4}-\d\d-\d\d \d\d:\d\d  2 permutations × 1 iteration  complete\n$/);
+    const [{ executionId }] = (await new SQL(database.url)`SELECT execution_id AS "executionId" FROM thunderjar_executions`) as [{ executionId: string }];
+    const shown = await thunderjar(copy.dir, ["show", executionId, "2-1"], { env });
+    expect(shown.stdout).toStartWith("Container run  2-1\n");
+    expect(shown.exitCode).toBe(0);
+    // Nothing was written locally.
+    expect(await Bun.file(`${copy.dir}/.thunderjar/.data/runs.sqlite`).exists()).toBe(false);
   });
 
   test("an agent exiting non-zero is recorded and the rest still run, but the execution fails", async () => {

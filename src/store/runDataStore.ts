@@ -1,7 +1,11 @@
-// The run data store: what each execution did, and each of its container runs. A small
-// interface, so another store (a shared remote one) can drop in behind it. The store is a SQLite
-// file, by `bun:sqlite`, at the config's `runDataStore` path, by default
-// `.thunderjar/.data/runs.sqlite`, which `init` gitignores, or `runs.sqlite` in `--data-dir`.
+// The run data store: what each execution did, and each of its container runs, behind a small
+// interface with two implementations, named by the config's `runDataStore`:
+//
+//   sqliteStore    a local SQLite file, by `bun:sqlite`; by default `.thunderjar/.data/runs.sqlite`,
+//                  which `init` gitignores, or `runs.sqlite` in `--data-dir`
+//   postgresStore  a shared Postgres database, by `Bun.sql`, so CI and developers see the same runs
+//
+// Both have the same two tables (Postgres's prefixed `thunderjar_`):
 //
 //   executions      (execution_id PRIMARY KEY, record)                      its ExecutionRecord
 //   container_runs  (execution_id, permutation, iteration PRIMARY KEY, record)  a ContainerRunRecord each
@@ -9,6 +13,7 @@
 // Each record is a JSON column, so a record's shape can grow without a migration; the keys
 // beside it are only for lookups and order. Each write is one statement, so it's atomic.
 // Reads open the file read-only, so reading never creates or changes it.
+import { SQL } from "bun";
 import { Database } from "bun:sqlite";
 import type { Reply, Resolved, TokenCosts } from "../api/declarations.ts";
 import type { Axis } from "../config/permutations.ts";
@@ -132,7 +137,7 @@ export interface RunDataStore {
 /** The file of the store in `dataDir`, a `--data-dir`. */
 export const storeFileIn = (dataDir: string) => `${dataDir}/runs.sqlite`;
 
-/** A store, or a record in it, that can't be read, in the file at `path`. */
+/** A store, or a record in it, that can't be read or written: at `path`, a file, or a description of a database. */
 export class RunDataStoreError extends Error {
   readonly path: string;
 
@@ -229,6 +234,69 @@ export function sqliteStore(path: string): RunDataStore {
         { id: executionId },
       );
       return rows.map((row) => parse<ContainerRunRecord>(`container run ${executionId} ${row.permutation}-${row.iteration}`, row.record));
+    },
+  };
+}
+
+const POSTGRES_SCHEMA = [
+  "CREATE TABLE IF NOT EXISTS thunderjar_executions (execution_id TEXT PRIMARY KEY, record JSONB NOT NULL)",
+  `CREATE TABLE IF NOT EXISTS thunderjar_container_runs (
+    execution_id TEXT NOT NULL,
+    permutation INTEGER NOT NULL,
+    iteration INTEGER NOT NULL,
+    record JSONB NOT NULL,
+    PRIMARY KEY (execution_id, permutation, iteration)
+  )`,
+];
+
+/**
+ * The Postgres store at `url`, named `label` in errors, e.g. `Postgres at $THUNDERJAR_DB_URL`, so
+ * the URL and its password are never printed. Its tables, prefixed `thunderjar_` to share a
+ * database, are created on first use. Throws a RunDataStoreError if the database can't be reached.
+ */
+export function postgresStore(url: string, label: string): RunDataStore {
+  // A short idle timeout, so a command's process can exit once its queries are done.
+  const sql = new SQL(url, { max: 4, idleTimeout: 1 });
+  let ready: Promise<void> | undefined;
+
+  /** Runs `query` once the tables exist. */
+  const run = async <T>(query: () => Promise<T>): Promise<T> => {
+    try {
+      ready ??= (async () => {
+        for (const statement of POSTGRES_SCHEMA) await sql.unsafe(statement);
+      })();
+      await ready;
+      return await query();
+    } catch (error) {
+      ready = undefined;
+      throw new RunDataStoreError(label, error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  return {
+    async recordExecution(record) {
+      await run(
+        () => sql`INSERT INTO thunderjar_executions (execution_id, record) VALUES (${record.executionId}, ${record})
+          ON CONFLICT (execution_id) DO UPDATE SET record = EXCLUDED.record`,
+      );
+    },
+    async recordContainerRun(record) {
+      await run(
+        () => sql`INSERT INTO thunderjar_container_runs (execution_id, permutation, iteration, record)
+          VALUES (${record.executionId}, ${record.permutation}, ${record.iteration}, ${record})
+          ON CONFLICT (execution_id, permutation, iteration) DO UPDATE SET record = EXCLUDED.record`,
+      );
+    },
+    async listExecutions() {
+      // ULIDs sort by time.
+      const rows = await run(() => sql`SELECT record FROM thunderjar_executions ORDER BY execution_id DESC`);
+      return (rows as { record: ExecutionRecord }[]).map((row) => row.record);
+    },
+    async containerRunsOf(executionId) {
+      const rows = await run(
+        () => sql`SELECT record FROM thunderjar_container_runs WHERE execution_id = ${executionId} ORDER BY permutation, iteration`,
+      );
+      return (rows as { record: ContainerRunRecord }[]).map((row) => row.record);
     },
   };
 }
