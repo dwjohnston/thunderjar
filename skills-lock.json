@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "concise-output": {
+      "source": "jagreehal/jagreehal-claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/concise-output/SKILL.md",
+      "computedHash": "d79c9324c714504f4e892b50284c76199ff34f5a8e7a944b94a400d8725b3d1c"
+    },
     "git-always-commit": {
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
