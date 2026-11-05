@@ -8,6 +8,7 @@
 //   parameters/<role>/     each folder parameter's files/ folder, at its ctx.dir: see PARAMETER_DIRS.
 //                          Its index.ts, and anything else beside files/, is never copied.
 import { $ } from "bun";
+import type { BuildOptions } from "../api/declarations.ts";
 import { FILES, PARAMETERS } from "../config/folders.ts";
 import { existsIn } from "../config/loader.ts";
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
@@ -62,7 +63,7 @@ export type PrerunBuildResult = {
 /**
  * Builds the prerun image of each of `permutations`, of a test case under `root` (the
  * `.thunderjar/` folder), that doesn't exist yet, from its Dockerfile. Permutations with the same
- * image hash share one image.
+ * image hash share one image. Each build is given `build`'s secrets and SSH agent.
  *
  * Throws a DockerUnavailableError if Docker can't be asked which images exist, a ConfigError, or
  * a DockerBuildError if a build fails, after which no other image is built.
@@ -72,6 +73,7 @@ export async function buildPrerunImages(
   permutations: HashedPermutation[],
   imagePrefix?: string,
   hooks: PrerunBuildHooks = {},
+  build: BuildOptions = {},
 ): Promise<PrerunBuildResult> {
   const unique = [...new Map(permutations.map((permutation) => [permutation.imageHash, permutation])).values()];
   const existing = await imagesIn(prerunRepository(imagePrefix));
@@ -84,7 +86,7 @@ export async function buildPrerunImages(
     try {
       await copyParameters(root, permutation, contextDir);
       await Bun.write(`${contextDir}/Dockerfile`, permutation.dockerfile);
-      await buildImage(contextDir, image);
+      await buildImage(contextDir, image, build);
     } finally {
       await $`rm -rf ${contextDir}`.quiet();
     }

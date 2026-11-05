@@ -331,6 +331,23 @@ export function sqliteStore(options: { path: string }): SqliteStore {
 
 export type ImageStore = { repository: string };
 
+/**
+ * What prerun builds are given beside their build context, for a fragment that needs a credential
+ * at build time only, e.g. to clone a private repository. Never in an image layer, the run data, or
+ * any hash: Docker reads each secret from Thunderjar's environment as it builds.
+ */
+export type BuildOptions = {
+  /**
+   * Each passed as `docker build --secret id=<id>,env=<env>`, for a fragment to mount for one
+   * `RUN`, at `/run/secrets/<id>`: `RUN --mount=type=secret,id=github git clone
+   * "https://x-access-token:$(cat /run/secrets/github)@github.com/acme/private.git" /workspace`.
+   * `plan`, `build` and `run` stop if `env` is unset.
+   */
+  secrets?: { id: string; env: string }[];
+  /** Passes the host's SSH agent as `docker build --ssh default`, for `RUN --mount=type=ssh git clone git@github.com:…`. */
+  ssh?: boolean;
+};
+
 export type ConfigDeclaration = {
   /**
    * The registry repository prerun and postrun images are pushed to, e.g.
@@ -339,6 +356,8 @@ export type ConfigDeclaration = {
    */
   imageStore: ImageStore | null;
   runDataStore: SqliteStore;
+  /** Secrets, and the SSH agent, for prerun builds. None by default. */
+  build?: BuildOptions;
 };
 
 export function declareConfig(config: ConfigDeclaration): ConfigDeclaration {

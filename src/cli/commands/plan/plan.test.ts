@@ -398,3 +398,22 @@ Resolved
     expect(exitCode).toBe(1);
   });
 });
+
+describe("0210 build secrets", () => {
+  test("stops if a build secret's variable is unset", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0210"), ["plan", "example"], { env: { GITHUB_TOKEN: "" } });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe('Error: Build secret "github" needs GITHUB_TOKEN, which is not set.\nExport it in the shell that runs thunderjar.\n');
+    expect(exitCode).toBe(1);
+  });
+
+  test("a secret's value is in no hash", async () => {
+    const plan = (token: string) => thunderjar(scenario("0210"), ["plan", "example"], { env: { GITHUB_TOKEN: token } });
+
+    const [one, other] = [await plan("one-token"), await plan("another-token")];
+
+    expect(one.exitCode).toBe(0);
+    expect(one.stdout).toBe(other.stdout);
+  });
+});

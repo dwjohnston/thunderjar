@@ -286,6 +286,42 @@ describe("0402 broken declarations, resolving", () => {
   });
 });
 
+describe("0210 build secrets", () => {
+  const TOKEN = { GITHUB_TOKEN: "ghp_not-a-real-token" };
+
+  test("each build is given the config's secrets and the SSH agent, and the secret's value is nowhere in its context", async () => {
+    await using docker = await fakeDocker();
+
+    const { stderr, exitCode } = await thunderjar(scenario("0210"), ["build", "example"], { env: { ...docker.env, ...TOKEN } });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [build] = (await commandsOf(docker)).filter((command) => command.startsWith("docker build"));
+    expect(build).toMatch(/^docker build --secret id=github,env=GITHUB_TOKEN --ssh default -t thunderjar-prerun:[0-9a-f]{8} <CONTEXT>$/);
+    const context = docker.contextOf(build!.split(" ").at(-2) as string);
+    expect(await Bun.file(`${context}/Dockerfile`).text()).toContain("RUN --mount=type=secret,id=github \\\n");
+    expect((await $`grep -r ${TOKEN.GITHUB_TOKEN} ${context}`.nothrow().quiet()).exitCode).toBe(1);
+  });
+
+  test("without the secret's variable, it stops before Docker is asked anything", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0210"), ["build", "example"], { env: { ...docker.env, GITHUB_TOKEN: "" } });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe('Error: Build secret "github" needs GITHUB_TOKEN, which is not set.\nExport it in the shell that runs thunderjar.\n');
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
+  });
+
+  test("the dry run needs no secret: nothing is built", async () => {
+    const { stderr, exitCode } = await thunderjar(scenario("0210"), ["build", "example", "--dry-run"], { env: { GITHUB_TOKEN: "" } });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+  });
+});
+
 describe("0207 image store", () => {
   const PRERUN = "ghcr.io/acme/thunderjar-images:prerun-hae60c784";
   const NOT_LOGGED_IN =

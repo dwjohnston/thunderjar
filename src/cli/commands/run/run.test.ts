@@ -825,6 +825,32 @@ describe("0209 floating code state", () => {
   });
 });
 
+describe("0210 build secrets", () => {
+  test("a secret's value is in no record of the run", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+    const token = `ghp_${crypto.randomUUID()}`;
+
+    const { stderr, exitCode } = await thunderjar(scenario("0210"), ["run", "example", "--data-dir", data], { env: { ...docker.env, GITHUB_TOKEN: token } });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect((await readStore(data)).containerRuns).toHaveLength(1);
+    expect((await $`grep -r ${token} ${data}`.nothrow().quiet()).exitCode).toBe(1);
+    expect((await docker.commands()).find((command) => command.startsWith("docker build"))).toContain(" --secret id=github,env=GITHUB_TOKEN --ssh default ");
+  });
+
+  test("without the secret's variable, it stops before anything is built or run", async () => {
+    await using docker = await fakeDocker();
+
+    const { stderr, exitCode } = await thunderjar(scenario("0210"), ["run", "example", "--data-dir", dataDir()], { env: { ...docker.env, GITHUB_TOKEN: "" } });
+
+    expect(stderr).toBe('Error: Build secret "github" needs GITHUB_TOKEN, which is not set.\nExport it in the shell that runs thunderjar.\n');
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
+  });
+});
+
 describe("0207 image store", () => {
   const REPOSITORY = "ghcr.io/acme/thunderjar-images";
   const PRERUN = `${REPOSITORY}:prerun-hae60c784`;

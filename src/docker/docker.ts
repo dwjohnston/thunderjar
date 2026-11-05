@@ -3,6 +3,7 @@
 // `docker` CLI, or the executable THUNDERJAR_DOCKER names in its place: tests point that at
 // src/testing/fakeDocker.ts.
 import { $ } from "bun";
+import type { BuildOptions } from "../api/declarations.ts";
 
 /** Thrown when the Docker CLI can't be run, or can't reach its daemon. */
 export class DockerUnavailableError extends Error {}
@@ -25,12 +26,23 @@ const dockerBinary = () => Bun.env.THUNDERJAR_DOCKER || "docker";
 const reasonOf = (stderr: { toString(): string }) => stderr.toString().trim().split("\n").at(-1);
 
 /**
- * Builds the Dockerfile at the root of the build context `contextDir`, and tags the image `image`.
- * Throws a DockerBuildError if the build fails.
+ * Builds the Dockerfile at the root of the build context `contextDir`, and tags the image `image`,
+ * given `options`' secrets, by the variables they're read from, and the SSH agent. Throws a
+ * DockerBuildError if the build fails.
+ *
+ * Plain `docker build`, not `docker buildx build`: with BuildKit, which it uses by default since
+ * Docker Engine 23, and with DOCKER_BUILDKIT=1 before, it takes `--secret` and `--ssh`. Where the
+ * buildx plugin is installed, `docker build` is buildx's, with the builder that loads the image into
+ * the local daemon, where `run` finds it. `docker buildx build` would fail without the plugin, and
+ * with a `docker-container` builder would leave the image in the builder unless asked to `--load` it.
  */
-export async function buildImage(contextDir: string, image: string): Promise<void> {
+export async function buildImage(contextDir: string, image: string, options: BuildOptions = {}): Promise<void> {
   const binary = dockerBinary();
-  const result = await $`${binary} build -t ${image} ${contextDir}`.quiet().nothrow();
+  const secrets = (options.secrets ?? []).flatMap(({ id, env }) => ["--secret", `id=${id},env=${env}`]);
+  const ssh = options.ssh ? ["--ssh", "default"] : [];
+  // BuildKit, which --secret and --ssh need: the default builder since Docker Engine 23, and
+  // asked for here for older engines.
+  const result = await $`${binary} build ${secrets} ${ssh} -t ${image} ${contextDir}`.env({ ...Bun.env, DOCKER_BUILDKIT: "1" }).quiet().nothrow();
   if (result.exitCode !== 0) {
     throw new DockerBuildError(reasonOf(result.stderr) || `\`${binary} build\` exited ${result.exitCode}`);
   }

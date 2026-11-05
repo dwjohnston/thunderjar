@@ -2,12 +2,11 @@
 // Names only: their values stay in the shell that runs Thunderjar, and reach a container through
 // `docker run -e NAME`.
 import type { HarnessDeclaration, TestCaseDeclaration } from "../api/declarations.ts";
+import { ENV_NAME } from "./envName.ts";
 import { PARAMETERS } from "./folders.ts";
 import { ConfigError, loadDeclaration, type Problem, problemsError } from "./loader.ts";
 import { parsePair } from "./permutations.ts";
 
-/** An environment variable's name, as a POSIX shell takes one. */
-const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const show = (value: unknown) => JSON.stringify(value) ?? String(value);
 
@@ -15,7 +14,7 @@ const show = (value: unknown) => JSON.stringify(value) ?? String(value);
 export function requiredEnvProblem(requiredEnv: unknown): string | undefined {
   if (requiredEnv === undefined) return undefined;
   if (!Array.isArray(requiredEnv)) return `must be an array of environment variable names, got ${show(requiredEnv)}`;
-  const bad = requiredEnv.filter((name) => typeof name !== "string" || !NAME.test(name));
+  const bad = requiredEnv.filter((name) => typeof name !== "string" || !ENV_NAME.test(name));
   if (bad.length > 0) return `${bad.map(show).join(", ")} ${bad.length === 1 ? "is not an environment variable name" : "are not environment variable names"}`;
   return undefined;
 }

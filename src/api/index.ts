@@ -15,6 +15,7 @@ export type {
   AggregateFor,
   ApplyParameterCtx,
   BaseImageDeclaration,
+  BuildOptions,
   CodeStateDeclaration,
   ConfigDeclaration,
   FragmentCtx,

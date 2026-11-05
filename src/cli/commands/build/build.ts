@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
-import { loadProjectConfig } from "../../../config/projectConfig.ts";
+import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
 import { DockerBuildError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { prerunImage } from "../../../execution/images.ts";
 import { checkImageStore, ImageStoreLoginError, pushPrerunImages } from "../../../execution/imageStore.ts";
@@ -28,13 +28,14 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string): P
  * Builds each prerun image test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above
  * it, needs that doesn't exist yet, writing `Building <image> ... done` for each, then, with an
  * image store, pushes each of them, writing `Pushing <reference> ... done`, then a count. Exits 1
- * with an error if Docker can't be reached, has no login for the image store's registry (before
- * anything is built), or a build or push fails.
+ * with an error if a build secret's variable is unset, Docker can't be reached, has no login for the
+ * image store's registry (before anything is built), or a build or push fails.
  */
 async function build(cwd: string, name: string, imagePrefix?: string): Promise<void> {
   const root = await findThunderjarRoot(cwd);
-  const { imageStore } = await loadProjectConfig(root);
+  const { imageStore, build: buildOptions } = await loadProjectConfig(root);
   const testCase = await loadTestCase(root, name);
+  checkBuildSecrets(buildOptions);
   const permutations = await hashPermutations(root, testCase);
   let building: string | undefined;
   let pushing: string | undefined;
@@ -49,7 +50,7 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
         building = undefined;
         console.log("done");
       },
-    });
+    }, buildOptions);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
       onPushing: (_image, reference) => {
         pushing = reference;

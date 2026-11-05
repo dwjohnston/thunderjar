@@ -126,6 +126,10 @@ bun run fixture 0202 plan is-prime-baseline
   - `0209_floating_code_state`: the shared setup, with a code state that floats.
     - Code state `follow-main` resolves the latest commit of the sandbox repository's `main` with `ctx.exec("git ls-remote --exit-code …")`, and clones it at that commit. Tests put a fake `git` first on the `PATH` with `fakeCommand("git", { stdout })`, so nothing reaches the network.
     - Test case `follow-main`, in place of `example`, names it.
+  - `0210_build_secrets`: the shared setup, with build secrets.
+    - `thunderjar.config.ts` gives `build: { secrets: [{ id: "github", env: "GITHUB_TOKEN" }], ssh: true }`, so `plan`, `build` and `run` stop without `GITHUB_TOKEN`.
+    - Code state `private` clones a made-up private repository with `RUN --mount=type=secret,id=github`, reading the token from `/run/secrets/github`. The fake Docker doesn't run it.
+    - Test case `example` names `private` in place of `baseline`.
 - **04_unhappy**: projects broken on purpose.
   - `0401_type_errors`: the shared setup, but test case `example` names prompt set `snerkk`, which isn't declared. Fails to type-check.
   - `0402_broken_declarations`: the shared setup, beside declarations broken in ways only loading finds. No `tsconfig.json` or `_generated/`: it isn't type-checked.

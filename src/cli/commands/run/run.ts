@@ -2,7 +2,7 @@ import { Command } from "commander";
 import type { TestCaseDeclaration } from "../../../api/declarations.ts";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { AXES, parsePair } from "../../../config/permutations.ts";
-import { loadProjectConfig } from "../../../config/projectConfig.ts";
+import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerBuildError, DockerContainerError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
@@ -108,9 +108,10 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  */
 async function run(cwd: string, name: string, imagePrefix: string, dataDir?: string): Promise<void> {
   const root = await findThunderjarRoot(cwd);
-  const { imageStore } = await loadProjectConfig(root);
+  const { imageStore, build } = await loadProjectConfig(root);
   const testCase = await loadTestCase(root, name);
   await checkRequiredEnv(root, testCase);
+  checkBuildSecrets(build);
   try {
     await checkImageStore(imageStore);
   } catch (error) {
@@ -138,7 +139,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   // Whether the last line written is waiting for how its build, push or container run ends.
   let lineOpen = false;
   try {
-    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore }, fileStore(store), {
+    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build }, fileStore(store), {
       onBuilding: (image) => {
         building = image;
         lineOpen = true;
