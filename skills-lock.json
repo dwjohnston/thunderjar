@@ -1,6 +1,18 @@
 {
   "version": 1,
   "skills": {
+    "ai-generated-content-header": {
+      "source": "dwjohnston/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ai-generated-content-header/SKILL.md",
+      "computedHash": "14468c7f3b85bc98bcf3e4ae9bee12be0de499abefabedde54b1e1839d092350"
+    },
+    "concise-output": {
+      "source": "jagreehal/jagreehal-claude-skills",
+      "sourceType": "github",
+      "skillPath": "skills/concise-output/SKILL.md",
+      "computedHash": "d79c9324c714504f4e892b50284c76199ff34f5a8e7a944b94a400d8725b3d1c"
+    },
     "git-always-commit": {
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
@@ -41,7 +53,7 @@
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/ts-write-script/SKILL.md",
-      "computedHash": "fe890506ae0f51084b7f293037f94e0bee80d0f3485712fb3cc9b2b905ebe4a6"
+      "computedHash": "e7ee61a16e888cb042b036d73d0fbad21c1d87ca7a32bd32bcb37040cce76765"
     },
     "user-get-attention": {
       "source": "dwjohnston/agent-skills",
@@ -53,7 +65,7 @@
       "source": "dwjohnston/agent-skills",
       "sourceType": "github",
       "skillPath": "skills/write-for-the-human/SKILL.md",
-      "computedHash": "319058eba84c3fa632e16f9a6ad250789dd9b59ea68a1f42a8555e72cc2ad798"
+      "computedHash": "14c510c1ed766547239f343f0c9993a981ebc027e8a027d8e66e57556b89f665"
     }
   }
 }

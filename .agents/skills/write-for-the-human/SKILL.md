@@ -41,22 +41,59 @@ Fails on any linted file that matches no entry's `allowedFiles`.
 
 **Why:** Specifics invite the reader to check them, and make the sentence go stale when they change.
 
-### Use lists
 
-Prefer structured lists rather than listing items in a single sentence. 
+### Use bullet points extensively
+
+Instead of:
+> Migration 0042 adds orders.region as NOT NULL, backfilled from customers.region, which locks writes for about 20 min on prod; drop legacy_region a week later.
+Write:
+- `0042_add_orders_region`
+  - Adds `orders.region` as NOT NULL.
+  - Backfilled from `customers.region`.
+  - Locks writes for about 20 minutes on prod.
+- Then: drop `legacy_region` a week later.
 
 
-👎 Bad
 ```
-Two live threads, one parked, and one newly captured project idea. Meta-repo: five items left, and the first of them — the versioned spin-up — is the December presentation. Three closed on 2026-10-26: the commit-as-you-go rule, agent-skills, dotfiles.
+- **Test case parameters**
+  - Base image: `node20`.
+  - Code states
+    - `thunderjar-start`: repo pinned at `d384541`.
+    - `thunderjar-main`: repo at a later commit, with dependencies installed.
+  - Harnesses: Claude Code, Codex, Copilot, OpenCode.
+  - Prompt set: `none`.
 ```
 
-👍 Good
 ```
-Three things: 
+- **Test case parameters**
+  - Base image: `node20`.
+  - Code states
+    - `thunderjar-start`:
+      - repo pinned at `d384541`.
+    - `thunderjar-main`:
+      - repo at a later commit, with dependencies installed.
+  - Harnesses: Claude Code, Codex, Copilot, OpenCode.
+  - Prompt set: `none`.
+```
 
-- Meta repo 
-- 
+Instead of
+```
+- **Tasks**
+  - `is-prime`
+  - `add-claude-code-harness-0201`
+    - Checks the harness file and folder, declaration, parameter-name test, typecheck and tests.
+```
+
+Write:
+```
+- **Tasks**
+  - `is-prime`
+  - `add-claude-code-harness-0201`
+    - Checks:
+       - Harness file and folder,
+       - declaration,
+       - parameter-name test,
+       - typecheck and tests.
 ```
 
 #### Use numbered lists
@@ -75,9 +112,11 @@ e.g.
      git rm --cached meta-repo.local.yaml
      ```
 2. Purge it from history
-   - Rewrites every commit, so it needs a fresh clone.
+   - Rewrites every commit
+    - So: it needs a fresh clone.
 3. Rotate the secrets it contained
-   - Safe to do last, once the file is gone from the tip.
+   - Safe to do last, 
+    - Once the file is gone from the tip.
 ````
 
 The reply is then "2 and 3, skip 1", rather than a paragraph describing which parts to do.

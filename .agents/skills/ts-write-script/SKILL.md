@@ -3,6 +3,14 @@ name: ts-write-script
 description: By default - use TypeScript to write scripts. 
 ---
 
+## Templates
+
+Copy a template from [templates/](templates/) as a starting point, then adapt it.
+
+| Template | Use when |
+| --- | --- |
+| [template_basic.ts](templates/template_basic.ts) | Plain Node/Bun APIs only: a `help` function and `parseArgs` |
+| [template_endorsed_tools.ts](templates/template_endorsed_tools.ts) | Using the endorsed tools below: `commander` for arguments, `envalid` for env vars |
 
 ## Endorsed tools
 
@@ -71,7 +79,6 @@ import { Command } from "commander";
 
 if (import.meta.main) {
   new Command()
-    // 👇
     .description("Count the lines in a text file and print the total to stdout.")
     .argument("<file>", "path to a text file (relative to the current directory)")
     .option("--skip-blank", "do not count empty lines")
@@ -80,9 +87,6 @@ if (import.meta.main) {
     .parse();
 }
 ```
-
-Include a `// 👇` comment. This will help draw the eye of the human to a useful start point.
-
 
 ## Reference files relative to scripts location
 
