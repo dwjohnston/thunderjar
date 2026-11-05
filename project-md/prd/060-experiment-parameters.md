@@ -259,7 +259,7 @@ export default declareInitialPrompt({
 
 - **Measuring instrument** — single-purpose, reusable evaluation logic (built-in
   or user-defined), parameterized by a config type and a value type. Examples:
-  `grep`, `fileCreated`, `templateTest`.
+  `grep`, `fileCreated`, `templateTest`, `shell`.
 - **Measurement** — an instrument plus a specific config, declared on a task.
   Copied per task, never shared by reference, so changing one task's
   measurement config can't silently change another task's meaning or history.
@@ -327,6 +327,23 @@ Rendered into the measurement container and run there, so it gets the real
 pinned runtime and installed dependencies. Its value type is a count rather
 than a boolean — a measurement, not a verdict. The glob matching nothing gives
 `skipped`; a template that can't bind gives `erroredWhileMeasuring`.
+
+### `shell`
+
+The escape hatch: runs any shell command in the measurement container, with
+`sh -c` in `workdir`, and records whether it exited 0. Use it for whatever no
+other instrument measures, with whatever the image has installed.
+
+```ts
+{
+  instrument: "shell",
+  config: { command: "bunx tsc --noEmit" },
+  aggregate: ["rate"],
+}
+```
+
+Its value is a boolean, so it aggregates as `rate` or `count`. A non-zero exit,
+including a command that isn't found, is `false`, not `erroredWhileMeasuring`.
 
 ## Open questions
 

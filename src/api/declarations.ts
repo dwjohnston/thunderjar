@@ -264,6 +264,11 @@ export type InstrumentTypes = {
    * counting from 1, of an initial prompt of several turns, or by default its last.
    */
   replyMatches: { config: { pattern: string; turn?: number }; value: boolean };
+  /**
+   * Does `command`, any shell command, exit 0? It runs with `sh -c` in the measurement
+   * container, in `workdir`, so it can use whatever the image has installed.
+   */
+  shell: { config: { command: string }; value: boolean };
 };
 
 export type InstrumentName = keyof InstrumentTypes;
