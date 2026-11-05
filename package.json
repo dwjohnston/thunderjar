@@ -23,6 +23,7 @@
     "lint:generate": "bun scripts/lint-layers.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "fixture": "bun scripts/fixture.ts",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:build:versions": "bun scripts/build-versioned-docs.ts",

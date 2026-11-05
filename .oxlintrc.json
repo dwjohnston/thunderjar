@@ -18,7 +18,72 @@
   },
   "ignorePatterns": [
     "node_modules",
-    "dist"
+    "dist",
+    "fixtures/.tmp"
   ],
-  "overrides": []
+  "overrides": [
+    {
+      "files": [
+        "src/testing/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^node:"
+              },
+              {
+                "regex": "^\\.\\./cli(/|$)",
+                "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/testing/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^node:"
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/|$)",
+                "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/testing/*/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^node:"
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)",
+                "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }
