@@ -15,11 +15,11 @@ const TEMP = `${Bun.env.TMPDIR || "/tmp"}/thunderjar-package-${crypto.randomUUID
 const PROJECT = `${TEMP}/project`;
 
 /** The commands run in the project, and what each one's output must contain. */
-const STEPS: { args: string[]; expect: string }[] = [
-  { args: ["init"], expect: "test-cases/example.ts" },
-  { args: ["generate"], expect: "parameterNames.d.ts" },
-  { args: ["plan", "example"], expect: "claude-code@2.1.283/haiku-4-5" },
-  { args: ["run", "example", "--dry-run"], expect: "claude -p" },
+const STEPS: { args: string[]; expect: string[] }[] = [
+  { args: ["init"], expect: ["test-cases/example.ts", "promptSets/house-style/files/AGENTS.md", "harnessModels/opencode/index.ts"] },
+  { args: ["generate"], expect: ["parameterNames.d.ts"] },
+  { args: ["plan", "example"], expect: ["claude-code@2.1.283/haiku-4-5"] },
+  { args: ["run", "example", "--dry-run"], expect: ["claude -p"] },
 ];
 
 /** A step that failed, with its output. */
@@ -60,7 +60,8 @@ try {
     const step = `thunderjar ${args.join(" ")}`.padEnd(width);
     // init's Claude Code harness needs a key to plan or run; nothing here reaches Anthropic.
     const { output } = await mustRun(step, $`npx --no-install thunderjar ${args}`.cwd(PROJECT).env({ ...Bun.env, ANTHROPIC_API_KEY: "smoke-test" }));
-    if (!output.includes(expect)) fail(step, `Expected the output to include ${JSON.stringify(expect)}:\n${output}`);
+    const missing = expect.find((text) => !output.includes(text));
+    if (missing !== undefined) fail(step, `Expected the output to include ${JSON.stringify(missing)}:\n${output}`);
     console.log(`${step}  ok`);
   }
 } catch (error) {
