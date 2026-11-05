@@ -5,7 +5,7 @@ import { AXES, parsePair } from "../../../config/permutations.ts";
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
-import { DockerBuildError, DockerContainerError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
+import { DockerBuildError, DockerContainerError, DockerPullError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { type PlannedExecution, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
 import { runExecution } from "../../../execution/runExecution.ts";
@@ -113,9 +113,11 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  * any agent exits non-zero or times out, or with an error if Docker fails, or, before anything is
  * built, if a variable a harness needs is unset or Docker has no login for the image store.
  */
-async function run(cwd: string, name: string, imagePrefix: string, dataDir?: string): Promise<void> {
+async function run(cwd: string, name: string, imagePrefix: string, dataDir?: string, local = false): Promise<void> {
   const root = await findThunderjarRoot(cwd);
-  const { imageStore, build } = await loadProjectConfig(root);
+  const config = await loadProjectConfig(root);
+  const { imageStore, build } = config;
+  const runtime = local ? null : config.runtime;
   const testCase = await loadTestCase(root, name);
   await checkRequiredEnv(root, testCase);
   checkBuildSecrets(build);
@@ -145,14 +147,16 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   const failed = paint.red("failed");
 
   console.log(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
+  if (runtime !== null) console.log(paint.dim(`Running containers with \`${runtime.command.join(" ")}\``));
   let building: string | undefined;
   let pushing: string | undefined;
+  let pulling: string | undefined;
   // Whether a container run has started, so a push is of a postrun image.
   let running = false;
   // Whether the last line written is waiting for how its build, push or container run ends.
   let lineOpen = false;
   try {
-    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build }, fileStore(store), {
+    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime }, fileStore(store), {
       onBuilding: (image) => {
         building = image;
         lineOpen = true;
@@ -170,6 +174,16 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
       },
       onPushed: () => {
         pushing = undefined;
+        lineOpen = false;
+        console.log(done);
+      },
+      onPulling: (reference) => {
+        pulling = reference;
+        lineOpen = true;
+        process.stdout.write(`Pulling ${paint.cyan(reference)} into the runtime ${ellipsis} `);
+      },
+      onPulled: () => {
+        pulling = undefined;
         lineOpen = false;
         console.log(done);
       },
@@ -205,6 +219,11 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
     } else if (caught instanceof DockerPushError) {
       console.log(failed);
       error(pushFailure(pushing as string, caught));
+    } else if (caught instanceof DockerPullError) {
+      console.log(failed);
+      error(
+        `The runtime couldn't pull ${pulling}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
+      );
     } else if (caught instanceof DockerContainerError && lineOpen) {
       console.log(failed);
       error(`Running a container failed: ${caught.message}`);
@@ -220,19 +239,20 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
 export function createRunCommand(): Command {
   return new Command("run")
     .description(
-      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there.",
+      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, runs the containers there, from the image store, unless --local is given.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(
       "--dry-run",
       "print the images, environment variables, prompts and harness commands the execution would use, without running anything",
     )
+    .option("--local", "run containers on the local Docker daemon, even if thunderjar.config.ts gives a runtime")
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())
     .action(
-      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string; dataDir?: string }) => {
+      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; local?: boolean; imagePrefix: string; dataDir?: string }) => {
         if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
-        else await run(process.cwd(), name, options.imagePrefix, options.dataDir);
+        else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local);
       }),
     );
 }

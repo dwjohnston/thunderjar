@@ -376,3 +376,77 @@ describe("0201 minimal existing setup, with imageStore: null", () => {
     expect(commands.filter((command) => /^docker (login|tag|push)\b/.test(command))).toEqual([]);
   });
 });
+
+describe("0211 remote runtime", () => {
+  const REPOSITORY = "ghcr.io/acme/thunderjar-images";
+  const PRERUN = `${REPOSITORY}:prerun-hae60c784`;
+  const REMOTE = "docker --context cloud";
+
+  test("builds and pushes locally, pulls into the runtime, then runs, commits, pushes and measures there", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const { executionId } = (await readStore(data)).execution as ExecutionRecord;
+    const postrun = `${REPOSITORY}:postrun-e${executionId}-hb7b0c69c-i00`;
+    expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
+Running containers with \`<REPO>/src/testing/fakeDocker.ts --context cloud\`
+Building thunderjar-prerun:ae60c784 ... done
+Pushing ${PRERUN} ... done
+Pulling ${PRERUN} into the runtime ... done
+ 1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
+      Pushing ${postrun.replace(executionId, "<ID>")} ... done
+      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
+Wrote <REPO>/fixtures/.tmp/data-<UUID>/runs/<ULID>/
+`);
+    const commands = await docker.commands();
+    const local = commands.filter((command) => !command.startsWith(REMOTE));
+    expect(local).toEqual([
+      "docker login ghcr.io",
+      "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
+      expect.stringMatching(/^docker build -t thunderjar-prerun:ae60c784 /),
+      `docker tag thunderjar-prerun:ae60c784 ${PRERUN}`,
+      `docker push --quiet ${PRERUN}`,
+    ]);
+    expect(commands).toContain(`${REMOTE} pull --quiet ${PRERUN}`);
+    // The runtime runs the stored prerun image, pulling it if it must.
+    expect(commands.find((command) => command.startsWith(`${REMOTE} run --name`))).toContain(`--pull missing`);
+    expect(commands.find((command) => command.startsWith(`${REMOTE} run --name`))).toContain(` ${PRERUN} -c `);
+    expect(commands).toContain(`${REMOTE} push --quiet ${postrun}`);
+    expect(commands.some((command) => command.startsWith(`${REMOTE} run --detach`))).toBe(true);
+  });
+
+  test("--local runs on the local Docker daemon, ignoring the runtime", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+
+    const { stdout, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--local", "--data-dir", dataDir()], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toContain("Running containers with");
+    const commands = await docker.commands();
+    expect(commands.filter((command) => command.startsWith(REMOTE))).toEqual([]);
+    expect(commands.find((command) => command.startsWith("docker run --name"))).toContain("--pull never");
+  });
+
+  test("a pull the runtime can't make is an error saying what to check, and nothing is run or written", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:ae60c784"], pullDenied: true });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(stdout).toBe(`Execution <ULID>
+Running containers with \`<REPO>/src/testing/fakeDocker.ts --context cloud\`
+Pushing ${PRERUN} ... done
+Pulling ${PRERUN} into the runtime ... failed
+`);
+    expect(stderr).toBe(`Error: The runtime couldn't pull ${PRERUN}: Error response from daemon: pull access denied for ${PRERUN}, repository does not exist or may require 'docker login'
+Make sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.
+`);
+    expect(exitCode).toBe(1);
+    expect((await docker.commands()).filter((command) => / run /.test(command))).toEqual([]);
+    expect(await Bun.file(data).exists()).toBe(false);
+  });
+});

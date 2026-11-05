@@ -6,7 +6,7 @@
 import type { ImageStore } from "../api/declarations.ts";
 import type { HashedPermutation } from "../config/permutations.ts";
 import { registryHost } from "../config/projectConfig.ts";
-import { checkLogin, DockerLoginError, pushImage } from "../docker/docker.ts";
+import { checkLogin, DockerLoginError, type DockerRuntime, localRuntime, pullImage, pushImage } from "../docker/docker.ts";
 import { prerunImage, storedPrerunImage } from "./images.ts";
 
 /** Thrown when Docker has no valid login for the image store's registry. */
@@ -42,10 +42,10 @@ export type PushHooks = {
   onPushed?: (image: string, reference: string) => void;
 };
 
-/** Tags the local `image` as `reference` and pushes it, calling `hooks`. Throws a DockerPushError. */
-export async function pushToStore(image: string, reference: string, hooks: PushHooks = {}): Promise<void> {
+/** Tags `image`, in `runtime`, as `reference` and pushes it, calling `hooks`. Throws a DockerPushError. */
+export async function pushToStore(image: string, reference: string, hooks: PushHooks = {}, runtime: DockerRuntime = localRuntime()): Promise<void> {
   hooks.onPushing?.(image, reference);
-  await pushImage(image, reference);
+  await pushImage(image, reference, runtime);
   hooks.onPushed?.(image, reference);
 }
 
@@ -69,4 +69,23 @@ export async function pushPrerunImages(
     pushed.push(reference);
   }
   return pushed;
+}
+
+export type PullHooks = {
+  /** Called as the runtime starts pulling each image. */
+  onPulling?: (reference: string) => void;
+  /** Called as each pull succeeds. */
+  onPulled?: (reference: string) => void;
+};
+
+/**
+ * Pulls each of `references` into `runtime`, so a runtime that can't reach the image store, or
+ * has no login for it, fails here, before any agent runs. Throws a DockerPullError.
+ */
+export async function pullIntoRuntime(references: string[], runtime: DockerRuntime, hooks: PullHooks = {}): Promise<void> {
+  for (const reference of references) {
+    hooks.onPulling?.(reference);
+    await pullImage(reference, runtime);
+    hooks.onPulled?.(reference);
+  }
 }
