@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { copyScenarioProject } from "../testing/cli.ts";
 import { scenario } from "../testing/scenario.ts";
 import { ConfigError, findThunderjarRoot } from "./loader.ts";
 
@@ -12,8 +13,10 @@ describe("findThunderjarRoot", () => {
   });
 
   test("fails when no folder up to / has one", async () => {
-    const promise = findThunderjarRoot(scenario("0101"));
+    // Outside the repo, whose own .thunderjar/ would otherwise be found above it.
+    await using copy = await copyScenarioProject("0101", { outsideRepo: true });
+    const promise = findThunderjarRoot(copy.dir);
     await expect(promise).rejects.toBeInstanceOf(ConfigError);
-    await expect(promise).rejects.toThrow(`No .thunderjar/ folder in ${scenario("0101")} or any folder above it.`);
+    await expect(promise).rejects.toThrow(`No .thunderjar/ folder in ${copy.dir} or any folder above it.`);
   });
 });

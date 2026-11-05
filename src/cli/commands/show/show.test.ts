@@ -291,7 +291,9 @@ export default declareMeasurement({
 
 describe("0101 empty project", () => {
   test("without a .thunderjar/ folder there's no store, or measurements, to read", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0101"), ["show", BASELINE]);
+    // Outside the repo, whose own .thunderjar/ would otherwise be found above it.
+    await using copy = await copyScenarioProject("0101", { outsideRepo: true });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["show", BASELINE]);
 
     expect(stdout).toBe("");
     expect(stderr).toBe("Error: No .thunderjar/ folder in <PROJECT> or any folder above it. Run `thunderjar init` first.\n");

@@ -4,7 +4,7 @@
 // hand, e.g. `bun run fixture 0203 executions two-harnesses`.
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
-import { TMP_DIR, thunderjar } from "../../../testing/cli.ts";
+import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
 const dirs: string[] = [];
@@ -103,7 +103,9 @@ describe("0203 recorded executions", () => {
 
 describe("0101 empty project", () => {
   test("without a .thunderjar/ folder, or --data-dir, there's no store to read", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0101"), ["executions"]);
+    // Outside the repo, whose own .thunderjar/ would otherwise be found above it.
+    await using copy = await copyScenarioProject("0101", { outsideRepo: true });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["executions"]);
 
     expect(stdout).toBe("");
     expect(stderr).toBe("Error: No .thunderjar/ folder in <PROJECT> or any folder above it. Run `thunderjar init` first.\n");

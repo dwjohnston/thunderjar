@@ -1,7 +1,7 @@
 // `thunderjar plan`, through the CLI. It only reads the project, so it runs on the scenarios
 // unchanged. Any of these can be run by hand, e.g. `bun run fixture 0402 plan unknown-prompt-set`.
 import { describe, expect, test } from "bun:test";
-import { thunderjar } from "../../../testing/cli.ts";
+import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
@@ -159,7 +159,9 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
 
 describe("0101 empty project", () => {
   test("without a .thunderjar/ folder, it fails and says to run init", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0101"), ["plan", "example"]);
+    // Outside the repo, whose own .thunderjar/ would otherwise be found above it.
+    await using copy = await copyScenarioProject("0101", { outsideRepo: true });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["plan", "example"]);
 
     expect(stdout).toBe("");
     expect(stderr).toBe(

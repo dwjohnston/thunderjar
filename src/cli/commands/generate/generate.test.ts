@@ -67,7 +67,9 @@ describe.each(["0201", "0202", "0203", "0401"])("%s's checked-in generated names
 
 describe("0101 empty project", () => {
   test("without a .thunderjar/ folder, it fails and says to run init", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0101"), ["generate"]);
+    // Outside the repo, whose own .thunderjar/ would otherwise be found above it.
+    await using copy = await copyScenarioProject("0101", { outsideRepo: true });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["generate"]);
 
     expect(stdout).toBe("");
     expect(stderr).toBe(
