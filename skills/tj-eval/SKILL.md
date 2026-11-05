@@ -37,7 +37,7 @@ e.g.
 import { declareInitialPrompt } from "thunderjar";
 
 export default declareInitialPrompt({
-  prompt: "Add to the 0201 fixture the claude code harness",
+  prompt: "add a --json flag to the list command",
   timeoutSeconds: 900,
 });
 ```
@@ -52,11 +52,11 @@ export default declareInitialPrompt({
 
 Write each part of "done" as something you can check in the workspace after the run.
 
-e.g. for "add the claude code harness to the 0201 fixture":
+e.g. for "add a --json flag to the list command":
 
-1. A harness folder exists.
-2. The generated names include it.
-3. The type tests assert it is valid.
+1. The command accepts the flag.
+2. Its output with the flag is valid JSON.
+3. A test covers the flag.
 4. The typecheck and test suite still pass.
 
 ✅ **Do** measure each part separately.
@@ -69,7 +69,7 @@ e.g. for "add the claude code harness to the 0201 fixture":
 
 Ask: what could the agent skip, or get wrong, and still look done? Measure that directly.
 
-e.g. a type test asserts `"claude-code/…"` is *not* a harness. The agent can name its folder `claude-code-2.1.311`, leave the tests alone, and everything still passes. So: check for a new positive assertion, not just a passing typecheck.
+e.g. the agent adds the flag but still prints the human-readable header line above the JSON. A `grep` for the flag passes, and so does the test suite, if no test parses the output. So: run the command and parse what it prints.
 
 **Why:** The checks that pass by accident make an agent look better than it is. The trap is usually what tells agents apart.
 
@@ -138,10 +138,10 @@ import { declareTestCase } from "thunderjar";
 
 export default declareTestCase({
   baseImage: ["node20"],
-  codeState: ["thunderjar-start"],
+  codeState: ["main"],
   promptSet: ["none"],
   harnessModel: ["claude-code-2.1.311/claude-haiku-5-5"],
-  task: "add-claude-code-to-0201",
+  task: "add-json-flag",
   initialPrompt: ["plain"],
   iterations: 1,
 });
