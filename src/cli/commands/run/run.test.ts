@@ -777,7 +777,7 @@ describe("0201 minimal existing setup", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "c4220635", 1, PLAIN, ALPHA_0201(PLAIN))}
+${permutation(1, "83405d8a", 1, PLAIN, ALPHA_0201(PLAIN))}
 `);
   });
 });
@@ -803,7 +803,7 @@ describe("0402 broken declarations", () => {
 
 describe("0207 image store", () => {
   const REPOSITORY = "ghcr.io/acme/thunderjar-images";
-  const PRERUN = `${REPOSITORY}:prerun-hc4220635`;
+  const PRERUN = `${REPOSITORY}:prerun-h83405d8a`;
 
   test("without a docker login for the registry, stops before anything is built, run or written", async () => {
     await using docker = await fakeDocker();
@@ -829,9 +829,9 @@ describe("0207 image store", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
-    const postrun = `${REPOSITORY}:postrun-e${executionId}-hc4220635-i00`;
+    const postrun = `${REPOSITORY}:postrun-e${executionId}-h83405d8a-i00`;
     expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
-Building thunderjar-prerun:c4220635 ... done
+Building thunderjar-prerun:83405d8a ... done
 Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
@@ -846,7 +846,7 @@ Wrote <REPO>/fixtures/.tmp/data-<UUID>/runs/<ULID>/
   });
 
   test("a prerun push the registry refuses is an error, and nothing is run or written", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:c4220635"], failing: [PRERUN] });
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:83405d8a"], failing: [PRERUN] });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["run", "example", "--data-dir", data], { env: docker.env });

@@ -2,6 +2,9 @@
 // and one comparing harnesses, the parameters they use, and a second prompt set to copy and edit.
 import { STARTER_HARNESSES } from "./starterHarnesses.ts";
 
+/** A repository to clone: its URL, and a commit of it. */
+export type Repository = { url: string; commit: string };
+
 const declaration = (fn: string, body: string) =>
   `import { ${fn} } from "thunderjar";\n\nexport default ${fn}(${body});\n`;
 
@@ -69,10 +72,13 @@ export default declareTestCase({
 
 const baseImage = `import { declareBaseImage } from "thunderjar";
 
-// With bun, which the templateTest measurement runs its tests with.
+// With bun, which the templateTest measurement runs its tests with, and a git identity, so the
+// agent and a prompt set can commit. \`--system\`, so a harness that runs as another user has it too.
 export default declareBaseImage({
   applyParameter: () => \`FROM node:20-bookworm
-RUN npm install --global bun@1.3.14\`,
+RUN npm install --global bun@1.3.14
+RUN git config --system user.name "Thunderjar agent" \\\\
+  && git config --system user.email agent@thunderjar.invalid\`,
 });
 `;
 
@@ -124,49 +130,53 @@ const tsIgnoreCountMeasurement = declaration(
 }`,
 );
 
-/**
- * Checks out `head`, the project's commit when `init` ran, or, outside a git repository, leaves
- * `/workspace` empty, with how to check one out in a comment.
- */
-const codeState = (head: string | undefined) =>
-  head
-    ? `import { checkoutCommit, declareCodeState } from "thunderjar";
+/** A code state's fragment that clones \`config.repo\` into /workspace at \`config.commit\`, detached, with no remote. */
+const cloneFragment = `(config) => \`RUN git clone --quiet \${config.repo} /workspace \\\\
+  && git -C /workspace checkout --quiet --detach \${config.commit} \\\\
+  && git -C /workspace remote remove origin\``;
 
-// The project's repository at a commit, checked out into /workspace. The commit must be in the
-// repository: commit it, or Thunderjar can't build it.
+/**
+ * Clones `repository.url` at `repository.commit`, the project's remote and commit when `init` ran,
+ * or, without them, leaves `/workspace` empty, with how to clone one in a comment.
+ */
+const codeState = (repository: Repository | undefined) =>
+  repository
+    ? `import { declareCodeState } from "thunderjar";
+
+// The project's repository, cloned into /workspace at a commit. The commit must be pushed, so the
+// build can fetch it. Pin a commit, never a branch: the same text must always build the same thing.
 export default declareCodeState({
-  config: { commit: "${head}" },
-  applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),
+  config: {
+    repo: "${repository.url}",
+    commit: "${repository.commit}",
+  },
+  applyParameter: ${cloneFragment},
 });
 `
     : `import { declareCodeState } from "thunderjar";
 
-// An empty /workspace. The project wasn't a git repository when \`thunderjar init\` ran. Once it is,
-// check a commit of it out into /workspace:
-//
-//   import { checkoutCommit, declareCodeState } from "thunderjar";
+// An empty /workspace. The project had no pushed git repository when \`thunderjar init\` ran. To
+// clone one into /workspace at a commit:
 //
 //   export default declareCodeState({
-//     config: { commit: "<a commit hash>" },
-//     applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),
+//     config: {
+//       repo: "https://github.com/<owner>/<repo>.git",
+//       commit: "<a commit hash>",
+//     },
+${cloneFragment
+  .split("\n")
+  .map((line, i) => `//     ${i === 0 ? "applyParameter: " : ""}${line}${i === cloneFragment.split("\n").length - 1 ? "," : ""}`)
+  .join("\n")}
 //   });
 export default declareCodeState({});
 `;
 
-/** Copies files from a commit: `git checkout <commit> -- <paths>`, without needing the commit in /workspace. */
-const snerk = (head: string | undefined) => `import { declarePromptSet } from "thunderjar";
+// Adds nothing, so the agent has only what the code state has.
+const snerk = `import { declarePromptSet } from "thunderjar";
 
-// Files from a commit of the project's repository, such as its AGENTS.md or skills, copied into
-// /workspace at the same paths, like \`git checkout <commit> -- <paths>\`. They're left uncommitted.
-// Each path is from the repository's root, e.g. "AGENTS.md" or ".agents/skills/review/SKILL.md".
-export default declarePromptSet<{ commit: string; paths: string[] }>({
-  config: {
-    commit: "${head ?? "<a commit hash>"}",
-    paths: [],
-  },
-  applyParameter: (config, ctx) =>
-    config.paths.map((path) => \`COPY \${ctx.git.show(config.commit, path)} /workspace/\${path}\`).join("\\n"),
-});
+// Adds nothing: the agent works with whatever AGENTS.md and skills the code state has. To give it
+// your own, put them in a files/ folder beside this file and copy them in, as house-style does.
+export default declarePromptSet({});
 `;
 
 // Files kept beside the declaration, copied over /workspace and committed.
@@ -174,7 +184,7 @@ const houseStyle = `import { declarePromptSet } from "thunderjar";
 
 // The files in this folder's files/, copied over /workspace and committed, so the agent's changes
 // can be told from them. \`git add -A\`, not \`git commit -a\`, which skips new files such as a new
-// skill. Use it with a code state that checks out a commit, so /workspace is a git repository.
+// skill. Use it with a code state that clones a repository, so /workspace is one.
 export default declarePromptSet({
   applyParameter: (_config, ctx) => \`COPY \${ctx.dir}/files/ /workspace/
 RUN cd /workspace && git add -A && git commit --quiet -m "Thunderjar: apply promptSet"\`,
@@ -192,9 +202,9 @@ const P = "test-case-parameters";
 /**
  * The files `init` creates under `.thunderjar/`, keyed by their path in it, in the order it creates them.
  * `nestedPackage` is for a project without its own `package.json`: `.thunderjar/` gets one, with thunderjar as its dependency.
- * `head` is the commit the project's repository is at, if it is in one, for the code state and prompt set to start from.
+ * `repository` is the project's remote and the commit it is at, if it has them, for the code state to clone.
  */
-export function scaffold({ nestedPackage, head }: { nestedPackage: boolean; head?: string }): Record<string, string> {
+export function scaffold({ nestedPackage, repository }: { nestedPackage: boolean; repository?: Repository }): Record<string, string> {
   return {
     ...(nestedPackage && {
       "package.json": json({ name: "thunderjar-config", private: true, type: "module", dependencies: { thunderjar: "latest" } }),
@@ -205,8 +215,8 @@ export function scaffold({ nestedPackage, head }: { nestedPackage: boolean; head
     "test-cases/compare-models.ts": compareModels,
     "test-cases/compare-harnesses.ts": compareHarnesses,
     [`${P}/baseImages/node20/index.ts`]: baseImage,
-    [`${P}/codeStates/baseline/index.ts`]: codeState(head),
-    [`${P}/promptSets/snerk/index.ts`]: snerk(head),
+    [`${P}/codeStates/baseline/index.ts`]: codeState(repository),
+    [`${P}/promptSets/snerk/index.ts`]: snerk,
     [`${P}/promptSets/house-style/index.ts`]: houseStyle,
     [`${P}/promptSets/house-style/files/AGENTS.md`]: houseStyleAgentsMd,
     ...Object.fromEntries(

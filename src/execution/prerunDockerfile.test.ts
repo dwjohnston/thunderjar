@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { CHECKOUT_COMMIT, checkoutCommit } from "../api/checkoutCommit.ts";
 import {
-  type ApplyParameterCtx,
   declareBaseImage,
   declareCodeState,
   declareHarness,
@@ -43,7 +41,7 @@ describe("renderPrerun", () => {
       file: "tasks/is-prime/initial-prompts/plain.ts",
       declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: () => "RUN touch /workspace/PROMPT" }),
     };
-    expect(renderPrerun(parameters({ initialPrompt })).dockerfile).toBe(
+    expect(renderPrerun(parameters({ initialPrompt }))).toBe(
       [
         "FROM node:20-bookworm",
         "WORKDIR /workspace",
@@ -57,7 +55,7 @@ describe("renderPrerun", () => {
   });
 
   test("a missing or empty fragment adds no line, and surrounding whitespace is trimmed", () => {
-    const { dockerfile } = renderPrerun(
+    const dockerfile = renderPrerun(
       parameters({
         codeState: { file: "codeStates/baseline/index.ts", declaration: declareCodeState({}) },
         promptSet: { file: "promptSets/snerk/index.ts", declaration: declarePromptSet({ applyParameter: () => "  \n" }) },
@@ -69,7 +67,7 @@ describe("renderPrerun", () => {
 
   test("each fragment gets its declaration's config, and a ctx with its role's dir", () => {
     const seen: Record<string, unknown> = {};
-    const { dockerfile } = renderPrerun(
+    const dockerfile = renderPrerun(
       parameters({
         baseImage: {
           file: "baseImages/node20/index.ts",
@@ -112,13 +110,12 @@ describe("renderPrerun", () => {
         "",
       ].join("\n"),
     );
-    const git = { show: expect.any(Function) };
     expect(seen).toEqual({
-      baseImage: { dir: PARAMETER_DIRS.baseImage, git },
-      codeState: { dir: "parameters/codeState", git, [CHECKOUT_COMMIT]: expect.any(Function) },
-      promptSet: [undefined, { dir: "parameters/promptSet", git }],
-      harness: { dir: "parameters/harness", git, version: "2.1.283" },
-      initialPrompt: { git },
+      baseImage: { dir: PARAMETER_DIRS.baseImage },
+      codeState: { dir: "parameters/codeState" },
+      promptSet: [undefined, { dir: "parameters/promptSet" }],
+      harness: { dir: "parameters/harness", version: "2.1.283" },
+      initialPrompt: {},
     });
   });
 
@@ -159,84 +156,26 @@ describe("renderPrerun", () => {
   });
 });
 
-describe("renderPrerun, reading the repository", () => {
-  const COMMIT = "65bcb92cc069821e4695433b11582962ee6d68bd";
-  const codeState = (applyParameter: (config: unknown, ctx: ApplyParameterCtx) => string) => ({
-    file: "test-case-parameters/codeStates/baseline/index.ts",
-    declaration: declareCodeState({ applyParameter }),
-  });
-  const promptSet = (applyParameter: (config: unknown, ctx: ApplyParameterCtx) => string) => ({
-    file: "test-case-parameters/promptSets/snerk/index.ts",
-    declaration: declarePromptSet({ applyParameter }),
-  });
+describe("renderPrerun, a code state that clones a repository", () => {
+  test("its RUN follows WORKDIR, its line continuations intact", () => {
+    const codeState = {
+      file: "test-case-parameters/codeStates/baseline/index.ts",
+      declaration: declareCodeState({
+        config: { repo: "https://github.com/acme/widgets.git", commit: "24dc11c26e2716a12cf33b82fec895a7f02b3e8a" },
+        applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\
+  && git -C /workspace checkout --quiet --detach ${config.commit} \\
+  && git -C /workspace remote remove origin`,
+      }),
+    };
 
-  test("checkoutCommit: Thunderjar clones the bundle straight after the base image, then WORKDIR, then the code state's own lines", () => {
-    const { dockerfile, git } = renderPrerun(
-      parameters({ codeState: codeState((_config, ctx) => `${checkoutCommit(ctx, COMMIT)}\nRUN npm ci`) }),
-    );
-
-    expect(dockerfile).toBe(`FROM node:20-bookworm
-COPY code.bundle /tmp/code.bundle
-RUN git clone --quiet /tmp/code.bundle /workspace \\
-  && git -C /workspace checkout --quiet --detach ${COMMIT} \\
-  && git -C /workspace branch --quiet --delete --force code-state \\
-  && git -C /workspace remote remove origin \\
-  && git -C /workspace config user.name "Thunderjar agent" \\
-  && git -C /workspace config user.email agent@thunderjar.invalid \\
-  && rm /tmp/code.bundle
+    expect(renderPrerun(parameters({ codeState }))).toBe(`FROM node:20-bookworm
 WORKDIR /workspace
-RUN npm ci
+RUN git clone --quiet https://github.com/acme/widgets.git /workspace \\
+  && git -C /workspace checkout --quiet --detach 24dc11c26e2716a12cf33b82fec895a7f02b3e8a \\
+  && git -C /workspace remote remove origin
 COPY CLAUDE.md /workspace/
 RUN npm install -g claude
 `);
-    expect(git).toEqual([{ kind: "bundle", owner: 'code state "baseline"', commit: COMMIT, path: "code.bundle" }]);
-  });
-
-  test("ctx.git.show: the file's path in the build context, recorded with its commit", () => {
-    const { dockerfile, git } = renderPrerun(
-      parameters({
-        promptSet: promptSet((_config, ctx) => `COPY ${ctx.git.show("e4f5a6", "./prompts//snerk.md")} /workspace/CLAUDE.md`),
-      }),
-    );
-
-    expect(dockerfile).toContain("\nCOPY git/e4f5a6/prompts/snerk.md /workspace/CLAUDE.md\n");
-    expect(git).toEqual([
-      { kind: "file", owner: 'prompt set "snerk"', commit: "e4f5a6", file: "prompts/snerk.md", path: "git/e4f5a6/prompts/snerk.md" },
-    ]);
-  });
-
-  test("a fragment that reads nothing from the repository needs nothing from it", () => {
-    expect(renderPrerun(parameters()).git).toEqual([]);
-  });
-
-  test("a commit that isn't a hash, a path outside the repository, and checkoutCommit outside a code state are errors", () => {
-    expect(
-      problemsOf(() =>
-        renderPrerun(
-          parameters({
-            codeState: codeState((_config, ctx) => checkoutCommit(ctx, "main")),
-            promptSet: promptSet((_config, ctx) => `COPY ${ctx.git.show(COMMIT, "../secrets.md")} /workspace/`),
-            harness: {
-              file: "test-case-parameters/harnessModels/claude-code/index.ts",
-              declaration: declareHarness({ applyParameter: (_config, ctx) => checkoutCommit(ctx, COMMIT), cli: () => "claude" }),
-              version: "2.1.283",
-            },
-          }),
-        ),
-      ),
-    ).toEqual([
-      '.thunderjar/test-case-parameters/codeStates/baseline/index.ts: applyParameter: threw: checkoutCommit needs a commit hash, got "main".',
-      '.thunderjar/test-case-parameters/promptSets/snerk/index.ts: applyParameter: threw: ctx.git.show needs a path inside the repository, got "../secrets.md".',
-      ".thunderjar/test-case-parameters/harnessModels/claude-code/index.ts: applyParameter: threw: checkoutCommit is only for a code state's applyParameter.",
-    ]);
-  });
-
-  test("a code state checks out one commit", () => {
-    expect(
-      problemsOf(() => renderPrerun(parameters({ codeState: codeState((_config, ctx) => checkoutCommit(ctx, "a1b2c3") + checkoutCommit(ctx, "d4e5f6")) }))),
-    ).toEqual([
-      ".thunderjar/test-case-parameters/codeStates/baseline/index.ts: applyParameter: threw: checkoutCommit was already called, with a1b2c3: a code state checks out one commit.",
-    ]);
   });
 });
 
@@ -246,7 +185,7 @@ describe("loadPrerunParameters", () => {
     const testCase = await loadTestCase(root, "is-prime-baseline");
     const dockerfiles = await Promise.all(
       expandPermutations(testCase).map(async (permutation) =>
-        renderPrerun(await loadPrerunParameters(root, testCase.task, permutation)).dockerfile,
+        renderPrerun(await loadPrerunParameters(root, testCase.task, permutation)),
       ),
     );
 

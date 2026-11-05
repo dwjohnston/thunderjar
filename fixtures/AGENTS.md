@@ -9,7 +9,6 @@ fixtures/
   node_modules/thunderjar      link to the repo root, so scenarios resolve `thunderjar`
   01_unitialised/              projects before `init`
   02_regular/                  initialised projects that work
-  03_real_git/                 parameters that read real commits of this repository
   04_unhappy/                  projects broken on purpose
   05_real_agents/              projects that run a real agent
     <NNNN>_<what it is>/       a scenario, e.g. 0201_minimal_existing_setup
@@ -79,18 +78,11 @@ bun run fixture 0202 plan is-prime-baseline
 
 **Why:** the catalogue is how you pick a scenario for a new test without reading every fixture file. A stale entry sends a test to the wrong project.
 
-## Changing a real git scenario's commits
-
-✅ **Do** add a new commit holding only the scenario's project change when a real git scenario needs another state, tag it `fixture-<scenario>-<name>`, e.g. `fixture-0301-third`, and push the tag.
-
-❌ **Don't** amend, squash or rebase away a commit a declaration pins, or move its tag.
-
-**Why:** the declarations pin commits by hash. A commit that's only on a branch disappears when the branch is squash-merged or deleted, and then the scenario breaks on every fresh clone, CI included. The tag keeps it reachable, and CI checks out with full history and tags (`fetch-depth: 0`).
-
 ## Scenario catalogue
 
 - **What the scenarios share**
   - Initialised scenarios start from what `init` scaffolds in an empty project: base image `node20`, code state `baseline`, prompt set `snerk`, task `is-prime` with initial prompt `plain` and measurement `isPrimeTsExists`. In place of init's test cases, which use real harnesses, they have test case `example`: one fake agent, one iteration.
+  - `node20` installs `bun` and sets a git identity for every user. Code state `baseline` leaves `/workspace` empty, and prompt set `snerk` adds nothing, as `init` scaffolds them outside a git repository.
   - The agent is the fake `fake-harness-alpha`, version `1.0.0`, model `fake-model-small`, instead of `claude-code`.
   - `thunderjar.config.ts` has `imageStore: null`, as `init` scaffolds it, so nothing asks Docker for a login or pushes.
   - Each checks in its `_generated/parameterNames.d.ts`, though `.thunderjar/.gitignore` ignores it, so it type-checks without running `generate`.
@@ -128,15 +120,6 @@ bun run fixture 0202 plan is-prime-baseline
     - Task `sandbox`, in place of `is-prime`, with initial prompt `plain`, `Sandbox yourself.`, and measurement `sandboxed`, a `replyMatches` of `^sandboxed$`.
     - Test case `sandboxed`, instead of `example`: both base images.
   - `0207_image_store`: the shared setup, with `imageStore: { repository: "ghcr.io/acme/thunderjar-images" }`, so `run` and `build` check the `docker login` for `ghcr.io`, then push each image. The fake Docker has a login only when a test gives it one: `fakeDocker({ loggedIn: ["ghcr.io"] })`.
-- **03_real_git**: projects whose code states and prompt sets read real commits of this repository. See "Changing a real git scenario's commits" above.
-  - `0301_git_project`: a JavaScript project committed twice, whose code states check out each commit and whose prompt sets read a file at each.
-    - Real git, through `checkoutCommit` and `ctx.git.show`. Its `project/` is committed to this repository at two pinned states:
-      - `first`, tagged `fixture-0301-first`: `greet.js`, `package.json`, `package-lock.json` and `prompts/house-style.md`.
-      - `second`, tagged `fixture-0301-second`: `greet.js` takes a name, `farewell.js` is added, and `prompts/house-style.md` changes.
-      - The worktree's `greet.js`, `farewell.js` and `prompts/house-style.md` have moved on from both, so a file read from the worktree fails the tests.
-    - Code states `first` and `second` check out each commit with `checkoutCommit`, so `/workspace` is this whole repository at that commit, then run `npm ci` in the project. `unpushed` names a commit this repository doesn't have.
-    - Prompt sets `house-style-first` and `house-style-second` copy `prompts/house-style.md`, read at each commit with `ctx.git.show`, to `/workspace/HOUSE_STYLE.md`.
-    - Test cases, instead of `example`: `two-commits`, both code states × both prompt sets, and `unpushed-commit`, the missing commit, which stops the build before anything is built.
 - **04_unhappy**: projects broken on purpose.
   - `0401_type_errors`: the shared setup, but test case `example` names prompt set `snerkk`, which isn't declared. Fails to type-check.
   - `0402_broken_declarations`: the shared setup, beside declarations broken in ways only loading finds. No `tsconfig.json` or `_generated/`: it isn't type-checked.

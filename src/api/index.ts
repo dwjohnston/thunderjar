@@ -1,5 +1,4 @@
 // The `thunderjar` library: what a project's `.thunderjar/` files import.
-export { checkoutCommit } from "./checkoutCommit.ts";
 export { claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
 export {
   declareBaseImage,
@@ -22,7 +21,6 @@ export type {
   CodeStateDeclaration,
   ConfigDeclaration,
   FragmentCtx,
-  GitCtx,
   HarnessApplyCtx,
   HarnessCliCtx,
   HarnessDeclaration,

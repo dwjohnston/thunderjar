@@ -200,9 +200,11 @@ describe("0201 minimal existing setup", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toBe(`# thunderjar-prerun:c4220635
+    expect(stdout).toBe(`# thunderjar-prerun:83405d8a
 FROM node:20-bookworm
 RUN npm install --global bun@1.3.14
+RUN git config --system user.name "Thunderjar agent" \\
+  && git config --system user.email agent@thunderjar.invalid
 WORKDIR /workspace
 RUN echo "install fake-harness-alpha@1.0.0"
 `);
@@ -223,109 +225,12 @@ RUN echo "install fake-harness-alpha@1.0.0"
 
     expect(plan.stdout).toContain("(2 permutations)");
     expect(exitCode).toBe(0);
-    expect(stdout.match(/^# .*$/gm)).toEqual(["# thunderjar-prerun:c4220635"]);
-  });
-});
-
-describe("0301 git project: real git", () => {
-  // The project's two pinned commits, tagged fixture-0301-first and fixture-0301-second.
-  const FIRST = "2dcf1912eb39b8b0ee181367b8564646886de132";
-  const SECOND = "ad8a952bd73a86c85623d1fbd5da9723ecddc08d";
-  const PROJECT = "fixtures/03_real_git/0301_git_project/project";
-
-  /** The dry run's block for the prerun image of `hash`. */
-  const gitImage = (hash: string, codeState: string, promptSet: string) => `# thunderjar-prerun:${hash}
-FROM node:20-bookworm
-COPY code.bundle /tmp/code.bundle
-RUN git clone --quiet /tmp/code.bundle /workspace \\
-  && git -C /workspace checkout --quiet --detach ${codeState} \\
-  && git -C /workspace branch --quiet --delete --force code-state \\
-  && git -C /workspace remote remove origin \\
-  && git -C /workspace config user.name "Thunderjar agent" \\
-  && git -C /workspace config user.email agent@thunderjar.invalid \\
-  && rm /tmp/code.bundle
-WORKDIR /workspace
-RUN cd ${PROJECT} && npm ci --no-audit --no-fund
-COPY git/${promptSet}/${PROJECT}/prompts/house-style.md /workspace/HOUSE_STYLE.md
-RUN echo "install fake-harness-alpha@1.0.0"`;
-
-  const UNPUSHED = `Error: commit a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0 (code state "unpushed") is not in this repository.
-Fetch it, or check that it has been pushed.
-`;
-
-  test("two-commits: Thunderjar checks out each code state's commit straight after the base image", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0301"), ["build", "two-commits", "--dry-run"]);
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    expect(stdout).toBe(`${gitImage("f42bd87a", FIRST, FIRST)}
-
-${gitImage("65a1cb99", FIRST, SECOND)}
-
-${gitImage("9417dc85", SECOND, FIRST)}
-
-${gitImage("cc8c940e", SECOND, SECOND)}
-`);
-  });
-
-  test("a prompt file is read at its prompt set's commit, never from the worktree", async () => {
-    await using docker = await fakeDocker();
-
-    const { stderr, exitCode } = await thunderjar(scenario("0301"), ["build", "two-commits"], { env: docker.env });
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    const promptFile = (image: string, commit: string) =>
-      Bun.file(`${docker.contextOf(`thunderjar-prerun:${image}`)}/git/${commit}/${PROJECT}/prompts/house-style.md`).text();
-    expect(await promptFile("f42bd87a", FIRST)).toBe("# House style (first commit)\n\nWrite small functions.\n");
-    expect(await promptFile("65a1cb99", SECOND)).toBe("# House style (second commit)\n\nWrite small functions, and name every parameter.\n");
-    expect(await Bun.file(`${scenario("0301")}/prompts/house-style.md`).text()).toStartWith("# House style (worktree)\n");
-  });
-
-  test("a code state's bundle holds its commit and what came before it, and nothing after", async () => {
-    await using docker = await fakeDocker();
-    await thunderjar(scenario("0301"), ["build", "two-commits"], { env: docker.env });
-    const clone = `${TMP_DIR}/clone-${crypto.randomUUID()}`;
-
-    try {
-      await $`git clone --quiet ${docker.contextOf("thunderjar-prerun:f42bd87a")}/code.bundle ${clone}`.quiet();
-      const history = (await $`git -C ${clone} rev-list --all`.text()).split("\n");
-
-      expect((await $`git -C ${clone} rev-parse HEAD`.text()).trim()).toBe(FIRST);
-      expect(history).toContain(FIRST);
-      expect(history).not.toContain(SECOND);
-      expect(await Bun.file(`${clone}/${PROJECT}/greet.js`).text()).toBe(
-        `// Scenario 0301's project, at its first commit.\nexport const greet = () => "Hello!";\n`,
-      );
-      expect(await Bun.file(`${clone}/${PROJECT}/farewell.js`).exists()).toBe(false);
-      expect(await Bun.file(`${scenario("0301")}/greet.js`).text()).toContain("in the worktree");
-    } finally {
-      await $`rm -rf ${clone}`.quiet();
-    }
-  });
-
-  test("unpushed-commit: a commit this repository doesn't have stops the build before anything is built", async () => {
-    await using docker = await fakeDocker();
-
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0301"), ["build", "unpushed-commit"], { env: docker.env });
-
-    expect(stdout).toBe("");
-    expect(stderr).toBe(UNPUSHED);
-    expect(exitCode).toBe(1);
-    expect((await docker.commands()).filter((command) => command.startsWith("docker build"))).toEqual([]);
-  });
-
-  test("unpushed-commit: the dry run stops at the missing commit too", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0301"), ["build", "unpushed-commit", "--dry-run"]);
-
-    expect(stdout).toBe("");
-    expect(stderr).toBe(UNPUSHED);
-    expect(exitCode).toBe(1);
+    expect(stdout.match(/^# .*$/gm)).toEqual(["# thunderjar-prerun:83405d8a"]);
   });
 });
 
 describe("0207 image store", () => {
-  const PRERUN = "ghcr.io/acme/thunderjar-images:prerun-hc4220635";
+  const PRERUN = "ghcr.io/acme/thunderjar-images:prerun-h83405d8a";
   const NOT_LOGGED_IN =
     "Error: Can't push to ghcr.io/acme/thunderjar-images: no valid Docker login for ghcr.io (Cannot perform an interactive login from a non TTY device). Run `docker login ghcr.io`.\n";
 
@@ -347,22 +252,22 @@ describe("0207 image store", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toBe(`Building thunderjar-prerun:c4220635 ... done
+    expect(stdout).toBe(`Building thunderjar-prerun:83405d8a ... done
 Pushing ${PRERUN} ... done
 1 built, 0 already present, 1 pushed
 `);
     expect(await commandsOf(docker)).toEqual([
       "docker login ghcr.io",
       "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
-      "docker build -t thunderjar-prerun:c4220635 <CONTEXT>",
-      `docker tag thunderjar-prerun:c4220635 ${PRERUN}`,
+      "docker build -t thunderjar-prerun:83405d8a <CONTEXT>",
+      `docker tag thunderjar-prerun:83405d8a ${PRERUN}`,
       `docker push --quiet ${PRERUN}`,
     ]);
     expect(await docker.pushed()).toEqual([PRERUN]);
   });
 
   test("pushes a prerun image that's already present, so the store has it too", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:c4220635"] });
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:83405d8a"] });
 
     const { stdout, exitCode } = await thunderjar(scenario("0207"), ["build", "example"], { env: docker.env });
 
@@ -376,7 +281,7 @@ Pushing ${PRERUN} ... done
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["build", "example"], { env: docker.env });
 
-    expect(stdout).toBe(`Building thunderjar-prerun:c4220635 ... done\nPushing ${PRERUN} ... failed\n`);
+    expect(stdout).toBe(`Building thunderjar-prerun:83405d8a ... done\nPushing ${PRERUN} ... failed\n`);
     expect(stderr).toBe(`Error: Pushing ${PRERUN} failed: denied: permission_denied: The token provided does not match expected scopes.
 Check that your Docker login for ghcr.io can push to ghcr.io/acme/thunderjar-images: on ghcr.io, a token needs the write:packages scope.
 `);

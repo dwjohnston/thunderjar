@@ -100,14 +100,21 @@ export default declareTestCase({
 `);
   });
 
-  test("outside a git repository, its code state leaves /workspace empty, and says how to check a commit out", async () => {
+  test("outside a git repository, its code state leaves /workspace empty, and says how to clone one", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
 
     const baseline = await read(copy.dir, `${P}/codeStates/baseline/index.ts`);
     expect(baseline).toContain("export default declareCodeState({});");
-    expect(baseline).toContain("//     applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),");
-    expect(await read(copy.dir, `${P}/promptSets/snerk/index.ts`)).toContain('commit: "<a commit hash>"');
+    expect(baseline).toContain("//     applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\\\\n");
+  });
+
+  test("its base image gives every user a git identity", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    expect(await read(copy.dir, `${P}/baseImages/node20/index.ts`)).toContain(`RUN git config --system user.name "Thunderjar agent" \\\\
+  && git config --system user.email agent@thunderjar.invalid\``);
   });
 
   test("every TypeScript file it scaffolds imports thunderjar and loads", async () => {
@@ -173,37 +180,48 @@ describe("0102 JavaScript project", () => {
 });
 
 describe("0101 empty project, made a git repository", () => {
-  test("its code state checks out the project's commit, and its prompt set copies files from it", async () => {
+  const git = (dir: string, args: string[]) => $`git ${args}`.cwd(dir).env({ ...Bun.env, GIT_CEILING_DIRECTORIES: TMP_DIR }).quiet();
+  const commit = async (dir: string) => {
+    await git(dir, ["init", "--quiet"]);
+    await git(dir, ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "first"]);
+    return (await git(dir, ["rev-parse", "HEAD"])).stdout.toString().trim();
+  };
+
+  test("with an origin, its code state clones it at the project's commit", async () => {
     await using copy = await copyScenarioProject("0101");
-    const git = (args: string[]) => $`git ${args}`.cwd(copy.dir).env({ ...Bun.env, GIT_CEILING_DIRECTORIES: TMP_DIR }).quiet();
-    await git(["init", "--quiet"]);
-    await git(["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "first"]);
-    const head = (await git(["rev-parse", "HEAD"])).stdout.toString().trim();
+    const head = await commit(copy.dir);
+    await git(copy.dir, ["remote", "add", "origin", "https://github.com/acme/widgets.git"]);
 
     const { stderr, exitCode } = await init(copy.dir);
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(await read(copy.dir, `${P}/codeStates/baseline/index.ts`)).toBe(`import { checkoutCommit, declareCodeState } from "thunderjar";
+    expect(await read(copy.dir, `${P}/codeStates/baseline/index.ts`)).toBe(`import { declareCodeState } from "thunderjar";
 
-// The project's repository at a commit, checked out into /workspace. The commit must be in the
-// repository: commit it, or Thunderjar can't build it.
+// The project's repository, cloned into /workspace at a commit. The commit must be pushed, so the
+// build can fetch it. Pin a commit, never a branch: the same text must always build the same thing.
 export default declareCodeState({
-  config: { commit: "${head}" },
-  applyParameter: (config, ctx) => checkoutCommit(ctx, config.commit),
+  config: {
+    repo: "https://github.com/acme/widgets.git",
+    commit: "${head}",
+  },
+  applyParameter: (config) => \`RUN git clone --quiet \${config.repo} /workspace \\\\
+  && git -C /workspace checkout --quiet --detach \${config.commit} \\\\
+  && git -C /workspace remote remove origin\`,
 });
 `);
-    expect(await read(copy.dir, `${P}/promptSets/snerk/index.ts`)).toContain(`commit: "${head}"`);
   });
 
-  test("before its first commit, it's treated as outside one", async () => {
-    await using copy = await copyScenarioProject("0101");
-    await $`git init --quiet`.cwd(copy.dir).quiet();
+  test("without an origin, or before its first commit, it's treated as outside one", async () => {
+    await using noOrigin = await copyScenarioProject("0101");
+    await commit(noOrigin.dir);
+    await using noCommit = await copyScenarioProject("0101");
+    await git(noCommit.dir, ["init", "--quiet"]);
 
-    const { exitCode } = await init(copy.dir);
-
-    expect(exitCode).toBe(0);
-    expect(await read(copy.dir, `${P}/codeStates/baseline/index.ts`)).toContain("export default declareCodeState({});");
+    for (const dir of [noOrigin.dir, noCommit.dir]) {
+      expect((await init(dir)).exitCode).toBe(0);
+      expect(await read(dir, `${P}/codeStates/baseline/index.ts`)).toContain("export default declareCodeState({});");
+    }
   });
 });
 

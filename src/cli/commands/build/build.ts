@@ -7,7 +7,6 @@ import { DockerBuildError, DockerPushError, DockerUnavailableError } from "../..
 import { prerunImage } from "../../../execution/images.ts";
 import { checkImageStore, ImageStoreLoginError, pushPrerunImages } from "../../../execution/imageStore.ts";
 import { buildPrerunImages } from "../../../execution/prerunBuilds.ts";
-import { checkGitNeeds } from "../../../execution/gitNeeds.ts";
 import { loadPrerunParameters, renderPrerun } from "../../../execution/prerunDockerfile.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { pushFailure } from "../../format.ts";
@@ -16,7 +15,7 @@ import { imagePrefixOption } from "../../imagePrefix.ts";
 /**
  * Each prerun image test case `name` needs, of the nearest `.thunderjar/` folder in `cwd` or above
  * it: `# <image>`, then its Dockerfile. Permutations with the same hash share one image. Docker
- * isn't asked anything, but every commit the Dockerfiles read is checked, as a build would.
+ * isn't asked anything.
  */
 export async function dryRun(cwd: string, name: string, imagePrefix?: string): Promise<string> {
   const root = await findThunderjarRoot(cwd);
@@ -26,10 +25,9 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string): P
   const rendered = await Promise.all(
     unique.map(async (permutation) => ({
       image: prerunImage(permutation.hash, imagePrefix),
-      ...renderPrerun(await loadPrerunParameters(root, testCase.task, permutation)),
+      dockerfile: renderPrerun(await loadPrerunParameters(root, testCase.task, permutation)),
     })),
   );
-  await checkGitNeeds(root, rendered.flatMap(({ git }) => git));
   return rendered.map(({ image, dockerfile }) => `# ${image}\n${dockerfile.trimEnd()}`).join("\n\n");
 }
 
