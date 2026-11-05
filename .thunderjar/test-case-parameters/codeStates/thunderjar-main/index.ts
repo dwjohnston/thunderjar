@@ -1,4 +1,4 @@
-import { declareCodeState } from "thunderjar";
+import { declareCodeState } from "thunderjar-published";
 
 // The project's repository at a commit on main, with its dependencies installed, so measurements
 // can run its typecheck and tests. The commit must be pushed, so the build can fetch it.

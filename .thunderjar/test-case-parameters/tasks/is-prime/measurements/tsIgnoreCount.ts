@@ -1,4 +1,4 @@
-import { declareMeasurement } from "thunderjar";
+import { declareMeasurement } from "thunderjar-published";
 
 export default declareMeasurement({
   instrument: "grep",

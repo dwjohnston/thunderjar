@@ -1,4 +1,4 @@
-import { declareInitialPrompt } from "thunderjar";
+import { declareInitialPrompt } from "thunderjar-published";
 
 export default declareInitialPrompt({
   prompt: "Create a file isPrime.ts exporting a function that tests for primality.",

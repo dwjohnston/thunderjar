@@ -37,3 +37,18 @@ The project is shipped with installable skills in the [skills](./skills/) folder
 
 Basically changes are merged to main, they will be installable via `bunx skills add`? Maybe the instruction should be to use the the git tag? 
 
+
+
+## Dogfooding
+
+The repo runs thunderjar on itself from [`.thunderjar/`](./.thunderjar/). It uses a published release, installed as an npm alias devDependency:
+
+```json
+"thunderjar-published": "npm:thunderjar@0.2.0-preview-cb023da"
+```
+
+`.thunderjar/` code imports from `thunderjar-published`, not `thunderjar`.
+
+Why the alias: Changesets rewrites any dependency named `thunderjar` to the version it's about to release. That version isn't on npm yet, so `bun install` fails on the "Version Packages" PR. The alias has a different name and an `npm:` range, so Changesets leaves it alone.
+
+To dogfood a newer release, bump the version in the alias by hand. See [.thunderjar/AGENTS.md](./.thunderjar/AGENTS.md).

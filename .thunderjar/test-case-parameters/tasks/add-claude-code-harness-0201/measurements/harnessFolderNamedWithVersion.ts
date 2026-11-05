@@ -1,4 +1,4 @@
-import { declareMeasurement } from "thunderjar";
+import { declareMeasurement } from "thunderjar-published";
 
 // The repo's convention, as init scaffolds it: the folder is named for the harness and its version.
 export default declareMeasurement({

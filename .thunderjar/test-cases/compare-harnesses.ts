@@ -1,4 +1,4 @@
-import { declareTestCase } from "thunderjar";
+import { declareTestCase } from "thunderjar-published";
 
 // The same model in three harnesses: Haiku 5.5 in Claude Code, GitHub Copilot CLI and OpenCode.
 // Each harness needs its own key: ANTHROPIC_API_KEY, COPILOT_GITHUB_TOKEN and OPENCODE_API_KEY.

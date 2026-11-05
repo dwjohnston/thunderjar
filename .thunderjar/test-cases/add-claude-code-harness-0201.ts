@@ -1,4 +1,4 @@
-import { declareTestCase } from "thunderjar";
+import { declareTestCase } from "thunderjar-published";
 
 // Claude Code on Haiku, Sonnet and Opus, adding the claude-code harness to the 0201 fixture.
 export default declareTestCase({

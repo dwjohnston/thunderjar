@@ -1,4 +1,4 @@
-import { declareHarness } from "thunderjar";
+import { declareHarness } from "thunderjar-published";
 
 // OpenAI's Codex CLI, without its sandbox or approvals: the container is the sandbox.
 // A test case names a model by the ID the agent takes, e.g. "codex-0.166.0/gpt-6.1-sol", "codex-0.166.0/gpt-5.5".

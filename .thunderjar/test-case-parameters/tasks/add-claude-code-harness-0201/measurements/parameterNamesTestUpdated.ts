@@ -1,4 +1,4 @@
-import { declareMeasurement } from "thunderjar";
+import { declareMeasurement } from "thunderjar-published";
 
 // Whether the fixture's type test changed at all, committed or not. What the change should be is
 // left open for now.
