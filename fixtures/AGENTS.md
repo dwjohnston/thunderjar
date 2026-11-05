@@ -100,6 +100,7 @@ bun run fixture 0202 plan is-prime-baseline
   - `0202_typical_project`: a matrix of two prompt sets, two fake agents and two wordings of the task.
     - Prompt sets `snerk` and `glurk`, each writing its own `FAKE_INSTRUCTIONS.md`.
     - A second fake agent, `fake-harness-beta`, version `1.0.0`, models `fake-model-small` and `fake-model-large`. It writes a correct `isPrime.ts`, where alpha's is buggy.
+    - `fake-harness-alpha` needs `FAKE_HARNESS_KEY` (`requiredEnv`), so `plan` and `run` of its test cases stop without it: `FAKE_HARNESS_KEY=x bun run fixture 0202 plan example`. Both fake agents write `set` to `/thunderjar/fake-harness-key` if they see it, or an empty line if not, never its value.
     - Base image `node20` installs `bun`, which the `templateTest` instrument runs its tests with.
     - Task `is-prime` has a second initial prompt, `terse`, and two more measurements: `isPrimeTemplateTest`, a `templateTest` of `isPrime.test.template.ts` (5 tests; alpha's `isPrime.ts` passes 3 and fails 2, beta's passes all 5), and `tsIgnoreCount`, a `grep` for `@ts-ignore` (alpha's has 1, beta's none).
     - Test cases: `example`, and `is-prime-baseline`: both prompt sets, `fake-harness-alpha@1.0.0/fake-model-small` and `fake-harness-beta@1.0.0/fake-model-large`, both initial prompts, 5 iterations. Matrix shape 1/1/2/2/2.
@@ -125,7 +126,8 @@ bun run fixture 0202 plan is-prime-baseline
     - Code states `unwrapped`, a plain object, and `wrongly-wrapped`, wrapped in `declareBaseImage`.
     - Task `fizz-buzz`, whose only initial prompt is `fizzy`.
     - One task per broken measurement, each with initial prompt `plain` and a test case of its own name: `unknown-instrument` (`fileCraeted`), `misfit-config` (`fileCreated` given a `path`), `unfit-aggregate` (`fileCreated` by `mean`), `missing-template` (a `templateTest` template that isn't there), `invalid-regex` (a `grep` pattern that doesn't parse) and `unwrapped-measurement`.
-    - Test cases, instead of `example`: `sound`, as `example` is in the shared setup, and one per mistake: `unknown-prompt-set` (`snirk`), `unknown-task` (`is-even`), `prompt-of-another-task` (`fizzy`), `unexported-base-image`, `unwrapped-code-state`, `wrongly-wrapped-code-state`, `unknown-harness-models` (an unknown version, an unknown model, and a pair not of the form `harness@version/model`), `empty-code-states` (`codeState: []` and 2.5 iterations) and `zero-iterations`.
+    - Harness `fake-harness-bad-env`, whose `requiredEnv` is `["API KEY", 3]`.
+    - Test cases, instead of `example`: `sound`, as `example` is in the shared setup, and one per mistake: `bad-required-env` (names `fake-harness-bad-env`), `unknown-prompt-set` (`snirk`), `unknown-task` (`is-even`), `prompt-of-another-task` (`fizzy`), `unexported-base-image`, `unwrapped-code-state`, `wrongly-wrapped-code-state`, `unknown-harness-models` (an unknown version, an unknown model, and a pair not of the form `harness@version/model`), `empty-code-states` (`codeState: []` and 2.5 iterations) and `zero-iterations`.
   - `0403_broken_harness_family`: the shared setup, with a second fake agent, `fake-harness-beta`, whose `versions.ts` isn't wrapped in `declareHarnessVersions`. No `tsconfig.json` or `_generated/`.
     - Test cases: `example`, and `beta`, which names `fake-harness-beta@1.0.0/fake-model-large`.
   - `0404_empty_parameter_folders`: the shared setup with every declaration deleted: each parameter folder holds only a `.gitkeep`. Test case `example` is left. No `tsconfig.json` or `_generated/`.

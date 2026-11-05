@@ -10,91 +10,103 @@ import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.t
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
+/** What 0202's fake-harness-alpha needs: `plan` and `run` stop without it. */
+const KEY = { FAKE_HARNESS_KEY: "fake-key" };
+
 const PLAIN = "Create a file isPrime.ts exporting a function that tests for primality.";
 const TERSE = "isPrime.ts: export a primality test.";
 
-const ALPHA = (prompt: string) =>
+/** 0201's fake-harness-alpha, which needs nothing. */
+const ALPHA_0201 = (prompt: string) =>
   `printf '%s\\n' '// ${prompt}' '// @ts-ignore' 'export const isPrime = (n: number) => n > 1 && n % 2 !== 0;' > isPrime.ts && echo '{"model":"fake-model-small-001"}' > /thunderjar/result.json`;
+/** 0202's fake agents record whether they saw FAKE_HARNESS_KEY. */
+const KEY_CHECK = ` && echo "\${FAKE_HARNESS_KEY+set}" > /thunderjar/fake-harness-key`;
+const ALPHA = (prompt: string) => `${ALPHA_0201(prompt)}${KEY_CHECK}`;
 const BETA = (prompt: string) =>
-  `printf '%s\\n' '// ${prompt}' 'export const isPrime = (n: number) => n > 1 && Array.from({ length: n - 2 }, (_, i) => i + 2).every((d) => n % d !== 0);' > isPrime.ts && echo '{"model":"fake-model-large-001"}' > /thunderjar/result.json`;
+  `printf '%s\\n' '// ${prompt}' 'export const isPrime = (n: number) => n > 1 && Array.from({ length: n - 2 }, (_, i) => i + 2).every((d) => n % d !== 0);' > isPrime.ts && echo '{"model":"fake-model-large-001"}' > /thunderjar/result.json${KEY_CHECK}`;
 
-/** The dry run's lines for permutation `n`, with its `iterations`, each running `command`. */
-const permutation = (n: number, hash: string, iterations: number, command: string) =>
+/** The dry run's lines for permutation `n`, with its `iterations`, each given `env` and running `command`. */
+const permutation = (n: number, hash: string, iterations: number, command: string, env?: string) =>
   [
     `Permutation ${n}: prerun image thunderjar-prerun:${hash}`,
     ...Array.from({ length: iterations }, (_, i) => [
       `  Iteration ${i + 1}: postrun image thunderjar-postrun:<ULID>-${n}-${i + 1}`,
-      `    ${command}`,
+      ...(env ? [`    env:      ${env}`] : []),
+      `    command:  ${command}`,
     ]).flat(),
   ].join("\n");
+
+/** A permutation of 0202's fake-harness-alpha, given its key. */
+const alphaPermutation = (n: number, hash: string, iterations: number, prompt: string) =>
+  permutation(n, hash, iterations, ALPHA(prompt), "FAKE_HARNESS_KEY");
 
 const filesIn = (dir: string) => [...new Glob("**").scanSync({ cwd: dir, dot: true })].sort();
 
 describe("0202 typical project", () => {
   test("example: the execution's ID, then its one permutation's prerun image, and its iteration's postrun image and harness command", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--dry-run"]);
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--dry-run"], { env: KEY });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "5650e1a8", 1, ALPHA(PLAIN))}
+${alphaPermutation(1, "e4a5b2ee", 1, PLAIN)}
 `);
   });
 
   test("is-prime-baseline: every permutation in plan's order, with its hash, and every iteration inside it", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"]);
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"], { env: KEY });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "5650e1a8", 5, ALPHA(PLAIN))}
+${alphaPermutation(1, "e4a5b2ee", 5, PLAIN)}
 
-${permutation(2, "8ff151b1", 5, ALPHA(TERSE))}
+${alphaPermutation(2, "03784781", 5, TERSE)}
 
-${permutation(3, "de78e815", 5, BETA(PLAIN))}
+${permutation(3, "2a7ea4db", 5, BETA(PLAIN))}
 
-${permutation(4, "4437033b", 5, BETA(TERSE))}
+${permutation(4, "12540fdc", 5, BETA(TERSE))}
 
-${permutation(5, "69114039", 5, ALPHA(PLAIN))}
+${alphaPermutation(5, "6060998e", 5, PLAIN)}
 
-${permutation(6, "050f83dc", 5, ALPHA(TERSE))}
+${alphaPermutation(6, "1669ec38", 5, TERSE)}
 
-${permutation(7, "db4da990", 5, BETA(PLAIN))}
+${permutation(7, "597e293d", 5, BETA(PLAIN))}
 
-${permutation(8, "b36f0c54", 5, BETA(TERSE))}
+${permutation(8, "635376a2", 5, BETA(TERSE))}
 `);
   });
 
   test("the prerun images carry the hashes plan shows", async () => {
-    const run = await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"]);
-    const plan = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"]);
+    const run = await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"], { env: KEY });
+    const plan = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"], { env: KEY });
 
     const hashes = plan.stdout.match(/\b[0-9a-f]{8}(?=  \w+$)/gm);
     expect(run.stdout.match(/(?<=thunderjar-prerun:)[0-9a-f]{8}/g)).toEqual(hashes);
   });
 
   test("--image-prefix starts every image name with it", async () => {
-    const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--dry-run", "--image-prefix", "throwaway"]);
+    const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--dry-run", "--image-prefix", "throwaway"], { env: KEY });
 
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "5650e1a8", 1, ALPHA(PLAIN)).replaceAll("thunderjar-", "throwaway-")}
+${alphaPermutation(1, "e4a5b2ee", 1, PLAIN).replaceAll("thunderjar-", "throwaway-")}
 `);
   });
 
   test("writes nothing", async () => {
     const before = filesIn(scenario("0202"));
 
-    await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"]);
+    await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"], { env: KEY });
 
     expect(filesIn(scenario("0202"))).toEqual(before);
   });
 
   test("an unknown test case is a configuration error", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "missing", "--dry-run"]);
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "missing", "--dry-run"], { env: KEY });
 
     expect(stdout).toBe("");
     expect(stderr).toBe('Error: No test case named "missing": expected .thunderjar/test-cases/missing.ts.\n');
@@ -102,14 +114,14 @@ ${permutation(1, "5650e1a8", 1, ALPHA(PLAIN)).replaceAll("thunderjar-", "throwaw
   });
 
   test("two-harnesses: one permutation per fake harness, one iteration each", async () => {
-    const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--dry-run"]);
+    const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--dry-run"], { env: KEY });
 
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "5650e1a8", 1, ALPHA(PLAIN))}
+${alphaPermutation(1, "e4a5b2ee", 1, PLAIN)}
 
-${permutation(2, "de78e815", 1, BETA(PLAIN))}
+${permutation(2, "2a7ea4db", 1, BETA(PLAIN))}
 `);
   });
 });
@@ -162,15 +174,15 @@ describe("run, against the fake Docker", () => {
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--data-dir", data], {
-      env: docker.env,
+      env: { ...docker.env, ...KEY },
       paths: { "<DATA>": data },
     });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
-Building thunderjar-prerun:5650e1a8 ... done
-Building thunderjar-prerun:de78e815 ... done
+Building thunderjar-prerun:e4a5b2ee ... done
+Building thunderjar-prerun:2a7ea4db ... done
  1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
 ${ALPHA_MEASURES}
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
@@ -196,7 +208,7 @@ Wrote <DATA>/runs/<ULID>/
       testCase: "two-harnesses",
       task: "is-prime",
       permutation: 1,
-      permutationHash: expect.stringMatching(/^5650e1a8[0-9a-f]{56}$/),
+      permutationHash: expect.stringMatching(/^e4a5b2ee[0-9a-f]{56}$/),
       iteration: 1,
       postrunImage: `thunderjar-postrun:${id}-1-1`,
       ranAt: new Date(alpha.execution.startedAt).toISOString(),
@@ -217,7 +229,7 @@ Wrote <DATA>/runs/<ULID>/
       },
     });
     expect(alpha.execution.finishedAt).toBeGreaterThanOrEqual(alpha.execution.startedAt);
-    expect(beta.permutationHash).toStartWith("de78e815");
+    expect(beta.permutationHash).toStartWith("2a7ea4db");
     expect(beta.harnessModel.modelId).toBe("fake-model-large-001");
     expect(beta.harnessResult).toBe('{"model":"fake-model-large-001"}\n');
     expect(beta.parameters.baseImage).toEqual(alpha.parameters.baseImage);
@@ -234,11 +246,11 @@ Wrote <DATA>/runs/<ULID>/
 
     // Each container ran from its prerun image, then was committed into its postrun image and removed.
     const container = (n: number) => `thunderjar-run-${id}-${n}-1`;
-    const prerun = (n: number) => `thunderjar-prerun:${n === 1 ? "5650e1a8" : "de78e815"}`;
+    const prerun = (n: number) => `thunderjar-prerun:${n === 1 ? "e4a5b2ee" : "2a7ea4db"}`;
     const commands = await containerCommands(docker);
     expect(commands.filter((command) => !command.includes("-measure-"))).toEqual(
       [1, 2].flatMap((n) => [
-        `docker run --name ${container(n)} --pull never --entrypoint sh ${prerun(n)} -c <script>`,
+        `docker run --name ${container(n)} --pull never ${n === 1 ? "-e FAKE_HARNESS_KEY " : ""}--entrypoint sh ${prerun(n)} -c <script>`,
         `docker cp ${container(n)}:/thunderjar/run.json <destination>`,
         `docker cp ${container(n)}:/thunderjar/result.json <destination>`,
         `docker image inspect --format {{json .Config.Entrypoint}}\t{{json .Config.Cmd}} ${prerun(n)}`,
@@ -260,19 +272,22 @@ Wrote <DATA>/runs/<ULID>/
       }
     }
     expect(await docker.images()).toEqual([
-      "thunderjar-prerun:5650e1a8",
-      "thunderjar-prerun:de78e815",
+      "thunderjar-prerun:e4a5b2ee",
+      "thunderjar-prerun:2a7ea4db",
       `thunderjar-postrun:${id}-1-1`,
       `thunderjar-postrun:${id}-2-1`,
     ]);
     expect(await docker.containers()).toEqual([]);
+    // Alpha's container was given its key. Beta's, of another harness, wasn't.
+    expect(await docker.fileIn(`thunderjar-postrun:${id}-1-1`, "/thunderjar/fake-harness-key")).toBe("set\n");
+    expect(await docker.fileIn(`thunderjar-postrun:${id}-2-1`, "/thunderjar/fake-harness-key")).toBe("\n");
   });
 
   test("by default, the store is .thunderjar/.data/, and existing prerun images are reused", async () => {
     await using copy = await copyScenarioProject("0202");
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:5650e1a8"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:e4a5b2ee"] });
 
-    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: docker.env });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: { ...docker.env, ...KEY } });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
@@ -290,7 +305,7 @@ Wrote .thunderjar/.data/runs/<ULID>/
     await using docker = await fakeDocker();
 
     const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--data-dir", dataDir()], {
-      env: docker.env,
+      env: { ...docker.env, ...KEY },
     });
 
     expect(exitCode).toBe(0);
@@ -330,7 +345,7 @@ export default declareTestCase({
     );
     await using docker = await fakeDocker();
 
-    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "two-models"], { env: docker.env });
+    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "two-models"], { env: { ...docker.env, ...KEY } });
 
     expect(exitCode).toBe(0);
     expect(stdout.split("\n").filter((line) => line.includes("iteration"))).toEqual([
@@ -352,7 +367,7 @@ export default declareHarness({ cli: () => "echo partial > isPrime.ts && exit 3"
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], {
-      env: docker.env,
+      env: { ...docker.env, ...KEY },
       paths: { "<DATA>": data },
     });
 
@@ -394,7 +409,7 @@ export default declareHarness({ cli: () => "true" });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], {
-      env: docker.env,
+      env: { ...docker.env, ...KEY },
       paths: { "<DATA>": data },
     });
 
@@ -418,7 +433,7 @@ Wrote <DATA>/runs/<ULID>/
     await using docker = await fakeDocker();
     const data = dataDir();
 
-    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
     expect(exitCode).toBe(0);
     expect(stdout).toMatch(/ 1\/1  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. done \(<duration>\)\nWrote /);
@@ -436,10 +451,10 @@ Wrote <DATA>/runs/<ULID>/
 export default declareHarness({ cli: () => "rm -rf /thunderjar" });
 `,
     );
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:de78e815"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:2a7ea4db"] });
     const data = dataDir();
 
-    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], { env: docker.env });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
     expect(stdout).toMatch(/^Execution <ULID>\nBuilding thunderjar-prerun:\w{8} \.\.\. done\n 1\/2  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. failed\n$/);
     expect(stderr).toMatch(/^Error: Running a container failed: .*thunderjar\/run\.json: Directory nonexistent\n$/);
@@ -455,7 +470,7 @@ export default declareHarness({ cli: () => "rm -rf /thunderjar" });
     await using docker = await fakeDocker({ unreachable: true });
     const data = dataDir();
 
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--data-dir", data], { env: docker.env });
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
     expect(stdout).toBe("Execution <ULID>\n");
     expect(stderr).toBe(
@@ -466,18 +481,68 @@ export default declareHarness({ cli: () => "rm -rf /thunderjar" });
   });
 
   test("a failed build is an error, and nothing is run or written", async () => {
-    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:5650e1a8"] });
+    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:e4a5b2ee"] });
     const data = dataDir();
 
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--data-dir", data], { env: docker.env });
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
-    expect(stdout).toBe("Execution <ULID>\nBuilding thunderjar-prerun:5650e1a8 ... failed\n");
+    expect(stdout).toBe("Execution <ULID>\nBuilding thunderjar-prerun:e4a5b2ee ... failed\n");
     expect(stderr).toBe(
-      'Error: Building thunderjar-prerun:5650e1a8 failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1\n',
+      'Error: Building thunderjar-prerun:e4a5b2ee failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1\n',
     );
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => command.startsWith("docker run"))).toEqual([]);
     expect(await Bun.file(data).exists()).toBe(false);
+  });
+});
+
+describe("0202 typical project, without the key fake-harness-alpha needs", () => {
+  const MISSING = "Error: fake-harness-alpha needs FAKE_HARNESS_KEY, which is not set.\nExport it in the shell that runs thunderjar.\n";
+
+  test("run stops before anything is built, run or written", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--data-dir", data], { env: docker.env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(MISSING);
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
+    expect(await Bun.file(data).exists()).toBe(false);
+  });
+
+  test("so does the dry run", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--dry-run"]);
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(MISSING);
+    expect(exitCode).toBe(1);
+  });
+
+  test("a test case of harnesses that need nothing runs without it", async () => {
+    await using copy = await copyScenarioProject("0202");
+    await Bun.write(
+      `${copy.dir}/.thunderjar/test-cases/beta-only.ts`,
+      `import { declareTestCase } from "thunderjar";
+
+export default declareTestCase({
+  baseImage: ["node20"],
+  codeState: ["baseline"],
+  promptSet: ["snerk"],
+  harnessModel: ["fake-harness-beta@1.0.0/fake-model-large"],
+  task: "is-prime",
+  initialPrompt: ["plain"],
+  iterations: 1,
+});
+`,
+    );
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "beta-only", "--dry-run"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toContain("env:");
   });
 });
 
@@ -489,7 +554,7 @@ describe("0201 minimal existing setup", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "e943919c", 1, ALPHA(PLAIN))}
+${permutation(1, "e943919c", 1, ALPHA_0201(PLAIN))}
 `);
   });
 });
@@ -500,7 +565,7 @@ describe("0402 broken declarations", () => {
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0402"), ["run", "unknown-instrument", "--data-dir", data], {
-      env: docker.env,
+      env: { ...docker.env, ...KEY },
     });
 
     expect(stdout).toBe("");

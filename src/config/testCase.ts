@@ -5,6 +5,7 @@ import type { TestCaseDeclaration } from "../api/declarations.ts";
 import { foldersIn, PARAMETERS } from "./folders.ts";
 import { ConfigError, existsIn, FOLDER, loadDeclaration, type Problem, problemsError } from "./loader.ts";
 import { checkMeasurements } from "./measurements.ts";
+import { requiredEnvProblem } from "./requiredEnv.ts";
 
 const show = (value: unknown) => JSON.stringify(value) ?? String(value);
 
@@ -125,7 +126,11 @@ class TestCaseChecker {
     const loaded = this.harnesses.get(name);
     if (loaded) return loaded;
     const dir = `${PARAMETERS}/harnessModels/${name}`;
-    await loadDeclaration(this.root, `${dir}/index.ts`, "declareHarness", this.problems);
+    const declaration = (await loadDeclaration(this.root, `${dir}/index.ts`, "declareHarness", this.problems)) as
+      | Record<string, unknown>
+      | undefined;
+    const envProblem = declaration && requiredEnvProblem(declaration.requiredEnv);
+    if (envProblem) this.problems.push({ file: `${dir}/index.ts`, field: "requiredEnv", message: envProblem });
     await loadDeclaration(this.root, `${dir}/collectTokenCosts.ts`, "declareTokenCostCollector", this.problems);
     const harness = {
       versions: await loadDeclaration(this.root, `${dir}/versions.ts`, "declareHarnessVersions", this.problems),

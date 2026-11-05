@@ -52,11 +52,14 @@ async function mustRun(args: string[]): Promise<string> {
 
 /**
  * Runs `script` with `sh -c`, in place of the image's entrypoint, in a new container `name` from
- * the local image `image`, and leaves the container once it stops. Its output is discarded.
- * Throws a DockerContainerError if the script, or Docker, fails.
+ * the local image `image`, and leaves the container once it stops. Its output is discarded. Each
+ * variable named in `env` is passed in with `-e NAME`, so Docker copies its value from Thunderjar's
+ * own environment, and the value is never on a command line. Throws a DockerContainerError if the
+ * script, or Docker, fails.
  */
-export async function runContainer(image: string, name: string, script: string): Promise<void> {
-  await mustRun(["run", "--name", name, "--pull", "never", "--entrypoint", "sh", image, "-c", script]);
+export async function runContainer(image: string, name: string, script: string, env: string[] = []): Promise<void> {
+  const passed = env.flatMap((variable) => ["-e", variable]);
+  await mustRun(["run", "--name", name, "--pull", "never", ...passed, "--entrypoint", "sh", image, "-c", script]);
 }
 
 /**
