@@ -35,6 +35,9 @@ const SCAFFOLD = [
   ...HARNESSES.flatMap((harness) => HARNESS_FILES.map((file) => `${P}/harnessModels/${harness}/${file}`)),
   `${P}/tasks/is-prime/initial-prompts/plain.ts`,
   `${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`,
+  `${P}/tasks/is-prime/measurements/isPrimeTemplateTest.ts`,
+  `${P}/tasks/is-prime/measurements/templates/isPrime.test.ts.template`,
+  `${P}/tasks/is-prime/measurements/tsIgnoreCount.ts`,
 ];
 
 const createdLines = (paths: string[]) =>

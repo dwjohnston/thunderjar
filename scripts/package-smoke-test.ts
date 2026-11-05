@@ -16,9 +16,21 @@ const PROJECT = `${TEMP}/project`;
 
 /** The commands run in the project, and what each one's output must contain. */
 const STEPS: { args: string[]; expect: string[] }[] = [
-  { args: ["init"], expect: ["test-cases/example.ts", "promptSets/house-style/files/AGENTS.md", "harnessModels/opencode/index.ts"] },
+  {
+    args: ["init"],
+    expect: [
+      "test-cases/example.ts",
+      "promptSets/house-style/files/AGENTS.md",
+      "harnessModels/opencode/index.ts",
+      "measurements/isPrimeTemplateTest.ts",
+      "measurements/templates/isPrime.test.ts.template",
+      "measurements/tsIgnoreCount.ts",
+    ],
+  },
   { args: ["generate"], expect: ["parameterNames.d.ts"] },
   { args: ["plan", "example"], expect: ["claude-code@2.1.283/haiku-4-5"] },
+  // bun, which the templateTest measurement runs its tests with, is in the base image.
+  { args: ["build", "example", "--dry-run"], expect: ["npm install --global bun@1.3.14"] },
   { args: ["run", "example", "--dry-run"], expect: ["claude -p"] },
 ];
 

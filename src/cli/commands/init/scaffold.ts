@@ -16,7 +16,7 @@ export default declareConfig({
 `;
 
 // `allowImportingTsExtensions` because thunderjar ships its TypeScript source. A measurement's
-// template, like `isPrime.test.template.ts`, isn't TypeScript until it's rendered.
+// template named like `*.template.ts` isn't TypeScript until it's rendered (`init`'s own is `*.ts.template`).
 const tsconfig = json({
   compilerOptions: {
     target: "ESNext",
@@ -44,12 +44,14 @@ const testCase = declaration(
 }`,
 );
 
-const baseImage = declaration(
-  "declareBaseImage",
-  `{
-  applyParameter: () => \`FROM node:20-bookworm\`,
-}`,
-);
+const baseImage = `import { declareBaseImage } from "thunderjar";
+
+// With bun, which the templateTest measurement runs its tests with.
+export default declareBaseImage({
+  applyParameter: () => \`FROM node:20-bookworm
+RUN npm install --global bun@1.3.14\`,
+});
+`;
 
 const initialPrompt = declaration(
   "declareInitialPrompt",
@@ -65,6 +67,37 @@ const measurement = declaration(
   instrument: "fileCreated",
   config: { glob: "**/isPrime.ts" },
   aggregate: ["rate"],
+}`,
+);
+
+// Renders templates/isPrime.test.ts.template against the agent's isPrime.ts, runs it with `bun test`, and
+// records how many tests pass and fail.
+const templateTestMeasurement = declaration(
+  "declareMeasurement",
+  `{
+  instrument: "templateTest",
+  config: { subject: "**/isPrime.ts", template: "./templates/isPrime.test.ts.template" },
+  aggregate: ["sum", "mean"],
+}`,
+);
+
+// \`{{defaultExport}}\` and \`{{subjectPath}}\` are filled in from the agent's file, whatever it names its function.
+const isPrimeTestTemplate = `import { {{defaultExport}} } from "{{subjectPath}}";
+
+test("2 is prime", () => expect({{defaultExport}}(2)).toBe(true));
+test("17 is prime", () => expect({{defaultExport}}(17)).toBe(true));
+test("15 is not prime", () => expect({{defaultExport}}(15)).toBe(false));
+test("0 is not prime", () => expect({{defaultExport}}(0)).toBe(false));
+test("1 is not prime", () => expect({{defaultExport}}(1)).toBe(false));
+`;
+
+// How many \`@ts-ignore\`s the agent left. A count of 0 means none; \`max\` shows whether any run had one.
+const tsIgnoreCountMeasurement = declaration(
+  "declareMeasurement",
+  `{
+  instrument: "grep",
+  config: { glob: "**/*.ts", pattern: "@ts-ignore" },
+  aggregate: ["mean", "max"],
 }`,
 );
 
@@ -159,5 +192,8 @@ export function scaffold({ nestedPackage, head }: { nestedPackage: boolean; head
     ),
     [`${P}/tasks/is-prime/initial-prompts/plain.ts`]: initialPrompt,
     [`${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`]: measurement,
+    [`${P}/tasks/is-prime/measurements/isPrimeTemplateTest.ts`]: templateTestMeasurement,
+    [`${P}/tasks/is-prime/measurements/templates/isPrime.test.ts.template`]: isPrimeTestTemplate,
+    [`${P}/tasks/is-prime/measurements/tsIgnoreCount.ts`]: tsIgnoreCountMeasurement,
   };
 }
