@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
 import type { MeasurementContext, Reply } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { aggregateMethods, fileCreated, grep, instruments, isInstrumentName, replyMatches, templateTest } from "./instruments.ts";
+import { aggregateMethods, bunTestFile, fileCreated, grep, instruments, isInstrumentName, replyMatches } from "./instruments.ts";
 
 const ROOT = `${TMP_DIR}/instruments-${crypto.randomUUID()}`;
 
@@ -148,14 +148,20 @@ describe("grep", () => {
   });
 });
 
-describe("templateTest", () => {
-  const TEMPLATE = `import { {{defaultExport}} } from "{{subjectPath}}";
-test("2 is prime", () => expect({{defaultExport}}(2)).toBe(true));
-test("17 is prime", () => expect({{defaultExport}}(17)).toBe(true));
-test("15 is not prime", () => expect({{defaultExport}}(15)).toBe(false));
-test("0 is not prime", () => expect({{defaultExport}}(0)).toBe(false));
-test("1 is not prime", () => expect({{defaultExport}}(1)).toBe(false));
+describe("bunTestFile", () => {
+  const CASES = `test("2 is prime", () => expect(isPrime(2)).toBe(true));
+test("17 is prime", () => expect(isPrime(17)).toBe(true));
+test("15 is not prime", () => expect(isPrime(15)).toBe(false));
+test("0 is not prime", () => expect(isPrime(0)).toBe(false));
+test("1 is not prime", () => expect(isPrime(1)).toBe(false));
 `;
+
+  /** A test of the subject's `isPrime`, which falls back to a reference implementation when run without one. */
+  const TEST = `import { expect, test } from "bun:test";
+
+const { isPrime } = await import(Bun.env.THUNDERJAR_SUBJECT ?? "./isPrime.reference.ts");
+
+${CASES}`;
 
   const CORRECT = `export function isPrime(n: number): boolean {
   if (n < 2) return false;
@@ -167,8 +173,8 @@ test("1 is not prime", () => expect({{defaultExport}}(1)).toBe(false));
   /** Says 1 is prime. */
   const BUGGY = CORRECT.replace("n < 2", "n < 1");
 
-  /** `template` in a file of its own on the host, as a measurement brings it. */
-  const templateFile = async (template = TEMPLATE) => `${await folderWith({ "isPrime.test.template.ts": template })}/isPrime.test.template.ts`;
+  /** `test` in a file of its own on the host, as a measurement brings it. */
+  const testFile = async (test = TEST) => `${await folderWith({ "isPrime.test.ts": test })}/isPrime.test.ts`;
 
   const erroredWith = async (promise: Promise<unknown>) => {
     const result = (await promise) as { outcome: string; error?: Error };
@@ -178,26 +184,46 @@ test("1 is not prime", () => expect({{defaultExport}}(1)).toBe(false));
 
   test("is skipped when nothing matches the subject", async () => {
     const ctx = await contextWith({ "src/prime.ts": CORRECT });
-    expect(await templateTest.evaluate({ subject: "**/isPrime.ts", template: await templateFile() }, ctx)).toEqual({
+    expect(await bunTestFile.evaluate({ subject: "**/isPrime.ts", test: await testFile() }, ctx)).toEqual({
       outcome: "skipped",
       reason: "no file matches **/isPrime.ts",
     });
   });
 
   test("counts the tests passing and failing against a correct subject, and a buggy one", async () => {
-    const template = await templateFile();
-    expect(await templateTest.evaluate({ subject: "**/isPrime.ts", template }, await contextWith({ "isPrime.ts": CORRECT }))).toEqual({
+    const test = await testFile();
+    expect(await bunTestFile.evaluate({ subject: "**/isPrime.ts", test }, await contextWith({ "isPrime.ts": CORRECT }))).toEqual({
       outcome: "measured",
       data: { passed: 5, failed: 0 },
     });
-    expect(
-      await templateTest.evaluate({ subject: "**/isPrime.ts", template }, await contextWith({ "src/lib/isPrime.ts": BUGGY })),
-    ).toEqual({ outcome: "measured", data: { passed: 4, failed: 1 } });
+    expect(await bunTestFile.evaluate({ subject: "**/isPrime.ts", test }, await contextWith({ "src/lib/isPrime.ts": BUGGY }))).toEqual({
+      outcome: "measured",
+      data: { passed: 4, failed: 1 },
+    });
   }, 20_000);
 
-  test("binds {{defaultExport}} to a default export too", async () => {
+  test("counts a skipped test, or a todo, as neither passing nor failing", async () => {
+    const test = await testFile(`${TEST}test.skip("3 is prime", () => {});\ntest.todo("4 is not prime");\n`);
+    expect(await bunTestFile.evaluate({ subject: "isPrime.ts", test }, await contextWith({ "isPrime.ts": BUGGY }))).toEqual({
+      outcome: "measured",
+      data: { passed: 4, failed: 1 },
+    });
+  }, 20_000);
+
+  test("takes a default export, when the test does", async () => {
+    const test = await testFile(`import { expect, test } from "bun:test";
+
+const subject = await import(Bun.env.THUNDERJAR_SUBJECT ?? "./isPrime.reference.ts");
+const isPrime = subject.isPrime ?? subject.default;
+
+${CASES}`);
     const ctx = await contextWith({ "isPrime.ts": CORRECT.replace("export function", "export default function") });
-    expect(await templateTest.evaluate({ subject: "isPrime.ts", template: await templateFile() }, ctx)).toEqual({
+    expect(await bunTestFile.evaluate({ subject: "isPrime.ts", test }, ctx)).toEqual({ outcome: "measured", data: { passed: 5, failed: 0 } });
+  }, 20_000);
+
+  test("takes a subject with several exports", async () => {
+    const ctx = await contextWith({ "isPrime.ts": `${CORRECT}export const isComposite = (n: number) => n > 1 && !isPrime(n);\n` });
+    expect(await bunTestFile.evaluate({ subject: "isPrime.ts", test: await testFile() }, ctx)).toEqual({
       outcome: "measured",
       data: { passed: 5, failed: 0 },
     });
@@ -205,67 +231,48 @@ test("1 is not prime", () => expect({{defaultExport}}(1)).toBe(false));
 
   test("sums the counts over every subject the glob matches", async () => {
     const ctx = await contextWith({ "a/isPrime.ts": CORRECT, "b/isPrime.ts": BUGGY });
-    expect(await templateTest.evaluate({ subject: "**/isPrime.ts", template: await templateFile() }, ctx)).toEqual({
+    expect(await bunTestFile.evaluate({ subject: "**/isPrime.ts", test: await testFile() }, ctx)).toEqual({
       outcome: "measured",
       data: { passed: 9, failed: 1 },
     });
   }, 20_000);
 
-  test("writes the rendered test beside its subject", async () => {
+  test("writes the test into a folder of its own in the workdir, and nothing beside the subject", async () => {
     const ctx = await contextWith({ "src/isPrime.ts": CORRECT });
-    await templateTest.evaluate({ subject: "**/isPrime.ts", template: await templateFile() }, ctx);
-    expect(await Bun.file(`${ctx.workdir}/src/isPrime.templateTest.test.ts`).text()).toBe(
-      TEMPLATE.replaceAll("{{defaultExport}}", "isPrime").replaceAll("{{subjectPath}}", "./isPrime.ts"),
+    await bunTestFile.evaluate({ subject: "**/isPrime.ts", test: await testFile() }, ctx);
+    expect(await ctx.glob("src/**")).toEqual(["src/isPrime.ts"]);
+    expect(await Bun.file(`${ctx.workdir}/.thunderjar-measure/isPrime.test.ts`).text()).toBe(TEST);
+  }, 20_000);
+
+  test("is erroredWhileMeasuring, saying why, when the subject doesn't load", async () => {
+    const ctx = await contextWith({ "src/isPrime.ts": "export const isPrime = (\n" });
+    expect(await erroredWith(bunTestFile.evaluate({ subject: "**/isPrime.ts", test: await testFile() }, ctx))).toBe(
+      "isPrime.test.ts didn't run against src/isPrime.ts: error: Unexpected end of file",
     );
   }, 20_000);
 
-  test("is erroredWhileMeasuring when the template can't bind", async () => {
-    const template = await templateFile();
-    const noExport = await contextWith({ "isPrime.ts": CORRECT.replace("export function", "function") });
-    expect(await erroredWith(templateTest.evaluate({ subject: "isPrime.ts", template }, noExport))).toBe(
-      "isPrime.ts has no export to bind {{defaultExport}} to",
-    );
-
-    const twoExports = await contextWith({ "isPrime.ts": `${CORRECT}export const two = 2;\n` });
-    expect(await erroredWith(templateTest.evaluate({ subject: "isPrime.ts", template }, twoExports))).toBe(
-      "isPrime.ts has 2 exports (isPrime, two); {{defaultExport}} binds to a single one",
-    );
-
-    const unknown = await templateFile(`${TEMPLATE}// {{subjectName}}\n`);
-    expect(
-      await erroredWith(templateTest.evaluate({ subject: "isPrime.ts", template: unknown }, await contextWith({ "isPrime.ts": CORRECT }))),
-    ).toBe("the template has an unknown placeholder {{subjectName}}");
-  });
-
-  test("is erroredWhileMeasuring when the test run reports no results, or fails outside any test", async () => {
+  test("is erroredWhileMeasuring when the test runs no tests", async () => {
     const ctx = await contextWith({ "isPrime.ts": CORRECT });
-    const empty = await templateFile(`import { {{defaultExport}} } from "{{subjectPath}}";\n`);
-    expect(await erroredWith(templateTest.evaluate({ subject: "isPrime.ts", template: empty }, ctx))).toStartWith(
-      "bun test ./isPrime.templateTest.test.ts reported no results",
-    );
-
-    const throws = await templateFile(`throw new Error("broken template");\n${TEMPLATE}`);
-    expect(await erroredWith(templateTest.evaluate({ subject: "isPrime.ts", template: throws }, ctx))).toBe(
-      "bun test ./isPrime.templateTest.test.ts failed outside any test: error: broken template",
-    );
+    const test = await testFile(`import { test } from "bun:test";\n\ntest.skip("2 is prime", () => {});\n`);
+    expect(await erroredWith(bunTestFile.evaluate({ subject: "isPrime.ts", test }, ctx))).toBe("isPrime.test.ts ran no tests against isPrime.ts");
   }, 20_000);
 
   test("is erroredWhileMeasuring, saying why, when there is no bun to run the test with", async () => {
     const ctx = await contextWith({ "isPrime.ts": CORRECT });
-    const withoutBun: MeasurementContext = { ...ctx, exec: (command) => ctx.exec(command.replace(/^bun /, "no-such-bun ")) };
-    expect(await erroredWith(templateTest.evaluate({ subject: "isPrime.ts", template: await templateFile() }, withoutBun))).toMatch(
-      /^bun test \.\/isPrime\.templateTest\.test\.ts reported no results: .*no-such-bun.*not found$/,
+    const withoutBun: MeasurementContext = { ...ctx, exec: (command) => ctx.exec(command.replace(" bun test ", " no-such-bun test ")) };
+    expect(await erroredWith(bunTestFile.evaluate({ subject: "isPrime.ts", test: await testFile() }, withoutBun))).toMatch(
+      /^isPrime\.test\.ts didn't run against isPrime\.ts: .*no-such-bun.*not found$/,
     );
   });
 
-  test("checks its config is a subject glob and a template path", () => {
-    expect(templateTest.checkConfig({ subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" })).toEqual([]);
-    expect(templateTest.checkConfig({ subject: "**/isPrime.ts" })).toEqual([
-      ["config.template", "must be a path relative to the measurement's file, got undefined"],
+  test("checks its config is a subject glob and a test path", () => {
+    expect(bunTestFile.checkConfig({ subject: "**/isPrime.ts", test: "./isPrime.test.ts" })).toEqual([]);
+    expect(bunTestFile.checkConfig({ subject: "**/isPrime.ts" })).toEqual([
+      ["config.test", "must be a path relative to the measurement's file, got undefined"],
     ]);
-    expect(templateTest.checkConfig({})).toEqual([
+    expect(bunTestFile.checkConfig({})).toEqual([
       ["config.subject", "must be a glob pattern, got undefined"],
-      ["config.template", "must be a path relative to the measurement's file, got undefined"],
+      ["config.test", "must be a path relative to the measurement's file, got undefined"],
     ]);
   });
 });

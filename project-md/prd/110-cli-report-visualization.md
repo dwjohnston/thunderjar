@@ -10,7 +10,7 @@ All examples use one running scenario:
 
 - Task `is-prime`, with the three measurements from
   [085-experiment-results.md](085-experiment-results.md#how-a-measures-values-combine):
-  `isPrimeTsExists` (`rate`), `tsIgnoreCount` (`mean`, `max`) and `isPrimeTemplateTest` (`sum`).
+  `isPrimeTsExists` (`rate`), `tsIgnoreCount` (`mean`, `max`) and `isPrimeTests` (`sum`).
 - Experiment `is-prime-baseline`: a matrix of two models (`haiku`, `sonnet`) with every other
   parameter fixed, so two permutations, five iterations each, ten container runs.
 
@@ -110,7 +110,7 @@ Summary  01K4X9J2E8MQZ3V7R5T0WABCDE
   measure              haiku           sonnet
   isPrimeTsExists      rate 0.80       rate 1.00
   tsIgnoreCount        mean 0.6 max 2  mean 0.0 max 0
-  isPrimeTemplateTest  sum 17 pass, 3   sum 24 pass, 1
+  isPrimeTests         sum 17 pass, 3   sum 24 pass, 1
                        fail (n=4)      fail (n=5)
 
 Inspect with: thunderjar show 01K4X9J2E8MQZ3V7R5T0WABCDE
@@ -167,7 +167,7 @@ Permutation 4f9a21c8  (5 iterations)
   MEASURE              MEASURED  AGGREGATE
   isPrimeTsExists      5/5       rate 0.80
   tsIgnoreCount        5/5       mean 0.6, max 2
-  isPrimeTemplateTest  4/5       sum {passed: 17, failed: 3}
+  isPrimeTests         4/5       sum {passed: 17, failed: 3}
 
   cost       $0.109 total   $0.022 / iteration
   tokens     in 412,300     out 38,950
@@ -180,7 +180,7 @@ Permutation 9be07d35  (5 iterations)
   MEASURE              MEASURED  AGGREGATE
   isPrimeTsExists      5/5       rate 1.00
   tsIgnoreCount        5/5       mean 0.0, max 0
-  isPrimeTemplateTest  5/5       sum {passed: 24, failed: 1}
+  isPrimeTests         5/5       sum {passed: 24, failed: 1}
 
   cost       $0.586 total   $0.117 / iteration
   tokens     in 405,870     out 41,210
@@ -199,7 +199,7 @@ Where a measure's stored value is stale (its content hash no longer matches the 
 it is marked rather than hidden:
 
 ```
-  isPrimeTemplateTest  4/5       sum {passed: 17, failed: 3}  stale, run `remeasure`
+  isPrimeTests         4/5       sum {passed: 17, failed: 3}  stale, run `remeasure`
 ```
 
 ### A container run
@@ -222,7 +222,7 @@ Parameters
 Measures
   isPrimeTsExists      false
   tsIgnoreCount        0
-  isPrimeTemplateTest  skipped  (no isPrime.ts to test)
+  isPrimeTests         skipped  (no isPrime.ts to test)
 
 Cost       $0.027
 Tokens     in 98,410   out 9,120
@@ -252,7 +252,7 @@ Permutation 4f9a21c8  model=haiku
   MEASURE              A                 B                 CHANGE
   isPrimeTsExists      rate 0.80         rate 0.40         -0.40  worse
   tsIgnoreCount        mean 0.6, max 2   mean 1.4, max 3   +0.8   worse
-  isPrimeTemplateTest  sum 17/3          sum 15/5          -2     worse
+  isPrimeTests         sum 17/3          sum 15/5          -2     worse
   cost / iteration     $0.022            $0.021            -$0.001
   duration (mean)      0:43              0:44              +0:01
 
@@ -260,7 +260,7 @@ Permutation 9be07d35  model=sonnet
   MEASURE              A                 B                 CHANGE
   isPrimeTsExists      rate 1.00         rate 1.00         =
   tsIgnoreCount        mean 0.0, max 0   mean 0.0, max 0   =
-  isPrimeTemplateTest  sum 24/1          sum 25/0          +1     better
+  isPrimeTests         sum 24/1          sum 25/0          +1     better
   cost / iteration     $0.117            $0.121            +$0.004
   duration (mean)      1:03              1:05              +0:02
 ```
@@ -289,7 +289,7 @@ Pairing permutations by the parameters that did not change:
   A 9be07d35  <->  B 02c8f7a1   model=sonnet
 
 Measurement sets differ. Comparing 2 of 3 measurements.
-  isPrimeTemplateTest   A: d91f6a07   B: 5e3c8b12   not comparable (version differs)
+  isPrimeTests          A: d91f6a07   B: 5e3c8b12   not comparable (version differs)
 
 Pair model=haiku
   MEASURE          A                 B                 CHANGE
@@ -314,14 +314,14 @@ Execution 01K4X9J2E8MQZ3V7R5T0WABCDE  (10 container runs)
 Current measurements for task is-prime:
   isPrimeTsExists      up to date
   tsIgnoreCount        up to date
-  isPrimeTemplateTest  new / changed (d91f6a07)
+  isPrimeTests         new / changed (d91f6a07)
 
 Measuring in new measurement containers from each postrun image:
-  4f9a21c8 i00  isPrimeTemplateTest  {passed: 4, failed: 1}
-  4f9a21c8 i01  isPrimeTemplateTest  {passed: 5, failed: 0}
-  4f9a21c8 i02  isPrimeTemplateTest  {passed: 5, failed: 0}
-  4f9a21c8 i03  isPrimeTemplateTest  skipped
-  4f9a21c8 i04  isPrimeTemplateTest  {passed: 3, failed: 2}
+  4f9a21c8 i00  isPrimeTests  {passed: 4, failed: 1}
+  4f9a21c8 i01  isPrimeTests  {passed: 5, failed: 0}
+  4f9a21c8 i02  isPrimeTests  {passed: 5, failed: 0}
+  4f9a21c8 i03  isPrimeTests  skipped
+  4f9a21c8 i04  isPrimeTests  {passed: 3, failed: 2}
   ...
 
 Updated 10 container runs. Recomputed 2 aggregation results.

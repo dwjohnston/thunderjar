@@ -259,7 +259,7 @@ export default declareInitialPrompt({
 
 - **Measuring instrument** — single-purpose, reusable evaluation logic (built-in
   or user-defined), parameterized by a config type and a value type. Examples:
-  `grep`, `fileCreated`, `templateTest`.
+  `grep`, `fileCreated`, `bunTestFile`.
 - **Measurement** — an instrument plus a specific config, declared on a task.
   Copied per task, never shared by reference, so changing one task's
   measurement config can't silently change another task's meaning or history.
@@ -298,35 +298,68 @@ Keeping instrument logic host-side means it stays unit-testable against a fake
 context — layer 1 of [120-test-boundaries.md](120-test-boundaries.md) — without
 requiring Thunderjar's own runtime inside every base image.
 
-### `templateTest`
+### `bunTestFile`
 
-The instrument that shows why `writeFile` is on the context. A test against
-agent output can't be written in advance, because the thing it tests doesn't
-exist yet and won't have a predictable name. So the file supplied is a
-*template*, populated at measure time from whatever the agent actually
-produced:
+The instrument that shows why `exec` and `writeFile` are on the context. It runs
+an ordinary Bun test file against the file the agent wrote:
 
 ```ts
 // declared on the task
 {
-  instrument: "templateTest",
+  instrument: "bunTestFile",
   config: {
-    subject: "output/**/*.ts",             // resolved in the measurement container
-    template: "./prime.test.template.ts",  // host-side, part of the measurement's content hash
+    subject: "**/isPrime.ts",     // resolved in the measurement container
+    test: "./isPrime.test.ts",    // host-side, part of the measurement's content hash
   },
 }
 ```
 
+The agent's file doesn't exist when the test is written, so the test can't
+import it by path. It reads the path from an environment variable instead, and
+falls back to a reference implementation beside it:
+
 ```ts
-// prime.test.template.ts — not runnable as-is
-import { {{defaultExport}} } from "{{subjectPath}}";
-test("17 is prime", () => expect({{defaultExport}}(17)).toBe(true));
+// isPrime.test.ts: runnable and type-checked as it is
+import { expect, test } from "bun:test";
+
+// The agent's file when measured; the reference implementation when you run it yourself.
+const { isPrime }: typeof import("./isPrime.reference.ts") =
+  await import(Bun.env.THUNDERJAR_SUBJECT ?? "./isPrime.reference.ts");
+
+test("17 is prime", () => expect(isPrime(17)).toBe(true));
 ```
 
-Rendered into the measurement container and run there, so it gets the real
-pinned runtime and installed dependencies. Its value type is a count rather
-than a boolean — a measurement, not a verdict. The glob matching nothing gives
-`skipped`; a template that can't bind gives `erroredWhileMeasuring`.
+- **The test is plain TypeScript.**
+  - Run it on the host, `bun test ./isPrime.test.ts`, and it tests the
+    reference implementation.
+  - The editor type-checks it, with Bun's types.
+  - For a subject that may use a default export, the test takes
+    `subject.isPrime ?? subject.default`.
+- **It runs inside the workdir.**
+  - It's written to `.thunderjar-measure/` in the measurement container, so it
+    gets the real pinned runtime and the project's installed dependencies.
+  - Nothing is written beside the agent's files.
+- **One run per subject.**
+  - `THUNDERJAR_SUBJECT` is the subject's absolute path, and Bun writes a JUnit
+    report, `--reporter=junit`.
+  - The counts come from the report, not from Bun's console output, or its exit
+    code: `bun test` exits 1 whenever a test fails.
+  - A skipped or todo test neither passes nor fails.
+- **The reference implementation isn't part of the config.**
+  - The test never imports it when measured, so it stays out of the content
+    hash.
+
+Its value type is pass and fail counts, summed over every subject, rather than a
+boolean: a measurement, not a verdict.
+
+| Case | Outcome |
+|---|---|
+| The glob matches nothing | `skipped` |
+| No report, e.g. the subject doesn't parse | `erroredWhileMeasuring`, with Bun's error |
+| A report of 0 tests | `erroredWhileMeasuring` |
+
+A more general instrument could come later: any command that writes a JUnit
+report, for test runners other than Bun's.
 
 ## Open questions
 

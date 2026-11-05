@@ -1,3 +1,5 @@
 {
-  "extends": "./project/.thunderjar/tsconfig.json"
+  "extends": "./project/.thunderjar/tsconfig.json",
+  // Bun's types, for the bunTestFile measurement's test.
+  "compilerOptions": { "types": ["bun"] }
 }

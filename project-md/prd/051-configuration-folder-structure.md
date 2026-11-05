@@ -47,8 +47,9 @@ my-app/
     │           └── measurements/          # NOT hashed
     │               ├── isPrimeTsExists.ts
     │               ├── isPrimeTestExists.ts
-    │               ├── isPrimeTemplateTest.ts
-    │               └── isPrime.test.template.ts
+    │               ├── isPrimeTests.ts
+    │               ├── isPrime.test.ts
+    │               └── isPrime.reference.ts
     └── _generated/
         └── parameter-names.d.ts           # generated from the folders above; git-ignored
 ```
@@ -69,8 +70,8 @@ my-app/
   from every parameter hash**: measurements don't affect the prerun or postrun image, so
   changing them must not change the permutation hash.
 - **One file per measurement, named by its file.** `isPrimeTsExists.ts` is the
-  measurement `isPrimeTsExists`. Supporting files, like a `templateTest` template, sit
-  alongside.
+  measurement `isPrimeTsExists`. Supporting files, like a `bunTestFile` test and its
+  reference implementation, sit alongside.
 - **Experiments live outside `experiment-parameters/`.** An experiment isn't a parameter;
   it's a matrix over them.
 - **Generated types live in `_generated/`.** They are built from the folder names above

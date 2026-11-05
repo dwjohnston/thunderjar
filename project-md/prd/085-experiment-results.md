@@ -65,8 +65,8 @@ type RecordedMeasure = {
     outcome: { outcome: "measured", data: 0 },
   },
   // added three months later against the same postrun image
-  isPrimeTemplateTest: {
-    instrument: "templateTest",
+  isPrimeTests: {
+    instrument: "bunTestFile",
     contentHash: "d91f6a07…",
     measuredAt: "2026-12-14T09:02:44Z",
     outcome: { outcome: "measured", data: { passed: 4, failed: 1 } },
@@ -79,7 +79,7 @@ type RecordedMeasure = {
 - **The name identifies the measurement.** Results are keyed by it, and it's what a
   report shows.
 - **The content hash identifies the version.** It covers `instrument`, `config`, and any
-  bundled files, such as a `templateTest` template. It does **not** cover `aggregate`:
+  bundled files, such as a `bunTestFile` test. It does **not** cover `aggregate`:
   changing how values combine only means recomputing aggregation results, never
   re-measuring.
 - **A stale measure is a hash mismatch.** A stored measure whose `contentHash` differs
@@ -93,7 +93,7 @@ type RecordedMeasure = {
 
 ```
 measurement set hash = hash(
-  "isPrimeTemplateTest:d91f6a07…\n" +
+  "isPrimeTests:d91f6a07…\n" +
   "isPrimeTsExists:7b21ac90…\n" +
   "tsIgnoreCount:0c4fe218…"
 )
@@ -224,7 +224,7 @@ iterations.
 // per-iteration measures, i00–i04
 isPrimeTsExists:     true,  true,  true,  false,   true
 tsIgnoreCount:       0,     2,     0,     0,       1
-isPrimeTemplateTest: {4,1}, {5,0}, {5,0}, skipped, {3,2}  // i03: no isPrime.ts to test
+isPrimeTests:        {4,1}, {5,0}, {5,0}, skipped, {3,2}  // i03: no isPrime.ts to test
 ```
 
 Each measurement picks one or more combinations from a fixed menu, as an array. The
@@ -256,10 +256,10 @@ export default declareMeasurement({
   aggregate: ["mean", "max"], // typical and worst iteration
 });
 
-// tasks/is-prime/measurements/isPrimeTemplateTest.ts
+// tasks/is-prime/measurements/isPrimeTests.ts
 export default declareMeasurement({
-  instrument: "templateTest",
-  config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
+  instrument: "bunTestFile",
+  config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
   aggregate: ["sum"],
 });
 ```
@@ -272,7 +272,7 @@ of iterations whose value was combined:
 measures: {
   isPrimeTsExists:     { measured: 5, rate: 0.8 },
   tsIgnoreCount:       { measured: 5, mean: 0.6, max: 2 },
-  isPrimeTemplateTest: { measured: 4, sum: { passed: 17, failed: 3 } },   // i03 skipped
+  isPrimeTests:        { measured: 4, sum: { passed: 17, failed: 3 } },   // i03 skipped
 }
 ```
 

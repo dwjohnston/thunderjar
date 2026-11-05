@@ -19,8 +19,7 @@
   "ignorePatterns": [
     "node_modules",
     "dist",
-    "fixtures/.tmp",
-    "**/*.template.ts"
+    "fixtures/.tmp"
   ],
   "overrides": [
     {

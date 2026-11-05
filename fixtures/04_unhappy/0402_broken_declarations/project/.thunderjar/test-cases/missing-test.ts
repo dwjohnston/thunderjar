@@ -5,7 +5,7 @@ export default declareTestCase({
   codeState: ["baseline"],
   promptSet: ["snerk"],
   harnessModel: ["fake-harness-alpha@1.0.0/fake-model-small"],
-  task: "missing-template",
+  task: "missing-test",
   initialPrompt: ["plain"],
   iterations: 1,
 });

@@ -16,8 +16,9 @@ experiment-parameters/tasks/is-prime/
 └── measurements/                  # NOT hashed
     ├── isPrimeTsExists.ts
     ├── isPrimeTestExists.ts
-    ├── isPrimeTemplateTest.ts
-    └── isPrime.test.template.ts
+    ├── isPrimeTests.ts
+    ├── isPrime.test.ts
+    └── isPrime.reference.ts
 ```
 
 The folder name is the task. There is no `index.ts`.
@@ -65,15 +66,16 @@ Every initial prompt of the task is judged by the same ones, so two wordings com
 measurement by measurement.
 
 One file per measurement, named by its file: `isPrimeTsExists.ts` is the measurement
-`isPrimeTsExists`. Supporting files, like a `templateTest` template, sit alongside.
+`isPrimeTsExists`. Supporting files, like a `bunTestFile` test and its reference
+implementation, sit alongside.
 
 ```ts
-// experiment-parameters/tasks/is-prime/measurements/isPrimeTemplateTest.ts
+// experiment-parameters/tasks/is-prime/measurements/isPrimeTests.ts
 export default declareMeasurement({
-  instrument: "templateTest",
+  instrument: "bunTestFile",
   config: {
     subject: "**/isPrime.ts",
-    template: "./isPrime.test.template.ts",
+    test: "./isPrime.test.ts",
   },
 });
 ```

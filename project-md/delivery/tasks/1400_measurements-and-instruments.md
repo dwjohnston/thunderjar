@@ -1,6 +1,6 @@
 # 1400: Measurements and instruments
 
-Measures are taken on each container run after the agent finishes, using the `grep` and `templateTest` instruments.
+Measures are taken on each container run after the agent finishes, using the `grep` and `bunTestFile` instruments.
 
 From rows 9 and 10. See [planned reapplication](../../research/planned-reapplication.md), step 14.
 
@@ -11,7 +11,7 @@ minor
 ## Artifacts
 
 - `declareMeasure`
-- The `grep` and `templateTest` instruments
+- The `grep` and `bunTestFile` instruments
 - Measurements written to the run data store
 
 ## Example CLI Output
