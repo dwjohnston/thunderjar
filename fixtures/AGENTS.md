@@ -102,6 +102,12 @@ bun run fixture 0202 plan is-prime-baseline
     - A second fake agent, `fake-harness-beta`, version `1.0.0`, models `fake-model-small` and `fake-model-large`. It writes a correct `isPrime.ts`, where alpha's is buggy.
     - Task `is-prime` has a second initial prompt, `terse`.
     - Test cases: `example`, and `is-prime-baseline`: both prompt sets, `fake-harness-alpha@1.0.0/fake-model-small` and `fake-harness-beta@1.0.0/fake-model-large`, both initial prompts, 5 iterations. Matrix shape 1/1/2/2/2.
+  - `0203_recorded_executions`: `0202_typical_project`, with a run data store checked in at `.thunderjar/.data/`, as if three executions had already run. Fixed execution IDs and timestamps, in UTC.
+    - `.thunderjar/.gitignore` ignores `.data/`, so its files are force-added.
+    - `01m3vf68s54p5eyn5s3t1ygkdj`: `is-prime-baseline`, started 2026-10-01 10:12, complete. All 40 container runs, 8 permutations × 5 iterations, every agent exiting 0.
+    - `01m3ygz4g89aqh8yey8em0twpq`: `two-harnesses`, started 2026-10-02 14:40, failed. Both container runs: permutation 1, `fake-harness-alpha`, exits 0; permutation 2, `fake-harness-beta`, exits 3 and leaves no result file.
+    - `01m40g5972dza3k7g3d36k55zw`: `example`, started 2026-10-03 09:05, still running. 1 × 1, with no container run recorded yet.
+    - No container run has a measure in its `result` yet.
 - **03_real_git**: projects whose code states and prompt sets read real commits of this repository. See "Changing a real git scenario's commits" above.
   - `0301_git_project`: a JavaScript project committed twice, whose code states check out each commit and whose prompt sets read a file at each.
     - Real git, through `checkoutCommit` and `ctx.git.show`. Its `project/` is committed to this repository at two pinned states:

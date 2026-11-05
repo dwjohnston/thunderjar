@@ -1,0 +1,45 @@
+{
+  "executionId": "01m3vf68s54p5eyn5s3t1ygkdj",
+  "testCase": "is-prime-baseline",
+  "task": "is-prime",
+  "permutation": 4,
+  "permutationHash": "775c8f66ccb14b9310e2bd7b524476fca793a57da4d0a081c62c010c15b6d1c9",
+  "iteration": 4,
+  "postrunImage": "thunderjar-postrun:01m3vf68s54p5eyn5s3t1ygkdj-4-4",
+  "ranAt": "2026-10-01T10:25:52.767Z",
+  "parameters": {
+    "baseImage": {
+      "name": "node20",
+      "parameterHash": "26d9745fb68074a7c8ddea6037750768ffd92aaed9fc1b4f09b480e800b4f039"
+    },
+    "codeState": {
+      "name": "baseline",
+      "parameterHash": "e7d314637bf7f4dcf94c40fedaf7c8c25b166f27d3bee02656b7c325fba19e7e"
+    },
+    "promptSet": {
+      "name": "snerk",
+      "parameterHash": "7b30ae9dca2524085ab583fb1d5fe4de0f94f7d470516e96e4037b2c5165e962"
+    },
+    "harnessModel": {
+      "name": "fake-harness-beta@1.0.0/fake-model-large",
+      "parameterHash": "3a8115a71a53f29936ee761c721f05f7305ef45247c2e3e4df4a8302b86be01f"
+    },
+    "initialPrompt": {
+      "name": "terse",
+      "parameterHash": "4bd07001ebcda7f202cb3f9c25ae7b981357c791fbc62e457089ad3e4662dfa6"
+    }
+  },
+  "harnessModel": {
+    "harness": "fake-harness-beta",
+    "version": "1.0.0",
+    "model": "fake-model-large",
+    "modelId": "fake-model-large-001"
+  },
+  "execution": {
+    "startedAt": 1790850352767,
+    "finishedAt": 1790850383767,
+    "exitCode": 0
+  },
+  "harnessResult": "{\"model\":\"fake-model-large-001\"}\n",
+  "result": {}
+}

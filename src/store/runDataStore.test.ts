@@ -1,7 +1,7 @@
 import { $, Glob } from "bun";
 import { afterEach, describe, expect, test } from "bun:test";
 import { TMP_DIR } from "../testing/cli.ts";
-import { type ContainerRunRecord, type ExecutionRecord, executionFolder, fileStore } from "./runDataStore.ts";
+import { type ContainerRunRecord, type ExecutionRecord, executionFolder, fileStore, RunDataStoreError } from "./runDataStore.ts";
 
 const dirs: string[] = [];
 const dataDir = () => {
@@ -124,5 +124,18 @@ describe("fileStore", () => {
     await store.recordContainerRun(containerRun(id, 1, 1));
 
     expect(filesIn(dir)).toEqual([`runs/${id}/container-runs/1-1.json`]);
+  });
+
+  test("a record that isn't JSON is a RunDataStoreError with its path", async () => {
+    const dir = dataDir();
+    const store = fileStore(dir);
+    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+    await store.recordContainerRun(containerRun(id, 1, 1));
+    await Bun.write(`${dir}/runs/${id}/container-runs/1-1.json`, "{");
+    await Bun.write(`${dir}/runs/${id}/execution.json`, "");
+
+    const pathOf = (error: unknown) => (error instanceof RunDataStoreError ? error.path : error);
+    expect(await store.containerRunsOf(id).catch(pathOf)).toBe(`${dir}/runs/${id}/container-runs/1-1.json`);
+    expect(await store.listExecutions().catch(pathOf)).toBe(`${dir}/runs/${id}/execution.json`);
   });
 });
