@@ -21,6 +21,11 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun test
+      # Ubuntu 24.04's AppArmor stops unconfined processes making user namespaces, whatever
+      # docker run is told. Scenario 0206's sandboxing agent needs them, as Claude Code's
+      # bubblewrap sandbox does.
+      - name: Let containers make user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Docker image tests (GitHub's Ubuntu runners have Docker)
         run: bun run test:docker
       - name: Installed package smoke test
