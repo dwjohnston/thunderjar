@@ -42,7 +42,7 @@
     "changeset": "changeset",
     "version": "changeset version",
     "release": "changeset publish",
-    "skills:update": "bunx skills update dwjohnston/agent-skills",
+    "skills:update": "bunx skills update -p -y $(jq -r '.skills | to_entries[] | select(.value.source == \"dwjohnston/agent-skills\") | .key' skills-lock.json)",
     "skills:add": "bunx skills add dwjohnston/agent-skills"
   },
   "dependencies": {

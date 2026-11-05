@@ -53,6 +53,49 @@ Write:
   - Locks writes for about 20 minutes on prod.
 - Then: drop `legacy_region` a week later.
 
+
+```
+- **Test case parameters**
+  - Base image: `node20`.
+  - Code states
+    - `thunderjar-start`: repo pinned at `d384541`.
+    - `thunderjar-main`: repo at a later commit, with dependencies installed.
+  - Harnesses: Claude Code, Codex, Copilot, OpenCode.
+  - Prompt set: `none`.
+```
+
+```
+- **Test case parameters**
+  - Base image: `node20`.
+  - Code states
+    - `thunderjar-start`:
+      - repo pinned at `d384541`.
+    - `thunderjar-main`:
+      - repo at a later commit, with dependencies installed.
+  - Harnesses: Claude Code, Codex, Copilot, OpenCode.
+  - Prompt set: `none`.
+```
+
+Instead of
+```
+- **Tasks**
+  - `is-prime`
+  - `add-claude-code-harness-0201`
+    - Checks the harness file and folder, declaration, parameter-name test, typecheck and tests.
+```
+
+Write:
+```
+- **Tasks**
+  - `is-prime`
+  - `add-claude-code-harness-0201`
+    - Checks:
+       - Harness file and folder,
+       - declaration,
+       - parameter-name test,
+       - typecheck and tests.
+```
+
 #### Use numbered lists
 
 If the context is you are likely receiving feedback/input from the user, use numbered lists.
