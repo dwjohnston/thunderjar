@@ -1,6 +1,6 @@
 // The starter harnesses `init` scaffolds, one folder each under `harnessModels/`. Users copy and
-// edit these rather than write a harness from scratch. Only `claude-code` is in the example test
-// case, so a new user needs only one key.
+// edit these rather than write a harness from scratch. `compare-models` uses only `claude-code`, so
+// a new user can start with one key. `compare-harnesses` also uses `copilot` and `opencode`.
 
 const declaration = (fn: string, body: string) =>
   `import { ${fn} } from "thunderjar";\n\nexport default ${fn}(${body});\n`;
@@ -163,6 +163,7 @@ export const STARTER_HARNESSES: Record<string, Record<string, string>> = {
     "index.ts": opencode,
     "models.ts": models(CHECK("https://opencode.ai/zen/v1/models"), [
       ["opus-5", "opencode/claude-opus-5"],
+      ["haiku-5-5", "opencode/claude-haiku-5-5"],
       ["gpt-5-6-luna", "opencode/gpt-5.6-luna"],
       ["gpt-5-5", "opencode/gpt-5.5"],
       ["deepseek-v4-pro", "opencode/deepseek-v4-pro"],

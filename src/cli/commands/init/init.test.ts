@@ -26,7 +26,8 @@ const SCAFFOLD = [
   "tsconfig.json",
   ".gitignore",
   "thunderjar.config.ts",
-  "test-cases/example.ts",
+  "test-cases/compare-models.ts",
+  "test-cases/compare-harnesses.ts",
   `${P}/baseImages/node20/index.ts`,
   `${P}/codeStates/baseline/index.ts`,
   `${P}/promptSets/snerk/index.ts`,
@@ -68,13 +69,28 @@ export default declareConfig({
   runDataStore: sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }),
 });
 `);
-    expect(await read(copy.dir, "test-cases/example.ts")).toBe(`import { declareTestCase } from "thunderjar";
+    expect(await read(copy.dir, "test-cases/compare-models.ts")).toBe(`import { declareTestCase } from "thunderjar";
 
+// The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5.
 export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],
   promptSet: ["snerk"],
-  harnessModel: ["claude-code@2.1.283/haiku-4-5"],
+  harnessModel: ["claude-code@2.1.283/haiku-4-5", "claude-code@2.1.283/haiku-5-5"],
+  task: "is-prime",
+  initialPrompt: ["plain"],
+  iterations: 1,
+});
+`);
+    expect(await read(copy.dir, "test-cases/compare-harnesses.ts")).toBe(`import { declareTestCase } from "thunderjar";
+
+// The same model in three harnesses: Haiku 5.5 in Claude Code, GitHub Copilot CLI and OpenCode.
+// Each harness needs its own key: ANTHROPIC_API_KEY, COPILOT_GITHUB_TOKEN and OPENCODE_API_KEY.
+export default declareTestCase({
+  baseImage: ["node20"],
+  codeState: ["baseline"],
+  promptSet: ["snerk"],
+  harnessModel: ["claude-code@2.1.283/haiku-5-5", "copilot@1.0.105/haiku-5-5", "opencode@1.19.5/haiku-5-5"],
   task: "is-prime",
   initialPrompt: ["plain"],
   iterations: 1,
@@ -120,7 +136,7 @@ export default declareTestCase({
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
     await Bun.write(`${copy.dir}/.thunderjar/thunderjar.config.ts`, "// edited\n");
-    await $`rm ${copy.dir}/.thunderjar/test-cases/example.ts`.quiet();
+    await $`rm ${copy.dir}/.thunderjar/test-cases/compare-models.ts`.quiet();
 
     const { stdout, stderr, exitCode } = await init(copy.dir);
 
@@ -128,9 +144,9 @@ export default declareTestCase({
     expect(exitCode).toBe(0);
     expect(stdout).toBe(
       [
-        "Created .thunderjar/test-cases/example.ts",
+        "Created .thunderjar/test-cases/compare-models.ts",
         ...["package.json", ...SCAFFOLD]
-          .filter((path) => path !== "test-cases/example.ts")
+          .filter((path) => path !== "test-cases/compare-models.ts")
           .map((path) => `Exists  .thunderjar/${path}`),
       ].join("\n") + "\n",
     );
@@ -193,24 +209,23 @@ describe("0201 minimal existing setup", () => {
   const ALPHA = `${P}/harnessModels/fake-harness-alpha/`;
   const CLAUDE_CODE = `${P}/harnessModels/claude-code/`;
   const GENERATED = "_generated/parameterNames.d.ts";
-  // The starters a minimal setup leaves out: every harness but the example's, and the second prompt set.
-  const isStarter = (path: string) =>
-    (path.startsWith(`${P}/harnessModels/`) && !path.startsWith(CLAUDE_CODE)) || path.startsWith(`${P}/promptSets/house-style/`);
+  // What a minimal setup leaves out: every harness but Claude Code, the second prompt set, and init's
+  // test cases, which use real harnesses. 0201 has one test case of its own, `example`, instead.
+  const leftOut = (path: string) =>
+    (path.startsWith(`${P}/harnessModels/`) && !path.startsWith(CLAUDE_CODE)) ||
+    path.startsWith(`${P}/promptSets/house-style/`) ||
+    path.startsWith("test-cases/");
 
-  test("is what init scaffolds in 0101, with the agent swapped for fake-harness-alpha, and no starters", async () => {
+  test("is what init scaffolds in 0101, with the agent swapped for fake-harness-alpha, no starters, and its own test case", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
-    const scaffolded = filesIn(copy.dir).filter((path) => !isStarter(path));
+    const scaffolded = filesIn(copy.dir).filter((path) => !leftOut(path));
     const existing = filesIn(scenario("0201"));
 
     const swapped = (path: string) => path.replace(CLAUDE_CODE, ALPHA);
-    expect(existing).toEqual([...scaffolded.map(swapped), GENERATED].toSorted());
+    expect(existing).toEqual([...scaffolded.map(swapped), "test-cases/example.ts", GENERATED].toSorted());
     for (const path of scaffolded.filter((path) => !path.startsWith(CLAUDE_CODE))) {
-      const content = (await read(copy.dir, path)).replace(
-        '"claude-code@2.1.283/haiku-4-5"',
-        '"fake-harness-alpha@1.0.0/fake-model-small"',
-      );
-      expect(await read(scenario("0201"), path), path).toBe(content);
+      expect(await read(scenario("0201"), path), path).toBe(await read(copy.dir, path));
     }
   });
 });

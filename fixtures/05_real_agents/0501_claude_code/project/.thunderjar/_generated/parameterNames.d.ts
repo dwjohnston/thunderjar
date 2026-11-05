@@ -11,7 +11,7 @@ type HarnessModelName =
   | `claude-code@${"2.1.283"}/${"haiku-4-5" | "haiku-5-5" | "opus-5-5" | "sonnet-5-5"}`
   | `codex@${"0.166.0"}/${"gpt-5-5" | "gpt-5-6-luna" | "gpt-6-1-sol" | "gpt-6-astra" | "gpt-6-luna"}`
   | `copilot@${"1.0.105"}/${"gpt-5-5" | "gpt-5-6-luna" | "gpt-6-1-sol" | "haiku-5-5" | "opus-5-5" | "sonnet-5-5"}`
-  | `opencode@${"1.19.5"}/${"deepseek-v4-pro" | "gpt-5-5" | "gpt-5-6-luna" | "opus-5"}`;
+  | `opencode@${"1.19.5"}/${"deepseek-v4-pro" | "gpt-5-5" | "gpt-5-6-luna" | "haiku-5-5" | "opus-5"}`;
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;

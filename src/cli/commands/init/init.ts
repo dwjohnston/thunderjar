@@ -55,7 +55,7 @@ export async function init(projectDir: string): Promise<InitResult> {
 export function createInitCommand(): Command {
   return new Command("init")
     .description(
-      "Scaffold the .thunderjar/ configuration folder in the current directory, with an example test case, and starter prompt sets and harnesses to copy. Existing files are left as they are.",
+      "Scaffold the .thunderjar/ configuration folder in the current directory, with two test cases, one comparing models and one comparing harnesses, and starter prompt sets and harnesses to copy. Existing files are left as they are.",
     )
     .action(async () => {
       const { createdFolder, created, existing } = await init(process.cwd());
