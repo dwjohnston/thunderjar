@@ -8,6 +8,7 @@ import { $, Glob } from "bun";
 import type { Reply } from "../../../api/declarations.ts";
 import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure, RecordedOutcome } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
+import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
@@ -799,6 +800,27 @@ describe("0402 broken declarations", () => {
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual([]);
     expect(await Bun.file(data).exists()).toBe(false);
+  });
+});
+
+describe("0209 floating code state", () => {
+  test("each container run records what its parameters resolved to, and show displays it", async () => {
+    const MAIN = "24dc11c26e2716a12cf33b82fec895a7f02b3e8a";
+    await using docker = await fakeDocker();
+    await using git = await fakeCommand("git", { stdout: `${MAIN}\trefs/heads/main` });
+    const data = dataDir();
+
+    const { stderr, exitCode } = await thunderjar(scenario("0209"), ["run", "follow-main", "--data-dir", data], { env: { ...docker.env, ...git.env } });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(await git.calls()).toHaveLength(1);
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    expect(record.parameters.codeState).toEqual({ name: "follow-main", parameterHash: expect.stringMatching(/^[0-9a-f]{64}$/), resolved: MAIN });
+    expect(record.parameters.promptSet).toEqual({ name: "snerk", parameterHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
+
+    const show = await thunderjar(scenario("0209"), ["show", record.executionId, "1-1", "--data-dir", data]);
+    expect(show.stdout).toContain(`\n  codeState      follow-main                                ${record.parameters.codeState.parameterHash.slice(0, 8)}  resolved ${MAIN}\n`);
   });
 });
 

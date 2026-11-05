@@ -50,6 +50,50 @@ test("ctx carries dir for folder parameters, and version for harnesses", () => {
   declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: (_config, ctx) => ctx.dir });
 });
 
+test("ctx.resolved is typed from what resolve returns, awaited", () => {
+  declareCodeState({
+    config: { repo: "https://github.com/acme/widgets.git", branch: "main" },
+    resolve: (config, ctx) => {
+      assertType<string>(config.branch);
+      return ctx.exec(`git ls-remote --exit-code ${config.repo} refs/heads/${config.branch}`);
+    },
+    applyParameter: (_config, ctx) => {
+      assertType<string>(ctx.resolved);
+      assertType<string>(ctx.dir);
+      return `RUN echo ${ctx.resolved.slice(0, 8)}`;
+    },
+  });
+  declarePromptSet({
+    resolve: () => ({ skills: ["review"], count: 1 }),
+    applyParameter: (_config, ctx) => {
+      assertType<string[]>(ctx.resolved.skills);
+      // @ts-expect-error - not in what resolve returned
+      return ctx.resolved.agents;
+    },
+  });
+  declareHarness({
+    resolve: async () => "2.1.311",
+    applyParameter: (_config, ctx) => `RUN npm install -g @anthropic-ai/claude-code@${ctx.resolved}`,
+    cli: (ctx) => {
+      assertType<string>(ctx.resolved);
+      return `claude --model ${ctx.modelId}`;
+    },
+  });
+});
+
+test("ctx.resolved is undefined without a resolve, and resolve must return what JSON can hold", () => {
+  declareCodeState({
+    applyParameter: (_config, ctx) => {
+      assertType<undefined>(ctx.resolved);
+      return "";
+    },
+  });
+  // @ts-expect-error - a function isn't something JSON can hold
+  declareCodeState({ resolve: () => () => "main" });
+  // @ts-expect-error - nor is a Date
+  declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, resolve: () => new Date() });
+});
+
 test("a base image must say how it is applied: it carries the FROM", () => {
   // @ts-expect-error - applyParameter is missing
   declareBaseImage({});

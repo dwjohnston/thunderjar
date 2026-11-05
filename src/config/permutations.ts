@@ -1,6 +1,6 @@
 // A test case's matrix: the cross product of its five parameter arrays. Each permutation's hashes
 // are from what its parameters output: see src/execution/hashPermutations.ts.
-import type { TestCaseDeclaration } from "../api/declarations.ts";
+import type { Resolved, TestCaseDeclaration } from "../api/declarations.ts";
 
 /** The matrix axes, in declaration field order. `task` is a single value, not an axis. */
 export const AXES = ["baseImage", "codeState", "promptSet", "harnessModel", "initialPrompt"] as const;
@@ -30,6 +30,8 @@ export type HashedPermutation = Permutation & {
   imageHash: string;
   /** Its prerun Dockerfile. */
   dockerfile: string;
+  /** What each of its parameters with a `resolve` resolved to. */
+  resolved: Partial<Record<Axis, Resolved>>;
 };
 
 /** The size of each axis, e.g. `[1, 1, 2, 2, 2]`. Their product is the number of permutations. */

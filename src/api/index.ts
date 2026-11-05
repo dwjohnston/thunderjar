@@ -36,6 +36,8 @@ export type {
   ModelTokenCosts,
   PromptSetDeclaration,
   Reply,
+  Resolved,
+  ResolveCtx,
   SqliteStore,
   TestCaseDeclaration,
   TokenCostCollector,

@@ -13,7 +13,7 @@ import type {
 import { PARAMETERS } from "../config/folders.ts";
 import { loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
-import { hashPermutations } from "./hashPermutations.ts";
+import { type HashOptions, hashPermutations } from "./hashPermutations.ts";
 import { requiredEnvOf } from "../config/requiredEnv.ts";
 import { DEFAULT_IMAGE_PREFIX, postrunImage, prerunImage } from "./images.ts";
 
@@ -108,12 +108,12 @@ async function loadHarness(root: string, task: string, permutation: HashedPermut
   return { baseImage, harness, collectTokenCosts, version: pinned, modelId: models[model] as string, initialPrompt };
 }
 
-/** Each turn of a container run in session `sessionId`, with the harness command for it. */
-function planTurns({ harness, version, modelId, initialPrompt }: Loaded, sessionId: string): PlannedTurn[] {
+/** Each turn of a container run in session `sessionId`, with the harness command for it, given what the harness resolved to. */
+function planTurns({ harness, version, modelId, initialPrompt }: Loaded, sessionId: string, resolved: unknown): PlannedTurn[] {
   const prompts = promptsOf(initialPrompt);
   return prompts.map((prompt, turn) => {
     const paths = turnPaths(turn, prompts.length);
-    const command = harness.cli({ version, modelId, initialPrompt: prompt, ...paths, turn, sessionId });
+    const command = harness.cli({ version, modelId, initialPrompt: prompt, ...paths, turn, sessionId, resolved });
     return { prompt, ...paths, command };
   });
 }
@@ -128,8 +128,9 @@ export async function planExecution(
   testCase: TestCaseDeclaration,
   executionId: string,
   imagePrefix: string = DEFAULT_IMAGE_PREFIX,
+  options: HashOptions = {},
 ): Promise<PlannedExecution> {
-  const hashed = await hashPermutations(root, testCase);
+  const hashed = await hashPermutations(root, testCase, options);
   const problems: Problem[] = [];
   const loaded = await Promise.all(hashed.map((permutation) => loadHarness(root, testCase.task, permutation, problems)));
   if (problems.length > 0) throw problemsError(problems);
@@ -154,7 +155,7 @@ export async function planExecution(
             number: i + 1,
             postrunImage: postrunImage(executionId, p + 1, i + 1, imagePrefix),
             sessionId,
-            turns: planTurns(harnessed, sessionId),
+            turns: planTurns(harnessed, sessionId, permutation.resolved.harnessModel),
           };
         }),
       };

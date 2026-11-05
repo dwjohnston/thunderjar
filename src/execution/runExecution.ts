@@ -72,7 +72,14 @@ function containerRunRecord(
     postrunImage: iteration.postrunImage,
     ranAt: new Date(execution.startedAt).toISOString(),
     parameters: Object.fromEntries(
-      AXES.map((axis) => [axis, { name: permutation[axis], parameterHash: permutation.parameterHashes[axis] }]),
+      AXES.map((axis) => [
+        axis,
+        {
+          name: permutation[axis],
+          parameterHash: permutation.parameterHashes[axis],
+          ...(permutation.resolved[axis] !== undefined && { resolved: permutation.resolved[axis] }),
+        },
+      ]),
     ) as ContainerRunRecord["parameters"],
     harnessModel: { harness, version, model, modelId: permutation.modelId },
     execution,

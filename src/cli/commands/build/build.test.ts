@@ -4,6 +4,7 @@
 import { $ } from "bun";
 import { describe, expect, test } from "bun:test";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
+import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
@@ -253,6 +254,35 @@ describe("0402 broken declarations", () => {
       expect(exitCode).toBe(1);
     }
     expect((await docker.commands()).filter((command) => command.startsWith("docker build"))).toEqual([]);
+  });
+});
+
+describe("0209 floating code state", () => {
+  test("the Dockerfile pins the commit the code state resolved to", async () => {
+    await using git = await fakeCommand("git", { stdout: "24dc11c26e2716a12cf33b82fec895a7f02b3e8a\trefs/heads/main" });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0209"), ["build", "follow-main", "--dry-run"], { env: git.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(`WORKDIR /workspace
+RUN git clone --quiet https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git /workspace \\
+  && git -C /workspace checkout --quiet --detach 24dc11c26e2716a12cf33b82fec895a7f02b3e8a \\
+  && git -C /workspace remote remove origin
+`);
+  });
+});
+
+describe("0402 broken declarations, resolving", () => {
+  test("a resolve that throws is a config error naming the parameter, and nothing is built", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0402"), ["build", "unresolvable-code-state"], { env: docker.env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe('Error: code state "unresolvable": resolve threw: no branch named no-such-branch\n');
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
   });
 });
 

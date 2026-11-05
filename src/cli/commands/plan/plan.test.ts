@@ -2,6 +2,7 @@
 // unchanged. Any of these can be run by hand, e.g. `bun run fixture 0402 plan unknown-prompt-set`.
 import { describe, expect, test } from "bun:test";
 import { thunderjar } from "../../../testing/cli.ts";
+import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
@@ -353,6 +354,47 @@ Error: .thunderjar/test-case-parameters/promptSets/ has no prompt sets
 Error: .thunderjar/test-case-parameters/harnessModels/ has no harnesses
 Error: .thunderjar/test-case-parameters/tasks/ has no tasks
 `);
+    expect(exitCode).toBe(1);
+  });
+});
+
+describe("0209 floating code state", () => {
+  const MAIN = "24dc11c26e2716a12cf33b82fec895a7f02b3e8a";
+
+  test("shows what each parameter with a resolve resolved to, after the matrix", async () => {
+    await using git = await fakeCommand("git", { stdout: `${MAIN}\trefs/heads/main` });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0209"), ["plan", "follow-main"], { env: git.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toEndWith(`| plain   ${stdout.match(/[0-9a-f]{8}(?=  missing)/)?.[0]}  missing
+
+Resolved
+  codeState  follow-main  ${MAIN}
+`);
+    expect(await git.calls()).toEqual(["ls-remote --exit-code https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git refs/heads/main"]);
+  });
+
+  test("a new commit on the branch gives a new hash", async () => {
+    await using main = await fakeCommand("git", { stdout: `${MAIN}\trefs/heads/main` });
+    await using later = await fakeCommand("git", { stdout: "0123456789abcdef0123456789abcdef01234567\trefs/heads/main" });
+
+    const hashOf = async (env: Record<string, string>) => (await thunderjar(scenario("0209"), ["plan", "follow-main"], { env })).stdout.match(/[0-9a-f]{8}(?=  missing)/)?.[0];
+
+    expect(await hashOf(main.env)).not.toBe(await hashOf(later.env));
+    expect(await hashOf(main.env)).toBe(await hashOf(main.env));
+  });
+
+  test("a resolve whose command fails is an error naming the parameter", async () => {
+    await using git = await fakeCommand("git", { exitCode: 2 });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0209"), ["plan", "follow-main"], { env: git.env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      'Error: code state "follow-main": resolve threw: `git ls-remote --exit-code https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git refs/heads/main` exited with 2\n',
+    );
     expect(exitCode).toBe(1);
   });
 });

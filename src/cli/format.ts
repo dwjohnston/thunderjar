@@ -1,4 +1,4 @@
-import type { ModelTokenCosts, TokenCosts } from "../api/declarations.ts";
+import type { ModelTokenCosts, Resolved, TokenCosts } from "../api/declarations.ts";
 import { registryHost } from "../config/projectConfig.ts";
 import type { Execution } from "../store/runDataStore.ts";
 
@@ -52,3 +52,6 @@ export function pushFailure(reference: string, error: Error): string {
   const repository = reference.slice(0, reference.lastIndexOf(":"));
   return `Pushing ${reference} failed: ${error.message}\nCheck that your Docker login for ${registryHost(repository)} can push to ${repository}: on ghcr.io, a token needs the write:packages scope.`;
 }
+
+/** What a parameter's `resolve` returned, as shown: a string as it is, anything else as JSON. */
+export const showResolved = (value: Resolved) => (typeof value === "string" ? value : JSON.stringify(value));

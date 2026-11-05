@@ -5,7 +5,7 @@ import { expandPermutations, type HashedPermutation } from "../config/permutatio
 import { loadTestCase } from "../config/testCase.ts";
 import { copyScenarioProject } from "../testing/cli.ts";
 import { scenario } from "../testing/scenario.ts";
-import { hashPermutations } from "./hashPermutations.ts";
+import { hashPermutations, hostExec } from "./hashPermutations.ts";
 
 const ONE: TestCaseDeclaration = {
   baseImage: ["node20"],
@@ -70,6 +70,7 @@ describe("hashPermutations", () => {
         modelId: permutation.harnessModel.startsWith("fake-harness-alpha") ? "fake-model-small-001" : "fake-model-large-001",
         imageHash: sha,
         dockerfile: expect.stringMatching(/^FROM node:20-bookworm\n/),
+        resolved: {},
       })),
     );
   });
@@ -341,11 +342,123 @@ export default declareCodeState({
     await edit(`${parameters}/promptSets/snerk/index.ts`, (text) => text.replace("applyParameter: () =>", 'applyParameter: () => { throw new Error("no"); },\n  _was: () =>'));
     await edit(`${parameters}/harnessModels/fake-harness-beta/index.ts`, (text) => text.replace("cli: (ctx) =>", 'cli: () => { throw new Error("no cli"); },\n  _was: (ctx: { initialPrompt: string; modelId: string; resultPath: string }) =>'));
 
-    expect(hashPermutations(copied, TWO_PAIRS)).rejects.toThrow(
+    await expect(hashPermutations(copied, TWO_PAIRS)).rejects.toThrow(
       [
         ".thunderjar/test-case-parameters/promptSets/snerk/index.ts: applyParameter: threw: no",
         ".thunderjar/test-case-parameters/harnessModels/fake-harness-beta/index.ts: cli: threw: no cli",
       ].join("\n"),
     );
+  });
+});
+
+describe("hashPermutations, resolving", () => {
+  const floating = `${scenario("0209")}/${FOLDER}`;
+  const FOLLOW_MAIN: TestCaseDeclaration = { ...ONE, codeState: ["follow-main"] };
+  const MAIN = "24dc11c26e2716a12cf33b82fec895a7f02b3e8a";
+  const LATER = "0123456789abcdef0123456789abcdef01234567";
+
+  /** A fake `ctx.exec` printing `stdout`, and the commands it was given. */
+  const fakeExec = (stdout: (command: string) => string) => {
+    const commands: string[] = [];
+    return {
+      commands,
+      exec: async (command: string) => {
+        commands.push(command);
+        return stdout(command);
+      },
+    };
+  };
+
+  test("passes what resolve returns to the fragment as ctx.resolved, and records it", async () => {
+    const { exec, commands } = fakeExec(() => `${MAIN}\trefs/heads/main`);
+
+    const [permutation] = await hashPermutations(floating, FOLLOW_MAIN, { exec });
+
+    expect(commands).toEqual(["git ls-remote --exit-code https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git refs/heads/main"]);
+    expect(permutation?.dockerfile).toContain(`\n  && git -C /workspace checkout --quiet --detach ${MAIN} \\\n`);
+    expect(permutation?.resolved).toEqual({ codeState: MAIN });
+  });
+
+  test("a different commit changes the code state's hash, and nothing else", async () => {
+    const before = await hashPermutations(floating, FOLLOW_MAIN, fakeExec(() => MAIN));
+    const after = await hashPermutations(floating, FOLLOW_MAIN, fakeExec(() => LATER));
+
+    expect(changes(before, after)).toEqual([{ parameters: ["codeState"], hash: true, image: true }]);
+  });
+
+  test("the same commit gives the same hashes", async () => {
+    expect(await hashPermutations(floating, FOLLOW_MAIN, fakeExec(() => MAIN))).toEqual(
+      await hashPermutations(floating, FOLLOW_MAIN, fakeExec(() => MAIN)),
+    );
+  });
+
+  test("a resolved value no fragment uses changes no hash", async () => {
+    await using copy = await copyScenarioProject("0209");
+    const root = `${copy.dir}/${FOLDER}`;
+    await Bun.write(
+      `${root}/test-case-parameters/promptSets/stamped/index.ts`,
+      `import { declarePromptSet } from "thunderjar";
+
+export default declarePromptSet({
+  resolve: (_config, ctx) => ctx.exec("date"),
+  applyParameter: () => "RUN echo stamped",
+});
+`,
+    );
+    const testCase = { ...ONE, promptSet: ["stamped"] };
+
+    const monday = await hashPermutations(root, testCase, fakeExec(() => "Monday"));
+    const tuesday = await hashPermutations(root, testCase, fakeExec(() => "Tuesday"));
+
+    expect(monday[0]?.resolved).toEqual({ promptSet: "Monday" });
+    expect(changes(monday, tuesday)).toEqual([UNCHANGED]);
+  });
+
+  test("a parameter that several permutations share is resolved once", async () => {
+    const { exec, commands } = fakeExec(() => MAIN);
+
+    const permutations = await hashPermutations(floating, { ...FOLLOW_MAIN, initialPrompt: ["plain", "plain"], iterations: 3 }, { exec });
+
+    expect(permutations).toHaveLength(2);
+    expect(permutations.map((permutation) => permutation.resolved)).toEqual([{ codeState: MAIN }, { codeState: MAIN }]);
+    expect(commands).toHaveLength(1);
+  });
+
+  test("a resolve that throws, or a command that fails, is a config error naming its parameter", async () => {
+    const failing = hostExec("/");
+    const root = `${scenario("0402")}/${FOLDER}`;
+
+    await expect(hashPermutations(floating, FOLLOW_MAIN, { exec: () => failing("echo 'no such remote' >&2; exit 2") })).rejects.toThrow(
+      "code state \"follow-main\": resolve threw: `echo 'no such remote' >&2; exit 2` exited with 2: no such remote",
+    );
+    await expect(hashPermutations(root, { ...ONE, codeState: ["unresolvable"] })).rejects.toThrow(
+      'code state "unresolvable": resolve threw: no branch named no-such-branch',
+    );
+  });
+
+  test("a resolve that returns what JSON can't hold is a config error", async () => {
+    await using copy = await copyScenarioProject("0209");
+    const root = `${copy.dir}/${FOLDER}`;
+    await Bun.write(
+      `${root}/test-case-parameters/promptSets/vague/index.ts`,
+      `import { declarePromptSet } from "thunderjar";
+
+export default declarePromptSet({ resolve: () => undefined as never });
+`,
+    );
+
+    await expect(hashPermutations(root, { ...ONE, promptSet: ["vague"] })).rejects.toThrow(
+      'prompt set "vague": resolve must return a string, number, boolean or null, or a list or object of them, got undefined.',
+    );
+  });
+});
+
+describe("hostExec", () => {
+  test("runs the command with sh in its folder, and gives its stdout, trimmed", async () => {
+    expect(await hostExec(scenario("0209"))("pwd && printf '  a b  \\n\\n'")).toBe(`${scenario("0209")}\n  a b`);
+  });
+
+  test("throws on a non-zero exit, with its stderr", async () => {
+    await expect(hostExec("/")("echo oops >&2; exit 3")).rejects.toThrow("`echo oops >&2; exit 3` exited with 3: oops");
   });
 });

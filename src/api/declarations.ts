@@ -48,18 +48,42 @@ export type ApplyParameterCtx = FragmentCtx & {
   dir: string;
 };
 
-/**
- * A parameter declaration's `config`, and the `applyParameter` that receives it. A method, so a
- * declaration with any `config` is still a `XDeclaration<unknown>` once loaded.
- */
-type Applies<C, Ctx> = {
-  config?: C;
-  applyParameter?(config: C, ctx: Ctx): string;
+/** What `resolve` gets, to look up what a floating parameter currently means. */
+export type ResolveCtx = {
+  /**
+   * Runs `command` with `sh -c` on the host, in the root of the repository the project is in (or
+   * the project's folder, outside one). Returns its stdout, trimmed. Throws on a non-zero exit.
+   */
+  exec(command: string): Promise<string>;
 };
 
+/** What `resolve` can return: anything JSON can hold, so it can be recorded with each run. */
+export type Resolved = string | number | boolean | null | Resolved[] | { [key: string]: Resolved };
+
+/**
+ * A parameter declaration's `config`, its optional `resolve`, and the `applyParameter` that
+ * receives them. Methods, so a declaration with any `config` is still a `XDeclaration<unknown>`
+ * once loaded.
+ *
+ * `resolve` is for a floating parameter, such as a branch's latest commit. Thunderjar calls it on
+ * the host, once per execution (`plan`, `run`, `build`), before anything is hashed, and passes its
+ * result to `applyParameter` as `ctx.resolved`, and to a harness's `cli`. It must only read: a `git
+ * fetch` is fine, building or writing anything isn't. It isn't hashed itself: only the text it ends
+ * up in is, so a value no fragment uses changes nothing. Each run records it beside the parameter.
+ * Declare it before `applyParameter`, so `ctx.resolved`'s type is inferred from it.
+ */
+type Applies<C, Ctx, R> = {
+  config?: C;
+  resolve?(config: C, ctx: ResolveCtx): R | Promise<R>;
+  applyParameter?(config: C, ctx: Ctx & { resolved: R }): string;
+};
+
+/** What a declaration's `resolve` returns, or undefined if it has none. */
+type ResolvedOf = Resolved | undefined;
+
 /** A base image's fragment is required: it carries the prerun image's `FROM`. */
-export type BaseImageDeclaration<C = unknown> = Applies<C, ApplyParameterCtx> & {
-  applyParameter(config: C, ctx: ApplyParameterCtx): string;
+export type BaseImageDeclaration<C = unknown, R = unknown> = Applies<C, ApplyParameterCtx, R> & {
+  applyParameter(config: C, ctx: ApplyParameterCtx & { resolved: R }): string;
   /**
    * More `docker run` options for the agent's containers, for agents that need more of the
    * kernel than Docker allows by default, e.g. Claude Code's bubblewrap sandbox, which needs user
@@ -73,19 +97,19 @@ export type BaseImageDeclaration<C = unknown> = Applies<C, ApplyParameterCtx> & 
   runOptions?: string[];
 };
 
-export function declareBaseImage<C = undefined>(declaration: BaseImageDeclaration<C>): BaseImageDeclaration<C> {
+export function declareBaseImage<C = undefined, R extends ResolvedOf = undefined>(declaration: BaseImageDeclaration<C, R>): BaseImageDeclaration<C, R> {
   return declared("declareBaseImage", declaration);
 }
 
-export type CodeStateDeclaration<C = unknown> = Applies<C, ApplyParameterCtx>;
+export type CodeStateDeclaration<C = unknown, R = unknown> = Applies<C, ApplyParameterCtx, R>;
 
-export function declareCodeState<C = undefined>(declaration: CodeStateDeclaration<C>): CodeStateDeclaration<C> {
+export function declareCodeState<C = undefined, R extends ResolvedOf = undefined>(declaration: CodeStateDeclaration<C, R>): CodeStateDeclaration<C, R> {
   return declared("declareCodeState", declaration);
 }
 
-export type PromptSetDeclaration<C = unknown> = Applies<C, ApplyParameterCtx>;
+export type PromptSetDeclaration<C = unknown, R = unknown> = Applies<C, ApplyParameterCtx, R>;
 
-export function declarePromptSet<C = undefined>(declaration: PromptSetDeclaration<C>): PromptSetDeclaration<C> {
+export function declarePromptSet<C = undefined, R extends ResolvedOf = undefined>(declaration: PromptSetDeclaration<C, R>): PromptSetDeclaration<C, R> {
   return declared("declarePromptSet", declaration);
 }
 
@@ -122,8 +146,9 @@ export type HarnessCliCtx = {
   sessionId: string;
 };
 
-export type HarnessDeclaration<C = unknown> = Applies<C, HarnessApplyCtx> & {
-  cli: (ctx: HarnessCliCtx) => string;
+export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApplyCtx, R> & {
+  /** The command that runs the agent for one turn. `ctx.resolved` is what `resolve` returned. */
+  cli(ctx: HarnessCliCtx & { resolved: R }): string;
   /**
    * The agent's final reply, read from the text of the result file its `cli` left, for
    * instruments such as `replyMatches` to measure. Without it, a run has no reply.
@@ -137,7 +162,7 @@ export type HarnessDeclaration<C = unknown> = Applies<C, HarnessApplyCtx> & {
   requiredEnv?: string[];
 };
 
-export function declareHarness<C = undefined>(declaration: HarnessDeclaration<C>): HarnessDeclaration<C> {
+export function declareHarness<C = undefined, R extends ResolvedOf = undefined>(declaration: HarnessDeclaration<C, R>): HarnessDeclaration<C, R> {
   return declared("declareHarness", declaration);
 }
 
@@ -194,11 +219,13 @@ export function declareTokenCostCollector(collector: TokenCostCollector): TokenC
  * same container and agent session, so a later turn can ask about an earlier one. Its
  * `timeoutSeconds` covers every turn together.
  */
-export type InitialPromptDeclaration<C = unknown> = Applies<C, FragmentCtx> & {
+export type InitialPromptDeclaration<C = unknown, R = unknown> = Applies<C, FragmentCtx, R> & {
   timeoutSeconds: number;
 } & ({ prompt: string; turns?: never } | { turns: string[]; prompt?: never });
 
-export function declareInitialPrompt<C = undefined>(declaration: InitialPromptDeclaration<C>): InitialPromptDeclaration<C> {
+export function declareInitialPrompt<C = undefined, R extends ResolvedOf = undefined>(
+  declaration: InitialPromptDeclaration<C, R>,
+): InitialPromptDeclaration<C, R> {
   return declared("declareInitialPrompt", declaration);
 }
 
