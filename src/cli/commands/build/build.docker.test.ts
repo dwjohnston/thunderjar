@@ -117,9 +117,11 @@ export default declarePromptSet({ applyParameter: () => "RUN exit 3" });
   test("0207 image store: with no docker login for its registry, stops at once, without prompting, and builds nothing", async () => {
     // An empty Docker config: no stored login, whatever the machine running the tests has.
     const config = `${Bun.env.TMPDIR || "/tmp"}/tj-docker-config-${crypto.randomUUID()}`;
+    // Its own prefix: the other tests' images are still present until afterAll.
+    const prefix = `${PREFIX}-store`;
     await $`mkdir -p ${config}`.quiet();
     try {
-      const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["build", "example", "--image-prefix", PREFIX], {
+      const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["build", "example", "--image-prefix", prefix], {
         docker: "real",
         env: { DOCKER_CONFIG: config },
       });
@@ -127,7 +129,7 @@ export default declarePromptSet({ applyParameter: () => "RUN exit 3" });
       expect(stdout).toBe("");
       expect(stderr).toMatch(/^Error: Can't push to ghcr\.io\/acme\/thunderjar-images: no valid Docker login for ghcr\.io \(.+\)\. Run `docker login ghcr\.io`\.\n$/);
       expect(exitCode).toBe(1);
-      expect((await $`docker image ls --quiet ${REPOSITORY}`.text()).trim()).toBe("");
+      expect((await $`docker image ls --quiet ${`${prefix}-prerun`}`.text()).trim()).toBe("");
     } finally {
       await $`rm -rf ${config}`.quiet();
     }
