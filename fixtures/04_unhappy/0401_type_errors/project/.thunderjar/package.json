@@ -1,0 +1,8 @@
+{
+  "name": "thunderjar-config",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "thunderjar": "latest"
+  }
+}

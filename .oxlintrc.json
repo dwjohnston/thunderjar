@@ -39,6 +39,10 @@
                 "message": "src/testing may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
+                "regex": "^\\.\\./config(/|$)",
+                "message": "src/testing may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts."
+              },
+              {
                 "regex": "^\\.\\./cli(/|$)",
                 "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
               }
@@ -62,6 +66,10 @@
               {
                 "regex": "^\\.\\./\\.\\./api(/|$)",
                 "message": "src/testing may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts."
+              },
+              {
+                "regex": "^\\.\\./\\.\\./config(/|$)",
+                "message": "src/testing may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./\\.\\./cli(/|$)",
@@ -89,6 +97,10 @@
                 "message": "src/testing may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
+                "regex": "^\\.\\./\\.\\./\\.\\./config(/|$)",
+                "message": "src/testing may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts."
+              },
+              {
                 "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)",
                 "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
               }
@@ -108,6 +120,10 @@
             "patterns": [
               {
                 "regex": "^node:"
+              },
+              {
+                "regex": "^\\.\\./config(/|$)",
+                "message": "src/api may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts."
               },
               {
                 "regex": "^\\.\\./cli(/|$)",
@@ -131,6 +147,10 @@
                 "regex": "^node:"
               },
               {
+                "regex": "^\\.\\./\\.\\./config(/|$)",
+                "message": "src/api may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts."
+              },
+              {
                 "regex": "^\\.\\./\\.\\./cli(/|$)",
                 "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
               }
@@ -152,8 +172,75 @@
                 "regex": "^node:"
               },
               {
+                "regex": "^\\.\\./\\.\\./\\.\\./config(/|$)",
+                "message": "src/api may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts."
+              },
+              {
                 "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)",
                 "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/config/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^node:"
+              },
+              {
+                "regex": "^\\.\\./cli(/|$)",
+                "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/config/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^node:"
+              },
+              {
+                "regex": "^\\.\\./\\.\\./cli(/|$)",
+                "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/config/*/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^node:"
+              },
+              {
+                "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)",
+                "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts."
               }
             ]
           }
