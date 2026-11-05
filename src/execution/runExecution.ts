@@ -5,7 +5,7 @@
 // container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
 // recorded and measured, and the rest still run, but the execution is `failed`.
-import type { Reply, TestCaseDeclaration } from "../api/declarations.ts";
+import type { Reply, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
 import type {
@@ -21,6 +21,7 @@ import { containerName } from "./images.ts";
 import { measureContainerRun } from "./measure.ts";
 import { openMeasurementContext, recordedContext } from "./measurementContext.ts";
 import { collectReply } from "./reply.ts";
+import { collectTokenCosts } from "./tokenCosts.ts";
 import type { PlannedExecution, PlannedIteration, PlannedPermutation } from "./planExecution.ts";
 import { buildPrerunImages, type PrerunBuildHooks } from "./prerunBuilds.ts";
 
@@ -29,9 +30,9 @@ export type RunHooks = PrerunBuildHooks & {
   onRunning?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
   /**
    * Called as each iteration's container run finishes, however its agent exited, or if it timed
-   * out, with the text of its result file, or null if it left none.
+   * out, with its record, before it's measured.
    */
-  onRan?: (permutation: PlannedPermutation, iteration: PlannedIteration, execution: Execution, harnessResult: string | null) => void;
+  onRan?: (permutation: PlannedPermutation, iteration: PlannedIteration, record: ContainerRunRecord) => void;
   /** Called once each container run's measures are taken, if the task has any measurements. */
   onMeasured?: (permutation: PlannedPermutation, iteration: PlannedIteration, result: Record<string, RecordedMeasure>) => void;
 };
@@ -53,6 +54,7 @@ function containerRunRecord(
   iteration: PlannedIteration,
   execution: Execution,
   turns: { harnessResult: string | null; reply: Reply }[],
+  tokenCosts: TokenCosts,
 ): ContainerRunRecord {
   const last = turns.at(-1) as { harnessResult: string | null; reply: Reply };
   const { harness, version, model } = parsePair(permutation.harnessModel);
@@ -72,6 +74,7 @@ function containerRunRecord(
     execution,
     harnessResult: last.harnessResult,
     reply: last.reply,
+    tokenCosts,
     sessionId: iteration.sessionId,
     ...(turns.length > 1 && { turns }),
     result: {},
@@ -124,12 +127,16 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
           container,
         });
         const turns = harnessResults.map((harnessResult) => ({ harnessResult, reply: collectReply(permutation.harness.collectReply, harnessResult) }));
-        const record = containerRunRecord(run, permutation, iteration, execution, turns);
+        const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, harnessResults, {
+          version: permutation.version,
+          modelId: permutation.modelId,
+        });
+        const record = containerRunRecord(run, permutation, iteration, execution, turns, tokenCosts);
         const { harnessResult, reply } = record;
         await store.recordContainerRun(record);
         // Timed out, its exit code is null.
         if (execution.exitCode !== 0) status = "failed";
-        hooks.onRan?.(permutation, iteration, execution, harnessResult);
+        hooks.onRan?.(permutation, iteration, record);
 
         if (measurements.length === 0) continue;
         let opened = 0;

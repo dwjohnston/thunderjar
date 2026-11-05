@@ -8,7 +8,7 @@
 //   unreachable   if present, the daemon can't be reached
 //   failing       the images whose build or commit fails, one per line
 //   commands      appended to: one line per command, `docker <args…>`, a newline in an argument as `\n`
-//   contexts/     a copy of each build's context, by image, e.g. contexts/thunderjar-prerun:7459d991/
+//   contexts/     a copy of each build's context, by image, e.g. contexts/thunderjar-prerun:f64ca35b/
 //   containers/   each container not yet removed, by name, e.g. containers/<name>/:
 //     image         the image it was run from
 //     root/         its files: only what was written to /workspace and /thunderjar

@@ -7,6 +7,7 @@ import type {
   HarnessVersionsDeclaration,
   InitialPromptDeclaration,
   TestCaseDeclaration,
+  TokenCostCollector,
 } from "../api/declarations.ts";
 import { PARAMETERS } from "../config/folders.ts";
 import { loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
@@ -63,6 +64,11 @@ export type PlannedPermutation = {
   timeoutSeconds: number;
   /** Its harness's `cli` and `collectReply`. */
   harness: HarnessDeclaration;
+  /** Its harness's `collectTokenCosts`. */
+  collectTokenCosts: TokenCostCollector;
+  /** The pair's version, and the model ID its model resolves to, as `cli` and `collectTokenCosts` get them. */
+  version: string;
+  modelId: string;
   iterations: PlannedIteration[];
 };
 
@@ -72,20 +78,28 @@ export type PlannedExecution = {
 };
 
 /** What a permutation's harness, harness model pair and initial prompt are, loaded. */
-type Loaded = { harness: HarnessDeclaration; version: string; modelId: string; initialPrompt: InitialPromptDeclaration };
+type Loaded = {
+  harness: HarnessDeclaration;
+  collectTokenCosts: TokenCostCollector;
+  version: string;
+  modelId: string;
+  initialPrompt: InitialPromptDeclaration;
+};
 
 /** `permutation`'s harness and initial prompt, or undefined after adding to `problems` (`loadTestCase` already checked the files). */
 async function loadHarness(root: string, task: string, permutation: HashedPermutation, problems: Problem[]): Promise<Loaded | undefined> {
   const { harness: name, version, model } = parsePair(permutation.harnessModel);
   const dir = `${PARAMETERS}/harnessModels/${name}`;
-  const [harness, versions, models, initialPrompt] = (await Promise.all([
+  const [harness, collectTokenCosts, versions, models, initialPrompt] = (await Promise.all([
     loadDeclaration(root, `${dir}/index.ts`, "declareHarness", problems),
+    loadDeclaration(root, `${dir}/collectTokenCosts.ts`, "declareTokenCostCollector", problems),
     loadDeclaration(root, `${dir}/versions.ts`, "declareHarnessVersions", problems),
     loadDeclaration(root, `${dir}/models.ts`, "declareHarnessModels", problems),
     loadDeclaration(root, `${PARAMETERS}/tasks/${task}/initial-prompts/${permutation.initialPrompt}.ts`, "declareInitialPrompt", problems),
-  ])) as [HarnessDeclaration?, HarnessVersionsDeclaration?, HarnessModelsDeclaration?, InitialPromptDeclaration?];
-  if (!harness || !versions || !models || !initialPrompt) return undefined;
-  return { harness, version: (versions[version] as { version: string }).version, modelId: models[model] as string, initialPrompt };
+  ])) as [HarnessDeclaration?, TokenCostCollector?, HarnessVersionsDeclaration?, HarnessModelsDeclaration?, InitialPromptDeclaration?];
+  if (!harness || !collectTokenCosts || !versions || !models || !initialPrompt) return undefined;
+  const pinned = (versions[version] as { version: string }).version;
+  return { harness, collectTokenCosts, version: pinned, modelId: models[model] as string, initialPrompt };
 }
 
 /** Each turn of a container run in session `sessionId`, with the harness command for it. */
@@ -124,6 +138,9 @@ export async function planExecution(
         env: requiredEnvOf(harnessed.harness),
         timeoutSeconds: harnessed.initialPrompt.timeoutSeconds,
         harness: harnessed.harness,
+        collectTokenCosts: harnessed.collectTokenCosts,
+        version: harnessed.version,
+        modelId: harnessed.modelId,
         iterations: Array.from({ length: testCase.iterations }, (_, i) => {
           const sessionId = crypto.randomUUID();
           return {
