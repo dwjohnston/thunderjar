@@ -1,4 +1,5 @@
 import { $ } from "bun";
+import { FAKE_DOCKER } from "./fakeDocker.ts";
 import { applyPlaceholders, type PathPlaceholders } from "./placeholders.ts";
 import { FIXTURES_DIR, REPO_ROOT, scenario } from "./scenario.ts";
 
@@ -11,6 +12,7 @@ const COPIES_DIR = `${FIXTURES_DIR}/.tmp`;
 export type CliResult = { stdout: string; stderr: string; exitCode: number };
 
 export type CliOptions = {
+  /** More environment variables. Docker is the fake, with no images, unless these say otherwise: see `fakeDocker`. */
   env?: Record<string, string>;
   /** More paths to replace, e.g. `{ "<TMP>": dataDir }`. `<PROJECT>` (the cwd) and `<REPO>` are always replaced. */
   paths?: PathPlaceholders;
@@ -23,7 +25,7 @@ export type CliOptions = {
 export async function thunderjar(cwd: string, args: string[], options: CliOptions = {}): Promise<CliResult> {
   const result = await $`bun ${CLI} ${args}`
     .cwd(cwd)
-    .env({ ...Bun.env, ...options.env })
+    .env({ ...Bun.env, THUNDERJAR_DOCKER: FAKE_DOCKER, FAKE_DOCKER_DIR: "", ...options.env })
     .quiet()
     .nothrow();
   const paths = { "<PROJECT>": cwd, "<REPO>": REPO_ROOT, ...options.paths };
