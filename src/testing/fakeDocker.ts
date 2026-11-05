@@ -6,7 +6,9 @@
 //
 //   images        the images that exist, `<repository>:<tag>`, one per line; a build or commit adds one
 //   unreachable   if present, the daemon can't be reached
-//   failing       the images whose build or commit fails, one per line
+//   failing       the images whose build or commit fails, and the references whose push fails, one per line
+//   logins        the registry hosts Docker holds a valid login for, one per line
+//   pushed        appended to: each reference pushed, one per line
 //   commands      appended to: one line per command, `docker <args…>`, a newline in an argument as `\n`
 //   contexts/     a copy of each build's context, by image, e.g. contexts/thunderjar-prerun:f64ca35b/
 //   containers/   each container not yet removed, by name, e.g. containers/<name>/:
@@ -23,7 +25,8 @@
 // container it was committed from. So a fake harness's `cli` really runs, its result file is
 // really read, and what it left is in its postrun image. `run --detach` starts a container
 // without running its script, and `exec` runs a command in it the way `run` runs a script,
-// always in root/workspace.
+// always in root/workspace. `login <host>` succeeds only for a host in logins/, failing as Docker
+// does with its input closed. `tag` adds an image; `push` records it, if its host is logged in.
 //
 // Without FAKE_DOCKER_DIR the daemon is reachable, no image exists, nothing is recorded, and no
 // container can run. Tests make its state with `fakeDocker()`.
@@ -43,6 +46,8 @@ export type FakeDocker = AsyncDisposable & {
   contextOf: (image: string) => string;
   /** The images that exist. */
   images: () => Promise<string[]>;
+  /** The references pushed, in order. */
+  pushed: () => Promise<string[]>;
   /** The names of the containers not yet removed. */
   containers: () => Promise<string[]>;
   /** The text of the file at `path`, from the container's root, in the committed image `image`, or undefined if there's none. */
@@ -54,17 +59,20 @@ export type FakeDocker = AsyncDisposable & {
 const lines = (values: string[]) => values.map((value) => `${value}\n`).join("");
 
 /**
- * State for the fake, in which `images` exist, building or committing the `failing` images
- * fails, or the daemon is `unreachable`. Remove it when done, or declare it with `await using`.
+ * State for the fake, in which `images` exist, building or committing the `failing` images, or
+ * pushing the `failing` references, fails, Docker is logged in to the registry hosts `loggedIn`,
+ * or the daemon is `unreachable`. Remove it when done, or declare it with `await using`.
  */
 export async function fakeDocker({
   images = [],
   failing = [],
+  loggedIn = [],
   unreachable = false,
-}: { images?: string[]; failing?: string[]; unreachable?: boolean } = {}): Promise<FakeDocker> {
+}: { images?: string[]; failing?: string[]; loggedIn?: string[]; unreachable?: boolean } = {}): Promise<FakeDocker> {
   const dir = `${FIXTURES_DIR}/.tmp/docker-${crypto.randomUUID()}`;
   await Bun.write(`${dir}/images`, lines(images));
   await Bun.write(`${dir}/failing`, lines(failing));
+  await Bun.write(`${dir}/logins`, lines(loggedIn));
   if (unreachable) await Bun.write(`${dir}/unreachable`, "");
   const commandsFile = Bun.file(`${dir}/commands`);
   const listOf = async (file: string) => (await Bun.file(file).text()).split("\n").filter(Boolean);
@@ -76,6 +84,7 @@ export async function fakeDocker({
     commands: async () => ((await commandsFile.exists()) ? (await commandsFile.text()).split("\n").filter(Boolean) : []),
     contextOf: (image) => `${dir}/contexts/${image}`,
     images: () => listOf(`${dir}/images`),
+    pushed: async () => ((await Bun.file(`${dir}/pushed`).exists()) ? listOf(`${dir}/pushed`) : []),
     containers: async () =>
       (await Bun.file(`${dir}/containers`).exists())
         ? (await Array.fromAsync(new Glob("*/image").scan({ cwd: `${dir}/containers` }))).map((file) => file.slice(0, -"/image".length)).sort()
@@ -228,6 +237,25 @@ if (import.meta.main) {
     const pids = await tree((await pidFile.text()).trim());
     await $`kill -KILL ${pids}`.quiet().nothrow();
     console.log(subcommand);
+  } else if (command === "login" && subcommand !== undefined && rest.length === 0) {
+    // docker login <host>, its input closed
+    if (!(await list("logins")).includes(subcommand)) fail("Error: Cannot perform an interactive login from a non TTY device");
+    console.log("Login Succeeded");
+  } else if (command === "tag" && rest.length === 1) {
+    // docker tag <image> <reference>
+    const images = await list("images");
+    if (!images.includes(subcommand as string)) fail(`Error response from daemon: No such image: ${subcommand}`);
+    if (dir && !images.includes(rest[0] as string)) await Bun.write(state("images"), lines([...images, rest[0] as string]));
+  } else if (command === "push" && subcommand === "--quiet" && rest.length === 1) {
+    // docker push --quiet <reference>
+    const reference = rest[0] as string;
+    const host = reference.split("/")[0] as string;
+    if (!(await list("images")).includes(reference)) fail(`Error response from daemon: No such image: ${reference}`);
+    if (!(await list("logins")).includes(host) || (await list("failing")).includes(reference)) {
+      fail("denied: permission_denied: The token provided does not match expected scopes.");
+    }
+    if (dir) await Bun.write(state("pushed"), lines([...(await list("pushed")), reference]));
+    console.log(reference);
   } else if (command === "rm" && subcommand === "--force" && rest.length === 1) {
     // docker rm --force <name>
     if (dir) await $`rm -rf ${dir}/containers/${rest[0] as string}`.quiet();

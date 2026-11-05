@@ -1,4 +1,5 @@
 import type { ModelTokenCosts, TokenCosts } from "../api/declarations.ts";
+import { registryHost } from "../config/projectConfig.ts";
 import type { Execution } from "../store/runDataStore.ts";
 
 /**
@@ -45,3 +46,9 @@ export const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" :
 
 /** `iso` in UTC, to the minute, e.g. `2026-10-01 10:12`. */
 export const minute = (iso: string) => new Date(iso).toISOString().slice(0, 16).replace("T", " ");
+
+/** Why pushing `reference` failed, and what to check. */
+export function pushFailure(reference: string, error: Error): string {
+  const repository = reference.slice(0, reference.lastIndexOf(":"));
+  return `Pushing ${reference} failed: ${error.message}\nCheck that your Docker login for ${registryHost(repository)} can push to ${repository}: on ghcr.io, a token needs the write:packages scope.`;
+}

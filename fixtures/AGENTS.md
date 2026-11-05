@@ -92,6 +92,7 @@ bun run fixture 0202 plan is-prime-baseline
 - **What the scenarios share**
   - Initialised scenarios start from what `init` scaffolds in an empty project: base image `node20`, code state `baseline`, prompt set `snerk`, task `is-prime` with initial prompt `plain` and measurement `isPrimeTsExists`. In place of init's test cases, which use real harnesses, they have test case `example`: one fake agent, one iteration.
   - The agent is the fake `fake-harness-alpha`, version `1.0.0`, model `fake-model-small`, instead of `claude-code`.
+  - `thunderjar.config.ts` has `imageStore: null`, as `init` scaffolds it, so nothing asks Docker for a login or pushes.
   - Each checks in its `_generated/parameterNames.d.ts`, though `.thunderjar/.gitignore` ignores it, so it type-checks without running `generate`.
 - **01_unitialised**: projects before `init`.
   - `0101_empty_project`: an empty project, not JavaScript. `init` gives it a nested `.thunderjar/package.json`.
@@ -126,6 +127,7 @@ bun run fixture 0202 plan is-prime-baseline
     - Base image `node20-unconfined` is `node20` with `runOptions` `--security-opt seccomp=unconfined --security-opt apparmor=unconfined`. On Ubuntu 23.10 and later, the host must also allow unprivileged user namespaces, `sysctl kernel.apparmor_restrict_unprivileged_userns=0`, as CI does.
     - Task `sandbox`, in place of `is-prime`, with initial prompt `plain`, `Sandbox yourself.`, and measurement `sandboxed`, a `replyMatches` of `^sandboxed$`.
     - Test case `sandboxed`, instead of `example`: both base images.
+  - `0207_image_store`: the shared setup, with `imageStore: { repository: "ghcr.io/acme/thunderjar-images" }`, so `run` and `build` check the `docker login` for `ghcr.io`, then push each image. The fake Docker has a login only when a test gives it one: `fakeDocker({ loggedIn: ["ghcr.io"] })`.
 - **03_real_git**: projects whose code states and prompt sets read real commits of this repository. See "Changing a real git scenario's commits" above.
   - `0301_git_project`: a JavaScript project committed twice, whose code states check out each commit and whose prompt sets read a file at each.
     - Real git, through `checkoutCommit` and `ctx.git.show`. Its `project/` is committed to this repository at two pinned states:

@@ -5,7 +5,7 @@
 // container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
 // recorded and measured, and the rest still run, but the execution is `failed`.
-import type { Reply, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
+import type { ImageStore, Reply, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
 import type {
@@ -17,7 +17,8 @@ import type {
   RunDataStore,
 } from "../store/runDataStore.ts";
 import { runInContainer } from "./containerRun.ts";
-import { containerName } from "./images.ts";
+import { containerName, storedPostrunImage } from "./images.ts";
+import { type PushHooks, pushPrerunImages, pushToStore } from "./imageStore.ts";
 import { measureContainerRun } from "./measure.ts";
 import { openMeasurementContext, recordedContext } from "./measurementContext.ts";
 import { collectReply } from "./reply.ts";
@@ -25,7 +26,8 @@ import { collectTokenCosts } from "./tokenCosts.ts";
 import type { PlannedExecution, PlannedIteration, PlannedPermutation } from "./planExecution.ts";
 import { buildPrerunImages, type PrerunBuildHooks } from "./prerunBuilds.ts";
 
-export type RunHooks = PrerunBuildHooks & {
+export type RunHooks = PrerunBuildHooks &
+  PushHooks & {
   /** Called as each iteration's container run starts. */
   onRunning?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
   /**
@@ -45,6 +47,8 @@ export type ExecutionToRun = {
   testCase: TestCaseDeclaration;
   plan: PlannedExecution;
   imagePrefix?: string;
+  /** Where its images are pushed, or `null` (the default) to keep them local. Its login is checked before this runs. */
+  imageStore?: ImageStore | null;
 };
 
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
@@ -82,22 +86,20 @@ function containerRunRecord(
 }
 
 /**
- * Runs `run`, recording it in `store`, and returns its execution record. Throws, before
- * anything is recorded, a ConfigError if its task's measurements are wrong, and a
- * DockerUnavailableError, ConfigError or DockerBuildError if its prerun images can't be built.
+ * Runs `run`, recording it in `store`, and returns its execution record. With an image store,
+ * its prerun images are pushed once built, and each postrun image as soon as it's recorded,
+ * before it's measured. Throws, before anything is recorded, a ConfigError if its task's
+ * measurements are wrong, a DockerUnavailableError, ConfigError or DockerBuildError if its
+ * prerun images can't be built, and a DockerPushError if one can't be pushed.
  * Throws a DockerContainerError if Docker fails while running or measuring one, after
  * recording the execution as `failed`.
  */
 export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks = {}): Promise<ExecutionRecord> {
-  const { root, testCase, plan, imagePrefix } = run;
+  const { root, testCase, plan, imagePrefix, imageStore = null } = run;
   const measurements = await loadMeasurements(root, testCase.task);
-  await buildPrerunImages(
-    root,
-    testCase.task,
-    plan.permutations.map(({ permutation }) => permutation),
-    imagePrefix,
-    hooks,
-  );
+  const permutations = plan.permutations.map(({ permutation }) => permutation);
+  await buildPrerunImages(root, testCase.task, permutations, imagePrefix, hooks);
+  await pushPrerunImages(permutations, imageStore, imagePrefix, hooks);
 
   const startedAt = new Date().toISOString();
   const executionRecord = (status: ExecutionStatus, finishedAt?: string): ExecutionRecord => ({
@@ -138,6 +140,10 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
         // Timed out, its exit code is null.
         if (execution.exitCode !== 0) status = "failed";
         hooks.onRan?.(permutation, iteration, record);
+        if (imageStore !== null) {
+          const reference = storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);
+          await pushToStore(iteration.postrunImage, reference, hooks);
+        }
 
         if (measurements.length === 0) continue;
         let opened = 0;

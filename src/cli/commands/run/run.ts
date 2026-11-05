@@ -2,16 +2,18 @@ import { Command } from "commander";
 import type { TestCaseDeclaration } from "../../../api/declarations.ts";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { AXES, parsePair } from "../../../config/permutations.ts";
+import { loadProjectConfig } from "../../../config/projectConfig.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
-import { DockerBuildError, DockerContainerError, DockerUnavailableError } from "../../../docker/docker.ts";
+import { DockerBuildError, DockerContainerError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
+import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { type PlannedExecution, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
 import { runExecution } from "../../../execution/runExecution.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { executionFolder, fileStore, type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath } from "../../dataDir.ts";
-import { agentEnd, dollars, knownCost, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
@@ -99,23 +101,44 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  * Runs test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it: builds its
  * missing prerun images, then runs each iteration in a container, writing a line for each as it
  * finishes, and one of its measures once they're taken, and records them in the run data store
- * under `dataDir`. Exits 1 if any agent exits non-zero or times out, or with an error if Docker fails, or if a
- * variable a harness needs is unset, before anything is built.
+ * under `dataDir`. With an image store, pushes each prerun image once built, and each postrun
+ * image once its container run is recorded, writing `Pushing <reference> ... done`. Exits 1 if
+ * any agent exits non-zero or times out, or with an error if Docker fails, or, before anything is
+ * built, if a variable a harness needs is unset or Docker has no login for the image store.
  */
 async function run(cwd: string, name: string, imagePrefix: string, dataDir?: string): Promise<void> {
   const root = await findThunderjarRoot(cwd);
+  const { imageStore } = await loadProjectConfig(root);
   const testCase = await loadTestCase(root, name);
   await checkRequiredEnv(root, testCase);
+  try {
+    await checkImageStore(imageStore);
+  } catch (error) {
+    if (error instanceof ImageStoreLoginError) {
+      console.error(`Error: ${error.message}`);
+    } else if (error instanceof DockerUnavailableError) {
+      console.error(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
+    } else {
+      throw error;
+    }
+    process.exitCode = 1;
+    return;
+  }
   const plan = await planExecution(root, testCase, ulid(), imagePrefix);
   const store = dataDirOf(cwd, root, dataDir);
   const permutations = plan.permutations.length;
+  // Where a postrun image's push line goes: under its iteration, lined up with it, like its measures.
+  const underIteration = " ".repeat(ordinal(permutations, permutations).length + 3);
 
   console.log(`Execution ${plan.executionId}`);
   let building: string | undefined;
-  // Whether the last line written is waiting for how its build or container run ends.
+  let pushing: string | undefined;
+  // Whether a container run has started, so a push is of a postrun image.
+  let running = false;
+  // Whether the last line written is waiting for how its build, push or container run ends.
   let lineOpen = false;
   try {
-    const record = await runExecution({ root, name, testCase, plan, imagePrefix }, fileStore(store), {
+    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore }, fileStore(store), {
       onBuilding: (image) => {
         building = image;
         lineOpen = true;
@@ -126,7 +149,18 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
         lineOpen = false;
         console.log("done");
       },
+      onPushing: (_image, reference) => {
+        pushing = reference;
+        lineOpen = true;
+        process.stdout.write(`${running ? underIteration : ""}Pushing ${reference} ... `);
+      },
+      onPushed: () => {
+        pushing = undefined;
+        lineOpen = false;
+        console.log("done");
+      },
       onRunning: (permutation, iteration) => {
+        running = true;
         lineOpen = true;
         process.stdout.write(
           ` ${ordinal(permutation.number, permutations)}  iteration ${ordinal(iteration.number, testCase.iterations)}  ${label(testCase, permutation)}  ... `,
@@ -154,6 +188,9 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
     } else if (error instanceof DockerBuildError) {
       console.log("failed");
       console.error(`Error: Building ${building} failed: ${error.message}`);
+    } else if (error instanceof DockerPushError) {
+      console.log("failed");
+      console.error(`Error: ${pushFailure(pushing as string, error)}`);
     } else if (error instanceof DockerContainerError && lineOpen) {
       console.log("failed");
       console.error(`Error: Running a container failed: ${error.message}`);
@@ -169,7 +206,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
 export function createRunCommand(): Command {
   return new Command("run")
     .description(
-      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store.",
+      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(

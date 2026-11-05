@@ -10,7 +10,9 @@ const json = (value: unknown) => JSON.stringify(value, null, 2) + "\n";
 const config = `import { declareConfig, sqliteStore } from "thunderjar";
 
 export default declareConfig({
-  imageStore: { repository: "ghcr.io/your-org/thunderjar-images" },
+  // Images stay in the local Docker daemon. To push them to a registry, name its repository,
+  // e.g. { repository: "ghcr.io/your-org/thunderjar-images" }, and \`docker login\` to it.
+  imageStore: null,
   runDataStore: sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }),
 });
 `;

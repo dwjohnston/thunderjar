@@ -45,6 +45,25 @@ What gets written to the run data store at `P`, and what's deliberately *not* ex
 in v1 (the OTel trace and session transcript — pull the postrun image for those instead),
 is covered in [085-experiment-results.md](085-experiment-results.md).
 
+## With `imageStore: null`
+
+Every step runs as shown, except the pushes at `I` and `N`: images are tagged and kept in
+the local Docker daemon only. "Prerun image exists" at `C` asks the local daemon. See
+[050-setup-and-configure.md](050-setup-and-configure.md#thunderjarconfigts).
+
+## With an image store
+
+- Before `A` builds anything, the user's `docker login` for the registry is checked. See
+  [050-setup-and-configure.md](050-setup-and-configure.md#checking-the-image-store-login-before-a-run).
+- At `I`, every prerun image the execution uses is pushed, whether it was just built or
+  was already present locally.
+- At `N`, the postrun image is pushed straight after its container run is recorded, and
+  before it's measured.
+- A push that fails stops the execution. Runs already recorded are kept, and the images
+  stay in the local daemon.
+- Not yet: at `C`, only the local daemon is asked. A prerun image that's only in the store
+  is rebuilt, not pulled.
+
 ## Why commit happens before measurement
 
 Measurement runs at `O`, *after* the postrun image has been committed and pushed — not

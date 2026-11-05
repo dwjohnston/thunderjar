@@ -315,8 +315,15 @@ export function sqliteStore(options: { path: string }): SqliteStore {
   return { kind: "sqlite", ...options };
 }
 
+export type ImageStore = { repository: string };
+
 export type ConfigDeclaration = {
-  imageStore: { repository: string };
+  /**
+   * The registry repository prerun and postrun images are pushed to, e.g.
+   * `{ repository: "ghcr.io/acme/thunderjar-images" }`, with the user's `docker login`. `null`
+   * keeps them in the local Docker daemon only: nothing is pushed, and no login is needed.
+   */
+  imageStore: ImageStore | null;
   runDataStore: SqliteStore;
 };
 

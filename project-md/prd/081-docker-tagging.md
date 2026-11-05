@@ -38,6 +38,20 @@ the image's filesystem — so a separate positional index would be redundant, an
 unstable in meaning across executions if the matrix ever gets resolved in a different
 order.
 
+## With `imageStore: null`
+
+Nothing is pushed, so these tags aren't used. Images keep their local names:
+
+```
+thunderjar-prerun:<abbreviated hash>
+thunderjar-postrun:<execution ID>-<permutation number>-<iteration number>
+```
+
+`--image-prefix` replaces `thunderjar`. With an image store, each image is also tagged
+`<repository>:<tag>`, with the tag formats above, and pushed.
+
+Still to do: tag images locally under one repository name too, using these formats.
+
 ## Worked examples
 
 ### 1. Single-permutation experiment, 3 iterations, rerun later

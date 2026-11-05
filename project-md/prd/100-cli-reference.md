@@ -44,7 +44,9 @@ A preflight for the setup described in
 nothing. It checks that:
 
 - the Docker daemon is reachable;
-- the registry accepts a push to the image store repository;
+- with an `imageStore`, Docker holds a valid login for its registry, as `run` and `build`
+  check before they build anything (see
+  [050-setup-and-configure.md](050-setup-and-configure.md#checking-the-image-store-login-before-a-run));
 - every environment variable named by a harness's `requiredEnv` is set, and any variable
   the run data store names (e.g. `urlEnv`) is set;
 - the run data store can be opened;

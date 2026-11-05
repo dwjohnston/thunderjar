@@ -800,3 +800,76 @@ describe("0402 broken declarations", () => {
     expect(await Bun.file(data).exists()).toBe(false);
   });
 });
+
+describe("0207 image store", () => {
+  const REPOSITORY = "ghcr.io/acme/thunderjar-images";
+  const PRERUN = `${REPOSITORY}:prerun-hc4220635`;
+
+  test("without a docker login for the registry, stops before anything is built, run or written", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      `Error: Can't push to ${REPOSITORY}: no valid Docker login for ghcr.io (Cannot perform an interactive login from a non TTY device). Run \`docker login ghcr.io\`.\n`,
+    );
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual(["docker login ghcr.io"]);
+    expect(await Bun.file(data).exists()).toBe(false);
+  });
+
+  test("pushes the prerun image once built, and the postrun image before it's measured", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const { executionId } = (await readStore(data)).execution as ExecutionRecord;
+    const postrun = `${REPOSITORY}:postrun-e${executionId}-hc4220635-i00`;
+    expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
+Building thunderjar-prerun:c4220635 ... done
+Pushing ${PRERUN} ... done
+ 1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
+      Pushing ${postrun.replace(executionId, "<ID>")} ... done
+      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
+Wrote <REPO>/fixtures/.tmp/data-<UUID>/runs/<ULID>/
+`);
+    expect(await docker.pushed()).toEqual([PRERUN, postrun]);
+    const commands = await docker.commands();
+    expect(commands[0]).toBe("docker login ghcr.io");
+    // Pushed before the first measurement container starts.
+    expect(commands.indexOf(`docker push --quiet ${postrun}`)).toBeLessThan(commands.findIndex((command) => command.includes("-measure-")));
+  });
+
+  test("a prerun push the registry refuses is an error, and nothing is run or written", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:c4220635"], failing: [PRERUN] });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(stdout).toBe(`Execution <ULID>\nPushing ${PRERUN} ... failed\n`);
+    expect(stderr).toBe(`Error: Pushing ${PRERUN} failed: denied: permission_denied: The token provided does not match expected scopes.
+Check that your Docker login for ghcr.io can push to ${REPOSITORY}: on ghcr.io, a token needs the write:packages scope.
+`);
+    expect(exitCode).toBe(1);
+    expect((await docker.commands()).filter((command) => command.startsWith("docker run"))).toEqual([]);
+    expect(await Bun.file(data).exists()).toBe(false);
+  });
+});
+
+describe("0201 minimal existing setup, with imageStore: null", () => {
+  test("asks Docker for no login, and pushes nothing", async () => {
+    await using docker = await fakeDocker();
+
+    const { exitCode } = await thunderjar(scenario("0201"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    const commands = await docker.commands();
+    expect(commands[0]).toBe("docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun");
+    expect(commands.filter((command) => /^docker (login|tag|push)\b/.test(command))).toEqual([]);
+  });
+});

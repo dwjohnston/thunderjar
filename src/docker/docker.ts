@@ -10,6 +10,12 @@ export class DockerUnavailableError extends Error {}
 /** Thrown when `docker build` fails: the message is Docker's reason. */
 export class DockerBuildError extends Error {}
 
+/** Thrown when `docker login` finds no valid login for a registry: the message is Docker's reason. */
+export class DockerLoginError extends Error {}
+
+/** Thrown when tagging or pushing an image fails: the message is Docker's reason. */
+export class DockerPushError extends Error {}
+
 /** Thrown when running, reading from, committing or removing a container fails: the message is Docker's reason. */
 export class DockerContainerError extends Error {}
 
@@ -38,6 +44,40 @@ export async function imagesIn(repository: string): Promise<Set<string>> {
     throw new DockerUnavailableError(reasonOf(result.stderr) || `\`${binary} image ls\` exited ${result.exitCode}`);
   }
   return new Set(result.stdout.toString().split("\n").filter(Boolean));
+}
+
+const DAEMON_UNREACHABLE = /Cannot connect to the Docker daemon|error during connect/;
+
+/**
+ * Checks that Docker holds a valid login for the registry `host`, e.g. `ghcr.io`. With stored
+ * credentials, `docker login <host>` checks them with the registry. Without, it would prompt for
+ * them, but its input is closed, so it fails instead: it never waits for anyone to type.
+ *
+ * Throws a DockerLoginError if there's no valid login, or a DockerUnavailableError if Docker
+ * can't be reached.
+ */
+export async function checkLogin(host: string): Promise<void> {
+  const binary = dockerBinary();
+  const child = Bun.spawn([binary, "login", host], { env: { ...Bun.env }, stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+  const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  if (exitCode === 0) return;
+  const reason = reasonOf(stderr)?.replace(/^error: /i, "") || `\`${binary} login\` exited ${exitCode}`;
+  if (DAEMON_UNREACHABLE.test(stderr)) throw new DockerUnavailableError(reason);
+  throw new DockerLoginError(reason);
+}
+
+/**
+ * Tags the local image `image` as `reference`, in a registry repository, and pushes it there.
+ * Throws a DockerPushError with Docker's reason.
+ */
+export async function pushImage(image: string, reference: string): Promise<void> {
+  const binary = dockerBinary();
+  for (const args of [["tag", image, reference], ["push", "--quiet", reference]]) {
+    const result = await $`${binary} ${args}`.quiet().nothrow();
+    if (result.exitCode !== 0) {
+      throw new DockerPushError(reasonOf(result.stderr) || `\`${binary} ${args[0]}\` exited ${result.exitCode}`);
+    }
+  }
 }
 
 /** Runs `binary args…`, throwing a DockerContainerError with Docker's reason if it fails. */

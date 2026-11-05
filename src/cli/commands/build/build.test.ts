@@ -92,10 +92,11 @@ ${image("774a325c", GLURK, "fake-harness-beta")}
   });
 });
 
+/** The commands the fake was given, with each build context's temporary path replaced. */
+const commandsOf = async (docker: FakeDocker) =>
+  (await docker.commands()).map((command) => command.replace(/ \S+\/thunderjar-build-[\w-]+$/, " <CONTEXT>"));
+
 describe("0202 typical project, building with the fake Docker", () => {
-  /** The commands the fake was given, with each build context's temporary path replaced. */
-  const commandsOf = async (docker: FakeDocker) =>
-    (await docker.commands()).map((command) => command.replace(/ \S+\/thunderjar-build-[\w-]+$/, " <CONTEXT>"));
 
   test("builds only the missing prerun images, in plan's order, then counts them", async () => {
     await using docker = await fakeDocker({
@@ -320,5 +321,75 @@ ${gitImage("cc8c940e", SECOND, SECOND)}
     expect(stdout).toBe("");
     expect(stderr).toBe(UNPUSHED);
     expect(exitCode).toBe(1);
+  });
+});
+
+describe("0207 image store", () => {
+  const PRERUN = "ghcr.io/acme/thunderjar-images:prerun-hc4220635";
+  const NOT_LOGGED_IN =
+    "Error: Can't push to ghcr.io/acme/thunderjar-images: no valid Docker login for ghcr.io (Cannot perform an interactive login from a non TTY device). Run `docker login ghcr.io`.\n";
+
+  test("without a docker login for the registry, stops before anything is built", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["build", "example"], { env: docker.env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(NOT_LOGGED_IN);
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual(["docker login ghcr.io"]);
+  });
+
+  test("builds each prerun image, then pushes it to the image store, tagged prerun-h<hash>", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["build", "example"], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Building thunderjar-prerun:c4220635 ... done
+Pushing ${PRERUN} ... done
+1 built, 0 already present, 1 pushed
+`);
+    expect(await commandsOf(docker)).toEqual([
+      "docker login ghcr.io",
+      "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
+      "docker build -t thunderjar-prerun:c4220635 <CONTEXT>",
+      `docker tag thunderjar-prerun:c4220635 ${PRERUN}`,
+      `docker push --quiet ${PRERUN}`,
+    ]);
+    expect(await docker.pushed()).toEqual([PRERUN]);
+  });
+
+  test("pushes a prerun image that's already present, so the store has it too", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:c4220635"] });
+
+    const { stdout, exitCode } = await thunderjar(scenario("0207"), ["build", "example"], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Pushing ${PRERUN} ... done\n0 built, 1 already present, 1 pushed\n`);
+    expect(await docker.pushed()).toEqual([PRERUN]);
+  });
+
+  test("a push the registry refuses is an error, naming what the login needs", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], failing: [PRERUN] });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["build", "example"], { env: docker.env });
+
+    expect(stdout).toBe(`Building thunderjar-prerun:c4220635 ... done\nPushing ${PRERUN} ... failed\n`);
+    expect(stderr).toBe(`Error: Pushing ${PRERUN} failed: denied: permission_denied: The token provided does not match expected scopes.
+Check that your Docker login for ghcr.io can push to ghcr.io/acme/thunderjar-images: on ghcr.io, a token needs the write:packages scope.
+`);
+    expect(exitCode).toBe(1);
+    expect(await docker.pushed()).toEqual([]);
+  });
+
+  test("--dry-run needs no login", async () => {
+    await using docker = await fakeDocker();
+
+    const { exitCode } = await thunderjar(scenario("0207"), ["build", "example", "--dry-run"], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(await docker.commands()).toEqual([]);
   });
 });
