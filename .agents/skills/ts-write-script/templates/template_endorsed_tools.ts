@@ -15,7 +15,6 @@ if (import.meta.main) {
   });
 
   new Command()
-    // 👇
     .description(
       `Check whether every given integer is divisible by DIVISOR (default ${DEFAULT_DIVISOR}, i.e. even). Prints "true" or "false".`,
     )
