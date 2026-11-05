@@ -5,6 +5,8 @@ import { commitContainer, DockerContainerError, removeContainer, runContainer } 
 import { fakeDocker } from "../testing/fakeDocker.ts";
 import { openMeasurementContext } from "./measurementContext.ts";
 
+const NO_REPLY = { outcome: "unavailable", reason: "its harness has no collectReply" } as const;
+
 const saved = { THUNDERJAR_DOCKER: Bun.env.THUNDERJAR_DOCKER, FAKE_DOCKER_DIR: Bun.env.FAKE_DOCKER_DIR };
 
 afterEach(() => {
@@ -27,7 +29,7 @@ async function postrunImage(script: string) {
 describe("openMeasurementContext", () => {
   test("reads, globs and runs commands in a container from the postrun image, in /workspace", async () => {
     await using docker = await postrunImage("mkdir -p src && echo one > src/isPrime.ts && echo two > README.md && touch .hidden.ts");
-    const ctx = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", "the result");
+    const ctx = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", "the result", NO_REPLY);
 
     try {
       expect(ctx.workdir).toBe("/workspace");
@@ -49,7 +51,7 @@ describe("openMeasurementContext", () => {
 
   test("writes files, folders and all, which only that container sees", async () => {
     await using _ = await postrunImage("echo one > isPrime.ts");
-    const first = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", "");
+    const first = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", "", NO_REPLY);
     try {
       await first.writeFile("src/deep/isPrime.test.ts", "it's 'quoted'\nand $HOME\n");
       expect(await first.readFile("src/deep/isPrime.test.ts")).toBe("it's 'quoted'\nand $HOME\n");
@@ -58,7 +60,7 @@ describe("openMeasurementContext", () => {
       await first.close();
     }
 
-    const second = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-2", "");
+    const second = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-2", "", NO_REPLY);
     try {
       expect(await second.glob("**/*.ts")).toEqual(["isPrime.ts"]);
     } finally {
@@ -70,7 +72,7 @@ describe("openMeasurementContext", () => {
     await using docker = await fakeDocker();
     Object.assign(Bun.env, docker.env);
 
-    const error = await openMeasurementContext("tj-postrun:missing", "tj-run-x-1-1-measure-1", "").catch((e: unknown) => e);
+    const error = await openMeasurementContext("tj-postrun:missing", "tj-run-x-1-1-measure-1", "", NO_REPLY).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(DockerContainerError);
     expect((error as Error).message).toBe("docker: Error response from daemon: No such image: tj-postrun:missing");

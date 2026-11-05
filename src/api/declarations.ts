@@ -117,6 +117,11 @@ export type HarnessCliCtx = {
 export type HarnessDeclaration<C = unknown> = Applies<C, HarnessApplyCtx> & {
   cli: (ctx: HarnessCliCtx) => string;
   /**
+   * The agent's final reply, read from the text of the result file its `cli` left, for
+   * instruments such as `replyMatches` to measure. Without it, a run has no reply.
+   */
+  collectReply?: (raw: string) => string;
+  /**
    * The names of the environment variables the agent needs, e.g. its API key. Each is passed into
    * this harness's containers only, as `docker run -e NAME`, so its value comes from the shell that
    * runs Thunderjar, and is never written down. `plan` and `run` stop if one is unset.
@@ -198,8 +203,13 @@ export type MeasurementContext = {
   glob(pattern: string): Promise<string[]>;
   /** The text of the result file the harness's `cli` left, or "" if it left none. */
   harnessResult: string;
+  /** The agent's final reply, from its harness's `collectReply`, or why there's none. */
+  reply: Reply;
   workdir: string;
 };
+
+/** The agent's final reply, as its harness's `collectReply` read it from the result file, or why there's none. */
+export type Reply = { outcome: "collected"; text: string } | { outcome: "unavailable"; reason: string };
 
 /** Each built-in instrument's config and value, by name. */
 export type InstrumentTypes = {
@@ -212,6 +222,8 @@ export type InstrumentTypes = {
    * rendered against each file matching `subject` and run with `bun test`?
    */
   templateTest: { config: { subject: string; template: string }; value: { passed: number; failed: number } };
+  /** Does the agent's final reply match `pattern`, a JavaScript regular expression? */
+  replyMatches: { config: { pattern: string }; value: boolean };
 };
 
 export type InstrumentName = keyof InstrumentTypes;

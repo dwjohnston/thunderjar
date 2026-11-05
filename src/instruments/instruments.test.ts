@@ -2,9 +2,9 @@
 // host, standing in for a measurement container.
 import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
-import type { MeasurementContext } from "../api/declarations.ts";
+import type { MeasurementContext, Reply } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { aggregateMethods, fileCreated, grep, instruments, isInstrumentName, templateTest } from "./instruments.ts";
+import { aggregateMethods, fileCreated, grep, instruments, isInstrumentName, replyMatches, templateTest } from "./instruments.ts";
 
 const ROOT = `${TMP_DIR}/instruments-${crypto.randomUUID()}`;
 
@@ -21,12 +21,15 @@ async function folderWith(files: string[] | Record<string, string>): Promise<str
   return dir;
 }
 
-/** A context whose workdir is a folder holding `files`. */
-async function contextWith(files: string[] | Record<string, string>): Promise<MeasurementContext> {
+const NO_REPLY: Reply = { outcome: "unavailable", reason: "its harness has no collectReply" };
+
+/** A context whose workdir is a folder holding `files`, of a run whose reply is `reply`. */
+async function contextWith(files: string[] | Record<string, string>, reply: Reply = NO_REPLY): Promise<MeasurementContext> {
   const workdir = await folderWith(files);
   return {
     workdir,
     harnessResult: "",
+    reply,
     exec: async (command) => {
       const { stdout, stderr, exitCode } = await $`sh -c ${command}`.cwd(workdir).quiet().nothrow();
       return { stdout: stdout.toString(), stderr: stderr.toString(), exitCode };
@@ -38,6 +41,31 @@ async function contextWith(files: string[] | Record<string, string>): Promise<Me
     glob: async (pattern) => (await Array.fromAsync(new Glob(pattern).scan({ cwd: workdir, dot: true }))).toSorted(),
   };
 }
+
+describe("replyMatches", () => {
+  const replying = (text: string) => contextWith([], { outcome: "collected", text });
+
+  test("is whether the agent's reply matches the pattern", async () => {
+    expect(await replyMatches.evaluate({ pattern: "\\bEli\\b" }, await replying("The boy's name is Eli."))).toEqual({ outcome: "measured", data: true });
+    expect(await replyMatches.evaluate({ pattern: "\\bEli\\b" }, await replying("The boy's name is Elias."))).toEqual({ outcome: "measured", data: false });
+    // Case-sensitive, as a JavaScript RegExp without flags is.
+    expect(await replyMatches.evaluate({ pattern: "^arr" }, await replying("Arr, matey"))).toEqual({ outcome: "measured", data: false });
+    expect(await replyMatches.evaluate({ pattern: "^Arr" }, await replying("Arr, matey"))).toEqual({ outcome: "measured", data: true });
+  });
+
+  test("a run without a reply is skipped, saying why", async () => {
+    expect(await replyMatches.evaluate({ pattern: "Eli" }, await contextWith([]))).toEqual({
+      outcome: "skipped",
+      reason: "no reply: its harness has no collectReply",
+    });
+  });
+
+  test("a pattern that isn't a regular expression is a config problem", () => {
+    expect(replyMatches.checkConfig({ pattern: "Eli(" })).toEqual([["config.pattern", '"Eli(" is not a valid regular expression: missing )']]);
+    expect(replyMatches.checkConfig({})).toEqual([["config.pattern", "must be a JavaScript regular expression, got undefined"]]);
+    expect(replyMatches.checkConfig({ pattern: "Eli" })).toEqual([]);
+  });
+});
 
 describe("fileCreated", () => {
   test("is true when the glob matches a file, and false when nothing does", async () => {

@@ -161,7 +161,22 @@ Measures
     const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TIMED_OUT, "1-1"]);
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("Duration     10:00\nExit         timed out after <duration>\nResult file  none\n");
+    expect(stdout).toContain("Duration     10:00\nExit         timed out after <duration>\nResult file  none\n\nReply\n  none  (the agent left no result file)\n\nMeasures\n");
+  });
+
+  test("<container run> recorded with a reply shows it, under the agent's run", async () => {
+    const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TIMED_OUT, "2-1"]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(`
+Exit         0
+Result file  88 bytes
+
+Reply
+  I wrote isPrime.ts, and tested it up to 100.
+
+Measures
+`);
   });
 
   test("<container run> can be its postrun image", async () => {

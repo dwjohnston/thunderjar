@@ -13,6 +13,7 @@ const measurement = (name: string, declaration: MeasurementDeclaration): Measure
 
 const EXISTS = measurement("exists", { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] });
 const IGNORES = measurement("ignores", { instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, aggregate: ["max"] });
+const SAYS_ELI = measurement("saysEli", { instrument: "replyMatches", config: { pattern: "Eli" }, aggregate: ["rate"] });
 
 /** An opener of contexts over `files`, each recording what was done with it in `log`. */
 function opener(files: Record<string, string>, log: string[]) {
@@ -24,6 +25,7 @@ function opener(files: Record<string, string>, log: string[]) {
     return {
       workdir: "/workspace",
       harnessResult: "",
+      reply: { outcome: "unavailable", reason: "its harness has no collectReply" },
       exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
       readFile: async (path) => {
         const text = written[path] ?? files[path];
@@ -96,6 +98,18 @@ describe("measureContainerRun", () => {
       outcome: "erroredWhileMeasuring",
       error: { message: "isPrime.ts has no export to bind {{defaultExport}} to" },
     });
+  });
+
+  test("each context is opened with whether its instrument uses a container: a reply's doesn't", async () => {
+    const asked: boolean[] = [];
+    const open = opener({ "isPrime.ts": "" }, []);
+
+    await measureContainerRun([EXISTS, SAYS_ELI], async (usesContainer) => {
+      asked.push(usesContainer);
+      return open();
+    });
+
+    expect(asked).toEqual([true, false]);
   });
 
   test("with no measurements, nothing is opened", async () => {

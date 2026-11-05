@@ -42,12 +42,12 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("run, against real Docker", ()
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
-Building <PREFIX>-prerun:e4a5b2ee ... done
-Building <PREFIX>-prerun:2a7ea4db ... done
+Building <PREFIX>-prerun:7459d991 ... done
+Building <PREFIX>-prerun:24b0ab67 ... done
  1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
-      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
+      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
-      isPrimeTemplateTest: {passed: 5, failed: 0}   isPrimeTsExists: true   tsIgnoreCount: 0
+      isPrimeTemplateTest: {passed: 5, failed: 0}   isPrimeTsExists: true   saysArr: false   tsIgnoreCount: 0
 Wrote <DATA>/runs/<ULID>/
 `);
 
@@ -75,17 +75,23 @@ Wrote <DATA>/runs/<ULID>/
     expect(measures(alpha)).toEqual({
       isPrimeTemplateTest: ["templateTest", { outcome: "measured", data: { passed: 3, failed: 2 } }],
       isPrimeTsExists: ["fileCreated", { outcome: "measured", data: true }],
+      saysArr: ["replyMatches", { outcome: "measured", data: true }],
       tsIgnoreCount: ["grep", { outcome: "measured", data: 1 }],
     });
     expect(measures(beta)).toEqual({
       isPrimeTemplateTest: ["templateTest", { outcome: "measured", data: { passed: 5, failed: 0 } }],
       isPrimeTsExists: ["fileCreated", { outcome: "measured", data: true }],
+      saysArr: ["replyMatches", { outcome: "measured", data: false }],
       tsIgnoreCount: ["grep", { outcome: "measured", data: 0 }],
     });
 
     // The two fake agents did different things.
-    expect(alpha.harnessResult).toBe('{"model":"fake-model-small-001"}\n');
-    expect(beta.harnessResult).toBe('{"model":"fake-model-large-001"}\n');
+    expect(alpha.harnessResult).toBe('{"model":"fake-model-small-001","reply":"Arr, isPrime.ts be written."}\n');
+    expect(beta.harnessResult).toBe('{"model":"fake-model-large-001","reply":"I wrote isPrime.ts, and tested it up to 100."}\n');
+    expect([alpha.reply, beta.reply]).toEqual([
+      { outcome: "collected", text: "Arr, isPrime.ts be written." },
+      { outcome: "collected", text: "I wrote isPrime.ts, and tested it up to 100." },
+    ]);
     expect(await inImage(alpha.postrunImage, "cat isPrime.ts")).toBe(
       `// ${PLAIN}\n// @ts-ignore\nexport const isPrime = (n: number) => n > 1 && n % 2 !== 0;`,
     );
@@ -101,7 +107,7 @@ Wrote <DATA>/runs/<ULID>/
     // A postrun image starts as its prerun image does, rather than running the agent again.
     const config = "{{json .Config.Entrypoint}} {{json .Config.Cmd}}";
     expect(await $`docker image inspect --format ${config} ${alpha.postrunImage}`.text()).toBe(
-      await $`docker image inspect --format ${config} ${PREFIX}-prerun:e4a5b2ee`.text(),
+      await $`docker image inspect --format ${config} ${PREFIX}-prerun:7459d991`.text(),
     );
 
     // Every container was removed.
