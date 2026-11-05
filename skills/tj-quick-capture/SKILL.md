@@ -25,6 +25,8 @@ The user has seen an agent, usually you, get something wrong. Write down the fac
 
 The argument is the user's complaint, e.g. `"Agent did not invoke /x skill, /y skill"`.
 
+The user may instead ask you to capture another session, by its ID. Then follow [Capturing another session](#capturing-another-session) as well.
+
 ## Steps
 
 1. Gather the environment facts with the commands below.
@@ -70,6 +72,7 @@ git log --oneline -10
   "schemaVersion": 1,
   "capturedAt": "2026-11-05T21:53:00Z",
   "complaint": "Agent did not invoke /x skill, /y skill",
+  "capturedBy": null,
 
   "agent": {
     "harness": "Claude Code",
@@ -122,6 +125,7 @@ git log --oneline -10
 
 | Field | Source |
 |---|---|
+| `capturedBy` | `null` for your own session. See [Capturing another session](#capturing-another-session) |
 | `agent.*` | What your system prompt and environment tell you. `harnessVersion` from e.g. `claude --version` |
 | `agent.transcriptPath` | The harness's session log, if you know where it is. It holds the full record, so it is the most useful field |
 | `repository.*` | The git commands above. `commitAtSessionStart` from the git status you were given at the start, if any |
@@ -165,3 +169,60 @@ Put your interpretation only in `agentAnalysis`. Every other field is a fact you
 Replace tokens, API keys and passwords that appear in the conversation with `"<redacted>"`.
 
 **Rationale:** captures may be committed or shared, and a secret in a JSON file is easy to miss.
+
+## Capturing another session
+
+Every fact comes from that session's transcript, not from you.
+
+1. Find the transcript.
+   - Claude Code keeps it at `~/.claude/projects/<project>/<session id>.jsonl`.
+   - e.g.
+     ```sh
+     ls ~/.claude/projects/*/7d415040-1ed5-4557-91ca-8b727f3c299c.jsonl
+     ```
+   - Not found: tell the user, and stop.
+2. Read the agent fields from it.
+   - e.g.
+     ```sh
+     jq -r 'select(.type=="assistant") | .message.model' "$f" | sort -u
+     jq -r '.version // empty' "$f" | sort -u
+     ```
+3. Read the user's messages from it.
+   - e.g.
+     ```sh
+     jq -r 'select(.type=="user") | .message.content
+       | if type=="string" then . else (.[] | select(.type=="text") | .text) end' "$f"
+     ```
+   - Skip what the harness added, e.g. `/clear` notices and "the user opened the file" notes.
+4. Find the commits it made, from its `git commit` calls.
+   - e.g.
+     ```sh
+     jq -r 'select(.type=="assistant") | .message.content[]
+       | select(.type=="tool_use") | .input.command // empty' "$f" | grep "git commit"
+     ```
+   - `headCommit` is its last commit. `commitAtSessionStart` is the commit before its first.
+5. Fill in `capturedBy`.
+   - e.g.
+     ```json
+     "capturedBy": {
+       "sessionId": "09203808-4422-4924-9ab7-99fc465f136c",
+       "note": "Captured from another session's transcript, after the fact."
+     }
+     ```
+6. Name the captured session in the commit body.
+   - e.g.
+     ```sh
+     git commit -m "⚡ thunderjar quick capture: Did not invoke /write-for-the-human" \
+       -m "Captured on behalf of session 7d415040-1ed5-4557-91ca-8b727f3c299c, whose work is commit 9839823."
+     ```
+
+✅ **Do this**
+
+- Record the repository as it was when that session worked.
+- Set the uncommitted-change fields to `null`, unless the transcript shows them.
+
+❌ **Don't do that**
+
+- Don't use the current `HEAD`, or your own model and version.
+
+**Rationale:** other sessions may have committed since, so the current state is not the state the failure happened in. The eval needs that session's starting commit to reproduce it.
