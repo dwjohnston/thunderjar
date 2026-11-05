@@ -3,11 +3,7 @@ import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { type ExecutionRecord, fileStore, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath, resolvePath } from "../../dataDir.ts";
-
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
-
-/** `iso` in UTC, to the minute, e.g. `2026-10-01 10:12`. */
-const minute = (iso: string) => new Date(iso).toISOString().slice(0, 16).replace("T", " ");
+import { minute, plural } from "../../format.ts";
 
 /** One line per execution, in the order given: its ID, test case, when it started, its matrix and its status, in aligned columns. */
 export function renderExecutions(executions: ExecutionRecord[]): string {
