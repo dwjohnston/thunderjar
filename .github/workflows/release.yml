@@ -49,7 +49,7 @@ jobs:
       id-token: write # npm trusted publishing (OIDC)
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -61,7 +61,7 @@ jobs:
       # changesets/action shells out to npm/node under the hood, and npm
       # trusted publishing needs a recent npm (11.5.1+), which Node 24 ships.
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
@@ -106,7 +106,7 @@ jobs:
       RC_BRANCH: release-candidate/main
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
@@ -117,7 +117,7 @@ jobs:
           bun-version: latest
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
@@ -296,7 +296,7 @@ jobs:
       SHA: ${{ needs.preview-authorize.outputs.sha }}
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.preview-authorize.outputs.sha }}
           persist-credentials: false
@@ -307,7 +307,7 @@ jobs:
           bun-version: latest
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -328,7 +328,7 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP/pack"
 
       - name: Upload package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: preview-package
           path: ${{ runner.temp }}/pack/*.tgz
@@ -349,13 +349,13 @@ jobs:
       VERSION: ${{ needs.preview-build.outputs.version }}
     steps:
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
 
       - name: Download package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: preview-package
           path: pack
