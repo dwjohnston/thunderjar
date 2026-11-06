@@ -6,6 +6,8 @@ const SITE_ROOT = "/thunderjar/";
 const REPO_ROOT = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const DOCS_DIR = "docs";
 const THEME_DIR = `${DOCS_DIR}/.vitepress/theme`;
+// Older tags' copies that use the CLI bundle src/, which Vite can't do. The current copies read each tag's own src/.
+const RUNTIME_FILES = [`${DOCS_DIR}/.vitepress/config.ts`, `${DOCS_DIR}/cli/[command].paths.ts`];
 // The docs import the CLI from src/ (which reads package.json) to generate the CLI reference pages.
 const SOURCE_DIRS = [DOCS_DIR, "src"];
 // Left out of the docs hash, because its version changes with every release.
@@ -149,12 +151,17 @@ async function prepareSource(repoRoot: string, workDir: string, tag: string) {
   await $`git archive ${tag} ${present} | tar -x -C ${dir}`.cwd(repoRoot);
   await $`rm -rf ${dir}/${THEME_DIR}`;
   await $`cp -R ${repoRoot}/${THEME_DIR} ${dir}/${THEME_DIR}`;
+  for (const file of RUNTIME_FILES) {
+    const old = Bun.file(`${dir}/${file}`);
+    if (!(await old.exists()) || !(await old.text()).includes("src/cli/program")) continue;
+    await $`cp ${repoRoot}/${file} ${dir}/${file}`;
+  }
   return `${dir}/${DOCS_DIR}`;
 }
 
 async function build(repoRoot: string, source: string, base: string, dest: string) {
   console.log(`Building ${source} with base ${base}`);
-  await $`bunx vitepress build ${source} --base ${base} --outDir ${dest}`.cwd(repoRoot);
+  await $`bun --bun x vitepress build ${source} --base ${base} --outDir ${dest}`.cwd(repoRoot);
   return dest;
 }
 
