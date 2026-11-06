@@ -30,7 +30,7 @@
     "lint": "bun scripts/lint-layers.ts --check && oxlint",
     "lint:generate": "bun scripts/lint-layers.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test --parallel",
     "test:docker": "THUNDERJAR_DOCKER_TESTS=1 bun test --timeout 600000 .docker.test",
     "test:agent": "THUNDERJAR_AGENT_TESTS=1 bun test --timeout 900000 .agent.test",
     "test:package": "bun scripts/package-smoke-test.ts",
