@@ -12,19 +12,30 @@ const commands = createProgram().commands;
 export default defineConfig({
   title: "Thunderjar",
   base: "/thunderjar/",
+  appearance: false,
   themeConfig: {
-    nav: [{ text: "CLI", link: "/cli/" }],
-    sidebar: {
-      "/cli/": [
-        {
-          text: "CLI reference",
-          link: "/cli/",
-          items: commands.map((cmd) => ({
-            text: cmd.name(),
-            link: `/cli/${cmd.name()}`,
-          })),
-        },
-      ],
-    },
+    nav: [{ text: "Docs", link: "/getting-started" }],
+    sidebar: [
+      {
+        text: "Guide",
+        items: [
+          { text: "Getting started", link: "/getting-started" },
+          { text: "Motivation", link: "/motivation" },
+          { text: "How it works", link: "/how-it-works" },
+          {
+            text: "What it's not suitable for",
+            link: "/what-its-not-suitable-for",
+          },
+        ],
+      },
+      {
+        text: "CLI reference",
+        link: "/cli/",
+        items: commands.map((cmd) => ({
+          text: cmd.name(),
+          link: `/cli/${cmd.name()}`,
+        })),
+      },
+    ],
   },
 });
