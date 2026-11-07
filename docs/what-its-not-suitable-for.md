@@ -12,10 +12,9 @@ Humans: add your notes here
 
 # What it's not suitable for
 
-This page is a stub. It will list tasks Thunderjar cannot measure reliably, and the deliberate non-goals of the first release.
+- Any agent that interacts with the wider internet generally 
+    - "Do some deep research"
+        - The internet will have changed by the time you rerun the experiment. 
+    - "Fix issue #42 on github"
+        - This issue will likely have changed state by the time you run the experiment. 
 
-## TODO
-
-- Work without an automated measurement
-- Long-running or interactive tasks
-- Non-coding tasks

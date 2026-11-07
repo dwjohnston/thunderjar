@@ -12,11 +12,12 @@ Humans: add your notes here
 
 # Getting started
 
-This page is a stub. It will cover installing Thunderjar, scaffolding a project, and running a first experiment.
+```bash
+npx thunderjar init
+```
 
-## TODO
 
-- Prerequisites
-- Install
-- `thunderjar init`
-- Define and run an experiment
+This will create and populate a `.thunderjar` folder. 
+
+The folder comes preconfigured with an example test case. 
+

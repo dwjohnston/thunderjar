@@ -85,7 +85,7 @@ We then run all the permutations x the number of iterations.
 
 When the task completes we save the container as a postrun docker image, for each run. 
 
-We then apply measurements against each image, and aggregate the results. `thunderjar show` prints one row per permutation, with each measurement's own aggregate:
+We then apply measurements against each image, and aggregate the results:
 
 | # | Prompt set | Model | Runs | `isPrimeTemplateTest` (mean passed / failed) | `isPrimeTsExists` (rate) | `tsIgnoreCount` (mean / max) |
 |---|---|---|---|---|---|---|
@@ -94,8 +94,32 @@ We then apply measurements against each image, and aggregate the results. `thund
 | 3 | `commit-bbbccc` | `claude-opus-5-5` | 5/5 | 5.0 / 0.0 | 5/5 | 0.0 / 0 |
 | 4 | `commit-bbbccc` | `claude-haiku-5-5` | 5/5 | 4.8 / 0.2 | 5/5 | 0.0 / 0 |
 
-The aggregates are what you compare between permutations; the individual iterations stay in the run data store.
 
+Later, we can update our experiement 
+
+```ts
+import { declareTestCase } from "thunderjar";
+
+export default declareTestCase({
+  baseImage: ["node20"],
+  codeState: ["commit-b2c3d4"], // 👈
+  promptSet: ["commit-aaabbb", "commit-bbbccc"],
+  harnessModel: [
+    "claude-code-2.1.311/claude-opus-5-5",
+    "claude-code-2.1.311/claude-haiku-5-5",
+  ],
+  task: "is-prime",
+  initialPrompt: ["plain"],
+  iterations: 5,
+});
+```
+
+Because the task is the same, because it has the same set of measurements, this set of results can be compared against the previous results. 
+
+<!-- an image here would be good -->
+
+
+We can always update our measurements. Because we preserved the final state in a docker image, we dont' need to rerun any agents, we just reapply the measurements.
 
 
 
