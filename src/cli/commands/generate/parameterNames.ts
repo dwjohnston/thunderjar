@@ -1,4 +1,4 @@
-// Reads the names declared under `.thunderjar/test-case-parameters/`, and renders them as the
+// Reads the names declared under `.thunderjar/parameters/`, and renders them as the
 // global types of `_generated/parameterNames.d.ts`.
 import { foldersIn, PARAMETERS as P, tsFilesIn } from "../../../config/folders.ts";
 

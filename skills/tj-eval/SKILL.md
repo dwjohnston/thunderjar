@@ -11,7 +11,7 @@ e.g.
 
 ```
 .thunderjar/
-  test-case-parameters/tasks/<task>/
+  parameters/tasks/<task>/
     initial-prompts/plain.ts
     measurements/<one file per check>.ts
   test-cases/<task>.ts

@@ -202,7 +202,7 @@ const houseStyleAgentsMd = `# House style
 - Add a test beside each new module.
 `;
 
-const P = "test-case-parameters";
+const P = "parameters";
 
 /**
  * The files `init` creates under `.thunderjar/`, keyed by their path in it, in the order it creates them.

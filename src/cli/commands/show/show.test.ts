@@ -249,7 +249,7 @@ Measures
   test("a measure whose recorded values its declaration no longer combines shows ?, and why, and the rest still shows", async () => {
     await using copy = await copyScenarioProject("0203");
     await Bun.write(
-      `${copy.dir}/.thunderjar/test-case-parameters/tasks/is-prime/measurements/tsIgnoreCount.ts`,
+      `${copy.dir}/.thunderjar/parameters/tasks/is-prime/measurements/tsIgnoreCount.ts`,
       `import { declareMeasurement } from "thunderjar";
 
 export default declareMeasurement({

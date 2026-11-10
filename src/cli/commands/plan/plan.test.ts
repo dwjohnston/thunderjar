@@ -196,7 +196,7 @@ describe("0202 typical project, without the key fake-harness-alpha needs", () =>
 describe("0402 broken declarations", () => {
   const plan = (testCase: string) => thunderjar(scenario("0402"), ["plan", testCase]);
   const testCase = (name: string) => `.thunderjar/test-cases/${name}.ts`;
-  const parameter = (path: string) => `.thunderjar/test-case-parameters/${path}`;
+  const parameter = (path: string) => `.thunderjar/parameters/${path}`;
   const measurement = (path: string) => parameter(`tasks/${path}`);
 
   test("a test case naming only sound declarations plans beside the broken ones", async () => {
@@ -334,7 +334,7 @@ describe("0403 broken harness family", () => {
     const beta = await thunderjar(scenario("0403"), ["plan", "beta"]);
     expect(beta.stdout).toBe("");
     expect(beta.stderr).toBe(
-      'Error: .thunderjar/test-case-parameters/harnessModels/fake-harness-beta/index.ts: version: must be the version of the agent the harness installs, e.g. "2.1.311", got undefined\n',
+      'Error: .thunderjar/parameters/harnessModels/fake-harness-beta/index.ts: version: must be the version of the agent the harness installs, e.g. "2.1.311", got undefined\n',
     );
     expect(beta.exitCode).toBe(1);
 
@@ -350,11 +350,11 @@ describe("0404 empty parameter folders", () => {
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0404"), ["plan", "example"]);
 
     expect(stdout).toBe("");
-    expect(stderr).toBe(`Error: .thunderjar/test-case-parameters/baseImages/ has no base images
-Error: .thunderjar/test-case-parameters/codeStates/ has no code states
-Error: .thunderjar/test-case-parameters/promptSets/ has no prompt sets
-Error: .thunderjar/test-case-parameters/harnessModels/ has no harnesses
-Error: .thunderjar/test-case-parameters/tasks/ has no tasks
+    expect(stderr).toBe(`Error: .thunderjar/parameters/baseImages/ has no base images
+Error: .thunderjar/parameters/codeStates/ has no code states
+Error: .thunderjar/parameters/promptSets/ has no prompt sets
+Error: .thunderjar/parameters/harnessModels/ has no harnesses
+Error: .thunderjar/parameters/tasks/ has no tasks
 `);
     expect(exitCode).toBe(1);
   });

@@ -43,7 +43,7 @@ const edit = async (path: string, change: (text: string) => string) => {
 /** A copy of 0202, its `.thunderjar/` folder, and where its parameters are. */
 const copy0202 = async () => {
   const copy = await copyScenarioProject("0202");
-  return { copy, root: `${copy.dir}/${FOLDER}`, parameters: `${copy.dir}/${FOLDER}/test-case-parameters` };
+  return { copy, root: `${copy.dir}/${FOLDER}`, parameters: `${copy.dir}/${FOLDER}/parameters` };
 };
 
 /** Which of each permutation's hashes differ between `before` and `after`: its parameter hashes, its hash, and its image hash. */
@@ -345,8 +345,8 @@ export default declareCodeState({
 
     await expect(hashPermutations(copied, TWO_PAIRS)).rejects.toThrow(
       [
-        ".thunderjar/test-case-parameters/promptSets/snerk/index.ts: applyParameter: threw: no",
-        ".thunderjar/test-case-parameters/harnessModels/fake-harness-beta/index.ts: cli: threw: no cli",
+        ".thunderjar/parameters/promptSets/snerk/index.ts: applyParameter: threw: no",
+        ".thunderjar/parameters/harnessModels/fake-harness-beta/index.ts: cli: threw: no cli",
       ].join("\n"),
     );
   });
@@ -397,7 +397,7 @@ describe("hashPermutations, resolving", () => {
     await using copy = await copyScenarioProject("0209");
     const root = `${copy.dir}/${FOLDER}`;
     await Bun.write(
-      `${root}/test-case-parameters/promptSets/stamped/index.ts`,
+      `${root}/parameters/promptSets/stamped/index.ts`,
       `import { declarePromptSet } from "thunderjar";
 
 export default declarePromptSet({
@@ -441,7 +441,7 @@ export default declarePromptSet({
     await using copy = await copyScenarioProject("0209");
     const root = `${copy.dir}/${FOLDER}`;
     await Bun.write(
-      `${root}/test-case-parameters/promptSets/vague/index.ts`,
+      `${root}/parameters/promptSets/vague/index.ts`,
       `import { declarePromptSet } from "thunderjar";
 
 export default declarePromptSet({ resolve: () => undefined as never });

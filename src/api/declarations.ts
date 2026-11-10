@@ -306,7 +306,7 @@ export function declareMeasurement(declaration: MeasurementDeclaration): Measure
 }
 
 /**
- * Every name must be declared under `test-case-parameters/`, and each initial prompt must be one of
+ * Every name must be declared under `parameters/`, and each initial prompt must be one of
  * `task`'s, once `thunderjar generate` has run.
  */
 export type TestCaseDeclaration<T extends TaskNames = TaskNames> = {

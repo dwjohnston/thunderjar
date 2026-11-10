@@ -10,7 +10,7 @@ const filesIn = (dir: string) =>
 
 const read = (dir: string, path: string) => Bun.file(`${dir}/.thunderjar/${path}`).text();
 
-const P = "test-case-parameters";
+const P = "parameters";
 
 /**
  * `thunderjar init` in `dir`. Scenario copies are inside this repository, so git stops looking at
