@@ -29,6 +29,13 @@ export default defineConfig({
         ],
       },
       {
+        text: "Configuration",
+        items: [
+          { text: "Project structure", link: "/configuration/" },
+          { text: "Declaration reference", link: "/configuration/reference" },
+        ],
+      },
+      {
         text: "CLI reference",
         link: "/cli/",
         items: commands.map((cmd) => ({
