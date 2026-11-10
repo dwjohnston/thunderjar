@@ -168,8 +168,8 @@ Wrote <DATA>/runs/<ULID>/
     expect(exitCode).toBe(0);
     const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: data, onlyFiles: false })];
     const record = (await Bun.file(`${data}/${executionDir}/container-runs/1-1.json`).json()) as ContainerRunRecord;
-    // fake-echo copies the prompt file into its result file.
-    expect(record.harnessResult).toBe(AWKWARD);
-    expect(await $`docker run --rm ${record.postrunImage} cat /thunderjar/prompt.txt`.text()).toBe(AWKWARD);
+    // fake-echo copies the prompt file into its result file. writePrompt ends it with a newline.
+    expect(record.harnessResult).toBe(`${AWKWARD}\n`);
+    expect(await $`docker run --rm ${record.postrunImage} cat /thunderjar/prompt.txt`.text()).toBe(`${AWKWARD}\n`);
   }, 600_000);
 });
