@@ -72,26 +72,48 @@ RUN git clone --quiet https://github.com/acme/prompts.git /tmp/prompts \
   && find . -type f -name SKILL.md -exec cp --parents {} /workspace/ \; \
   && cd /workspace && git add -A && git commit --quiet -m "Thunderjar: apply promptSet"
 
-# 4. Harness
+# 4. Harness: installs the agent, and writes the model and the script that runs it
 RUN npm install -g @anthropic-ai/claude-code@2.1.311
 RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
+COPY <<'THUNDERJAR_EOF' /thunderjar/model.txt
+claude-opus-5-5
+THUNDERJAR_EOF
+COPY --chmod=755 <<'THUNDERJAR_EOF' /thunderjar/thunderjar-run.sh
+#!/bin/sh
+claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json --dangerously-skip-permissions > /thunderjar/result.json
+THUNDERJAR_EOF
 USER node
-COPY thunderjar/model.txt /thunderjar/model.txt
 
-# 5. Task: the initial prompt, and the script that runs the agent
-COPY thunderjar/prompt.txt /thunderjar/prompt.txt
-COPY --chmod=755 thunderjar/thunderjar-run.sh /thunderjar/thunderjar-run.sh
+# 5. Task: writes the initial prompt
+COPY <<'THUNDERJAR_EOF' /thunderjar/prompt.txt
+Create isPrime.ts, exporting isPrime(n: number): boolean, and implement it.
+THUNDERJAR_EOF
 ```
 
-The model and the initial prompt are baked into the image, along with `thunderjar-run.sh`, the script that runs the harness. So the image holds everything a run needs:
+Each layer is a parameter's `applyParameter`. The harness's writes the model and `thunderjar-run.sh`, the script that runs the agent, and the initial prompt's writes the prompt:
+
+```ts
+// harnessModels/claude-code-2.1.311/index.ts
+export default claudeCode({ version: "2.1.311" });
+
+// tasks/is-prime/initial-prompts/plain.ts
+export default declareInitialPrompt({
+  applyParameter: () => writePrompt("Create isPrime.ts, exporting isPrime(n: number): boolean, and implement it."),
+  timeoutSeconds: 600,
+});
+```
+
+`claudeCode` and `writePrompt` are helpers: each returns the Dockerfile fragment above. So the image holds everything a run needs:
 
 ```bash
-docker run thunderjar-prerun:956de01a sh /thunderjar/thunderjar-run.sh
+docker run thunderjar-prerun:3f2c9a10 sh /thunderjar/thunderjar-run.sh
 ```
 
 The script runs in the image's working directory, `/workspace` by default. A code state or initial prompt can set another with `WORKDIR`, e.g. to run the agent in one package of a monorepo.
 
 The layers go from least to most often changed, so permutations share every layer below the first one they differ in. Two models share the harness install. Two initial prompts share everything but the last layer.
+
+An initial prompt is a single prompt for now: an agent can't yet be given several turns.
 
 We then run all the permutations x the number of iterations. 
 

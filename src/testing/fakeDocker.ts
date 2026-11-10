@@ -24,8 +24,8 @@
 // variables passed with `-e NAME`, from the fake's own, beside PATH and HOME, as a container sees
 // only what it's given. While it runs, `kill` stops it, and everything it started, as if the
 // container had been killed. A built image's container
-// starts with only what Thunderjar bakes in, its build context's `thunderjar/` folder, at
-// /thunderjar: no fragment's RUN is run. A script that runs /thunderjar/thunderjar-run.sh runs a
+// starts with only the files its Dockerfile writes with `COPY <<'EOF' <path>` heredocs, as
+// writeFile does, under /workspace or /thunderjar: no RUN is run. A script that runs /thunderjar/thunderjar-run.sh runs a
 // copy of it with its paths mapped too. A committed image's starts with the files of the
 // container it was committed from. So a fake harness's `cli` really runs, its result file is
 // really read, and what it left is in its postrun image. `run --detach` starts a container
@@ -178,7 +178,15 @@ if (import.meta.main) {
     }
     if (dir) {
       await $`mkdir -p ${dir}/contexts/${image} && cp -R ${context}/. ${dir}/contexts/${image}`.quiet();
-      await $`if [ -d ${context}/thunderjar ]; then mkdir -p ${filesystemOf(image)}/thunderjar && cp -R ${context}/thunderjar/. ${filesystemOf(image)}/thunderjar; fi`.quiet();
+      // COPY [--chmod=…] <<'DELIM' <path>, then its lines, up to DELIM.
+      const dockerfile = (await Bun.file(`${context}/Dockerfile`).text()).split("\n");
+      for (let i = 0; i < dockerfile.length; i++) {
+        const copy = /^COPY (?:--\S+ )*<<'?(\w+)'? (\/(?:workspace|thunderjar)\/\S+)$/.exec(dockerfile[i] as string);
+        if (!copy) continue;
+        const end = dockerfile.indexOf(copy[1] as string, i + 1);
+        await Bun.write(`${filesystemOf(image)}${copy[2]}`, `${dockerfile.slice(i + 1, end).join("\n")}\n`);
+        i = end;
+      }
       await Bun.write(state("images"), lines([...(await list("images")), image]));
     }
   } else if (command === "run" && parseRun(args.slice(1))) {

@@ -20,7 +20,7 @@ project glossary before diving into the rest.
 6.1. [Base Image](061-base-image.md) — The image a prerun image is built `FROM`.
 6.2. [Code State](062-code-state.md) — The codebase applied on top of the base image.
 6.3. [Prompt Set](063-prompt-set.md) — Overlaying prompt files from a pinned commit.
-6.4. [Harness](064-harness.md) — The agent tool: installing it, the `cli` contract, token costs, and the `models` map.
+6.4. [Harness](064-harness.md) — The agent tool: installing it, the run script contract, token costs, and the `models` map.
 6.5. [Model](065-model.md) — The root LLM, and why its ID belongs to the harness.
 6.6. [Task](066-task.md) — The task, its initial prompts, and the task measurements that live beside them.
 7. [Data Architecture](070-data-architecture.md) — The run data store and image store.

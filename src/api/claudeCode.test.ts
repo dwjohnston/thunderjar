@@ -78,15 +78,6 @@ describe("claudeCodeTokenCosts", () => {
 
 describe("claudeCode", () => {
   const harness = claudeCode({ version: "2.1.311" });
-  const ctx = {
-    version: "2.1.311",
-    modelId: "claude-haiku-5-5",
-    initialPrompt: "Go.",
-    promptPath: "/thunderjar/prompt.txt",
-    resultPath: "/thunderjar/result.json",
-    sessionId: "0b9e8a52-2a4b-4c3e-9d3e-6f1c2b7a8d90",
-    resolved: undefined,
-  };
 
   test("is a harness declaration, pinning its version", () => {
     expect(declaredBy(harness)).toBe("declareHarness");
@@ -94,19 +85,19 @@ describe("claudeCode", () => {
     expect(harness.requiredEnv).toEqual(["ANTHROPIC_API_KEY"]);
   });
 
-  test("installs Claude Code as root, then runs as node", () => {
-    expect(harness.applyParameter?.(undefined, { dir: "parameters/harness", version: "2.1.311", resolved: undefined })).toBe(
+  test("installs Claude Code as root, writes the model and run script, then runs as node", () => {
+    expect(harness.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "claude-haiku-5-5", resolved: undefined })).toBe(
       `RUN npm install -g @anthropic-ai/claude-code@2.1.311
 RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
+COPY <<'THUNDERJAR_EOF' /thunderjar/model.txt
+claude-haiku-5-5
+THUNDERJAR_EOF
+COPY --chmod=755 <<'THUNDERJAR_EOF' /thunderjar/thunderjar-run.sh
+#!/bin/sh
+claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json --dangerously-skip-permissions > /thunderjar/result.json
+THUNDERJAR_EOF
 USER node`,
     );
-  });
-
-  test("starts the session on the first turn, and resumes it after", () => {
-    expect(harness.cli({ ...ctx, turn: 0 })).toBe(
-      'claude -p "$(cat /thunderjar/prompt.txt)" --model claude-haiku-5-5 --output-format json --dangerously-skip-permissions --session-id 0b9e8a52-2a4b-4c3e-9d3e-6f1c2b7a8d90 > /thunderjar/result.json',
-    );
-    expect(harness.cli({ ...ctx, turn: 1 })).toEndWith(" --resume 0b9e8a52-2a4b-4c3e-9d3e-6f1c2b7a8d90 > /thunderjar/result.json");
   });
 
   test("reads its reply and token costs with the library's readers", () => {
@@ -114,9 +105,11 @@ USER node`,
     expect(harness.collectTokenCosts?.(REAL, { version: "2.1.311", modelId: "deepseek-v4-pro" })).toEqual(claudeCodeTokenCosts(REAL));
   });
 
-  test("cli can be replaced", () => {
-    const custom = claudeCode({ version: "2.1.311", cli: (c) => `claude -p hi --model ${c.modelId} > ${c.resultPath}` });
+  test("its command can be replaced", () => {
+    const custom = claudeCode({ version: "2.1.311", command: "claude -p hi > /thunderjar/result.json" });
 
-    expect(custom.cli({ ...ctx, turn: 0 })).toBe("claude -p hi --model claude-haiku-5-5 > /thunderjar/result.json");
+    expect(custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", resolved: undefined })).toContain(
+      "#!/bin/sh\nclaude -p hi > /thunderjar/result.json\n",
+    );
   });
 });

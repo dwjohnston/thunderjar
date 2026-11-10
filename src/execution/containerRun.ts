@@ -9,25 +9,18 @@ import {
   runContainer,
 } from "../docker/docker.ts";
 import type { Execution } from "../store/runDataStore.ts";
-import { RUN_PATH, RUN_SCRIPT_PATH, SESSION_ID_VARIABLE, shellQuote } from "./runScript.ts";
+import { RESULT_PATH, RUN_PATH, timedRun } from "./runScript.ts";
 
 export { NOW_MS_FUNCTION, RUN_PATH } from "./runScript.ts";
-
-/** What a container runs: the baked run script, in session `sessionId`. */
-export const runCommand = (sessionId: string) => `${SESSION_ID_VARIABLE}=${shellQuote(sessionId)} sh ${RUN_SCRIPT_PATH}`;
 
 export type ContainerRun = {
   prerunImage: string;
   postrunImage: string;
-  /** The agent session its turns share. */
-  sessionId: string;
-  /** Where each of its turns leaves its result: one, unless its initial prompt has several turns. */
-  resultPaths: string[];
   /** The names of the environment variables passed into the container, from Thunderjar's own. */
   env: string[];
   /** More `docker run` options, from its base image. */
   runOptions: string[];
-  /** How long its turns, together, may run before it's killed. */
+  /** How long its run script may run before it's killed. */
   timeoutSeconds: number;
   /** The container's name. */
   container: string;
@@ -35,8 +28,8 @@ export type ContainerRun = {
 
 export type ContainerRunOutcome = {
   execution: Execution;
-  /** The text of each turn's result file, or null if it left none, in order. */
-  harnessResults: (string | null)[];
+  /** The text of its result file, or null if it left none. */
+  harnessResult: string | null;
 };
 
 /** Whether `value` is plausibly ms since the epoch: from 2001-09-09 (13 digits) up to 2286. */
@@ -78,17 +71,16 @@ export function parseExecution(text: string | undefined, timeoutSeconds: number,
  */
 export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
   try {
-    const stop = await runContainer(run.prerunImage, run.container, runCommand(run.sessionId), {
+    const stop = await runContainer(run.prerunImage, run.container, timedRun(), {
       env: run.env,
       runOptions: run.runOptions,
       timeoutSeconds: run.timeoutSeconds,
     });
     const killedAt = stop.timedOut ? stop.killedAt : undefined;
     const execution = parseExecution(await readContainerFile(run.container, RUN_PATH), run.timeoutSeconds, killedAt);
-    const harnessResults: (string | null)[] = [];
-    for (const resultPath of run.resultPaths) harnessResults.push((await readContainerFile(run.container, resultPath)) ?? null);
+    const harnessResult = (await readContainerFile(run.container, RESULT_PATH)) ?? null;
     await commitContainer(run.container, run.postrunImage, run.prerunImage);
-    return { execution, harnessResults };
+    return { execution, harnessResult };
   } finally {
     await removeContainer(run.container).catch(() => {});
   }

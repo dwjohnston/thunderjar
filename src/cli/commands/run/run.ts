@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import type { TestCaseDeclaration } from "../../../api/declarations.ts";
+import { RUN_SCRIPT_PATH } from "../../../api/files.ts";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { AXES, parsePair } from "../../../config/permutations.ts";
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
@@ -26,8 +27,8 @@ const field = (label: string, value: string) =>
 
 /**
  * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
- * the environment variables its container is given, by name, any more `docker run` options, the
- * prompt file's contents, and its harness command. With several turns, its session ID, and each turn's prompt and command.
+ * the environment variables its container is given, by name, any more `docker run` options, and
+ * the command it runs: its prerun image's run script. `build --dry-run` shows what the script is.
  */
 export function renderExecution({ executionId, permutations }: PlannedExecution): string {
   const blocks = permutations.map((permutation) =>
@@ -37,12 +38,7 @@ export function renderExecution({ executionId, permutations }: PlannedExecution)
         `  Iteration ${iteration.number}: postrun image ${iteration.postrunImage}`,
         ...(permutation.env.length > 0 ? [field("env", permutation.env.join(", "))] : []),
         ...(permutation.runOptions.length > 0 ? [field("docker", permutation.runOptions.join(" "))] : []),
-        ...(iteration.turns.length === 1
-          ? [field("prompt", iteration.turns[0]!.prompt), field("command", iteration.turns[0]!.command)]
-          : [
-              field("session", iteration.sessionId),
-              ...iteration.turns.flatMap(({ prompt, command }, t) => [field(`prompt ${t + 1}`, prompt), field(`turn ${t + 1}`, command)]),
-            ]),
+        field("command", `sh ${RUN_SCRIPT_PATH}`),
       ]),
     ].join("\n"),
   );
@@ -212,7 +208,7 @@ export function createRunCommand(): Command {
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(
       "--dry-run",
-      "print the images, environment variables, prompts and harness commands the execution would use, without running anything",
+      "print the images, environment variables and commands the execution would use, without running anything",
     )
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())

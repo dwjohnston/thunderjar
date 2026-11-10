@@ -3,6 +3,7 @@
 // hand, e.g. `bun run fixture 0202 build example --dry-run`.
 import { $ } from "bun";
 import { describe, expect, test } from "bun:test";
+import { writeModel, writePrompt, writeRunScript } from "../../../api/files.ts";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
@@ -11,19 +12,27 @@ import { scenario } from "../../../testing/scenario.ts";
 const SNERK = `RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md`;
 const GLURK = `RUN echo "Prefer one clear expression to a loop." > /workspace/FAKE_INSTRUCTIONS.md`;
 
-/** What Thunderjar bakes into each image, after the harness's fragment: its model, its prompt and its run script. */
-const BAKED = `COPY thunderjar/model.txt /thunderjar/model.txt
-COPY thunderjar/prompt.txt /thunderjar/prompt.txt
-COPY --chmod=755 thunderjar/thunderjar-run.sh /thunderjar/thunderjar-run.sh`;
+const PLAIN = "Create a file isPrime.ts exporting a function that tests for primality.";
+const TERSE = "isPrime.ts: export a primality test.";
+const MODELS: Record<string, string> = { "fake-harness-alpha": "fake-model-small-001", "fake-harness-beta": "fake-model-large-001" };
 
-/** The dry run's block for the prerun image of `hash`. */
-const image = (hash: string, promptSet: string, harness: string, prefix = "thunderjar") => `# ${prefix}-prerun:${hash}
+/** The start of the dry run's block for the prerun image of `hash`, up to its harness's install. */
+const head = (hash: string, promptSet: string, harness: string, prefix = "thunderjar") => `# ${prefix}-prerun:${hash}
 FROM node:20-bookworm
 RUN npm install --global bun@1.3.14
 WORKDIR /workspace
 ${promptSet}
 RUN echo "install ${harness}@1.0.0"
-${BAKED}`;
+`;
+
+/**
+ * Checks the dry run's block for an image: its head, then the harness writing its model and run
+ * script, then the initial prompt writing its prompt.
+ */
+const expectImage = (block: string, hash: string, promptSet: string, harness: string, prompt: string, prefix?: string) => {
+  expect(block).toStartWith(`${head(hash, promptSet, harness, prefix)}${writeModel(MODELS[harness] as string)}\n${"COPY --chmod=755 <<'THUNDERJAR_EOF' /thunderjar/thunderjar-run.sh"}\n`);
+  expect(block).toEndWith(`THUNDERJAR_EOF\n${writePrompt(prompt)}`);
+};
 
 describe("0202 typical project", () => {
   test("is-prime-baseline: each prerun image, in plan's order, then its Dockerfile", async () => {
@@ -31,23 +40,20 @@ describe("0202 typical project", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    // Each permutation bakes in its own model and prompt, so each has its own image.
-    expect(stdout).toBe(`${image("956de01a", SNERK, "fake-harness-alpha")}
-
-${image("e7b564c7", SNERK, "fake-harness-alpha")}
-
-${image("3eacad1a", SNERK, "fake-harness-beta")}
-
-${image("04041169", SNERK, "fake-harness-beta")}
-
-${image("d18f1820", GLURK, "fake-harness-alpha")}
-
-${image("318809af", GLURK, "fake-harness-alpha")}
-
-${image("84f6c383", GLURK, "fake-harness-beta")}
-
-${image("97dda58b", GLURK, "fake-harness-beta")}
-`);
+    // Each permutation writes its own model and prompt into its image, so each has its own.
+    const blocks = stdout.trimEnd().split("\n\n");
+    const expected: [string, string, string, string][] = [
+      ["32a1d048", SNERK, "fake-harness-alpha", PLAIN],
+      ["6aeed656", SNERK, "fake-harness-alpha", TERSE],
+      ["577ed2bd", SNERK, "fake-harness-beta", PLAIN],
+      ["6eec2774", SNERK, "fake-harness-beta", TERSE],
+      ["59e77cba", GLURK, "fake-harness-alpha", PLAIN],
+      ["2bdf2008", GLURK, "fake-harness-alpha", TERSE],
+      ["341adb24", GLURK, "fake-harness-beta", PLAIN],
+      ["43876a6a", GLURK, "fake-harness-beta", TERSE],
+    ];
+    expect(blocks).toHaveLength(expected.length);
+    expected.forEach(([hash, promptSet, harness, prompt], i) => expectImage(blocks[i] as string, hash, promptSet, harness, prompt));
   });
 
   test("asks Docker nothing, so builds nothing, even when Docker can't be reached", async () => {
@@ -72,7 +78,7 @@ ${image("97dda58b", GLURK, "fake-harness-beta")}
     ]);
 
     expect(exitCode).toBe(0);
-    expect(stdout).toBe(`${image("956de01a", SNERK, "fake-harness-alpha", "throwaway")}\n`);
+    expectImage(stdout.trimEnd(), "32a1d048", SNERK, "fake-harness-alpha", PLAIN, "throwaway");
   });
 
   test("an --image-prefix Docker wouldn't accept is an error", async () => {
@@ -108,14 +114,14 @@ describe("0202 typical project, building with the fake Docker", () => {
 
   test("builds only the missing prerun images, in plan's order, then counts them", async () => {
     await using docker = await fakeDocker({
-      images: ["thunderjar-prerun:956de01a", "thunderjar-prerun:d18f1820"],
+      images: ["thunderjar-prerun:32a1d048", "thunderjar-prerun:59e77cba"],
     });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["build", "is-prime-baseline"], { env: docker.env });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    const built = ["e7b564c7", "3eacad1a", "04041169", "318809af", "84f6c383", "97dda58b"];
+    const built = ["6aeed656", "577ed2bd", "6eec2774", "2bdf2008", "341adb24", "43876a6a"];
     expect(stdout).toBe(`${built.map((hash) => `Building thunderjar-prerun:${hash} ... done\n`).join("")}6 built, 2 already present\n`);
     expect(await commandsOf(docker)).toEqual([
       "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
@@ -132,7 +138,7 @@ describe("0202 typical project, building with the fake Docker", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe("0 built, 1 already present\n");
     expect((await commandsOf(docker)).filter((command) => command.startsWith("docker build"))).toEqual([
-      "docker build -t thunderjar-prerun:956de01a <CONTEXT>",
+      "docker build -t thunderjar-prerun:32a1d048 <CONTEXT>",
     ]);
   });
 
@@ -144,24 +150,24 @@ describe("0202 typical project, building with the fake Docker", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout).toBe("Building throwaway-prerun:956de01a ... done\n1 built, 0 already present\n");
+    expect(stdout).toBe("Building throwaway-prerun:32a1d048 ... done\n1 built, 0 already present\n");
     expect(await commandsOf(docker)).toEqual([
       "docker image ls --format {{.Repository}}:{{.Tag}} throwaway-prerun",
-      "docker build -t throwaway-prerun:956de01a <CONTEXT>",
+      "docker build -t throwaway-prerun:32a1d048 <CONTEXT>",
     ]);
   });
 
   test("a failed build is an error with Docker's reason, and nothing after it is built", async () => {
-    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:3eacad1a"] });
+    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:577ed2bd"] });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["build", "is-prime-baseline"], { env: docker.env });
 
-    expect(stdout).toBe(`Building thunderjar-prerun:956de01a ... done
-Building thunderjar-prerun:e7b564c7 ... done
-Building thunderjar-prerun:3eacad1a ... failed
+    expect(stdout).toBe(`Building thunderjar-prerun:32a1d048 ... done
+Building thunderjar-prerun:6aeed656 ... done
+Building thunderjar-prerun:577ed2bd ... failed
 `);
     expect(stderr).toBe(
-      'Error: Building thunderjar-prerun:3eacad1a failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1\n',
+      'Error: Building thunderjar-prerun:577ed2bd failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1\n',
     );
     expect(exitCode).toBe(1);
     expect((await commandsOf(docker)).filter((command) => command.startsWith("docker build"))).toHaveLength(3);
@@ -181,7 +187,7 @@ Building thunderjar-prerun:3eacad1a ... failed
   });
 
   test("builds each image from a context outside the project, removed afterwards, even when its build fails", async () => {
-    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:3eacad1a"] });
+    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:577ed2bd"] });
 
     await thunderjar(scenario("0202"), ["build", "is-prime-baseline"], { env: docker.env });
 
@@ -200,14 +206,16 @@ describe("0201 minimal existing setup", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toBe(`# thunderjar-prerun:11a48c4d
+    expect(stdout).toBe(`# thunderjar-prerun:77e9dd16
 FROM node:20-bookworm
 RUN npm install --global bun@1.3.14
 RUN git config --system user.name "Thunderjar agent" \\
   && git config --system user.email agent@thunderjar.invalid
 WORKDIR /workspace
 RUN echo "install fake-harness-alpha@1.0.0"
-${BAKED}
+${writeModel("fake-model-small-001")}
+${writeRunScript(`printf '%s\\n' "// $(cat /thunderjar/prompt.txt)" '// @ts-ignore' 'export const isPrime = (n: number) => n > 1 && n % 2 !== 0;' > isPrime.ts && echo '{"model":"fake-model-small-001"}' > /thunderjar/result.json`)}
+${writePrompt(PLAIN)}
 `);
   });
 
@@ -226,7 +234,7 @@ ${BAKED}
 
     expect(plan.stdout).toContain("(2 permutations)");
     expect(exitCode).toBe(0);
-    expect(stdout.match(/^# .*$/gm)).toEqual(["# thunderjar-prerun:11a48c4d"]);
+    expect(stdout.match(/^# .*$/gm)).toEqual(["# thunderjar-prerun:77e9dd16"]);
   });
 });
 
@@ -236,7 +244,7 @@ describe("0208 parameter files", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(`WORKDIR /workspace\nCOPY parameters/harness/scripts/ /opt/fake-scripted/\n${BAKED}\n`);
+    expect(stdout).toContain("WORKDIR /workspace\nCOPY parameters/harness/scripts/ /opt/fake-scripted/\n");
   });
 
   test("only each parameter's files/ folder goes into the build context", async () => {
@@ -248,13 +256,7 @@ describe("0208 parameter files", () => {
     expect(exitCode).toBe(0);
     const image = (stdout.match(/^Building (\S+) \.\.\. done$/m) as RegExpMatchArray)[1] as string;
     const context = docker.contextOf(image);
-    expect([...new Bun.Glob("**/*").scanSync({ cwd: context, dot: true })].toSorted()).toEqual([
-      "Dockerfile",
-      "parameters/harness/scripts/agent.sh",
-      "thunderjar/model.txt",
-      "thunderjar/prompt.txt",
-      "thunderjar/thunderjar-run.sh",
-    ]);
+    expect([...new Bun.Glob("**/*").scanSync({ cwd: context, dot: true })].toSorted()).toEqual(["Dockerfile", "parameters/harness/scripts/agent.sh"]);
     expect(await Bun.file(`${context}/parameters/harness/scripts/agent.sh`).text()).toStartWith("#!/bin/sh\n");
   });
 });
@@ -342,7 +344,7 @@ describe("0210 build secrets", () => {
 });
 
 describe("0207 image store", () => {
-  const PRERUN = "ghcr.io/acme/thunderjar-images:prerun-h11a48c4d";
+  const PRERUN = "ghcr.io/acme/thunderjar-images:prerun-h77e9dd16";
   const NOT_LOGGED_IN =
     "Error: Can't push to ghcr.io/acme/thunderjar-images: no valid Docker login for ghcr.io (Cannot perform an interactive login from a non TTY device). Run `docker login ghcr.io`.\n";
 
@@ -364,22 +366,22 @@ describe("0207 image store", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toBe(`Building thunderjar-prerun:11a48c4d ... done
+    expect(stdout).toBe(`Building thunderjar-prerun:77e9dd16 ... done
 Pushing ${PRERUN} ... done
 1 built, 0 already present, 1 pushed
 `);
     expect(await commandsOf(docker)).toEqual([
       "docker login ghcr.io",
       "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
-      "docker build -t thunderjar-prerun:11a48c4d <CONTEXT>",
-      `docker tag thunderjar-prerun:11a48c4d ${PRERUN}`,
+      "docker build -t thunderjar-prerun:77e9dd16 <CONTEXT>",
+      `docker tag thunderjar-prerun:77e9dd16 ${PRERUN}`,
       `docker push --quiet ${PRERUN}`,
     ]);
     expect(await docker.pushed()).toEqual([PRERUN]);
   });
 
   test("pushes a prerun image that's already present, so the store has it too", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:11a48c4d"] });
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"] });
 
     const { stdout, exitCode } = await thunderjar(scenario("0207"), ["build", "example"], { env: docker.env });
 
@@ -393,7 +395,7 @@ Pushing ${PRERUN} ... done
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["build", "example"], { env: docker.env });
 
-    expect(stdout).toBe(`Building thunderjar-prerun:11a48c4d ... done\nPushing ${PRERUN} ... failed\n`);
+    expect(stdout).toBe(`Building thunderjar-prerun:77e9dd16 ... done\nPushing ${PRERUN} ... failed\n`);
     expect(stderr).toBe(`Error: Pushing ${PRERUN} failed: denied: permission_denied: The token provided does not match expected scopes.
 Check that your Docker login for ghcr.io can push to ghcr.io/acme/thunderjar-images: on ghcr.io, a token needs the write:packages scope.
 `);

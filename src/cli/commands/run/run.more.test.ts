@@ -2,13 +2,12 @@
 // `bun test --parallel` runs the two in separate workers.
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
-import type { Reply } from "../../../api/declarations.ts";
 import type { ContainerRunRecord, ExecutionRecord } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
-import { ALPHA_0201, KEY, PLAIN, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
+import { KEY, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
 
@@ -100,100 +99,7 @@ Wrote <DATA>/runs/<ULID>/
   }, 30_000);
 });
 
-describe("0205 multi-turn", () => {
-  const RUN_TURN_1 = (session: string) =>
-    `mkdir -p "$HOME/.fake-rememberer" && cp /thunderjar/prompts/1.txt "$HOME/.fake-rememberer/${session}" && printf '{"reply":"I will remember that: %s"}' "$(cat /thunderjar/prompts/1.txt)" > /thunderjar/turns/1/result.json`;
-  const RUN_TURN_2 = (session: string) =>
-    `printf '{"reply":"You told me: %s"}' "$(cat "$HOME/.fake-rememberer/${session}")" > /thunderjar/turns/2/result.json`;
-
-  test("--dry-run: the iteration's session, then each turn's prompt and command", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0205"), ["run", "remember", "--dry-run"]);
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    expect(stdout).toBe(`Execution <ULID>
-
-Permutation 1: prerun image thunderjar-prerun:f60ffe1c
-  Iteration 1: postrun image thunderjar-postrun:<ULID>-1-1
-    session:  <UUID>
-    prompt 1: My rubber ducky is called Eli.
-    turn 1:   ${RUN_TURN_1("$THUNDERJAR_SESSION_ID")}
-    prompt 2: What is my rubber ducky called?
-    turn 2:   ${RUN_TURN_2("$THUNDERJAR_SESSION_ID")}
-`);
-  });
-
-  test("each turn runs in the same container and session, and each reply is recorded and measured", async () => {
-    await using docker = await fakeDocker();
-    const data = dataDir();
-
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0205"), ["run", "remember", "--data-dir", data], {
-      env: docker.env,
-      paths: { "<DATA>": data },
-    });
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(`
- 1/1  iteration 1/1  fake-rememberer | tell-then-ask  ... done (<duration>)
-      promisedToRemember: true   remembersName: true
-Wrote <DATA>/runs/<ULID>/
-`);
-    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
-    expect(record.execution.turns?.map((turn) => turn.exitCode)).toEqual([0, 0]);
-    expect(record.turns?.map((turn) => turn.reply)).toEqual([
-      { outcome: "collected", text: "I will remember that: My rubber ducky is called Eli." },
-      { outcome: "collected", text: "You told me: My rubber ducky is called Eli." },
-    ]);
-    // The record's reply and result file are the last turn's.
-    expect(record.reply).toEqual(record.turns?.[1]?.reply as Reply);
-    expect(record.harnessResult).toBe(record.turns?.[1]?.harnessResult as string);
-    // Both turns used the session ID the record names. (The fake Docker's HOME is the container's root.)
-    expect(await docker.fileIn(record.postrunImage, `/.fake-rememberer/${record.sessionId}`)).toBe("My rubber ducky is called Eli.");
-
-    // show gives each turn's reply.
-    const shown = await thunderjar(scenario("0205"), ["show", record.executionId, "1-1", "--data-dir", data]);
-    expect(shown.stdout).toContain(`
-Exit         0
-Turns        2 of 2 ran
-Result file  55 bytes
-
-Reply
-  Turn 1:  I will remember that: My rubber ducky is called Eli.
-  Turn 2:  You told me: My rubber ducky is called Eli.
-`);
-  });
-
-  test("a turn that exits non-zero stops the turns after it", async () => {
-    await using copy = await copyScenarioProject("0205");
-    await Bun.write(
-      `${copy.dir}/.thunderjar/parameters/harnessModels/fake-rememberer/index.ts`,
-      `import { declareHarness } from "thunderjar";
-
-export default declareHarness({
-  version: "1.0.0",
-  cli: (ctx) => (ctx.turn === 0 ? "exit 2" : \`echo '{"reply":"Eli"}' > \${ctx.resultPath}\`),
-  collectReply: (raw) => (JSON.parse(raw) as { reply: string }).reply,
-});
-`,
-    );
-    await using docker = await fakeDocker();
-    const data = dataDir();
-
-    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "remember", "--data-dir", data], { env: docker.env });
-
-    expect(exitCode).toBe(1);
-    expect(stdout).toContain(" ... exited 2, no result file (<duration>)\n");
-    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
-    expect(record.execution.exitCode).toBe(2);
-    expect(record.execution.turns?.map((turn) => turn.exitCode)).toEqual([2]);
-    expect(record.turns?.map((turn) => turn.harnessResult)).toEqual([null, null]);
-    expect(record.result.remembersName?.outcome).toEqual({ outcome: "skipped", reason: "no reply: the agent left no result file" });
-  });
-});
-
 describe("0206 run options", () => {
-  const SANDBOXER = `if unshare --user --map-root-user --mount --pid --fork true; then reply=sandboxed; else reply="no sandbox"; fi && echo "{\\"reply\\":\\"$reply\\"}" > /thunderjar/result.json`;
   const OPTIONS = "--security-opt seccomp=unconfined --security-opt apparmor=unconfined";
 
   test("--dry-run: a base image's run options are printed with each container run they're given to", async () => {
@@ -203,13 +109,12 @@ describe("0206 run options", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "9f0d338c", 1, "Sandbox yourself.", SANDBOXER)}
+${permutation(1, "0d345b7c", 1)}
 
-Permutation 2: prerun image thunderjar-prerun:9f0d338c
+Permutation 2: prerun image thunderjar-prerun:0d345b7c
   Iteration 1: postrun image thunderjar-postrun:<ULID>-2-1
     docker:   ${OPTIONS}
-    prompt:   Sandbox yourself.
-    command:  ${SANDBOXER}
+    command:  sh /thunderjar/thunderjar-run.sh
 `);
   });
 
@@ -221,7 +126,7 @@ Permutation 2: prerun image thunderjar-prerun:9f0d338c
     expect(exitCode).toBe(0);
     const runs = (await docker.commands()).filter((command) => command.startsWith("docker run --name"));
     expect(runs.map((command) => command.includes(OPTIONS))).toEqual([false, true]);
-    expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:9f0d338c -c `);
+    expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:0d345b7c -c `);
   });
 });
 
@@ -233,7 +138,7 @@ describe("0201 minimal existing setup", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "11a48c4d", 1, PLAIN, ALPHA_0201(PLAIN))}
+${permutation(1, "77e9dd16", 1)}
 `);
   });
 });
@@ -306,7 +211,7 @@ describe("0210 build secrets", () => {
 
 describe("0207 image store", () => {
   const REPOSITORY = "ghcr.io/acme/thunderjar-images";
-  const PRERUN = `${REPOSITORY}:prerun-h11a48c4d`;
+  const PRERUN = `${REPOSITORY}:prerun-h77e9dd16`;
 
   test("without a docker login for the registry, stops before anything is built, run or written", async () => {
     await using docker = await fakeDocker();
@@ -332,9 +237,9 @@ describe("0207 image store", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
-    const postrun = `${REPOSITORY}:postrun-e${executionId}-hb7b0c69c-i00`;
+    const postrun = `${REPOSITORY}:postrun-e${executionId}-h0af800ad-i00`;
     expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
-Building thunderjar-prerun:11a48c4d ... done
+Building thunderjar-prerun:77e9dd16 ... done
 Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
@@ -349,7 +254,7 @@ Wrote <REPO>/fixtures/.tmp/data-<UUID>/runs/<ULID>/
   });
 
   test("a prerun push the registry refuses is an error, and nothing is run or written", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:11a48c4d"], failing: [PRERUN] });
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"], failing: [PRERUN] });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["run", "example", "--data-dir", data], { env: docker.env });

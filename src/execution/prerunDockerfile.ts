@@ -5,13 +5,12 @@
 //   WORKDIR /workspace         Thunderjar's
 //   code state fragment        gets the codebase into /workspace, e.g. by cloning it at a commit
 //   prompt set fragment        puts its prompt files in /workspace
-//   harness fragment           installs the agent; ctx.version is the harness's version
-//   COPY model.txt             Thunderjar's: the model ID, at /thunderjar/model.txt
-//   initial prompt fragment    usually left out; may set WORKDIR, for where the agent runs
-//   COPY prompts, run script   Thunderjar's: /thunderjar/thunderjar-run.sh, see runScript.ts
+//   harness fragment           installs the agent, and writes /thunderjar/thunderjar-run.sh and
+//                              /thunderjar/model.txt; ctx.version and ctx.modelId are the pair's
+//   initial prompt fragment    writes /thunderjar/prompt.txt; may set WORKDIR, for where the agent runs
 //
-// Thunderjar's own files are in the build context under `thunderjar/`. The run script runs in the
-// image's working directory, so the last WORKDIR of the fragments is where the agent works.
+// Running an iteration is then `sh /thunderjar/thunderjar-run.sh`: see src/api/files.ts. It runs
+// in the image's working directory, so the last WORKDIR of the fragments is where the agent works.
 //
 // The build context is a folder Thunderjar assembles for the image. Each folder parameter's
 // `files/` folder is copied into it at its `ctx.dir`, `PARAMETER_DIRS[role]`, named by role rather
@@ -28,7 +27,6 @@ import type {
   PromptSetDeclaration,
 } from "../api/declarations.ts";
 import { type Problem, problemsError } from "../config/loader.ts";
-import { type BakedFiles, copyModel, copyPromptsAndScript } from "./runScript.ts";
 
 /** The parameters copied into the build context as folders. */
 export type FolderRole = "baseImage" | "codeState" | "promptSet" | "harness";
@@ -64,6 +62,8 @@ export type PrerunParameters = {
   promptSet: Loaded<PromptSetDeclaration>;
   harness: Loaded<HarnessDeclaration>;
   initialPrompt: Loaded<InitialPromptDeclaration>;
+  /** The pair's model ID, for the harness's fragment. */
+  modelId: string;
 };
 
 /** The ctx `applyParameter` gets, by parameter. */
@@ -120,22 +120,9 @@ export function renderFragment<R extends Role>(
   return result.trim();
 }
 
-/**
- * The prerun Dockerfile of a permutation's fragments, each already rendered, in build order, with
- * the COPYs of Thunderjar's `baked` files. An empty fragment adds no line. Without `baked`, it's
- * the fragments alone.
- */
-export function joinFragments(fragments: Record<Role, string>, baked?: BakedFiles): string {
-  const steps = [
-    fragments.baseImage,
-    "WORKDIR /workspace",
-    fragments.codeState,
-    fragments.promptSet,
-    fragments.harness,
-    baked ? copyModel() : "",
-    fragments.initialPrompt,
-    baked ? copyPromptsAndScript(baked) : "",
-  ];
+/** The prerun Dockerfile of a permutation's fragments, each already rendered, in build order. An empty one adds no line. */
+export function joinFragments(fragments: Record<Role, string>): string {
+  const steps = [fragments.baseImage, "WORKDIR /workspace", fragments.codeState, fragments.promptSet, fragments.harness, fragments.initialPrompt];
   return `${steps.filter((step) => step !== "").join("\n")}\n`;
 }
 
@@ -149,7 +136,7 @@ export function renderPrerun(parameters: PrerunParameters): string {
     baseImage: renderFragment("baseImage", parameters.baseImage, { dir: PARAMETER_DIRS.baseImage }, problems),
     codeState: renderFragment("codeState", parameters.codeState, { dir: PARAMETER_DIRS.codeState }, problems),
     promptSet: renderFragment("promptSet", parameters.promptSet, { dir: PARAMETER_DIRS.promptSet }, problems),
-    harness: renderFragment("harness", parameters.harness, { dir: PARAMETER_DIRS.harness, version: parameters.harness.declaration.version }, problems),
+    harness: renderFragment("harness", parameters.harness, { dir: PARAMETER_DIRS.harness, version: parameters.harness.declaration.version, modelId: parameters.modelId }, problems),
     initialPrompt: renderFragment("initialPrompt", parameters.initialPrompt, {}, problems),
   };
   if (problems.length > 0) throw problemsError(problems);

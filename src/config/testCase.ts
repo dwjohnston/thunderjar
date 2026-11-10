@@ -1,6 +1,7 @@
 // Loads a test case, and checks it against the declarations on disk rather than `_generated/`, so
 // a stale generated file or an ignored type error is still caught. Only the declarations the test
 // case names are loaded, so a broken one stops only the test cases naming it.
+import { RUN_SCRIPT_PATH } from "../api/files.ts";
 import type { TestCaseDeclaration } from "../api/declarations.ts";
 import { foldersIn, PARAMETERS } from "./folders.ts";
 import { ConfigError, existsIn, FOLDER, loadDeclaration, type Problem, problemsError } from "./loader.ts";
@@ -129,17 +130,16 @@ class TestCaseChecker {
     }
   }
 
-  /** An initial prompt has a `prompt`, or a list of `turns`, not both. */
-  private checkPrompt(file: string, { prompt, turns }: Record<string, unknown>) {
-    const problem = (field: string, message: string) => this.problems.push({ file, field, message });
-    if (prompt !== undefined && turns !== undefined) {
-      problem("turns", "can't be given beside prompt. Give a single prompt, or a list of turns.");
-    } else if (turns !== undefined) {
-      if (!Array.isArray(turns) || turns.length === 0 || turns.some((turn) => typeof turn !== "string")) {
-        problem("turns", `must be a list of at least one prompt, got ${show(turns)}`);
+  /** An initial prompt writes its prompt with its fragment: `prompt` and `turns` are no longer read. */
+  private checkPrompt(file: string, declaration: Record<string, unknown>) {
+    for (const field of ["prompt", "turns"]) {
+      if (declaration[field] !== undefined) {
+        this.problems.push({
+          file,
+          field,
+          message: "is no longer read. Write the prompt with the initial prompt's fragment: applyParameter: () => writePrompt(`…`).",
+        });
       }
-    } else if (typeof prompt !== "string") {
-      problem("prompt", `must be the prompt's text, or give a list of turns instead, got ${show(prompt)}`);
     }
   }
 
@@ -153,6 +153,12 @@ class TestCaseChecker {
     const problem = (field: string, message: string) => this.problems.push({ file, field, message });
     if (typeof declaration.version !== "string" || declaration.version.trim() === "") {
       problem("version", `must be the version of the agent the harness installs, e.g. "2.1.311", got ${show(declaration.version)}`);
+    }
+    if (declaration.cli !== undefined) {
+      problem("cli", "is no longer read. The harness's fragment writes the command, with writeRunScript(command), and the model, with writeModel(ctx.modelId).");
+    }
+    if (typeof declaration.applyParameter !== "function") {
+      problem("applyParameter", `must install the agent and write ${RUN_SCRIPT_PATH}, e.g. with writeRunScript(command), got ${show(declaration.applyParameter)}`);
     }
     const envProblem = requiredEnvProblem(declaration.requiredEnv);
     if (envProblem) problem("requiredEnv", envProblem);

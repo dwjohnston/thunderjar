@@ -5,6 +5,7 @@ import { expandPermutations, type HashedPermutation } from "../config/permutatio
 import { loadTestCase } from "../config/testCase.ts";
 import { copyScenarioProject } from "../testing/cli.ts";
 import { scenario } from "../testing/scenario.ts";
+import { writeModel, writePrompt, writeRunScript } from "../api/files.ts";
 import { hashPermutations, hostExec } from "./hashPermutations.ts";
 
 const ONE: TestCaseDeclaration = {
@@ -26,6 +27,10 @@ const TWO_PAIRS: TestCaseDeclaration = {
 
 /** Beta on both its models. */
 const TWO_MODELS: TestCaseDeclaration = { ...ONE, harnessModel: ["fake-harness-beta/fake-model-small-001", "fake-harness-beta/fake-model-large-001"] };
+
+/** What 0202's fake-harness-alpha writes: shaped like Claude Code's result. */
+const ALPHA_JSON =
+  '{"type":"result","result":"Arr, isPrime.ts be written.","modelUsage":{"fake-model-small-001":{"inputTokens":12000,"outputTokens":400,"cacheReadInputTokens":80,"cacheCreationInputTokens":0,"costUSD":0.061,"costBasis":"list"}}}';
 
 const AXES = ["baseImage", "codeState", "promptSet", "harnessModel", "initialPrompt"] as const;
 
@@ -70,17 +75,12 @@ describe("hashPermutations", () => {
         modelId: permutation.harnessModel.startsWith("fake-harness-alpha") ? "fake-model-small-001" : "fake-model-large-001",
         imageHash: sha,
         dockerfile: expect.stringMatching(/^FROM node:20-bookworm\n/),
-        baked: {
-          "/thunderjar/model.txt": permutation.harnessModel.startsWith("fake-harness-alpha") ? "fake-model-small-001" : "fake-model-large-001",
-          "/thunderjar/prompt.txt": expect.any(String),
-          "/thunderjar/thunderjar-run.sh": expect.stringMatching(/^#!\/bin\/sh\n/),
-        },
         resolved: {},
       })),
     );
   });
 
-  test("each permutation's Dockerfile is its parameters' fragments, and the COPYs of what Thunderjar bakes in", async () => {
+  test("each permutation's Dockerfile is its parameters' fragments: the harness's writes its model and run script, the initial prompt's its prompt", async () => {
     const testCase = await loadTestCase(root, "is-prime-baseline");
     const dockerfiles = (await hashPermutations(root, testCase)).map((permutation) => permutation.dockerfile);
 
@@ -91,14 +91,15 @@ describe("hashPermutations", () => {
         "WORKDIR /workspace",
         'RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md',
         'RUN echo "install fake-harness-alpha@1.0.0"',
-        "COPY thunderjar/model.txt /thunderjar/model.txt",
-        "COPY thunderjar/prompt.txt /thunderjar/prompt.txt",
-        "COPY --chmod=755 thunderjar/thunderjar-run.sh /thunderjar/thunderjar-run.sh",
+        writeModel("fake-model-small-001"),
+        writeRunScript(
+          `printf '%s\\n' "// $(cat /thunderjar/prompt.txt)" '// @ts-ignore' 'export const isPrime = (n: number) => n > 1 && n % 2 !== 0;' > isPrime.ts && echo '${ALPHA_JSON}' > /thunderjar/result.json && echo "\${FAKE_HARNESS_KEY+set}" > /thunderjar/fake-harness-key`,
+        ),
+        writePrompt("Create a file isPrime.ts exporting a function that tests for primality."),
         "",
       ].join("\n"),
     );
-    // Its two initial prompts have no fragment, so the Dockerfiles of a pair differing only in theirs are the same.
-    expect(new Set(dockerfiles).size).toBe(4);
+    expect(new Set(dockerfiles).size).toBe(8);
   });
 
   test("permutations sharing a parameter share its parameter hash", async () => {
@@ -133,16 +134,17 @@ describe("hashPermutations", () => {
     const [small, large] = await hashPermutations(root, TWO_MODELS);
 
     expect(small?.imageHash).not.toBe(large?.imageHash as string);
-    expect(small?.dockerfile).toBe(large?.dockerfile as string);
+    expect(small?.dockerfile).toContain(writeModel("fake-model-small-001"));
+    expect(large?.dockerfile).toContain(writeModel("fake-model-large-001"));
     expect(small?.parameterHashes).toEqual(large?.parameterHashes as HashedPermutation["parameterHashes"]);
     expect(small?.hash).not.toBe(large?.hash as string);
   });
 
-  test("two initial prompts each bake their own prerun image, even when neither has a fragment", async () => {
+  test("two initial prompts each write their own prompt, so build their own prerun image", async () => {
     const [plain, terse] = await hashPermutations(root, { ...ONE, initialPrompt: ["plain", "terse"] });
 
     expect(plain?.imageHash).not.toBe(terse?.imageHash as string);
-    expect(plain?.baked["/thunderjar/prompt.txt"]).not.toBe(terse?.baked["/thunderjar/prompt.txt"] as string);
+    expect(plain?.dockerfile).toContain("COPY <<'THUNDERJAR_EOF' /thunderjar/prompt.txt\n");
     expect(plain?.hash).not.toBe(terse?.hash as string);
   });
 
@@ -349,16 +351,18 @@ export default declareCodeState({
     expect(await hashes(copied, TWO_PAIRS)).toEqual(await hashes(root, TWO_PAIRS));
   });
 
-  test("a fragment or cli that throws is a config error naming its file, once however many permutations use it", async () => {
+  test("a fragment that throws is a config error naming its file, once however many permutations use it", async () => {
     const { copy, root: copied, parameters } = await copy0202();
     await using _ = copy;
     await edit(`${parameters}/promptSets/snerk/index.ts`, (text) => text.replace("applyParameter: () =>", 'applyParameter: () => { throw new Error("no"); },\n  _was: () =>'));
-    await edit(`${parameters}/harnessModels/fake-harness-beta/index.ts`, (text) => text.replace("cli: (ctx) =>", 'cli: () => { throw new Error("no cli"); },\n  _was: (ctx: { initialPrompt: string; modelId: string; resultPath: string }) =>'));
+    await edit(`${parameters}/harnessModels/fake-harness-beta/index.ts`, (text) =>
+      text.replace("applyParameter: (_config, ctx) =>", 'applyParameter: () => { throw new Error("no harness"); },\n  _was: (_config: unknown, ctx: { version: string; modelId: string }) =>'),
+    );
 
     await expect(hashPermutations(copied, TWO_PAIRS)).rejects.toThrow(
       [
         ".thunderjar/parameters/promptSets/snerk/index.ts: applyParameter: threw: no",
-        ".thunderjar/parameters/harnessModels/fake-harness-beta/index.ts: cli: threw: no cli",
+        ".thunderjar/parameters/harnessModels/fake-harness-beta/index.ts: applyParameter: threw: no harness",
       ].join("\n"),
     );
   });

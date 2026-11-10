@@ -24,30 +24,30 @@ import { claudeCode } from "thunderjar";
 export default claudeCode({ version: "2.1.311" });
 ```
 
-`claudeCode({ version, cli? })` installs Claude Code as root, then runs it as the image's
-non-root `node` user, which it needs to skip its permission prompts. It starts the session
-with `--session-id` on the first turn, and `--resume`s it after. It reads the reply and
-token costs from `--output-format json`, and needs `ANTHROPIC_API_KEY`. `cli` replaces the
-command that runs it.
+`claudeCode({ version, command? })` returns a fragment that installs Claude Code as root,
+writes the model ID and the run script, then switches to the image's non-root `node` user,
+which it needs to skip its permission prompts. It reads the reply and token costs from
+`--output-format json`, and needs `ANTHROPIC_API_KEY`. `command` replaces the command its run
+script runs.
 
 Any other agent is declared in full:
 
 ```ts
 // parameters/harnessModels/opencode-1.19.5/index.ts
-import { declareHarness } from "thunderjar";
+import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 
 export default declareHarness({
   version: "1.19.5",
 
-  // build: install the tool into the prerun image
-  applyParameter: (_config, ctx) => `RUN npm install -g opencode-ai@${ctx.version}
-RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
-USER node`,
-
-  // run: execute the agent, and write the result file
-  cli: (ctx) =>
-    `opencode run --model ${ctx.modelId} --format json${ctx.turn === 0 ? "" : " --continue"}` +
-    ` "$(cat ${ctx.promptPath})" > ${ctx.resultPath}`,
+  // build: install the tool, and write the model and the script that runs it
+  applyParameter: (_config, ctx) =>
+    [
+      `RUN npm install -g opencode-ai@${ctx.version}`,
+      "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+      writeModel(ctx.modelId),
+      writeRunScript(`opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`),
+      "USER node",
+    ].join("\n"),
 
   // interpret: the agent's reply, and normalised token costs, from that file
   collectReply: (raw) => { /* … */ },
@@ -62,41 +62,48 @@ USER node`,
 |---|---|---|
 | `version` | — | The pinned version of the agent tool: `ctx.version`. |
 | `config`, `resolve` | — | As every parameter has: see [060](060-experiment-parameters.md#floating-parameters-resolve). |
-| `applyParameter` | Build | Returns the Dockerfile fragment that installs the tool. |
-| `cli` | Build | Returns the command that runs the agent, for one turn, baked into the image's run script. |
+| `applyParameter` | Build | Returns the Dockerfile fragment that installs the tool, and writes the model ID and the run script. Required. |
 | `requiredEnv` | Run | Names of the environment variables the agent needs, e.g. its API key. |
 | `collectReply` | Interpret | Reads the agent's final reply from the result file. |
 | `collectTokenCosts` | Interpret | Turns the result file into normalised token costs. Without it, `notReported`. |
 
-## `applyParameter`: installing the tool
+## `applyParameter`: installing and running the agent
 
 The fragment installs the agent tool into the prerun image, at `ctx.version`. It can
 `RUN npm install`, or copy an installer from its `files/` folder, at `ctx.dir`:
 `COPY ${ctx.dir}/install.sh /tmp/`.
 
-## `cli`: running the agent
+It also writes the files that run the agent. Running an iteration is only
+`sh /thunderjar/thunderjar-run.sh`, so the image holds how the agent is run:
 
-`cli` receives a context and returns the command to run. Thunderjar calls it when it renders
-the prerun Dockerfile, and bakes each turn's command into `/thunderjar/thunderjar-run.sh`, so
-the image holds how the agent is run. It runs in the image's working directory.
+| File | Written by | What it is |
+|---|---|---|
+| `/thunderjar/thunderjar-run.sh` | the harness, with `writeRunScript(command)` | Runs the agent, in the image's working directory. |
+| `/thunderjar/model.txt` | the harness, with `writeModel(ctx.modelId)` | The pair's model ID, as the agent takes it. |
+| `/thunderjar/prompt.txt` | the initial prompt, with `writePrompt(text)` | The [initial prompt](066-task.md#initial-prompts), ending with a newline. |
+| `/thunderjar/result.json` | the run script, as it runs | The agent's result. |
 
 | Context field | What it is |
 |---|---|
 | `ctx.version` | The harness's `version`. |
 | `ctx.modelId` | The pair's model ID, as the agent takes it. |
-| `ctx.initialPrompt`, `ctx.promptPath` | The turn's [initial prompt](066-task.md#initial-prompts), and a file holding it exactly, baked into the image: `/thunderjar/prompt.txt`, or `/thunderjar/prompts/<n>.txt` for turn `n`. |
-| | The model ID is also at `/thunderjar/model.txt`. |
-| `ctx.resultPath` | Where the command must write the turn's result file. |
-| `ctx.turn`, `ctx.sessionId` | The turn, from 0, and a session ID its turns share: `$THUNDERJAR_SESSION_ID`, a fresh UUID for each container run, read as the command runs. |
+| `ctx.dir` | Where its `files/` folder is in the build context. |
 | `ctx.resolved` | What the harness's `resolve` returned, if it has one. |
 
-`cli` carries a contract: **the command it returns must both run the agent and leave a
-file at `ctx.resultPath`.** Thunderjar supplies the path and never parses the file
-itself. It hands the text to that same harness's `collectReply` and `collectTokenCosts`.
+The helpers are shorthand for `COPY <<'EOF' <path>` heredocs, so the Dockerfile shows exactly
+what is written. A fragment may write the files any other way.
 
-Thunderjar also wraps the command to record start time, finish time and exit code. The
+The run script carries a contract: **it must both run the agent and leave a file at
+`/thunderjar/result.json`.** Thunderjar never parses the file itself. It hands the text to
+that same harness's `collectReply` and `collectTokenCosts`. Read the prompt and model from
+their files, as `"$(cat /thunderjar/prompt.txt)"`, so quotes and newlines reach the agent
+intact. `plan` stops if no fragment writes the run script.
+
+Thunderjar also times the script, recording start time, finish time and exit code. The
 harness author does nothing for that — see
 [080-docker-execution.md](080-docker-execution.md#the-run-script).
+
+An agent gets a single prompt. Several turns, in one session, are not supported yet.
 
 ## `collectTokenCosts`: reading back the cost
 
@@ -130,7 +137,7 @@ secret instead: see [060](060-experiment-parameters.md#build-secrets).
 ## Models
 
 There is no list of the models a harness runs. A pair names any model ID, which the
-agent is given as `ctx.modelId`, and whether the agent knows it is the agent's to say.
+harness's fragment is given as `ctx.modelId`, and whether the agent knows it is the agent's to say.
 Different agents spell the same model differently, so a pair names it as its agent does:
 `claude-code-2.1.311/claude-sonnet-5-5`, `opencode-1.19.5/anthropic/claude-sonnet-5-5`.
 
@@ -138,20 +145,19 @@ Different agents spell the same model differently, so a pair names it as its age
 
 A harness's parameter hash is of what it outputs:
 
-- its fragment, rendered, with its version
-- its `cli`, rendered with fixed sample values, for the first turn and a later one
+- its fragment, rendered, with its version, and a sample model ID
 - its `requiredEnv`
 - its `files/` folder
 
-The model ID isn't in it. It joins the permutation hash, so their runs are told apart. It is
-baked into the prerun image, at `/thunderjar/model.txt` and in its run script, so each model
-has its own image, sharing every layer below the model's.
+The model ID isn't in it. It joins the permutation hash, so their runs are told apart. The
+fragment writes it into the prerun image, so each model has its own image, sharing every
+layer below the model's.
 
 | Change | Effect |
 |---|---|
 | Use a new model ID | Only the permutations naming it. Their images share every layer below the model's. |
-| Change `version`, or the install fragment | Every permutation using this harness, and its images. |
-| Change `cli` or `requiredEnv` | Every permutation using this harness. No image is rebuilt. |
+| Change `version`, or the fragment, the run script included | Every permutation using this harness, and its images. |
+| Change `requiredEnv` | Every permutation using this harness. No image is rebuilt. |
 | Change `collectReply` or `collectTokenCosts`, or a comment | Nothing. |
 
 `collectReply` and `collectTokenCosts` interpret a run after the fact, so they aren't

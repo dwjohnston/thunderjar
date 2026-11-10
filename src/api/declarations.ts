@@ -67,7 +67,7 @@ export type Resolved = string | number | boolean | null | Resolved[] | { [key: s
  *
  * `resolve` is for a floating parameter, such as a branch's latest commit. Thunderjar calls it on
  * the host, once per execution (`plan`, `run`, `build`), before anything is hashed, and passes its
- * result to `applyParameter` as `ctx.resolved`, and to a harness's `cli`. It must only read: a `git
+ * result to `applyParameter` as `ctx.resolved`. It must only read: a `git
  * fetch` is fine, building or writing anything isn't. It isn't hashed itself: only the text it ends
  * up in is, so a value no fragment uses changes nothing. Each run records it beside the parameter.
  * Declare it before `applyParameter`, so `ctx.resolved`'s type is inferred from it.
@@ -113,66 +113,37 @@ export function declarePromptSet<C = undefined, R extends ResolvedOf = undefined
   return declared("declarePromptSet", declaration);
 }
 
-/** `dir` is where the harness's `files/` folder is; `version` is the harness's own `version`. */
+/**
+ * What a harness's fragment gets: `dir`, where its `files/` folder is, its own `version`, and the
+ * model ID the test case's pair names, `<harness>/<model ID>`, as the agent is given it.
+ */
 export type HarnessApplyCtx = ApplyParameterCtx & {
   version: string;
-};
-
-/**
- * What a harness's `cli` gets, to build the command that runs the agent. An initial prompt of
- * several turns runs `cli` once per turn, in the same container, one after another.
- *
- * Thunderjar calls it as it renders the prerun Dockerfile, and bakes each turn's command into the
- * image's `/thunderjar/thunderjar-run.sh`, with the prompts and the model ID (also at
- * `/thunderjar/model.txt`). The command runs in the image's working directory: `/workspace`,
- * unless a code state or initial prompt fragment sets another with WORKDIR.
- */
-export type HarnessCliCtx = {
-  /** The harness's own `version`. */
-  version: string;
-  /** The model ID the test case's pair names, `<harness>/<model ID>`, as the agent is given it. */
   modelId: string;
-  /**
-   * The turn's prompt text. Pasted into a shell command it breaks on the first quote, `$` or
-   * backtick, so read `promptPath` instead.
-   */
-  initialPrompt: string;
-  /**
-   * A file in the image holding the turn's prompt, exactly, with no newline added: pass it to
-   * the agent as `"$(cat ${ctx.promptPath})"`, or as a file if it takes one. It's read-only to a
-   * non-root agent: write nothing beside it.
-   */
-  promptPath: string;
-  /** Where the agent's own report of the turn goes. Each turn has its own. */
-  resultPath: string;
-  /** Which turn this is, counting from 0. A single prompt is turn 0. */
-  turn: number;
-  /**
-   * `$THUNDERJAR_SESSION_ID`: a shell variable holding a fresh UUID for each container run, the
-   * same for each of its turns. The command is baked into the image, so it reads the ID as it
-   * runs. Start the agent's session with it on turn 0, and resume it on later turns, e.g.
-   * `--session-id`, then `--resume`.
-   */
-  sessionId: string;
 };
 
 export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApplyCtx, R> & {
   /**
    * The version of the agent this harness installs, e.g. `"2.1.311"`: `ctx.version` for its
-   * fragment and `cli`. One harness folder pins one version, so name the folder after it, e.g.
+   * fragment. One harness folder pins one version, so name the folder after it, e.g.
    * `claude-code-2.1.311/`, and copy the folder to try another.
    */
   version: string;
-  /** The command that runs the agent for one turn. `ctx.resolved` is what `resolve` returned. */
-  cli(ctx: HarnessCliCtx & { resolved: R }): string;
   /**
-   * The agent's final reply, read from the text of the result file its `cli` left, for
-   * instruments such as `replyMatches` to measure. Without it, a run has no reply.
+   * Installs the agent, and writes `/thunderjar/thunderjar-run.sh`, the script that runs it, e.g.
+   * with `writeRunScript`. The script runs in the image's working directory, reads the prompt
+   * from `/thunderjar/prompt.txt`, and must leave the agent's result at `/thunderjar/result.json`.
+   * `writeModel(ctx.modelId)` puts the model ID at `/thunderjar/model.txt`, for it to read.
+   */
+  applyParameter(config: C, ctx: HarnessApplyCtx & { resolved: R }): string;
+  /**
+   * The agent's final reply, read from the text of its result file, for instruments such as
+   * `replyMatches` to measure. Without it, a run has no reply.
    */
   collectReply?: (raw: string) => string;
   /**
-   * The run's token costs, read from the text of each turn's result file, once per turn, and
-   * summed. A throw is `unparseable`. Without it, every run's are `notReported`.
+   * The run's token costs, read from the text of its result file. A throw is `unparseable`.
+   * Without it, every run's are `notReported`.
    */
   collectTokenCosts?: TokenCostCollector;
   /**
@@ -209,23 +180,20 @@ export type TokenCosts =
   | { outcome: "unavailable"; reason: "absent" | "unparseable" | "notReported" };
 
 /**
- * Reads the token costs from what the harness's `cli` wrote to its result path. Thunderjar calls
- * it only for a result file that exists, once per turn, and sums them. A throw is `unparseable`.
+ * Reads the token costs from what the run script wrote to `/thunderjar/result.json`. Thunderjar
+ * calls it only for a result file that exists. A throw is `unparseable`.
  */
 export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: string }) => TokenCosts;
 
 /**
- * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. Thunderjar bakes
- * its prompt, or turns, into the prerun image itself, so its fragment is usually left out, or only
- * sets WORKDIR, to run the agent in a subfolder.
- *
- * It's a single `prompt`, or a list of `turns`, each run by the harness's `cli` in turn, in the
- * same container and agent session, so a later turn can ask about an earlier one. Its
- * `timeoutSeconds` covers every turn together.
+ * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. Its fragment
+ * writes the prompt to `/thunderjar/prompt.txt`, for the harness's run script to read, e.g. with
+ * `writePrompt`. It may also set WORKDIR, to run the agent in a subfolder. `timeoutSeconds` is how
+ * long the run script may run before it's killed.
  */
 export type InitialPromptDeclaration<C = unknown, R = unknown> = Applies<C, FragmentCtx, R> & {
   timeoutSeconds: number;
-} & ({ prompt: string; turns?: never } | { turns: string[]; prompt?: never });
+};
 
 export function declareInitialPrompt<C = undefined, R extends ResolvedOf = undefined>(
   declaration: InitialPromptDeclaration<C, R>,
@@ -254,7 +222,7 @@ export type MeasurementContext = {
   writeFile(path: string, contents: string): Promise<void>;
   /** The files matching `pattern`, relative to `workdir`, sorted. */
   glob(pattern: string): Promise<string[]>;
-  /** The text of the result file the harness's `cli` left, or "" if it left none. */
+  /** The text of the result file the run script left, or "" if it left none. */
   harnessResult: string;
   /** The agent's final reply, from its harness's `collectReply`, or why there's none. */
   reply: Reply;

@@ -90,16 +90,15 @@ read them years later, exactly as the original run did.
 
 ## The run script
 
-At `L`, Thunderjar runs `/thunderjar/thunderjar-run.sh`, baked into the prerun image at
-build time, in the image's working directory. It holds each turn's harness `cli` command,
-with the model ID and the prompt files it reads, wrapped to record when the agent started,
-when it finished, and how it exited. The session ID is the one thing it reads as it runs, from
-`THUNDERJAR_SESSION_ID`, which Thunderjar sets for each container run; run by hand, it makes
-one. In outline:
+At `L`, Thunderjar runs `/thunderjar/thunderjar-run.sh`, which the harness's fragment wrote
+into the prerun image at build time, in the image's working directory. It reads the model ID
+and the prompt from the files the harness's and initial prompt's fragments wrote beside it,
+so the image holds everything the run needs, and the script can be run by hand. Thunderjar
+wraps it to record when the agent started, when it finished, and how it exited:
 
 ```sh
 start=$(date +%s%3N)
-<command returned by the harness's cli>
+sh /thunderjar/thunderjar-run.sh
 code=$?
 end=$(date +%s%3N)
 echo "{\"startedAt\":$start,\"finishedAt\":$end,\"exitCode\":$code}" > /thunderjar/run.json

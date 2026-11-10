@@ -42,8 +42,8 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("run, against real Docker", ()
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
-Building <PREFIX>-prerun:956de01a ... done
-Building <PREFIX>-prerun:3eacad1a ... done
+Building <PREFIX>-prerun:32a1d048 ... done
+Building <PREFIX>-prerun:577ed2bd ... done
  1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
       isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
@@ -109,7 +109,7 @@ Wrote <DATA>/runs/<ULID>/
     // A postrun image starts as its prerun image does, rather than running the agent again.
     const config = "{{json .Config.Entrypoint}} {{json .Config.Cmd}}";
     expect(await $`docker image inspect --format ${config} ${alpha.postrunImage}`.text()).toBe(
-      await $`docker image inspect --format ${config} ${PREFIX}-prerun:956de01a`.text(),
+      await $`docker image inspect --format ${config} ${PREFIX}-prerun:32a1d048`.text(),
     );
 
     // Every container was removed.
@@ -139,28 +139,6 @@ Wrote <DATA>/runs/<ULID>/
     // Its postrun image holds the wrapper's start, all it wrote before it was killed.
     expect(Object.keys(JSON.parse(await inImage(sleeper.postrunImage, "cat /thunderjar/run.json")))).toEqual(["startedAt"]);
     expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${PREFIX}-`}`.text())).toEqual([]);
-  }, 600_000);
-
-  test("0205 remember: each turn runs in the same container and session, so the last can answer from the first", async () => {
-    const data = `${DATA_DIR}/remember`;
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0205"), ["run", "remember", "--image-prefix", PREFIX, "--data-dir", data], {
-      docker: "real",
-      paths: { "<PREFIX>": PREFIX, "<DATA>": data },
-    });
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain(`
- 1/1  iteration 1/1  fake-rememberer | tell-then-ask  ... done (<duration>)
-      promisedToRemember: true   remembersName: true
-`);
-    const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: data, onlyFiles: false })];
-    const record = (await Bun.file(`${data}/${executionDir}/container-runs/1-1.json`).json()) as ContainerRunRecord;
-    expect(record.turns?.map((turn) => turn.reply)).toEqual([
-      { outcome: "collected", text: "I will remember that: My rubber ducky is called Eli." },
-      { outcome: "collected", text: "You told me: My rubber ducky is called Eli." },
-    ]);
-    expect(await inImage(record.postrunImage, `cat "$HOME/.fake-rememberer/${record.sessionId}"`)).toBe("My rubber ducky is called Eli.");
   }, 600_000);
 
   test("0206 sandboxed: an agent can make a user namespace, as a sandbox does, only with its base image's run options", async () => {
