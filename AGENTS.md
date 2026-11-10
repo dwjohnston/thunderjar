@@ -3,6 +3,7 @@
 Thunderjar is a TypeScript/Bun CLI for
   - Running repeatable experiments that
      - Compare coding-agent harnesses for these combinations: 
+        - Base docker image
         - Initial code state
         - Prompsets (AGENTS.md, SKILL.md files etc)
         - The harness model pair 
@@ -324,3 +325,10 @@ The `fixture` script lets a developer run any thunderjar command in a scenario's
 ```sh
 bun run fixture 0201 plan two-pairs
 ```
+
+
+### Dos and Don'ts 
+
+- You don't need to keep the `project-md/prd` up to date. Let it drift. 
+- _do not_ update the the docs in `./docs` let the user do that. 
+
