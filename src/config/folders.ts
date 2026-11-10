@@ -2,7 +2,7 @@
 import { Glob } from "bun";
 import { ConfigError, existsIn, FOLDER } from "./loader.ts";
 
-export const PARAMETERS = "test-case-parameters";
+export const PARAMETERS = "parameters";
 
 /**
  * The folder, in a folder parameter's folder, that holds what its fragment can copy into the

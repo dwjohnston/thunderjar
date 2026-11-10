@@ -8,7 +8,7 @@ them — see [060-experiment-parameters.md](060-experiment-parameters.md).
 
 ## Declaration
 
-Lives at `test-case-parameters/promptSets/<name>/index.ts`, with its prompt files in a
+Lives at `parameters/promptSets/<name>/index.ts`, with its prompt files in a
 `files/` folder beside it.
 
 ```
@@ -20,7 +20,7 @@ promptSets/house-style/
 ```
 
 ```ts
-// test-case-parameters/promptSets/house-style/index.ts
+// parameters/promptSets/house-style/index.ts
 export default declarePromptSet({
   applyParameter: (_config, ctx) => `COPY ${ctx.dir}/ /workspace/
 RUN cd /workspace && git add -A && git commit --quiet -m "Thunderjar: apply promptSet"`,

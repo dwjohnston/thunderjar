@@ -1,4 +1,4 @@
-// The names a project declares under `.thunderjar/test-case-parameters/`. `thunderjar generate`
+// The names a project declares under `.thunderjar/parameters/`. `thunderjar generate`
 // writes them to `.thunderjar/_generated/parameterNames.d.ts` as global types, e.g.
 // `type TaskName = "is-prime"`, and fills in `ThunderjarParameterNames` with them. Until it
 // has run, every name is any string.

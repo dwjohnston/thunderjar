@@ -79,7 +79,7 @@ async function filesOf(root: string, dir: string): Promise<FileHash[]> {
 /** One parameter, rendered: its fragment, its `files/`, and its parameter hash. */
 type Rendered = { fragment: string; files: FileHash[]; hash: string };
 
-/** Where each folder axis's declarations are, relative to `test-case-parameters/`, and their declareX(). */
+/** Where each folder axis's declarations are, relative to `parameters/`, and their declareX(). */
 const FOLDERS = {
   baseImage: ["baseImages", "declareBaseImage"],
   codeState: ["codeStates", "declareCodeState"],

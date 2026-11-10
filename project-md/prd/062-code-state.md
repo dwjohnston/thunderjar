@@ -8,10 +8,10 @@ them — see [060-experiment-parameters.md](060-experiment-parameters.md).
 
 ## Declaration
 
-Lives at `test-case-parameters/codeStates/<name>/index.ts`.
+Lives at `parameters/codeStates/<name>/index.ts`.
 
 ```ts
-// test-case-parameters/codeStates/baseline/index.ts
+// parameters/codeStates/baseline/index.ts
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git",
@@ -36,7 +36,7 @@ A code state with files of its own, such as a fixture script, keeps them in its 
 folder, at `ctx.dir` in the build context:
 
 ```ts
-// test-case-parameters/codeStates/with-fixture/index.ts — its script is with-fixture/files/seed-fixture-data.sh
+// parameters/codeStates/with-fixture/index.ts — its script is with-fixture/files/seed-fixture-data.sh
 export default declareCodeState({
   config: { repo: "https://github.com/acme/widgets.git", commit: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0" },
   applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
@@ -104,7 +104,7 @@ runs on the host once per execution, before anything is hashed, and its result i
 This can be called a *floating parameter*.
 
 ```ts
-// test-case-parameters/codeStates/follow-main/index.ts
+// parameters/codeStates/follow-main/index.ts
 export default declareCodeState({
   config: { repo: "https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git", branch: "main" },
   resolve: async (config, ctx) =>

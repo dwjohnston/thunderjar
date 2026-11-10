@@ -116,25 +116,25 @@ describe("renderPrerun", () => {
   });
 
   test("a base image must have a fragment, and it must start with FROM", () => {
-    const missing = { file: "test-case-parameters/baseImages/node20/index.ts", declaration: {} as ReturnType<typeof declareBaseImage> };
+    const missing = { file: "parameters/baseImages/node20/index.ts", declaration: {} as ReturnType<typeof declareBaseImage> };
     expect(problemsOf(() => renderPrerun(parameters({ baseImage: missing })))).toEqual([
-      ".thunderjar/test-case-parameters/baseImages/node20/index.ts: applyParameter: is missing. A base image's fragment provides the FROM.",
+      ".thunderjar/parameters/baseImages/node20/index.ts: applyParameter: is missing. A base image's fragment provides the FROM.",
     ]);
 
-    const noFrom = { file: "test-case-parameters/baseImages/node20/index.ts", declaration: declareBaseImage({ applyParameter: () => "RUN echo hi\nFROM node:20" }) };
+    const noFrom = { file: "parameters/baseImages/node20/index.ts", declaration: declareBaseImage({ applyParameter: () => "RUN echo hi\nFROM node:20" }) };
     expect(problemsOf(() => renderPrerun(parameters({ baseImage: noFrom })))).toEqual([
-      '.thunderjar/test-case-parameters/baseImages/node20/index.ts: applyParameter: must return a fragment that starts with FROM, got "RUN echo hi".',
+      '.thunderjar/parameters/baseImages/node20/index.ts: applyParameter: must return a fragment that starts with FROM, got "RUN echo hi".',
     ]);
 
-    const empty = { file: "test-case-parameters/baseImages/node20/index.ts", declaration: declareBaseImage({ applyParameter: () => "" }) };
+    const empty = { file: "parameters/baseImages/node20/index.ts", declaration: declareBaseImage({ applyParameter: () => "" }) };
     expect(problemsOf(() => renderPrerun(parameters({ baseImage: empty })))).toEqual([
-      '.thunderjar/test-case-parameters/baseImages/node20/index.ts: applyParameter: must return a fragment that starts with FROM, got "".',
+      '.thunderjar/parameters/baseImages/node20/index.ts: applyParameter: must return a fragment that starts with FROM, got "".',
     ]);
   });
 
   test("names every fragment that throws or doesn't return a string, all at once", () => {
     const codeState = {
-      file: "test-case-parameters/codeStates/baseline/index.ts",
+      file: "parameters/codeStates/baseline/index.ts",
       declaration: declareCodeState({
         applyParameter: () => {
           throw new Error("no commit configured");
@@ -142,12 +142,12 @@ describe("renderPrerun", () => {
       }),
     };
     const promptSet = {
-      file: "test-case-parameters/promptSets/snerk/index.ts",
+      file: "parameters/promptSets/snerk/index.ts",
       declaration: { applyParameter: () => undefined } as unknown as ReturnType<typeof declarePromptSet>,
     };
     expect(problemsOf(() => renderPrerun(parameters({ codeState, promptSet })))).toEqual([
-      ".thunderjar/test-case-parameters/codeStates/baseline/index.ts: applyParameter: threw: no commit configured",
-      ".thunderjar/test-case-parameters/promptSets/snerk/index.ts: applyParameter: must return a Dockerfile fragment, a string, got undefined.",
+      ".thunderjar/parameters/codeStates/baseline/index.ts: applyParameter: threw: no commit configured",
+      ".thunderjar/parameters/promptSets/snerk/index.ts: applyParameter: must return a Dockerfile fragment, a string, got undefined.",
     ]);
   });
 });
@@ -155,7 +155,7 @@ describe("renderPrerun", () => {
 describe("renderPrerun, the build context", () => {
   test("a fragment may name its own folder, and paths that only look like another's", () => {
     const harness = {
-      file: "test-case-parameters/harnessModels/claude-code/index.ts",
+      file: "parameters/harnessModels/claude-code/index.ts",
       declaration: declareHarness({
         version: "2.1.283",
         applyParameter: (_config, ctx) => `COPY ${ctx.dir}/scripts/ /opt/parameters/promptSet/\nRUN ls parameters/harnessy`,
@@ -168,17 +168,17 @@ describe("renderPrerun, the build context", () => {
 
   test("a fragment naming another parameter's folder is an error naming its file, the initial prompt's included", () => {
     const codeState = {
-      file: "test-case-parameters/codeStates/baseline/index.ts",
+      file: "parameters/codeStates/baseline/index.ts",
       declaration: declareCodeState({ applyParameter: () => "COPY parameters/baseImage/ /workspace/\nCOPY ./parameters/promptSet/AGENTS.md /workspace/" }),
     };
     const initialPrompt = {
-      file: "test-case-parameters/tasks/is-prime/initial-prompts/plain.ts",
+      file: "parameters/tasks/is-prime/initial-prompts/plain.ts",
       declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: () => "COPY parameters/harness/PROMPT.md /workspace/" }),
     };
 
     expect(problemsOf(() => renderPrerun(parameters({ codeState, initialPrompt })))).toEqual([
-      ".thunderjar/test-case-parameters/codeStates/baseline/index.ts: applyParameter: uses another parameter's folder in the build context: the base image's, parameters/baseImage, and the prompt set's, parameters/promptSet. A fragment can only use its own files/, through ctx.dir.",
-      ".thunderjar/test-case-parameters/tasks/is-prime/initial-prompts/plain.ts: applyParameter: uses another parameter's folder in the build context: the harness's, parameters/harness. A fragment can only use its own files/, through ctx.dir.",
+      ".thunderjar/parameters/codeStates/baseline/index.ts: applyParameter: uses another parameter's folder in the build context: the base image's, parameters/baseImage, and the prompt set's, parameters/promptSet. A fragment can only use its own files/, through ctx.dir.",
+      ".thunderjar/parameters/tasks/is-prime/initial-prompts/plain.ts: applyParameter: uses another parameter's folder in the build context: the harness's, parameters/harness. A fragment can only use its own files/, through ctx.dir.",
     ]);
   });
 });
@@ -186,7 +186,7 @@ describe("renderPrerun, the build context", () => {
 describe("renderPrerun, a code state that clones a repository", () => {
   test("its RUN follows WORKDIR, its line continuations intact", () => {
     const codeState = {
-      file: "test-case-parameters/codeStates/baseline/index.ts",
+      file: "parameters/codeStates/baseline/index.ts",
       declaration: declareCodeState({
         config: { repo: "https://github.com/acme/widgets.git", commit: "24dc11c26e2716a12cf33b82fec895a7f02b3e8a" },
         applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\

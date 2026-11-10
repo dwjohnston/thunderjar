@@ -350,7 +350,7 @@ export default declareTestCase({
   test("an agent exiting non-zero is recorded and the rest still run, but the execution fails", async () => {
     await using copy = await copyScenarioProject("0202");
     await Bun.write(
-      `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-alpha/index.ts`,
+      `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness } from "thunderjar";
 
 export default declareHarness({ version: "1.0.0", cli: () => "echo partial > isPrime.ts && exit 3" });
@@ -392,7 +392,7 @@ Wrote <DATA>/runs/<ULID>/
   test("a measure that can't be taken says why", async () => {
     await using copy = await copyScenarioProject("0202");
     await Bun.write(
-      `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-alpha/index.ts`,
+      `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness } from "thunderjar";
 
 export default declareHarness({ version: "1.0.0", cli: () => "true" });
@@ -423,7 +423,7 @@ Wrote <DATA>/runs/<ULID>/
 
   test("a task without measurements has no measures to show", async () => {
     await using copy = await copyScenarioProject("0202");
-    await $`rm -r ${copy.dir}/.thunderjar/test-case-parameters/tasks/is-prime/measurements`.quiet();
+    await $`rm -r ${copy.dir}/.thunderjar/parameters/tasks/is-prime/measurements`.quiet();
     await using docker = await fakeDocker();
     const data = dataDir();
 
@@ -439,7 +439,7 @@ Wrote <DATA>/runs/<ULID>/
     await using copy = await copyScenarioProject("0202");
     // Leaves the run script nowhere to write run.json.
     await Bun.write(
-      `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-alpha/index.ts`,
+      `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness } from "thunderjar";
 
 export default declareHarness({ version: "1.0.0", cli: () => "rm -rf /thunderjar" });

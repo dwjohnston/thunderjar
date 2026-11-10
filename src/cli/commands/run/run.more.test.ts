@@ -167,7 +167,7 @@ Reply
   test("a turn that exits non-zero stops the turns after it", async () => {
     await using copy = await copyScenarioProject("0205");
     await Bun.write(
-      `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-rememberer/index.ts`,
+      `${copy.dir}/.thunderjar/parameters/harnessModels/fake-rememberer/index.ts`,
       `import { declareHarness } from "thunderjar";
 
 export default declareHarness({
@@ -249,7 +249,7 @@ describe("0402 broken declarations", () => {
 
     expect(stdout).toBe("");
     expect(stderr).toBe(
-      'Error: .thunderjar/test-case-parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest, replyMatches, shell\n',
+      'Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest, replyMatches, shell\n',
     );
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual([]);

@@ -4,7 +4,7 @@ import { scenario } from "../testing/scenario.ts";
 import { ConfigError } from "./loader.ts";
 import { loadMeasurements } from "./measurements.ts";
 
-const MEASUREMENTS = "test-case-parameters/tasks/is-prime/measurements";
+const MEASUREMENTS = "parameters/tasks/is-prime/measurements";
 
 describe("loadMeasurements", () => {
   const root = `${scenario("0202")}/.thunderjar`;
