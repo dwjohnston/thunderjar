@@ -121,6 +121,11 @@ export type HarnessApplyCtx = ApplyParameterCtx & {
 /**
  * What a harness's `cli` gets, to build the command that runs the agent. An initial prompt of
  * several turns runs `cli` once per turn, in the same container, one after another.
+ *
+ * Thunderjar calls it as it renders the prerun Dockerfile, and bakes each turn's command into the
+ * image's `/thunderjar/thunderjar-run.sh`, with the prompts and the model ID (also at
+ * `/thunderjar/model.txt`). The command runs in the image's working directory: `/workspace`,
+ * unless a code state or initial prompt fragment sets another with WORKDIR.
  */
 export type HarnessCliCtx = {
   /** The harness's own `version`. */
@@ -133,8 +138,9 @@ export type HarnessCliCtx = {
    */
   initialPrompt: string;
   /**
-   * A file in the container holding the turn's prompt, exactly, with no newline added: pass it to
-   * the agent as `"$(cat ${ctx.promptPath})"`, or as a file if it takes one.
+   * A file in the image holding the turn's prompt, exactly, with no newline added: pass it to
+   * the agent as `"$(cat ${ctx.promptPath})"`, or as a file if it takes one. It's read-only to a
+   * non-root agent: write nothing beside it.
    */
   promptPath: string;
   /** Where the agent's own report of the turn goes. Each turn has its own. */
@@ -142,8 +148,10 @@ export type HarnessCliCtx = {
   /** Which turn this is, counting from 0. A single prompt is turn 0. */
   turn: number;
   /**
-   * A fresh UUID for each container run, the same for each of its turns: start the agent's
-   * session with it on turn 0, and resume it on later turns, e.g. `--session-id`, then `--resume`.
+   * `$THUNDERJAR_SESSION_ID`: a shell variable holding a fresh UUID for each container run, the
+   * same for each of its turns. The command is baked into the image, so it reads the ID as it
+   * runs. Start the agent's session with it on turn 0, and resume it on later turns, e.g.
+   * `--session-id`, then `--resume`.
    */
   sessionId: string;
 };
@@ -207,8 +215,9 @@ export type TokenCosts =
 export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: string }) => TokenCosts;
 
 /**
- * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. It is used when
- * the harness runs, so its fragment is usually left out.
+ * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. Thunderjar bakes
+ * its prompt, or turns, into the prerun image itself, so its fragment is usually left out, or only
+ * sets WORKDIR, to run the agent in a subfolder.
  *
  * It's a single `prompt`, or a list of `turns`, each run by the harness's `cli` in turn, in the
  * same container and agent session, so a later turn can ask about an earlier one. Its

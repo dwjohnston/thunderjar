@@ -44,20 +44,23 @@ have run, and of its `files/` folder:
 | Hash | Of | Identifies |
 |---|---|---|
 | Permutation hash | The five parameter hashes, and the pair's model ID | A permutation's runs: two container runs are directly comparable only if theirs match |
-| Image hash | The prerun Dockerfile, and each folder parameter's `files/` | The prerun image, which is tagged with it |
+| Image hash | The prerun Dockerfile, each folder parameter's `files/`, and what Thunderjar bakes in | The prerun image, which is tagged with it |
 
 The image hash covers only what affects the image, so permutations that build the same
-image share it: two models of one harness, or two initial prompts without a fragment. The
-permutation hash covers every parameter, so their runs are still told apart.
+image share it. The model ID, the initial prompt and the run script are baked into the
+image, so two models of one harness, or two initial prompts, each have their own image. They
+still share every layer up to the model, so building the second is cheap.
 
 | Change | Parameter hash | Permutation hash | Image |
 |---|---|---|---|
 | A comment, or a helper, without changing the rendered text | — | — | — |
 | A code state's commit | code state | changed | rebuilt |
 | A file in a parameter's `files/` | that parameter | changed | rebuilt |
-| A harness's `cli` or `requiredEnv` | harness | changed | shared |
-| A pair's model ID | — | changed | shared |
-| An initial prompt's text or timeout | initial prompt | changed | shared, unless it has a fragment |
+| A harness's `cli` | harness | changed | rebuilt |
+| A harness's `requiredEnv` | harness | changed | shared |
+| A pair's model ID | — | changed | rebuilt |
+| An initial prompt's text | initial prompt | changed | rebuilt |
+| An initial prompt's timeout | initial prompt | changed | shared |
 | A base image's `runOptions` | base image | changed | shared |
 
 ### Floating parameters: `resolve`
@@ -129,7 +132,9 @@ A folder parameter's `ctx.dir` is where its `files/` folder is in the build cont
 harness's `ctx.version` is its own `version`.
 
 Building a permutation's prerun image is then a fold: each parameter's fragment, in the
-order below. Thunderjar adds only `WORKDIR /workspace`.
+order below. Thunderjar adds `WORKDIR /workspace`, and bakes in the model ID, the prompts,
+and `/thunderjar/thunderjar-run.sh`, the script that runs the agent. Its files are in the
+build context under `thunderjar/`.
 
 ```dockerfile
 FROM node:20-bookworm                                    # base image
@@ -141,7 +146,17 @@ RUN git clone --quiet https://github.com/acme/widgets.git /workspace \
   && git -C /workspace remote remove origin             # code state
 COPY parameters/promptSet/ /workspace/                   # prompt set, from its files/
 RUN npm install -g @anthropic-ai/claude-code@2.1.311     # harness
+COPY thunderjar/model.txt /thunderjar/model.txt          # Thunderjar: the model ID
+WORKDIR /workspace/packages/maths                        # initial prompt, optional
+COPY thunderjar/prompt.txt /thunderjar/prompt.txt        # Thunderjar: the prompt
+COPY --chmod=755 thunderjar/thunderjar-run.sh /thunderjar/thunderjar-run.sh
 ```
+
+Running an iteration is then only `sh /thunderjar/thunderjar-run.sh`, in the image's
+working directory: the last `WORKDIR` a fragment set, or `/workspace`. A code state or an
+initial prompt sets one to run the agent in a subfolder, e.g. a package of a monorepo, and
+measurements run there too. A prerun image holds everything a run needs, so it can be run,
+or read, without the project's config.
 
 Fragments are Dockerfile source rather than bare shell commands, because the
 prerun build *is* a Dockerfile — so layer caching stays explicit and the base
@@ -151,16 +166,16 @@ The order matches the build sequence in
 
 ### Build-time and run-time parameters
 
-Only four of the five contribute to the image. The initial prompt is consumed when the
-harness is invoked, and its fragment is usually left out:
+All five contribute to the image. The initial prompt's fragment is usually left out, or only
+sets `WORKDIR`: Thunderjar bakes its prompt in, for the run script to pass to the harness:
 
 | Parameter | Build time | Run time |
 |---|---|---|
 | Base image | seed of the build | `runOptions` |
-| Code state | clones the codebase, then dependencies / fixture generation | — |
+| Code state | clones the codebase, then dependencies / fixture generation; may set `WORKDIR` | — |
 | Prompt set | prompt files | — |
-| Harness model pair | installs the agent tool | invoked via `cli`, with `ctx.modelId` |
-| Initial prompt | — | `ctx.initialPrompt` |
+| Harness model pair | installs the agent tool; its `cli`, and the model ID, baked into the run script | `requiredEnv` |
+| Initial prompt | its prompt or turns, baked in; may set `WORKDIR` | its `timeoutSeconds` |
 
 This split is the same one the flowchart in
 [080-docker-execution.md](080-docker-execution.md#process) draws as its

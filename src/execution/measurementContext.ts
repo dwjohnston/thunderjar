@@ -4,7 +4,10 @@
 import type { MeasurementContext } from "../api/declarations.ts";
 import { execInContainer, removeContainer, startContainer } from "../docker/docker.ts";
 
-/** Where in the container paths, globs and commands resolve: where the agent worked. */
+/**
+ * Where paths, globs and commands resolve for an instrument that has no container: the default
+ * working directory. One with a container uses its image's, where the agent worked.
+ */
 export const WORKDIR = "/workspace";
 
 /** A MeasurementContext of its own, for one measurement; `close` removes its container. */
@@ -53,14 +56,23 @@ export async function openMeasurementContext(
     await removeContainer(container).catch(() => {});
     throw error;
   }
-  const run = (command: string[], stdin?: string) => execInContainer(container, WORKDIR, command, stdin);
+  // Where the agent worked: the postrun image's working directory, as its prerun image's last WORKDIR set it.
+  let workdir: string;
+  try {
+    const pwd = await execInContainer(container, undefined, ["sh", "-c", "pwd"]);
+    workdir = pwd.exitCode === 0 && pwd.stdout.trim().startsWith("/") ? pwd.stdout.trim() : WORKDIR;
+  } catch (error) {
+    await removeContainer(container).catch(() => {});
+    throw error;
+  }
+  const run = (command: string[], stdin?: string) => execInContainer(container, workdir, command, stdin);
   const mustRun = async (what: string, command: string[], stdin?: string) => {
     const result = await run(command, stdin);
     if (result.exitCode !== 0) throw new Error(`${what}: ${result.stderr.trim() || `exited ${result.exitCode}`}`);
     return result.stdout;
   };
   return {
-    workdir: WORKDIR,
+    workdir,
     harnessResult,
     reply,
     replies,
@@ -70,7 +82,7 @@ export async function openMeasurementContext(
       await mustRun(`can't write ${path}`, ["sh", "-c", 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1"', "sh", path], contents);
     },
     async glob(pattern) {
-      const found = await mustRun(`can't list the files in ${WORKDIR}`, ["find", ".", "(", "-type", "f", "-o", "-type", "l", ")"]);
+      const found = await mustRun(`can't list the files in ${workdir}`, ["find", ".", "(", "-type", "f", "-o", "-type", "l", ")"]);
       const glob = new Bun.Glob(pattern);
       return found
         .split("\n")

@@ -70,12 +70,17 @@ describe("hashPermutations", () => {
         modelId: permutation.harnessModel.startsWith("fake-harness-alpha") ? "fake-model-small-001" : "fake-model-large-001",
         imageHash: sha,
         dockerfile: expect.stringMatching(/^FROM node:20-bookworm\n/),
+        baked: {
+          "/thunderjar/model.txt": permutation.harnessModel.startsWith("fake-harness-alpha") ? "fake-model-small-001" : "fake-model-large-001",
+          "/thunderjar/prompt.txt": expect.any(String),
+          "/thunderjar/thunderjar-run.sh": expect.stringMatching(/^#!\/bin\/sh\n/),
+        },
         resolved: {},
       })),
     );
   });
 
-  test("each permutation's Dockerfile is its parameters' fragments", async () => {
+  test("each permutation's Dockerfile is its parameters' fragments, and the COPYs of what Thunderjar bakes in", async () => {
     const testCase = await loadTestCase(root, "is-prime-baseline");
     const dockerfiles = (await hashPermutations(root, testCase)).map((permutation) => permutation.dockerfile);
 
@@ -86,9 +91,13 @@ describe("hashPermutations", () => {
         "WORKDIR /workspace",
         'RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md',
         'RUN echo "install fake-harness-alpha@1.0.0"',
+        "COPY thunderjar/model.txt /thunderjar/model.txt",
+        "COPY thunderjar/prompt.txt /thunderjar/prompt.txt",
+        "COPY --chmod=755 thunderjar/thunderjar-run.sh /thunderjar/thunderjar-run.sh",
         "",
       ].join("\n"),
     );
+    // Its two initial prompts have no fragment, so the Dockerfiles of a pair differing only in theirs are the same.
     expect(new Set(dockerfiles).size).toBe(4);
   });
 
@@ -120,18 +129,20 @@ describe("hashPermutations", () => {
     expect(new Set(all).size).toBe(all.length);
   });
 
-  test("two models of one harness share a prerun image, but not a hash", async () => {
+  test("two models of one harness share every parameter hash, but each bakes its own prerun image", async () => {
     const [small, large] = await hashPermutations(root, TWO_MODELS);
 
-    expect(small?.imageHash).toBe(large?.imageHash as string);
+    expect(small?.imageHash).not.toBe(large?.imageHash as string);
+    expect(small?.dockerfile).toBe(large?.dockerfile as string);
     expect(small?.parameterHashes).toEqual(large?.parameterHashes as HashedPermutation["parameterHashes"]);
     expect(small?.hash).not.toBe(large?.hash as string);
   });
 
-  test("two initial prompts share a prerun image when neither has a fragment", async () => {
+  test("two initial prompts each bake their own prerun image, even when neither has a fragment", async () => {
     const [plain, terse] = await hashPermutations(root, { ...ONE, initialPrompt: ["plain", "terse"] });
 
-    expect(plain?.imageHash).toBe(terse?.imageHash as string);
+    expect(plain?.imageHash).not.toBe(terse?.imageHash as string);
+    expect(plain?.baked["/thunderjar/prompt.txt"]).not.toBe(terse?.baked["/thunderjar/prompt.txt"] as string);
     expect(plain?.hash).not.toBe(terse?.hash as string);
   });
 
@@ -156,12 +167,12 @@ describe("hashPermutations", () => {
     ).toEqual(await hashes(root, ONE));
   });
 
-  test("a pair's model ID is in the permutation hash alone, not the harness's or the image's", async () => {
+  test("a pair's model ID is in the permutation hash and the image, baked in, but not the harness's hash", async () => {
     const [small, large] = await hashPermutations(root, TWO_MODELS);
 
     expect(small?.modelId).toBe("fake-model-small-001");
     expect(large?.modelId).toBe("fake-model-large-001");
-    expect(changes([small as HashedPermutation], [large as HashedPermutation])).toEqual([{ parameters: [], hash: true, image: false }]);
+    expect(changes([small as HashedPermutation], [large as HashedPermutation])).toEqual([{ parameters: [], hash: true, image: true }]);
   });
 
   test("changing a harness's version changes its parameter hash and its image", async () => {
@@ -196,7 +207,8 @@ describe("hashPermutations", () => {
     ["baseImage", "baseImages/node20/index.ts", "bun@1.3.14", "bun@1.3.15", true],
     ["promptSet", "promptSets/snerk/index.ts", "Write small functions", "Write tiny functions", true],
     ["harnessModel", "harnessModels/fake-harness-alpha/index.ts", "install fake-harness-alpha", "set up fake-harness-alpha", true],
-    ["harnessModel", "harnessModels/fake-harness-alpha/index.ts", "'// @ts-ignore'", "'// @ts-expect-error'", false],
+    // Its `cli`: baked into the image's run script.
+    ["harnessModel", "harnessModels/fake-harness-alpha/index.ts", "'// @ts-ignore'", "'// @ts-expect-error'", true],
     ["harnessModel", "harnessModels/fake-harness-alpha/index.ts", 'requiredEnv: ["FAKE_HARNESS_KEY"]', 'requiredEnv: ["FAKE_HARNESS_TOKEN"]', false],
     ["initialPrompt", "tasks/is-prime/initial-prompts/plain.ts", "timeoutSeconds: 600", "timeoutSeconds: 601", false],
   ] as const)("changing what a %s outputs changes only its parameter hash (%s: %s)", async (axis, file, from, to, image) => {

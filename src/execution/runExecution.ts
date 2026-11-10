@@ -132,7 +132,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
         const { execution, harnessResults } = await runInContainer({
           prerunImage: permutation.prerunImage,
           postrunImage: iteration.postrunImage,
-          turns: iteration.turns,
+          sessionId: iteration.sessionId,
+          resultPaths: iteration.turns.map((turn) => turn.resultPath),
           env: permutation.env,
           runOptions: permutation.runOptions,
           timeoutSeconds: permutation.timeoutSeconds,

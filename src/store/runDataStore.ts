@@ -36,7 +36,7 @@ export type ExecutionRecord = {
   };
 };
 
-/** How the agent ran, from the execution wrapper's /thunderjar/run.json. */
+/** How the agent ran, from the run script's /thunderjar/run.json. */
 export type Execution = {
   /** Epoch ms, harness start. */
   startedAt: number;

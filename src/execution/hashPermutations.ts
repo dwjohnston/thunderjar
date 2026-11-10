@@ -11,8 +11,9 @@
 // through the text it ends up in.
 //
 // The permutation hash, which identifies runs, is of every parameter hash and the model ID. The
-// prerun image hash is of what the image is built from alone: its Dockerfile and each folder
-// parameter's `files/`, so two models of one harness share an image.
+// prerun image hash is of what the image is built from alone: its Dockerfile, each folder
+// parameter's `files/`, and what Thunderjar bakes in (see runScript.ts): the model ID, the
+// prompts, and the run script, so each model and initial prompt has an image of its own.
 import { $, CryptoHasher, Glob } from "bun";
 import type {
   BaseImageDeclaration,
@@ -28,6 +29,7 @@ import type {
 import { FILES, PARAMETERS } from "../config/folders.ts";
 import { ConfigError, existsIn, loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
 import { AXES, type Axis, expandPermutations, type HashedPermutation, parsePair } from "../config/permutations.ts";
+import { type BakedFiles, bakedFileList, bakedFiles, scriptTurns } from "./runScript.ts";
 import { type Ctxs, type FolderRole, joinFragments, PARAMETER_DIRS, renderFragment, type Role } from "./prerunDockerfile.ts";
 
 const sha256 = (data: string | ArrayBuffer) => new CryptoHasher("sha256").update(data).digest("hex");
@@ -293,14 +295,31 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
       harnessModel: harnessRendered.hash,
       initialPrompt: prompt.hash,
     };
-    const dockerfile = joinFragments({
-      baseImage: baseImage.fragment,
-      codeState: codeState.fragment,
-      promptSet: promptSet.fragment,
-      harness: harnessRendered.fragment,
-      initialPrompt: prompt.fragment,
-    });
-    const files = { baseImage: baseImage.files, codeState: codeState.files, promptSet: promptSet.files, harness: harnessRendered.files };
+    let baked: BakedFiles;
+    try {
+      const turns = scriptTurns(harnessModel.declaration, harnessModel.modelId, (parameters.initialPrompt as Parameter<InitialPromptDeclaration>).declaration, resolved.get(harnessModel.key));
+      baked = bakedFiles(harnessModel.modelId, turns);
+    } catch (error) {
+      problems.push({ file: harnessModel.file, field: "cli", message: `threw: ${error instanceof Error ? error.message : String(error)}` });
+      continue;
+    }
+    const dockerfile = joinFragments(
+      {
+        baseImage: baseImage.fragment,
+        codeState: codeState.fragment,
+        promptSet: promptSet.fragment,
+        harness: harnessRendered.fragment,
+        initialPrompt: prompt.fragment,
+      },
+      baked,
+    );
+    const files = {
+      baseImage: baseImage.files,
+      codeState: codeState.files,
+      promptSet: promptSet.files,
+      harness: harnessRendered.files,
+      thunderjar: bakedFileList(baked),
+    };
     const resolvedValues: Partial<Record<Axis, Resolved>> = {};
     for (const axis of AXES) {
       const value = resolved.get((parameters[axis] as Parameter<object>).key);
@@ -313,6 +332,7 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
       modelId: harnessModel.modelId,
       imageHash: sha256(JSON.stringify({ dockerfile, files })),
       dockerfile,
+      baked: bakedFileList(baked),
       resolved: resolvedValues,
     });
   }

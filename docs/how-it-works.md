@@ -76,10 +76,22 @@ RUN git clone --quiet https://github.com/acme/prompts.git /tmp/prompts \
 RUN npm install -g @anthropic-ai/claude-code@2.1.311
 RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
 USER node
+COPY thunderjar/model.txt /thunderjar/model.txt
+
+# 5. Task: the initial prompt, and the script that runs the agent
+COPY thunderjar/prompt.txt /thunderjar/prompt.txt
+COPY --chmod=755 thunderjar/thunderjar-run.sh /thunderjar/thunderjar-run.sh
 ```
 
+The model and the initial prompt are baked into the image, along with `thunderjar-run.sh`, the script that runs the harness. So the image holds everything a run needs:
 
-<!-- I think the conceptual model can be tidied up here.  I think baking the selected model and the intial prompt into the image makes sense-->
+```bash
+docker run thunderjar-prerun:956de01a sh /thunderjar/thunderjar-run.sh
+```
+
+The script runs in the image's working directory, `/workspace` by default. A code state or initial prompt can set another with `WORKDIR`, e.g. to run the agent in one package of a monorepo.
+
+The layers go from least to most often changed, so permutations share every layer below the first one they differ in. Two models share the harness install. Two initial prompts share everything but the last layer.
 
 We then run all the permutations x the number of iterations. 
 

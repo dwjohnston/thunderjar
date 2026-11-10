@@ -80,10 +80,17 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
 `);
   });
 
-  // Each pair of permutations differing only in their initial prompt, which has no fragment, shares a prerun image.
+  // The initial prompt is baked into the prerun image, so each permutation has its own.
   test("says which prerun images are built, asking Docker once", async () => {
     await using docker = await fakeDocker({
-      images: ["thunderjar-prerun:b9cd78e6", "thunderjar-prerun:44230271", "other-prerun:e01991db", "thunderjar-postrun:65f3bfb0"],
+      images: [
+        "thunderjar-prerun:956de01a",
+        "thunderjar-prerun:e7b564c7",
+        "thunderjar-prerun:3eacad1a",
+        "thunderjar-prerun:04041169",
+        "other-prerun:84f6c383",
+        "thunderjar-postrun:65f3bfb0",
+      ],
     });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"], { env: { ...docker.env, ...KEY } });
@@ -103,7 +110,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
   });
 
   test("--image-prefix looks for the images under that prefix", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:b9cd78e6", "other-prerun:e01991db"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:956de01a", "other-prerun:84f6c383", "other-prerun:97dda58b"] });
 
     const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline", "--image-prefix", "other"], {
       env: { ...docker.env, ...KEY },
@@ -125,7 +132,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
   });
 
   test("when Docker can't be reached, it still plans, with each image's status unknown, and says why", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:b9cd78e6"], unreachable: true });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:956de01a"], unreachable: true });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example"], { env: { ...docker.env, ...KEY } });
 

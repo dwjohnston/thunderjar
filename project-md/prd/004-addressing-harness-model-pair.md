@@ -92,8 +92,9 @@ A harness's parameter hash is of what it outputs, as every parameter's is (see
 4. Its `files/` folder.
 
 The model ID isn't in the harness's hash. It joins the permutation hash, beside the five
-parameter hashes, so two models of one harness share a prerun image, and their runs are
-told apart.
+parameter hashes, so their runs are told apart. The model ID is also baked into the
+prerun image, at `/thunderjar/model.txt` and in its run script, so each model has its own
+image, sharing every layer below the model's.
 
 | Change | Effect on existing hashes |
 |---|---|

@@ -102,7 +102,7 @@ Wrote <DATA>/runs/<ULID>/
 
 describe("0205 multi-turn", () => {
   const RUN_TURN_1 = (session: string) =>
-    `mkdir -p "$HOME/.fake-rememberer" && cp /thunderjar/turns/1/prompt.txt "$HOME/.fake-rememberer/${session}" && printf '{"reply":"I will remember that: %s"}' "$(cat /thunderjar/turns/1/prompt.txt)" > /thunderjar/turns/1/result.json`;
+    `mkdir -p "$HOME/.fake-rememberer" && cp /thunderjar/prompts/1.txt "$HOME/.fake-rememberer/${session}" && printf '{"reply":"I will remember that: %s"}' "$(cat /thunderjar/prompts/1.txt)" > /thunderjar/turns/1/result.json`;
   const RUN_TURN_2 = (session: string) =>
     `printf '{"reply":"You told me: %s"}' "$(cat "$HOME/.fake-rememberer/${session}")" > /thunderjar/turns/2/result.json`;
 
@@ -113,13 +113,13 @@ describe("0205 multi-turn", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-Permutation 1: prerun image thunderjar-prerun:b3d358e4
+Permutation 1: prerun image thunderjar-prerun:f60ffe1c
   Iteration 1: postrun image thunderjar-postrun:<ULID>-1-1
     session:  <UUID>
     prompt 1: My rubber ducky is called Eli.
-    turn 1:   ${RUN_TURN_1("<UUID>")}
+    turn 1:   ${RUN_TURN_1("$THUNDERJAR_SESSION_ID")}
     prompt 2: What is my rubber ducky called?
-    turn 2:   ${RUN_TURN_2("<UUID>")}
+    turn 2:   ${RUN_TURN_2("$THUNDERJAR_SESSION_ID")}
 `);
   });
 
@@ -203,9 +203,9 @@ describe("0206 run options", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "b3d358e4", 1, "Sandbox yourself.", SANDBOXER)}
+${permutation(1, "9f0d338c", 1, "Sandbox yourself.", SANDBOXER)}
 
-Permutation 2: prerun image thunderjar-prerun:b3d358e4
+Permutation 2: prerun image thunderjar-prerun:9f0d338c
   Iteration 1: postrun image thunderjar-postrun:<ULID>-2-1
     docker:   ${OPTIONS}
     prompt:   Sandbox yourself.
@@ -221,7 +221,7 @@ Permutation 2: prerun image thunderjar-prerun:b3d358e4
     expect(exitCode).toBe(0);
     const runs = (await docker.commands()).filter((command) => command.startsWith("docker run --name"));
     expect(runs.map((command) => command.includes(OPTIONS))).toEqual([false, true]);
-    expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:b3d358e4 -c `);
+    expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:9f0d338c -c `);
   });
 });
 
@@ -233,7 +233,7 @@ describe("0201 minimal existing setup", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "ae60c784", 1, PLAIN, ALPHA_0201(PLAIN))}
+${permutation(1, "11a48c4d", 1, PLAIN, ALPHA_0201(PLAIN))}
 `);
   });
 });
@@ -306,7 +306,7 @@ describe("0210 build secrets", () => {
 
 describe("0207 image store", () => {
   const REPOSITORY = "ghcr.io/acme/thunderjar-images";
-  const PRERUN = `${REPOSITORY}:prerun-hae60c784`;
+  const PRERUN = `${REPOSITORY}:prerun-h11a48c4d`;
 
   test("without a docker login for the registry, stops before anything is built, run or written", async () => {
     await using docker = await fakeDocker();
@@ -334,7 +334,7 @@ describe("0207 image store", () => {
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
     const postrun = `${REPOSITORY}:postrun-e${executionId}-hb7b0c69c-i00`;
     expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
-Building thunderjar-prerun:ae60c784 ... done
+Building thunderjar-prerun:11a48c4d ... done
 Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
@@ -349,7 +349,7 @@ Wrote <REPO>/fixtures/.tmp/data-<UUID>/runs/<ULID>/
   });
 
   test("a prerun push the registry refuses is an error, and nothing is run or written", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:ae60c784"], failing: [PRERUN] });
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:11a48c4d"], failing: [PRERUN] });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["run", "example", "--data-dir", data], { env: docker.env });

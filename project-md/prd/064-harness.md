@@ -63,7 +63,7 @@ USER node`,
 | `version` | — | The pinned version of the agent tool: `ctx.version`. |
 | `config`, `resolve` | — | As every parameter has: see [060](060-experiment-parameters.md#floating-parameters-resolve). |
 | `applyParameter` | Build | Returns the Dockerfile fragment that installs the tool. |
-| `cli` | Run | Returns the command that runs the agent, for one turn. |
+| `cli` | Build | Returns the command that runs the agent, for one turn, baked into the image's run script. |
 | `requiredEnv` | Run | Names of the environment variables the agent needs, e.g. its API key. |
 | `collectReply` | Interpret | Reads the agent's final reply from the result file. |
 | `collectTokenCosts` | Interpret | Turns the result file into normalised token costs. Without it, `notReported`. |
@@ -76,15 +76,18 @@ The fragment installs the agent tool into the prerun image, at `ctx.version`. It
 
 ## `cli`: running the agent
 
-`cli` receives a context and returns the command to run:
+`cli` receives a context and returns the command to run. Thunderjar calls it when it renders
+the prerun Dockerfile, and bakes each turn's command into `/thunderjar/thunderjar-run.sh`, so
+the image holds how the agent is run. It runs in the image's working directory.
 
 | Context field | What it is |
 |---|---|
 | `ctx.version` | The harness's `version`. |
 | `ctx.modelId` | The pair's model ID, as the agent takes it. |
-| `ctx.initialPrompt`, `ctx.promptPath` | The turn's [initial prompt](066-task.md#initial-prompts), and a file holding it exactly. |
+| `ctx.initialPrompt`, `ctx.promptPath` | The turn's [initial prompt](066-task.md#initial-prompts), and a file holding it exactly, baked into the image: `/thunderjar/prompt.txt`, or `/thunderjar/prompts/<n>.txt` for turn `n`. |
+| | The model ID is also at `/thunderjar/model.txt`. |
 | `ctx.resultPath` | Where the command must write the turn's result file. |
-| `ctx.turn`, `ctx.sessionId` | The turn, from 0, and a session ID its turns share. |
+| `ctx.turn`, `ctx.sessionId` | The turn, from 0, and a session ID its turns share: `$THUNDERJAR_SESSION_ID`, a fresh UUID for each container run, read as the command runs. |
 | `ctx.resolved` | What the harness's `resolve` returned, if it has one. |
 
 `cli` carries a contract: **the command it returns must both run the agent and leave a
@@ -93,7 +96,7 @@ itself. It hands the text to that same harness's `collectReply` and `collectToke
 
 Thunderjar also wraps the command to record start time, finish time and exit code. The
 harness author does nothing for that — see
-[080-docker-execution.md](080-docker-execution.md#the-execution-wrapper).
+[080-docker-execution.md](080-docker-execution.md#the-run-script).
 
 ## `collectTokenCosts`: reading back the cost
 
@@ -140,12 +143,13 @@ A harness's parameter hash is of what it outputs:
 - its `requiredEnv`
 - its `files/` folder
 
-The model ID isn't in it. It joins the permutation hash, so two models of one harness share
-a prerun image, and their runs are told apart.
+The model ID isn't in it. It joins the permutation hash, so their runs are told apart. It is
+baked into the prerun image, at `/thunderjar/model.txt` and in its run script, so each model
+has its own image, sharing every layer below the model's.
 
 | Change | Effect |
 |---|---|
-| Use a new model ID | Only the permutations naming it. No image is rebuilt. |
+| Use a new model ID | Only the permutations naming it. Their images share every layer below the model's. |
 | Change `version`, or the install fragment | Every permutation using this harness, and its images. |
 | Change `cli` or `requiredEnv` | Every permutation using this harness. No image is rebuilt. |
 | Change `collectReply` or `collectTokenCosts`, or a comment | Nothing. |

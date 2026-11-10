@@ -24,12 +24,18 @@ export type HashedPermutation = Permutation & {
   /** The model ID the harness model pair resolves to. */
   modelId: string;
   /**
-   * The prerun image hash: of its Dockerfile and each folder parameter's `files/`, and nothing
-   * else, so permutations that build the same image share it, e.g. two models of one harness.
+   * The prerun image hash: of its Dockerfile, each folder parameter's `files/`, and the files
+   * Thunderjar bakes in, and nothing else, so permutations that build the same image share it.
+   * The model and initial prompt are baked in, so each has its own.
    */
   imageHash: string;
   /** Its prerun Dockerfile. */
   dockerfile: string;
+  /**
+   * What Thunderjar bakes into its prerun image, by path in the image: the model ID, the prompts,
+   * and `/thunderjar/thunderjar-run.sh`. Each is in the build context under `thunderjar/`.
+   */
+  baked: Record<string, string>;
   /** What each of its parameters with a `resolve` resolved to. */
   resolved: Partial<Record<Axis, Resolved>>;
 };

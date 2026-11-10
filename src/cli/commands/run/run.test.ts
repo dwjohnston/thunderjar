@@ -21,7 +21,7 @@ describe("0202 typical project", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${alphaPermutation(1, "b9cd78e6", 1, PLAIN)}
+${alphaPermutation(1, "956de01a", 1, PLAIN)}
 `);
   });
 
@@ -32,21 +32,21 @@ ${alphaPermutation(1, "b9cd78e6", 1, PLAIN)}
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${alphaPermutation(1, "b9cd78e6", 5, PLAIN)}
+${alphaPermutation(1, "956de01a", 5, PLAIN)}
 
-${alphaPermutation(2, "b9cd78e6", 5, TERSE)}
+${alphaPermutation(2, "e7b564c7", 5, TERSE)}
 
-${permutation(3, "44230271", 5, PLAIN, BETA(PLAIN))}
+${permutation(3, "3eacad1a", 5, PLAIN, BETA(PLAIN))}
 
-${permutation(4, "44230271", 5, TERSE, BETA(TERSE))}
+${permutation(4, "04041169", 5, TERSE, BETA(TERSE))}
 
-${alphaPermutation(5, "5e583d26", 5, PLAIN)}
+${alphaPermutation(5, "d18f1820", 5, PLAIN)}
 
-${alphaPermutation(6, "5e583d26", 5, TERSE)}
+${alphaPermutation(6, "318809af", 5, TERSE)}
 
-${permutation(7, "e01991db", 5, PLAIN, BETA(PLAIN))}
+${permutation(7, "84f6c383", 5, PLAIN, BETA(PLAIN))}
 
-${permutation(8, "e01991db", 5, TERSE, BETA(TERSE))}
+${permutation(8, "97dda58b", 5, TERSE, BETA(TERSE))}
 `);
   });
 
@@ -55,7 +55,7 @@ ${permutation(8, "e01991db", 5, TERSE, BETA(TERSE))}
     const build = await thunderjar(scenario("0202"), ["build", "is-prime-baseline", "--dry-run"]);
 
     const images = run.stdout.match(/(?<=thunderjar-prerun:)[0-9a-f]{8}/g);
-    expect(images).toEqual(["b9cd78e6", "b9cd78e6", "44230271", "44230271", "5e583d26", "5e583d26", "e01991db", "e01991db"]);
+    expect(images).toEqual(["956de01a", "e7b564c7", "3eacad1a", "04041169", "d18f1820", "318809af", "84f6c383", "97dda58b"]);
     expect([...new Set(images)]).toEqual(build.stdout.match(/(?<=^# thunderjar-prerun:)[0-9a-f]{8}/gm) as string[]);
   });
 
@@ -65,7 +65,7 @@ ${permutation(8, "e01991db", 5, TERSE, BETA(TERSE))}
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${alphaPermutation(1, "b9cd78e6", 1, PLAIN).replaceAll("thunderjar-", "throwaway-")}
+${alphaPermutation(1, "956de01a", 1, PLAIN).replaceAll("thunderjar-", "throwaway-")}
 `);
   });
 
@@ -92,7 +92,7 @@ ${alphaPermutation(1, "b9cd78e6", 1, PLAIN).replaceAll("thunderjar-", "throwaway
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-Permutation 1: prerun image thunderjar-prerun:36a43eac
+Permutation 1: prerun image thunderjar-prerun:9858db5f
   Iteration 1: postrun image thunderjar-postrun:<ULID>-1-1
     prompt:   Say "hello", then print $HOME and \`whoami\`.
               Don't stop at 'single quotes', a backslash \\ or 100%.
@@ -106,9 +106,9 @@ Permutation 1: prerun image thunderjar-prerun:36a43eac
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${alphaPermutation(1, "b9cd78e6", 1, PLAIN)}
+${alphaPermutation(1, "956de01a", 1, PLAIN)}
 
-${permutation(2, "44230271", 1, PLAIN, BETA(PLAIN))}
+${permutation(2, "3eacad1a", 1, PLAIN, BETA(PLAIN))}
 `);
   });
 });
@@ -126,8 +126,8 @@ describe("run, against the fake Docker", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
-Building thunderjar-prerun:b9cd78e6 ... done
-Building thunderjar-prerun:44230271 ... done
+Building thunderjar-prerun:956de01a ... done
+Building thunderjar-prerun:3eacad1a ... done
  1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
 ${ALPHA_MEASURES}
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
@@ -211,7 +211,7 @@ Wrote <DATA>/runs/<ULID>/
 
     // Each container ran from its prerun image, then was committed into its postrun image and removed.
     const container = (n: number) => `thunderjar-run-${id}-${n}-1`;
-    const prerun = (n: number) => `thunderjar-prerun:${n === 1 ? "b9cd78e6" : "44230271"}`;
+    const prerun = (n: number) => `thunderjar-prerun:${n === 1 ? "956de01a" : "3eacad1a"}`;
     const commands = await containerCommands(docker);
     expect(commands.filter((command) => !command.includes("-measure-"))).toEqual(
       [1, 2].flatMap((n) => [
@@ -239,8 +239,8 @@ Wrote <DATA>/runs/<ULID>/
       }
     }
     expect(await docker.images()).toEqual([
-      "thunderjar-prerun:b9cd78e6",
-      "thunderjar-prerun:44230271",
+      "thunderjar-prerun:956de01a",
+      "thunderjar-prerun:3eacad1a",
       `thunderjar-postrun:${id}-1-1`,
       `thunderjar-postrun:${id}-2-1`,
     ]);
@@ -262,11 +262,20 @@ Wrote <DATA>/runs/<ULID>/
     // fake-echo copies the prompt file into its result file.
     expect(record?.harnessResult).toBe(AWKWARD);
     expect(await docker.fileIn(record?.postrunImage as string, "/thunderjar/prompt.txt")).toBe(AWKWARD);
+    // Baked into the prerun image with the prompt: the model, and the script that ran the agent.
+    expect(await docker.fileIn(record?.postrunImage as string, "/thunderjar/model.txt")).toBe(record?.harnessModel.modelId as string);
+    expect(await docker.fileIn(record?.postrunImage as string, "/thunderjar/thunderjar-run.sh")).toStartWith("#!/bin/sh\n");
+    expect((await docker.commands()).filter((command) => command.startsWith("docker run --name"))).toEqual([
+      expect.stringMatching(/ -c THUNDERJAR_SESSION_ID='[0-9a-f-]{36}' sh \/thunderjar\/thunderjar-run\.sh$/),
+    ]);
   });
 
   test("by default, the store is .thunderjar/.data/, and existing prerun images are reused", async () => {
     await using copy = await copyScenarioProject("0202");
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:b9cd78e6"] });
+    await using docker = await fakeDocker();
+    // Built beforehand, so its run script is baked in.
+    expect((await thunderjar(copy.dir, ["build", "example"], { env: { ...docker.env, ...KEY } })).exitCode).toBe(0);
+    expect(await docker.images()).toEqual(["thunderjar-prerun:956de01a"]);
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: { ...docker.env, ...KEY } });
 
@@ -428,7 +437,7 @@ Wrote <DATA>/runs/<ULID>/
 
   test("a container run that fails, not its agent, is an error, after recording the execution as failed", async () => {
     await using copy = await copyScenarioProject("0202");
-    // Leaves the execution wrapper nowhere to write run.json.
+    // Leaves the run script nowhere to write run.json.
     await Bun.write(
       `${copy.dir}/.thunderjar/test-case-parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness } from "thunderjar";
@@ -436,7 +445,7 @@ Wrote <DATA>/runs/<ULID>/
 export default declareHarness({ version: "1.0.0", cli: () => "rm -rf /thunderjar" });
 `,
     );
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:44230271"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:3eacad1a"] });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], { env: { ...docker.env, ...KEY } });
@@ -466,14 +475,14 @@ export default declareHarness({ version: "1.0.0", cli: () => "rm -rf /thunderjar
   });
 
   test("a failed build is an error, and nothing is run or written", async () => {
-    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:b9cd78e6"] });
+    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:956de01a"] });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
-    expect(stdout).toBe("Execution <ULID>\nBuilding thunderjar-prerun:b9cd78e6 ... failed\n");
+    expect(stdout).toBe("Execution <ULID>\nBuilding thunderjar-prerun:956de01a ... failed\n");
     expect(stderr).toBe(
-      'Error: Building thunderjar-prerun:b9cd78e6 failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1\n',
+      'Error: Building thunderjar-prerun:956de01a failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1\n',
     );
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => command.startsWith("docker run"))).toEqual([]);

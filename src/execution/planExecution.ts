@@ -1,6 +1,6 @@
 // Laying out one execution of a test case: each permutation, in plan's order, with its prerun
 // image, and inside it each iteration: one container run, with its postrun image, its session ID,
-// and the harness command each of its turns runs. Nothing is run here.
+// and the harness command each of its turns runs, as baked into the prerun image's run script. Nothing is run here.
 import type {
   BaseImageDeclaration,
   HarnessDeclaration,
@@ -13,35 +13,13 @@ import { loadDeclaration, type Problem, problemsError } from "../config/loader.t
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
 import { type HashOptions, hashPermutations } from "./hashPermutations.ts";
 import { requiredEnvOf } from "../config/requiredEnv.ts";
+import { type ScriptTurn, scriptTurns } from "./runScript.ts";
 import { DEFAULT_IMAGE_PREFIX, postrunImage, prerunImage } from "./images.ts";
 
-/** Where, inside the container, the harness's `cli` must leave the agent's result file. */
-export const RESULT_PATH = "/thunderjar/result.json";
+export { PROMPT_PATH, promptsOf, RESULT_PATH, turnPaths } from "./runScript.ts";
 
-/** Where, inside the container, the execution wrapper writes the initial prompt, for the harness's `cli` to read. */
-export const PROMPT_PATH = "/thunderjar/prompt.txt";
-
-/**
- * Where turn `turn` (counting from 0) of an initial prompt of `count` turns reads its prompt and
- * leaves its result. A single prompt keeps PROMPT_PATH and RESULT_PATH; turns each have a folder,
- * numbered from 1.
- */
-export function turnPaths(turn: number, count: number): { promptPath: string; resultPath: string } {
-  if (count === 1) return { promptPath: PROMPT_PATH, resultPath: RESULT_PATH };
-  return { promptPath: `/thunderjar/turns/${turn + 1}/prompt.txt`, resultPath: `/thunderjar/turns/${turn + 1}/result.json` };
-}
-
-/** The prompts of an initial prompt, one per turn. */
-export const promptsOf = (initialPrompt: InitialPromptDeclaration): string[] => initialPrompt.turns ?? [initialPrompt.prompt];
-
-/** One turn of a container run: its prompt, where it's written, and the harness command that reads it. */
-export type PlannedTurn = {
-  prompt: string;
-  promptPath: string;
-  resultPath: string;
-  /** The harness's `cli` command for the turn. */
-  command: string;
-};
+/** One turn of a container run: its prompt, where it's baked, and the harness command that reads it. */
+export type PlannedTurn = ScriptTurn;
 
 export type PlannedIteration = {
   /** Counts from 1. */
@@ -105,16 +83,6 @@ async function loadHarness(root: string, task: string, permutation: HashedPermut
   return { baseImage, harness, collectTokenCosts, version: harness.version, modelId: permutation.modelId, initialPrompt };
 }
 
-/** Each turn of a container run in session `sessionId`, with the harness command for it, given what the harness resolved to. */
-function planTurns({ harness, version, modelId, initialPrompt }: Loaded, sessionId: string, resolved: unknown): PlannedTurn[] {
-  const prompts = promptsOf(initialPrompt);
-  return prompts.map((prompt, turn) => {
-    const paths = turnPaths(turn, prompts.length);
-    const command = harness.cli({ version, modelId, initialPrompt: prompt, ...paths, turn, sessionId, resolved });
-    return { prompt, ...paths, command };
-  });
-}
-
 /**
  * Every container run of execution `executionId` of `testCase`, a test case of `root` (the
  * `.thunderjar/` folder) already checked by `loadTestCase`, with image names starting `imagePrefix`.
@@ -135,6 +103,8 @@ export async function planExecution(
     executionId,
     permutations: hashed.map((permutation, p) => {
       const harnessed = loaded[p] as Loaded;
+      // Baked into the prerun image: the same for each iteration, which reads its session ID as it runs.
+      const turns = scriptTurns(harnessed.harness, harnessed.modelId, harnessed.initialPrompt, permutation.resolved.harnessModel);
       return {
         number: p + 1,
         permutation,
@@ -152,7 +122,7 @@ export async function planExecution(
             number: i + 1,
             postrunImage: postrunImage(executionId, p + 1, i + 1, imagePrefix),
             sessionId,
-            turns: planTurns(harnessed, sessionId, permutation.resolved.harnessModel),
+            turns,
           };
         }),
       };

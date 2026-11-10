@@ -7,6 +7,7 @@
 //   Dockerfile
 //   parameters/<role>/     each folder parameter's files/ folder, at its ctx.dir: see PARAMETER_DIRS.
 //                          Its index.ts, and anything else beside files/, is never copied.
+//   thunderjar/            what Thunderjar bakes in, laid out as under /thunderjar: see runScript.ts.
 import { $ } from "bun";
 import type { BuildOptions } from "../api/declarations.ts";
 import { FILES, PARAMETERS } from "../config/folders.ts";
@@ -15,6 +16,7 @@ import { type HashedPermutation, parsePair } from "../config/permutations.ts";
 import { buildImage, imagesIn } from "../docker/docker.ts";
 import { prerunImage, prerunRepository } from "./images.ts";
 import { type FolderRole, PARAMETER_DIRS } from "./prerunDockerfile.ts";
+import { inContext } from "./runScript.ts";
 
 /** Where each folder parameter of `permutation` is, relative to `.thunderjar/`. */
 const parameterFolders = (permutation: HashedPermutation): Record<FolderRole, string> => ({
@@ -86,6 +88,7 @@ export async function buildPrerunImages(
     try {
       await copyParameters(root, permutation, contextDir);
       await Bun.write(`${contextDir}/Dockerfile`, permutation.dockerfile);
+      for (const [path, contents] of Object.entries(permutation.baked)) await Bun.write(`${contextDir}/${inContext(path)}`, contents);
       await buildImage(contextDir, image, build);
     } finally {
       await $`rm -rf ${contextDir}`.quiet();

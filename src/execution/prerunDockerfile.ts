@@ -6,7 +6,12 @@
 //   code state fragment        gets the codebase into /workspace, e.g. by cloning it at a commit
 //   prompt set fragment        puts its prompt files in /workspace
 //   harness fragment           installs the agent; ctx.version is the harness's version
-//   initial prompt fragment    usually left out: the prompt is used when the harness runs
+//   COPY model.txt             Thunderjar's: the model ID, at /thunderjar/model.txt
+//   initial prompt fragment    usually left out; may set WORKDIR, for where the agent runs
+//   COPY prompts, run script   Thunderjar's: /thunderjar/thunderjar-run.sh, see runScript.ts
+//
+// Thunderjar's own files are in the build context under `thunderjar/`. The run script runs in the
+// image's working directory, so the last WORKDIR of the fragments is where the agent works.
 //
 // The build context is a folder Thunderjar assembles for the image. Each folder parameter's
 // `files/` folder is copied into it at its `ctx.dir`, `PARAMETER_DIRS[role]`, named by role rather
@@ -23,6 +28,7 @@ import type {
   PromptSetDeclaration,
 } from "../api/declarations.ts";
 import { type Problem, problemsError } from "../config/loader.ts";
+import { type BakedFiles, copyModel, copyPromptsAndScript } from "./runScript.ts";
 
 /** The parameters copied into the build context as folders. */
 export type FolderRole = "baseImage" | "codeState" | "promptSet" | "harness";
@@ -114,9 +120,22 @@ export function renderFragment<R extends Role>(
   return result.trim();
 }
 
-/** The prerun Dockerfile of a permutation's fragments, each already rendered, in build order. An empty one adds no line. */
-export function joinFragments(fragments: Record<Role, string>): string {
-  const steps = [fragments.baseImage, "WORKDIR /workspace", fragments.codeState, fragments.promptSet, fragments.harness, fragments.initialPrompt];
+/**
+ * The prerun Dockerfile of a permutation's fragments, each already rendered, in build order, with
+ * the COPYs of Thunderjar's `baked` files. An empty fragment adds no line. Without `baked`, it's
+ * the fragments alone.
+ */
+export function joinFragments(fragments: Record<Role, string>, baked?: BakedFiles): string {
+  const steps = [
+    fragments.baseImage,
+    "WORKDIR /workspace",
+    fragments.codeState,
+    fragments.promptSet,
+    fragments.harness,
+    baked ? copyModel() : "",
+    fragments.initialPrompt,
+    baked ? copyPromptsAndScript(baked) : "",
+  ];
   return `${steps.filter((step) => step !== "").join("\n")}\n`;
 }
 
