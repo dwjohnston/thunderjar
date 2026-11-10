@@ -27,7 +27,7 @@ export async function generate(cwd: string): Promise<string> {
 export function createGenerateCommand(): Command {
   return new Command("generate")
     .description(
-      `Write the names declared under ${FOLDER}/test-case-parameters/ to ${FOLDER}/${GENERATED_PATH}, so a test case that names an undeclared parameter is a type error.`,
+      `Write the names declared under ${FOLDER}/parameters/ to ${FOLDER}/${GENERATED_PATH}, so a test case that names an undeclared parameter is a type error.`,
     )
     .action(
       reportingConfigErrors(async () => {

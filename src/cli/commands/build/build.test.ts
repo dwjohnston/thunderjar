@@ -249,7 +249,7 @@ describe("0402 broken declarations", () => {
 
       expect(stdout).toBe("");
       expect(stderr).toBe(
-        "Error: .thunderjar/test-case-parameters/promptSets/trespasser/index.ts: applyParameter: uses another parameter's folder in the build context: the harness's, parameters/harness. A fragment can only use its own files/, through ctx.dir.\n",
+        "Error: .thunderjar/parameters/promptSets/trespasser/index.ts: applyParameter: uses another parameter's folder in the build context: the harness's, parameters/harness. A fragment can only use its own files/, through ctx.dir.\n",
       );
       expect(exitCode).toBe(1);
     }

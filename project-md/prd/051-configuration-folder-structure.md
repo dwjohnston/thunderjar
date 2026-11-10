@@ -15,7 +15,7 @@ my-app/
     ├── thunderjar.config.ts               # global config: stores, image store, build secrets
     ├── test-cases/
     │   └── is-prime-baseline.ts           # declareTestCase(...)
-    ├── test-case-parameters/
+    ├── parameters/
     │   ├── baseImages/
     │   │   └── node20/
     │   │       └── index.ts               # declareBaseImage(...)
@@ -54,7 +54,7 @@ my-app/
 
 - **The user's own files stay where they are.** A code state clones the project's
   repository, or any other, at a pinned commit, in its own `RUN`.
-- **One folder per parameter**, under `test-case-parameters/<kind>/<name>/`. The folder
+- **One folder per parameter**, under `parameters/<kind>/<name>/`. The folder
   name is the parameter's name. Its hash is of what it outputs, not of the folder: see
   [060](060-experiment-parameters.md#hashing). Its `index.ts` may import from anywhere,
   e.g. a helper shared by several parameters.
@@ -71,7 +71,7 @@ my-app/
 - **One file per measurement, named by its file.** `isPrimeTsExists.ts` is the
   measurement `isPrimeTsExists`. Supporting files, like a `templateTest` template, sit
   alongside.
-- **Test cases live outside `test-case-parameters/`.** A test case isn't a parameter;
+- **Test cases live outside `parameters/`.** A test case isn't a parameter;
   it's a matrix over them.
 - **Generated types live in `_generated/`.** They are built from the folder names above
   and git-ignored — see

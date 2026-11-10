@@ -10,7 +10,7 @@ are common to all of them — see [060-experiment-parameters.md](060-experiment-
 
 ## Declaration
 
-A harness is a folder, `test-case-parameters/harnessModels/<harness>/`, with one `index.ts`,
+A harness is a folder, `parameters/harnessModels/<harness>/`, with one `index.ts`,
 and optionally a `files/` folder for its fragment to copy in. The folder pins one version:
 name it after the version, and copy it to try another. A test case names a pair as
 `<harness>/<model ID>`, e.g. `claude-code-2.1.311/claude-haiku-5-5`.
@@ -18,7 +18,7 @@ name it after the version, and copy it to try another. A test case names a pair 
 For Claude Code, the library has the whole declaration:
 
 ```ts
-// test-case-parameters/harnessModels/claude-code-2.1.311/index.ts
+// parameters/harnessModels/claude-code-2.1.311/index.ts
 import { claudeCode } from "thunderjar";
 
 export default claudeCode({ version: "2.1.311" });
@@ -33,7 +33,7 @@ command that runs it.
 Any other agent is declared in full:
 
 ```ts
-// test-case-parameters/harnessModels/opencode-1.19.5/index.ts
+// parameters/harnessModels/opencode-1.19.5/index.ts
 import { declareHarness } from "thunderjar";
 
 export default declareHarness({

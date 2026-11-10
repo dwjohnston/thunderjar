@@ -78,7 +78,7 @@ applyParameter?(config: C, ctx: Ctx & { resolved: R }): string;
 ```
 
 ```ts
-// test-case-parameters/codeStates/follow-main/index.ts
+// parameters/codeStates/follow-main/index.ts
 export default declareCodeState({
   config: { repo: "https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git", branch: "main" },
   resolve: async (config, ctx) =>
@@ -193,7 +193,7 @@ The image a permutation's prerun image is built `FROM`. Detail:
 [061-base-image.md](061-base-image.md).
 
 ```ts
-// test-case-parameters/baseImages/node20/index.ts
+// parameters/baseImages/node20/index.ts
 export default declareBaseImage({
   applyParameter: () => `FROM node:20-bookworm`,
 });
@@ -205,7 +205,7 @@ The codebase applied on top of the base image: a repository cloned at a pinned c
 any setup it needs. Detail: [062-code-state.md](062-code-state.md).
 
 ```ts
-// test-case-parameters/codeStates/baseline/index.ts
+// parameters/codeStates/baseline/index.ts
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar-evaluation-sandbox.git",
@@ -224,7 +224,7 @@ A named, reusable action that overlays prompt files (`CLAUDE.md`, skills, rules)
 the worktree before the harness runs. Detail: [063-prompt-set.md](063-prompt-set.md).
 
 ```ts
-// test-case-parameters/promptSets/house-style/index.ts — its files are in house-style/files/
+// parameters/promptSets/house-style/index.ts — its files are in house-style/files/
 export default declarePromptSet({
   applyParameter: (_config, ctx) => `COPY ${ctx.dir}/ /workspace/`,
 });
@@ -238,12 +238,12 @@ test case names it with a model ID, `<harness>/<model ID>`. Detail:
 [064-harness.md](064-harness.md) and [004](004-addressing-harness-model-pair.md).
 
 ```ts
-// test-case-parameters/harnessModels/claude-code-2.1.311/index.ts
+// parameters/harnessModels/claude-code-2.1.311/index.ts
 export default claudeCode({ version: "2.1.311" });
 ```
 
 ```ts
-// test-case-parameters/harnessModels/opencode-1.19.5/index.ts
+// parameters/harnessModels/opencode-1.19.5/index.ts
 export default declareHarness({
   version: "1.19.5",
 
@@ -268,7 +268,7 @@ of a task, and the task's measurements live in a `measurements/` folder beside i
 initial prompts, in no parameter hash. Detail: [066-task.md](066-task.md).
 
 ```ts
-// test-case-parameters/tasks/is-prime/initial-prompts/plain.ts
+// parameters/tasks/is-prime/initial-prompts/plain.ts
 export default declareInitialPrompt({
   prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
   timeoutSeconds: 600,

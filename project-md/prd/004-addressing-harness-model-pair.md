@@ -56,7 +56,7 @@ A harness is one folder with one `index.ts`, and the folder pins one version of 
 pair is that folder, then the model ID the agent is given: `<harness>/<model ID>`.
 
 ```
-test-case-parameters/harnessModels/
+parameters/harnessModels/
   claude-code-2.1.311/
     index.ts      # export default claudeCode({ version: "2.1.311" })
   opencode-1.19.5/

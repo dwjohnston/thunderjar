@@ -40,7 +40,7 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("build, against real Docker", 
 
   test("a fragment can COPY files from its parameter's files/ folder, ctx.dir, with symlinks followed", async () => {
     await using copy = await copyScenarioProject("0201");
-    const snerk = `${copy.dir}/.thunderjar/test-case-parameters/promptSets/snerk`;
+    const snerk = `${copy.dir}/.thunderjar/parameters/promptSets/snerk`;
     await Bun.write(`${copy.dir}/shared/AGENTS.md`, "# Snerk\n");
     await $`mkdir -p ${snerk}/files && ln -s ../../../../../shared/AGENTS.md ${snerk}/files/AGENTS.md`.quiet();
     await Bun.write(
@@ -64,7 +64,7 @@ export default declarePromptSet({
   test("a failed build is an error with Docker's reason", async () => {
     await using copy = await copyScenarioProject("0201");
     await Bun.write(
-      `${copy.dir}/.thunderjar/test-case-parameters/promptSets/snerk/index.ts`,
+      `${copy.dir}/.thunderjar/parameters/promptSets/snerk/index.ts`,
       `import { declarePromptSet } from "thunderjar";
 
 export default declarePromptSet({ applyParameter: () => "RUN exit 3" });
