@@ -11,7 +11,7 @@ import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, Ru
 import { type Paint, padEnd, painter, plain, printError, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { agentEnd, dollars, showResolved, endedCleanly, knownCost, minute, paintStatus, plural, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, duration, showResolved, endedCleanly, knownCost, minute, paintStatus, plural, thousands, totalTokens } from "../../format.ts";
 
 const GAP = "   ";
 
@@ -54,12 +54,6 @@ function showOutcome(outcome: RecordedOutcome | undefined, paint: Paint): string
   if (outcome.outcome === "skipped") return paint.yellow(`skipped${outcome.reason === undefined ? "" : `  (${outcome.reason})`}`);
   if (outcome.outcome === "erroredWhileMeasuring") return paint.red(`errored while measuring  (${outcome.error.message})`);
   return showValue(outcome.data, undefined, paint);
-}
-
-/** `ms` as minutes and seconds, e.g. `0:31`. */
-function duration(ms: number): string {
-  const seconds = Math.round(ms / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 /** A container run's name in its execution: `<permutation>-<iteration>`, as its record's file is named. */

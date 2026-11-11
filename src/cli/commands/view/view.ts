@@ -2,13 +2,17 @@
 // JSON API from the store, and serves a client-rendered React app that reads it. The store is
 // read afresh on each request, so a reload shows runs recorded since the page opened.
 import { Command, Option } from "commander";
-import { type RunDataStore, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type ExecutionRecord, type RunDataStore, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { painter } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
+import { type RunTotals, runTotals } from "../../format.ts";
 import { dataDirOption, openStore } from "../../dataDir.ts";
 import app from "./app/index.html";
 
 export const DEFAULT_PORT = 4300;
+
+/** An execution as the list shows it: its record, and its container runs' tokens and cost. */
+export type ExecutionSummary = ExecutionRecord & { totals: RunTotals };
 
 /** What `read` returns, as JSON: a Response as it is, or the store's error as a 500. */
 async function json(read: () => Promise<unknown>): Promise<Response> {
@@ -25,7 +29,7 @@ async function json(read: () => Promise<unknown>): Promise<Response> {
  * Serves the viewer of `store` on `port`, 0 for any free one.
  *
  *   GET /                                       the app
- *   GET /api/executions                         every ExecutionRecord, newest first
+ *   GET /api/executions                         every ExecutionSummary, newest first
  *   GET /api/executions/:id                     { execution, containerRuns }, or a 404
  */
 export function startViewServer(store: RunDataStore, port: number) {
@@ -34,7 +38,13 @@ export function startViewServer(store: RunDataStore, port: number) {
     development: false,
     routes: {
       "/": app,
-      "/api/executions": () => json(() => store.listExecutions()),
+      "/api/executions": () =>
+        json(async () => {
+          const executions = await store.listExecutions();
+          return Promise.all(
+            executions.map(async (e): Promise<ExecutionSummary> => ({ ...e, totals: runTotals(await store.containerRunsOf(e.executionId)) })),
+          );
+        }),
       "/api/executions/:id": (req) =>
         json(async () => {
           const { id } = req.params;
