@@ -113,15 +113,15 @@ if (import.meta.main) {
   const args = recorded[0] === "--context" ? recorded.slice(2) : recorded;
   const dir = Bun.env.FAKE_DOCKER_DIR;
   const state = (name: string) => Bun.file(`${dir}/${name}`);
+  // Appended to, never rewritten, so containers running at once don't lose each other's lines.
+  const append = (name: string, line: string) => $`sh -c ${'cat >> "$0"'} ${`${dir}/${name}`} < ${new Response(`${line}\n`)}`.quiet();
   const fail = (message: string): never => {
     console.error(message);
     process.exit(1);
   };
 
   if (dir) {
-    const commands = state("commands");
-    const before = (await commands.exists()) ? await commands.text() : "";
-    await Bun.write(commands, `${before}docker ${recorded.join(" ").replaceAll("\n", "\\n")}\n`);
+    await append("commands", `docker ${recorded.join(" ").replaceAll("\n", "\\n")}`);
   }
   if (dir && (await state("unreachable").exists())) {
     fail("Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?");
@@ -184,7 +184,7 @@ if (import.meta.main) {
     }
     if (dir) {
       await $`mkdir -p ${dir}/contexts/${image} && cp -R ${context}/. ${dir}/contexts/${image}`.quiet();
-      await Bun.write(state("images"), lines([...(await list("images")), image]));
+      await append("images", image);
     }
   } else if (command === "run" && parseRun(args.slice(1))) {
     // docker run [--detach] --name <name> --pull never [-e <NAME>]… [<option>]… --entrypoint sh <image> -c <script>
@@ -242,7 +242,7 @@ if (import.meta.main) {
     if (!dir || !(await state(`containers/${name}/image`).exists())) fail(`Error response from daemon: No such container: ${name}`);
     if ((await list("failing")).includes(image)) fail(`Error response from daemon: failed to commit ${name} as ${image}`);
     await $`mkdir -p ${filesystemOf(image)} && cp -R ${dir}/containers/${name}/root/. ${filesystemOf(image)}`.quiet();
-    await Bun.write(state("images"), lines([...(await list("images")), image]));
+    await append("images", image);
   } else if (command === "kill" && rest.length === 0) {
     // docker kill <name>
     const pidFile = state(`containers/${subcommand}/pid`);
@@ -263,7 +263,7 @@ if (import.meta.main) {
     // docker tag <image> <reference>
     const images = await list("images");
     if (!images.includes(subcommand as string)) fail(`Error response from daemon: No such image: ${subcommand}`);
-    if (dir && !images.includes(rest[0] as string)) await Bun.write(state("images"), lines([...images, rest[0] as string]));
+    if (dir && !images.includes(rest[0] as string)) await append("images", rest[0] as string);
   } else if (command === "push" && subcommand === "--quiet" && rest.length === 1) {
     // docker push --quiet <reference>
     const reference = rest[0] as string;
@@ -272,7 +272,7 @@ if (import.meta.main) {
     if (!(await list("logins")).includes(host) || (await list("failing")).includes(reference)) {
       fail("denied: permission_denied: The token provided does not match expected scopes.");
     }
-    if (dir) await Bun.write(state("pushed"), lines([...(await list("pushed")), reference]));
+    if (dir) await append("pushed", reference);
     console.log(reference);
   } else if (command === "pull" && subcommand === "--quiet" && rest.length === 1) {
     // docker pull --quiet <reference>

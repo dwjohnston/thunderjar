@@ -130,6 +130,7 @@ export default declareConfig({
     const env = Bun.env.THUNDERJAR_DOCKER;
     expect((await loadProjectConfig(await findThunderjarRoot(scenario("0211")))).runtime).toEqual({
       command: [env ?? "docker", "--context", "cloud"],
+      concurrency: 1,
     });
   });
 
@@ -160,6 +161,11 @@ describe("runtimeProblem", () => {
   test("no runtime, or a command with an image store, is fine", () => {
     expect(runtimeProblem(undefined, null)).toBeUndefined();
     expect(runtimeProblem({ command: ["docker", "--context", "cloud"] }, STORE)).toBeUndefined();
+    expect(runtimeProblem({ command: ["docker"], concurrency: 4 }, STORE)).toBeUndefined();
+  });
+
+  test.each([[0], [-1], [1.5], ["4"], [null]])("concurrency %p is not a number of containers", (concurrency) => {
+    expect(runtimeProblem({ command: ["docker"], concurrency }, STORE)).toBe(`concurrency must be a whole number, 1 or more, got ${JSON.stringify(concurrency)}`);
   });
 
   test.each([[null], ["docker"], [{}], [{ command: [] }], [{ command: "docker" }], [{ command: ["docker", ""] }], [{ command: [1] }]])(

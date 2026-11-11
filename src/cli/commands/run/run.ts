@@ -1,13 +1,13 @@
-import { Command } from "commander";
+import { Command, InvalidArgumentError, Option } from "commander";
 import type { TestCaseDeclaration } from "../../../api/declarations.ts";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { AXES, parsePair } from "../../../config/permutations.ts";
-import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
+import { checkBuildSecrets, isConcurrency, loadProjectConfig } from "../../../config/projectConfig.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerBuildError, DockerContainerError, DockerPullError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
-import { type PlannedExecution, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
+import { type PlannedExecution, type PlannedIteration, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
 import { runExecution } from "../../../execution/runExecution.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
@@ -114,12 +114,17 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  * image once its container run is recorded, writing `Pushing <reference> ... done`. Exits 1 if
  * any agent exits non-zero or times out, or with an error if Docker fails, or, before anything is
  * built, if a variable a harness needs is unset or Docker has no login for the image store.
+ *
+ * Runs `concurrency` containers at once, or the runtime's, or one at a time. With more than one,
+ * each line is written whole, starting with its iteration, as they finish in any order.
  */
-async function run(cwd: string, name: string, imagePrefix: string, dataDir?: string, local = false): Promise<void> {
+async function run(cwd: string, name: string, imagePrefix: string, dataDir?: string, local = false, concurrencyOption?: number): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const config = await loadProjectConfig(root);
   const { imageStore, build } = config;
   const runtime = local ? null : config.runtime;
+  const concurrency = concurrencyOption ?? runtime?.concurrency ?? 1;
+  const concurrent = concurrency > 1;
   const testCase = await loadTestCase(root, name);
   await checkRequiredEnv(root, testCase);
   checkBuildSecrets(build);
@@ -149,6 +154,11 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
 
   console.log(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
   if (runtime !== null) console.log(paint.dim(`Running containers with \`${runtime.command.join(" ")}\``));
+  if (concurrent) console.log(paint.dim(`Up to ${concurrency} containers at once`));
+  // With several at once: what starts each iteration's lines, and its postrun image's.
+  const heads = new Map<string, string>();
+  const headOf = (permutation: PlannedPermutation, iteration: PlannedIteration) =>
+    ` ${paint.bold(ordinal(permutation.number, permutations))}  iteration ${paint.bold(ordinal(iteration.number, testCase.iterations))}  ${paint.magenta(label(testCase, permutation))}`;
   let building: string | undefined;
   let pushing: string | undefined;
   let pulling: string | undefined;
@@ -171,7 +181,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
     line = undefined;
   };
   try {
-    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime }, store, {
+    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
       onBuilding: (image) => {
         building = image;
         open(`Building ${paint.cyan(image)} ${ellipsis} `);
@@ -180,12 +190,16 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
         building = undefined;
         close(done);
       },
-      onPushing: (_image, reference) => {
+      onPushing: (image, reference) => {
         pushing = reference;
+        if (concurrent && heads.has(image)) return;
         open(`${running ? underIteration : ""}Pushing ${paint.cyan(reference)} ${ellipsis} `);
       },
-      onPushed: () => {
-        pushing = undefined;
+      onPushed: (image, reference) => {
+        // With several at once, another push may have started since: it's the one that can fail.
+        if (pushing === reference) pushing = undefined;
+        const head = heads.get(image);
+        if (concurrent && head !== undefined) return console.log(`${head}  pushed ${paint.cyan(reference)}`);
         close(done);
       },
       onPulling: (reference) => {
@@ -198,23 +212,29 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
       },
       onRunning: (permutation, iteration) => {
         running = true;
-        open(
-          ` ${paint.bold(ordinal(permutation.number, permutations))}  iteration ${paint.bold(ordinal(iteration.number, testCase.iterations))}  ${paint.magenta(label(testCase, permutation))}  ${ellipsis} `,
-        );
+        if (concurrent) {
+          heads.set(iteration.postrunImage, headOf(permutation, iteration));
+          return console.log(`${headOf(permutation, iteration)}  started`);
+        }
+        open(`${headOf(permutation, iteration)}  ${ellipsis} `);
       },
-      onRan: (_permutation, _iteration, { execution, harnessResult, tokenCosts }) => {
+      onRan: (permutation, iteration, { execution, harnessResult, tokenCosts }) => {
         const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
         // Its cost if it can be trusted, else its tokens, if it has either.
         const cost = knownCost(tokenCosts);
         const tokens = totalTokens(tokenCosts);
         const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
-        close(execution.timedOut ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`);
+        const outcome = execution.timedOut ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`;
+        if (concurrent) return console.log(`${headOf(permutation, iteration)}  ${outcome}`);
+        close(outcome);
       },
       onMeasuring: (permutation) => {
+        if (concurrent) return;
         // Shown only on a terminal, and only until the measures replace it.
         open(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${paint.dim("Measuring ...")} `, true);
       },
-      onMeasured: (permutation, _iteration, result) => {
+      onMeasured: (permutation, iteration, result) => {
+        if (concurrent) return console.log(`${headOf(permutation, iteration)}  ${showMeasures(result, paint)}`);
         // Under the iteration, lined up with it.
         close(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
       },
@@ -227,6 +247,8 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
     } else if (caught instanceof DockerBuildError) {
       fail();
       error(`Building ${building} failed: ${caught.message}`);
+    } else if (caught instanceof DockerContainerError && concurrent) {
+      error(`Running or measuring a container failed: ${caught.message}`);
     } else if (caught instanceof DockerPushError) {
       fail();
       error(pushFailure(pushing as string, caught));
@@ -253,7 +275,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
 export function createRunCommand(): Command {
   return new Command("run")
     .description(
-      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, runs the containers there, from the image store, unless --local is given.",
+      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(
@@ -261,12 +283,19 @@ export function createRunCommand(): Command {
       "print the images, environment variables, prompts and harness commands the execution would use, without running anything",
     )
     .option("--local", "run containers on the local Docker daemon, even if thunderjar.config.ts gives a runtime")
+    .addOption(
+      new Option("--concurrency <n>", "run up to <n> containers at once, instead of the runtime's concurrency, or one at a time").argParser((value: string) => {
+        const n = Number(value);
+        if (!/^\d+$/.test(value) || !isConcurrency(n)) throw new InvalidArgumentError("It must be a whole number, 1 or more.");
+        return n;
+      }),
+    )
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())
     .action(
-      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; local?: boolean; imagePrefix: string; dataDir?: string }) => {
+      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; local?: boolean; concurrency?: number; imagePrefix: string; dataDir?: string }) => {
         if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix));
-        else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local);
+        else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency);
       }),
     );
 }

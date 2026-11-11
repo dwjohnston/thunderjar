@@ -372,7 +372,15 @@ export type BuildOptions = {
  * `imageStore` must be set, and the runtime must be able to pull from it, and push to it: its
  * registry login is set up on the runtime, not by Thunderjar. `thunderjar doctor` checks it.
  */
-export type RuntimeConfig = { command: string[] };
+export type RuntimeConfig = {
+  command: string[];
+  /**
+   * How many containers run on it at once: 1, one after another, by default. Each is an agent,
+   * with its builds and tests, so set it to what the runtime's CPU and memory can take.
+   * `run --concurrency` overrides it, and `run --local` doesn't use it.
+   */
+  concurrency?: number;
+};
 
 export type ConfigDeclaration = {
   /**
