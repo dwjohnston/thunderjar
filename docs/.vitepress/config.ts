@@ -12,6 +12,10 @@ const commands = createProgram().commands;
 export default defineConfig({
   title: "Thunderjar",
   base: "/thunderjar/",
+  // The base differs per docs version, so the icon's path is built from it.
+  transformHead: ({ siteConfig }) => [
+    ["link", { rel: "icon", type: "image/svg+xml", href: `${siteConfig.site.base}favicon.svg` }],
+  ],
   // Dark by default, with the light/dark toggle in the nav.
   appearance: "dark",
   themeConfig: {

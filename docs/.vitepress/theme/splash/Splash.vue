@@ -143,8 +143,6 @@ const columns = ["wroteTest", "caughtBug", "tsIgnore", "cost"] as const;
 .splash {
   position: relative;
   overflow: hidden;
-  margin-top: calc(var(--vp-nav-height) * -1);
-  padding-top: var(--vp-nav-height);
   background: radial-gradient(1200px 520px at 80% 0%, var(--bg-hi) 0%, var(--bg) 62%);
   color: var(--text);
 }
