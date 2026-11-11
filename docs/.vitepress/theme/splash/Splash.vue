@@ -78,7 +78,7 @@ const columns = ["wroteTest", "caughtBug", "tsIgnore", "cost"] as const;
                   <th>Model</th>
                   <th class="num">Wrote a test</th>
                   <th class="num">Caught the gnarly bug</th>
-                  <th class="num">@ts-ignore</th>
+                  <th class="num">@ts&#8209;ignore</th>
                   <th class="num">Cost</th>
                 </tr>
               </thead>
@@ -278,6 +278,14 @@ th,
 td {
   padding: 8px 9px;
   text-align: left;
+}
+
+/* Long headers wrap so the table fits its card; cell values stay on one line. */
+th {
+  vertical-align: bottom;
+}
+
+td {
   white-space: nowrap;
 }
 
@@ -309,6 +317,7 @@ td {
 
 .cta-row {
   padding: 44px 0 72px;
+  text-align: center;
 }
 
 .cta {
@@ -328,7 +337,7 @@ td {
   box-shadow: 0 6px 46px rgba(var(--accent-rgb), 0.7);
 }
 
-@media (max-width: 880px) {
+@media (max-width: 1000px) {
   .wrap {
     padding: 0 20px;
   }
@@ -352,6 +361,29 @@ td {
   .arrow {
     justify-self: center;
     transform: rotate(90deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: 12px;
+  }
+
+  pre {
+    font-size: 11.5px;
+  }
+
+  table {
+    font-size: 12px;
+  }
+
+  th,
+  td {
+    padding: 6px 4px;
+  }
+
+  th {
+    font-size: 11px;
   }
 }
 </style>
