@@ -15,6 +15,7 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath } from "../../dataDir.ts";
 import { agentEnd, dollars, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { print, printError } from "../../output.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
 const FIELD_INDENT = "    ";
@@ -116,9 +117,9 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
     await checkImageStore(imageStore);
   } catch (error) {
     if (error instanceof ImageStoreLoginError) {
-      console.error(`Error: ${error.message}`);
+      printError(`Error: ${error.message}`);
     } else if (error instanceof DockerUnavailableError) {
-      console.error(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
+      printError(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
     } else {
       throw error;
     }
@@ -131,7 +132,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   // Where a postrun image's push line goes: under its iteration, lined up with it, like its measures.
   const underIteration = " ".repeat(ordinal(permutations, permutations).length + 3);
 
-  console.log(`Execution ${plan.executionId}`);
+  print(`Execution ${plan.executionId}`);
   let building: string | undefined;
   let pushing: string | undefined;
   // Whether a container run has started, so a push is of a postrun image.
@@ -148,7 +149,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
       onBuilt: () => {
         building = undefined;
         lineOpen = false;
-        console.log("done");
+        print("done");
       },
       onPushing: (_image, reference) => {
         pushing = reference;
@@ -158,7 +159,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
       onPushed: () => {
         pushing = undefined;
         lineOpen = false;
-        console.log("done");
+        print("done");
       },
       onRunning: (permutation, iteration) => {
         running = true;
@@ -174,29 +175,29 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
         const cost = knownCost(tokenCosts);
         const tokens = totalTokens(tokenCosts);
         const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
-        console.log(execution.timedOut ? ended : `${ended} (${duration(execution.finishedAt - execution.startedAt)}${spent})`);
+        print(execution.timedOut ? ended : `${ended} (${duration(execution.finishedAt - execution.startedAt)}${spent})`);
       },
       onMeasured: (permutation, _iteration, result) => {
         // Under the iteration, lined up with it.
-        console.log(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result)}`);
+        print(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result)}`);
       },
     });
-    console.log(`Wrote ${displayPath(cwd, executionFolder(store, plan.executionId))}/`);
+    print(`Wrote ${displayPath(cwd, executionFolder(store, plan.executionId))}/`);
     if (record.status === "failed") process.exitCode = 1;
   } catch (error) {
     if (error instanceof DockerUnavailableError) {
-      console.error(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
+      printError(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
     } else if (error instanceof DockerBuildError) {
-      console.log("failed");
-      console.error(`Error: Building ${building} failed: ${error.message}`);
+      print("failed");
+      printError(`Error: Building ${building} failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
-      console.log("failed");
-      console.error(`Error: ${pushFailure(pushing as string, error)}`);
+      print("failed");
+      printError(`Error: ${pushFailure(pushing as string, error)}`);
     } else if (error instanceof DockerContainerError && lineOpen) {
-      console.log("failed");
-      console.error(`Error: Running a container failed: ${error.message}`);
+      print("failed");
+      printError(`Error: Running a container failed: ${error.message}`);
     } else if (error instanceof DockerContainerError) {
-      console.error(`Error: Measuring a container run failed: ${error.message}`);
+      printError(`Error: Measuring a container run failed: ${error.message}`);
     } else {
       throw error;
     }
@@ -218,7 +219,7 @@ export function createRunCommand(): Command {
     .addOption(dataDirOption())
     .action(
       reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string; dataDir?: string }) => {
-        if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix));
+        if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix));
         else await run(process.cwd(), name, options.imagePrefix, options.dataDir);
       }),
     );

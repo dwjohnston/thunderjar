@@ -1,6 +1,7 @@
 import { $ } from "bun";
 import { Command } from "commander";
 import { type Repository, scaffold } from "./scaffold.ts";
+import { print } from "../../output.ts";
 
 const FOLDER = ".thunderjar";
 
@@ -67,8 +68,8 @@ export function createInitCommand(): Command {
     )
     .action(async () => {
       const { createdFolder, created, existing } = await init(process.cwd());
-      if (createdFolder) console.log(`Created ${FOLDER}/`);
-      for (const path of created) console.log(`Created ${FOLDER}/${path}`);
-      for (const path of existing) console.log(`Exists  ${FOLDER}/${path}`);
+      if (createdFolder) print(`Created ${FOLDER}/`);
+      for (const path of created) print(`Created ${FOLDER}/${path}`);
+      for (const path of existing) print(`Exists  ${FOLDER}/${path}`);
     });
 }

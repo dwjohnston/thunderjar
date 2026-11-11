@@ -25,6 +25,7 @@ Thunderjar is a TypeScript/Bun CLI for
       - `<command>/`
         - `<command>.ts`
         - `<command>.test.ts`  
+  - `log/`: the diagnostic logger (pino).
   - `config/`: finds a project's `.thunderjar/` folder and loads its declarations.
   - `testing/`: the fixture harness that tests use to run the CLI in a scenario.
 - `docs/`: the VitePress docs site.
@@ -96,6 +97,25 @@ await $`git status --short`;
 import { execSync } from "node:child_process";
 execSync("git status --short");
 ```
+
+## Output and logging
+
+Never use `console` in `src/`. The `no-console` lint rule bans it.
+
+- A command's output, what the user reads, goes through `src/cli/output.ts`: `print` for stdout, `printError` for stderr. Tests assert on it.
+- Diagnostics go through the pino logger in `src/log/logger.ts`. Take one per module with `moduleLogger("<module>")`. It writes JSON lines to stderr, and is silent unless `--log-level` or `THUNDERJAR_LOG_LEVEL` asks for a level.
+
+```ts
+// ✅ Do
+const log = moduleLogger("docker");
+log.debug({ args, exitCode, stderr }, "docker failed");
+print(`${built.length} built`);
+
+// ❌ Don't
+console.log(`docker failed: ${stderr}`);
+```
+
+**Why:** stdout is the command's output, which users and tests read, so it stays plain text. The log can say far more, e.g. Docker's whole error, where the output shows only its last line, without cluttering it.
 
 ## Versioning while in 0.x
 

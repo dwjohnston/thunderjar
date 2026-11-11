@@ -16,6 +16,7 @@ import { prerunImage, prerunRepository } from "../../../execution/images.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { showResolved } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { print, printError } from "../../output.ts";
 
 /** Whether a permutation's prerun image exists: `unknown` when Docker can't be asked. */
 export type ImageStatus = "built" | "missing" | "unknown";
@@ -112,8 +113,8 @@ export function createPlanCommand(): Command {
     .action(
       reportingConfigErrors(async (name: string, options: { imagePrefix: string }) => {
         const { output, warning } = await plan(process.cwd(), name, options.imagePrefix);
-        console.log(output);
-        if (warning) console.error(warning);
+        print(output);
+        if (warning) printError(warning);
       }),
     );
 }

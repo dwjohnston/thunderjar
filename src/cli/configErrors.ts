@@ -1,4 +1,5 @@
 import { ConfigError } from "../config/loader.ts";
+import { printError } from "./output.ts";
 
 /**
  * `action`, but a ConfigError it throws is printed as `Error: <problem>` lines on stderr, with
@@ -12,7 +13,7 @@ export function reportingConfigErrors<Args extends unknown[]>(
       await action(...args);
     } catch (error) {
       if (!(error instanceof ConfigError)) throw error;
-      for (const problem of error.problems) console.error(`Error: ${problem}`);
+      for (const problem of error.problems) printError(`Error: ${problem}`);
       process.exitCode = 1;
     }
   };

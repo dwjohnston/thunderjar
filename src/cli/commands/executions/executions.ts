@@ -4,6 +4,7 @@ import { type ExecutionRecord, fileStore, RunDataStoreError } from "../../../sto
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath, resolvePath } from "../../dataDir.ts";
 import { minute, plural } from "../../format.ts";
+import { print, printError } from "../../output.ts";
 
 /** One line per execution, in the order given: its ID, test case, when it started, its matrix and its status, in aligned columns. */
 export function renderExecutions(executions: ExecutionRecord[]): string {
@@ -28,15 +29,15 @@ async function executions(cwd: string, testCase?: string, dataDir?: string): Pro
     listed = await fileStore(store).listExecutions();
   } catch (error) {
     if (!(error instanceof RunDataStoreError)) throw error;
-    console.error(`Error: Can't read ${displayPath(cwd, error.path)}: ${error.message}`);
+    printError(`Error: Can't read ${displayPath(cwd, error.path)}: ${error.message}`);
     process.exitCode = 1;
     return;
   }
   if (testCase !== undefined) listed = listed.filter((execution) => execution.testCase === testCase);
   if (listed.length === 0) {
-    console.log(testCase === undefined ? "No executions recorded." : `No executions of ${testCase} recorded.`);
+    print(testCase === undefined ? "No executions recorded." : `No executions of ${testCase} recorded.`);
   } else {
-    console.log(renderExecutions(listed));
+    print(renderExecutions(listed));
   }
 }
 

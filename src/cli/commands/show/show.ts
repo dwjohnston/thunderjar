@@ -11,6 +11,7 @@ import { type ContainerRunRecord, type ExecutionRecord, fileStore, type Recorded
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath, resolvePath } from "../../dataDir.ts";
 import { agentEnd, dollars, showResolved, endedCleanly, knownCost, minute, plural, thousands, totalTokens } from "../../format.ts";
+import { print, printError } from "../../output.ts";
 
 const GAP = "   ";
 
@@ -254,7 +255,7 @@ export function renderContainerRun(record: ContainerRunRecord): string {
 
 /** Prints `message` as an error, with exit code 1. */
 function fail(message: string): void {
-  console.error(`Error: ${message}`);
+  printError(`Error: ${message}`);
   process.exitCode = 1;
 }
 
@@ -278,12 +279,12 @@ async function show(cwd: string, executionId: string, containerRun?: string, dat
   }
 
   if (containerRun === undefined) {
-    console.log(renderExecution(execution, runs, await loadMeasurements(root!, execution.task)));
+    print(renderExecution(execution, runs, await loadMeasurements(root!, execution.task)));
     return;
   }
   const record = runs.find((run) => runName(run) === containerRun || run.postrunImage === containerRun);
   if (!record) return fail(`Execution ${executionId} has no container run ${containerRun}.`);
-  console.log(renderContainerRun(record));
+  print(renderContainerRun(record));
 }
 
 export function createShowCommand(): Command {

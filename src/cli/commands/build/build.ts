@@ -10,6 +10,7 @@ import { hashPermutations } from "../../../execution/hashPermutations.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { pushFailure } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { print, printError } from "../../output.ts";
 
 /**
  * Each prerun image test case `name` needs, of the nearest `.thunderjar/` folder in `cwd` or above
@@ -48,7 +49,7 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
       },
       onBuilt: () => {
         building = undefined;
-        console.log("done");
+        print("done");
       },
     }, buildOptions);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
@@ -58,21 +59,21 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
       },
       onPushed: () => {
         pushing = undefined;
-        console.log("done");
+        print("done");
       },
     });
-    console.log(`${built.length} built, ${present.length} already present${imageStore ? `, ${pushed.length} pushed` : ""}`);
+    print(`${built.length} built, ${present.length} already present${imageStore ? `, ${pushed.length} pushed` : ""}`);
   } catch (error) {
     if (error instanceof DockerUnavailableError) {
-      console.error(`Error: Docker can't be reached, so no image can be built: ${error.message}`);
+      printError(`Error: Docker can't be reached, so no image can be built: ${error.message}`);
     } else if (error instanceof ImageStoreLoginError) {
-      console.error(`Error: ${error.message}`);
+      printError(`Error: ${error.message}`);
     } else if (error instanceof DockerBuildError) {
-      console.log("failed");
-      console.error(`Error: Building ${building} failed: ${error.message}`);
+      print("failed");
+      printError(`Error: Building ${building} failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
-      console.log("failed");
-      console.error(`Error: ${pushFailure(pushing as string, error)}`);
+      print("failed");
+      printError(`Error: ${pushFailure(pushing as string, error)}`);
     } else {
       throw error;
     }
@@ -90,7 +91,7 @@ export function createBuildCommand(): Command {
     .addOption(imagePrefixOption())
     .action(
       reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string }) => {
-        if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix));
+        if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix));
         else await build(process.cwd(), name, options.imagePrefix);
       }),
     );

@@ -7,6 +7,7 @@ import { type RunDataStore, fileStore, RunDataStoreError } from "../../../store/
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, resolvePath } from "../../dataDir.ts";
 import app from "./app/index.html";
+import { print } from "../../output.ts";
 
 export const DEFAULT_PORT = 4300;
 
@@ -54,8 +55,8 @@ async function view(cwd: string, port: number, dataDir?: string): Promise<void> 
   // the bundle, on every request. So serve from the bundle's folder. The store's path is absolute.
   process.chdir(import.meta.dir);
   const server = startViewServer(fileStore(store), port);
-  console.log(`Viewing ${store}`);
-  console.log(`Open ${server.url}`);
+  print(`Viewing ${store}`);
+  print(`Open ${server.url}`);
 }
 
 export function createViewCommand(): Command {

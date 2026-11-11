@@ -7,6 +7,7 @@
 // recorded and measured, and the rest still run, but the execution is `failed`.
 import type { BuildOptions, ImageStore, Reply, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
 import { loadMeasurements } from "../config/measurements.ts";
+import { moduleLogger } from "../log/logger.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
 import type {
   ContainerRunRecord,
@@ -25,6 +26,8 @@ import { collectReply } from "./reply.ts";
 import { collectTokenCosts } from "./tokenCosts.ts";
 import type { PlannedExecution, PlannedIteration, PlannedPermutation } from "./planExecution.ts";
 import { buildPrerunImages, type PrerunBuildHooks } from "./prerunBuilds.ts";
+
+const log = moduleLogger("execution");
 
 export type RunHooks = PrerunBuildHooks &
   PushHooks & {
@@ -105,6 +108,8 @@ function containerRunRecord(
  */
 export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks = {}): Promise<ExecutionRecord> {
   const { root, testCase, plan, imagePrefix, imageStore = null, build = {} } = run;
+  const { executionId } = plan;
+  log.info({ executionId, testCase: run.name, task: testCase.task, permutations: plan.permutations.length, imageStore: imageStore?.repository }, "execution starting");
   const measurements = await loadMeasurements(root, testCase.task);
   const permutations = plan.permutations.map(({ permutation }) => permutation);
   await buildPrerunImages(root, permutations, imagePrefix, hooks, build);
@@ -128,6 +133,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     for (const permutation of plan.permutations) {
       for (const iteration of permutation.iterations) {
         hooks.onRunning?.(permutation, iteration);
+        const at = { executionId, permutation: permutation.number, iteration: iteration.number };
+        log.info({ ...at, permutationHash: permutation.permutation.hash, turns: iteration.turns.length }, "container run starting");
         const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
         const { execution, harnessResults } = await runInContainer({
           prerunImage: permutation.prerunImage,
@@ -148,6 +155,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
         await store.recordContainerRun(record);
         // Timed out, its exit code is null.
         if (execution.exitCode !== 0) status = "failed";
+        log.info({ ...at, exitCode: execution.exitCode, timedOut: execution.timedOut, tokenCosts }, "container run finished");
         hooks.onRan?.(permutation, iteration, record);
         if (imageStore !== null) {
           const reference = storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);
@@ -159,17 +167,21 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
         const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: turns.map((turn) => turn.reply) };
         const open = async (usesContainer: boolean) =>
           usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded) : recordedContext(recorded);
+        log.debug({ ...at, measurements: measurements.length }, "measuring");
         const result = await measureContainerRun(measurements, open);
+        log.info({ ...at, result }, "measured");
         await store.recordContainerRun({ ...record, result });
         hooks.onMeasured?.(permutation, iteration, result);
       }
     }
   } catch (error) {
     status = "failed";
+    log.error({ executionId, err: error }, "execution failed");
     throw error;
   } finally {
     finished = executionRecord(status, new Date().toISOString());
     await store.recordExecution(finished);
+    log.info({ executionId, status }, "execution finished");
   }
   return finished;
 }

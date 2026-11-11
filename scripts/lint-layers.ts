@@ -4,7 +4,7 @@
 //   bun scripts/lint-layers.ts           rewrite .oxlintrc.json
 //   bun scripts/lint-layers.ts --check   fail if .oxlintrc.json is out of date, or a folder in src/ is not a layer
 import { file, write } from "bun";
-import { LAYERS } from "./layers.ts";
+import { LAYERS, SRC_RULES } from "./layers.ts";
 
 const REPO_ROOT = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const CONFIG_FILE = ".oxlintrc.json";
@@ -52,11 +52,20 @@ export function generateOverrides(layers: readonly string[], depth: number, base
   return overrides;
 }
 
-/** `config` with its overrides generated from `layers`. */
-export function applyLayers(config: OxlintConfig, layers: readonly string[], srcFiles: string[]): OxlintConfig {
+/**
+ * `config` with its overrides generated from `layers`, after one applying `srcRules` to every file
+ * in src/, if there are any.
+ */
+export function applyLayers(
+  config: OxlintConfig,
+  layers: readonly string[],
+  srcFiles: string[],
+  srcRules: Readonly<Record<string, unknown>> = {},
+): OxlintConfig {
   const rule = config.rules?.["no-restricted-imports"];
   const base = Array.isArray(rule) ? ((rule[1] ?? {}) as RestrictedImportsOptions) : {};
-  return { ...config, overrides: generateOverrides(layers, maxDepth(srcFiles), base) };
+  const src = Object.keys(srcRules).length > 0 ? [{ files: ["src/**"], rules: { ...srcRules } }] : [];
+  return { ...config, overrides: [...src, ...generateOverrides(layers, maxDepth(srcFiles), base)] };
 }
 
 export const renderConfig = (config: OxlintConfig) => `${JSON.stringify(config, null, 2)}\n`;
@@ -71,7 +80,7 @@ if (import.meta.main) {
 
   const configFile = file(`${REPO_ROOT}/${CONFIG_FILE}`);
   const before = await configFile.text();
-  const after = renderConfig(applyLayers(JSON.parse(before), LAYERS, srcFiles));
+  const after = renderConfig(applyLayers(JSON.parse(before), LAYERS, srcFiles, SRC_RULES));
   if (process.argv.includes("--check")) {
     if (after !== before) {
       console.error(`${CONFIG_FILE} is out of date with scripts/layers.ts. Run \`bun run lint:generate\`.`);
