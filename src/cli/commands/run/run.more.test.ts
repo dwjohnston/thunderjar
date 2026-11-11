@@ -493,6 +493,34 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(exitCode).not.toBe(0);
   });
 
+  test("--iterations overrides the test case's, in what's run, written and recorded", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--iterations", "2", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(" 1/1  iteration 2/2  fake-harness-alpha | plain  ... done (");
+    const { execution, containerRuns } = await readStore(data);
+    expect(execution.matrix.iterations).toBe(2);
+    expect(containerRuns.map((run) => run.iteration).sort()).toEqual([1, 2]);
+  }, 30_000);
+
+  test("--iterations overrides the test case's in the dry run", async () => {
+    const { stdout, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--dry-run", "--iterations", "3"]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout.match(/^ {2}Iteration \d+:/gm)).toEqual(["  Iteration 1:", "  Iteration 2:", "  Iteration 3:"]);
+  });
+
+  test.each([["0"], ["two"], ["1.5"]])("--iterations %p is a usage error", async (value) => {
+    const { stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--iterations", value]);
+
+    expect(stderr).toContain("It must be a whole number, 1 or more.");
+    expect(exitCode).not.toBe(0);
+  });
+
   test("a pull the runtime can't make is an error saying what to check, and nothing is run or written", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:ae60c784"], pullDenied: true });
     const data = dataDir();

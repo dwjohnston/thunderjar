@@ -52,11 +52,15 @@ export function renderExecution({ executionId, permutations }: PlannedExecution,
   return [`${paint.dim("Execution")} ${paint.bold(executionId)}`, ...blocks].join("\n\n");
 }
 
+/** `testCase`, with `iterations` in place of its own, if given. */
+const withIterations = (testCase: TestCaseDeclaration, iterations?: number): TestCaseDeclaration =>
+  iterations === undefined ? testCase : { ...testCase, iterations };
+
 /** What an execution of test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it, would do. */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain): Promise<string> {
+export async function dryRun(cwd: string, name: string, imagePrefix?: string, iterations?: number, paint: Paint = plain): Promise<string> {
   const root = await findThunderjarRoot(cwd);
   const executionId = ulid();
-  const testCase = await loadTestCase(root, name);
+  const testCase = withIterations(await loadTestCase(root, name), iterations);
   await checkRequiredEnv(root, testCase);
   return renderExecution(await planExecution(root, testCase, executionId, imagePrefix), paint);
 }
@@ -116,15 +120,25 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  *
  * Runs `concurrency` containers at once, or the runtime's, or one at a time. With more than one,
  * each line is written whole, starting with its iteration, as they finish in any order.
+ *
+ * Runs `iterations` of each permutation, if given, instead of the test case's.
  */
-async function run(cwd: string, name: string, imagePrefix: string, dataDir?: string, local = false, concurrencyOption?: number): Promise<void> {
+async function run(
+  cwd: string,
+  name: string,
+  imagePrefix: string,
+  dataDir?: string,
+  local = false,
+  concurrencyOption?: number,
+  iterations?: number,
+): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const config = await loadProjectConfig(root);
   const { imageStore, build } = config;
   const runtime = local ? null : config.runtime;
   const concurrency = concurrencyOption ?? runtime?.concurrency ?? 1;
   const concurrent = concurrency > 1;
-  const testCase = await loadTestCase(root, name);
+  const testCase = withIterations(await loadTestCase(root, name), iterations);
   await checkRequiredEnv(root, testCase);
   checkBuildSecrets(build);
   try {
@@ -274,7 +288,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
 export function createRunCommand(): Command {
   return new Command("run")
     .description(
-      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency.",
+      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency. --iterations overrides the test case's iterations.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(
@@ -289,12 +303,23 @@ export function createRunCommand(): Command {
         return n;
       }),
     )
+    .addOption(
+      new Option("--iterations <n>", "run <n> iterations of each permutation, instead of the test case's iterations").argParser((value: string) => {
+        if (!/^\d+$/.test(value) || Number(value) < 1) throw new InvalidArgumentError("It must be a whole number, 1 or more.");
+        return Number(value);
+      }),
+    )
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())
     .action(
-      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; local?: boolean; concurrency?: number; imagePrefix: string; dataDir?: string }) => {
-        if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
-        else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency);
-      }),
+      reportingConfigErrors(
+        async (
+          name: string,
+          options: { dryRun?: boolean; local?: boolean; concurrency?: number; iterations?: number; imagePrefix: string; dataDir?: string },
+        ) => {
+          if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix, options.iterations, painter()));
+          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, options.iterations);
+        },
+      ),
     );
 }
