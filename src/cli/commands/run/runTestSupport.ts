@@ -2,7 +2,7 @@
 // `bun test --parallel` runs them in two workers.
 import { expect } from "bun:test";
 import { $, Glob, SQL } from "bun";
-import { type ContainerRunRecord, type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
+import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { TMP_DIR } from "../../../testing/cli.ts";
 import type { FakeDocker } from "../../../testing/fakeDocker.ts";
 
