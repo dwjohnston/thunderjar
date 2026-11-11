@@ -8,3 +8,4 @@ docs/.vitepress/cache
 !fixtures/node_modules/
 # Copies of scenario projects that tests write to.
 fixtures/.tmp/
+CLAUDE.local.md
