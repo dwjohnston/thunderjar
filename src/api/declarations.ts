@@ -76,7 +76,7 @@ export type Resolved = string | number | boolean | null | Resolved[] | { [key: s
  *
  * `resolve` is for a floating parameter, such as a branch's latest commit. Thunderjar calls it on
  * the host, once per execution (`plan`, `run`, `build`), before anything is hashed, and passes its
- * result to `applyParameter` as `ctx.resolved`, and to a harness's `cli`. It must only read: a `git
+ * result to `applyParameter` as `ctx.resolved`. It must only read: a `git
  * fetch` is fine, building or writing anything isn't. It isn't hashed itself: only the text it ends
  * up in is, so a value no fragment uses changes nothing. Each run records it beside the parameter.
  * Declare it before `applyParameter`, so `ctx.resolved`'s type is inferred from it.
@@ -206,39 +206,13 @@ export function declarePromptSet<C = undefined, R extends ResolvedOf = undefined
   return declared("declarePromptSet", declaration);
 }
 
-/** `dir` is where the harness's `files/` folder is; `version` is the harness's own `version`. */
+/**
+ * What a harness's fragment gets: `dir`, where its `files/` folder is, its own `version`, and the
+ * model ID the test case's pair names, `<harness>/<model ID>`, as the agent is given it.
+ */
 export type HarnessApplyCtx = ApplyParameterCtx & {
   version: string;
-};
-
-/**
- * What a harness's `cli` gets, to build the command that runs the agent. An initial prompt of
- * several turns runs `cli` once per turn, in the same container, one after another.
- */
-export type HarnessCliCtx = {
-  /** The harness's own `version`. */
-  version: string;
-  /** The model ID the test case's pair names, `<harness>/<model ID>`, as the agent is given it. */
   modelId: string;
-  /**
-   * The turn's prompt text. Pasted into a shell command it breaks on the first quote, `$` or
-   * backtick, so read `promptPath` instead.
-   */
-  initialPrompt: string;
-  /**
-   * A file in the container holding the turn's prompt, exactly, with no newline added: pass it to
-   * the agent as `"$(cat ${ctx.promptPath})"`, or as a file if it takes one.
-   */
-  promptPath: string;
-  /** Where the agent's own report of the turn goes. Each turn has its own. */
-  resultPath: string;
-  /** Which turn this is, counting from 0. A single prompt is turn 0. */
-  turn: number;
-  /**
-   * A fresh UUID for each container run, the same for each of its turns: start the agent's
-   * session with it on turn 0, and resume it on later turns, e.g. `--session-id`, then `--resume`.
-   */
-  sessionId: string;
 };
 
 /**
@@ -256,31 +230,30 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * @type {string}
    * @description
    * **Required.** The version of the agent this harness installs, e.g. `"2.1.311"`: `ctx.version` for its
-   * fragment and `cli`. One harness folder pins one version, so name the folder after it, e.g.
+   * fragment. One harness folder pins one version, so name the folder after it, e.g.
    * `claude-code-2.1.311/`, and copy the folder to try another.
    */
   version: string;
   /**
    * @docs
-   * @name cli
-   * @type {(ctx: HarnessCliCtx) => string}
+   * @name applyParameter
+   * @type {(config, ctx: HarnessApplyCtx) => string}
    * @description
-   * **Required.** The command that runs the agent for one turn. `ctx` has `version`, `modelId`,
-   * `initialPrompt`, `promptPath`, `resultPath`, `turn`, `sessionId`, and `resolved`, what
-   * `resolve` returned.
-   *
-   * ```ts
-   * cli: (ctx) => `claude -p "$(cat ${ctx.promptPath})" --model ${ctx.modelId} > ${ctx.resultPath}`,
-   * ```
+   * **Required.** Installs the agent, and writes `/thunderjar/thunderjar-run.sh`, the script that
+   * runs it, e.g. with `writeRunScript`. The script runs in the image's working directory, reads the
+   * prompt from `/thunderjar/prompt.txt`, and must leave the agent's result at
+   * `/thunderjar/result.json`. `writeModel(ctx.modelId)` puts the model ID at
+   * `/thunderjar/model.txt`, for it to read. `ctx` has `dir`, `version`, `modelId`, and `resolved`,
+   * what `resolve` returned.
    */
-  cli(ctx: HarnessCliCtx & { resolved: R }): string;
+  applyParameter(config: C, ctx: HarnessApplyCtx & { resolved: R }): string;
   /**
    * @docs
    * @name collectReply
    * @type {(raw: string) => string}
    * @description
-   * The agent's final reply, read from the text of the result file its `cli` left, for
-   * instruments such as `replyMatches` to measure. Without it, a run has no reply.
+   * The agent's final reply, read from the text of its result file, for instruments such as
+   * `replyMatches` to measure. Without it, a run has no reply.
    */
   collectReply?: (raw: string) => string;
   /**
@@ -288,8 +261,8 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * @name collectTokenCosts
    * @type {(raw: string, ctx: { version: string; modelId: string }) => TokenCosts}
    * @description
-   * The run's token costs, read from the text of each turn's result file, once per turn, and
-   * summed. A throw is `unparseable`. Without it, every run's are `notReported`.
+   * The run's token costs, read from the text of its result file. A throw is `unparseable`.
+   * Without it, every run's are `notReported`.
    */
   collectTokenCosts?: TokenCostCollector;
   /**
@@ -330,23 +303,24 @@ export type TokenCosts =
   | { outcome: "unavailable"; reason: "absent" | "unparseable" | "notReported" };
 
 /**
- * Reads the token costs from what the harness's `cli` wrote to its result path. Thunderjar calls
- * it only for a result file that exists, once per turn, and sums them. A throw is `unparseable`.
+ * Reads the token costs from what the run script wrote to `/thunderjar/result.json`. Thunderjar
+ * calls it only for a result file that exists. A throw is `unparseable`.
  */
 export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: string }) => TokenCosts;
 
 /**
- * @docs
+  * @docs
  * @kind heading
  * @name declareInitialPrompt
  * @file parameters/tasks/<task>/initial-prompts/<name>.ts
  * @description
- * What the agent is asked. Give either `prompt` or `turns`. Takes the shared options too, but
- * `applyParameter` gets no `ctx.dir`.
+ * What the agent is asked. Its fragment writes the prompt to `/thunderjar/prompt.txt`, for the
+ * harness's run script to read. Takes the shared options too, but `applyParameter` gets no
+ * `ctx.dir`.
  *
  * ```ts
  * export default declareInitialPrompt({
- *   prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
+ *   applyParameter: () => writePrompt("Create a file isPrime.ts exporting a function that tests for primality."),
  *   timeoutSeconds: 600,
  * });
  * ```
@@ -354,40 +328,21 @@ export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: 
 
 /**
  * @docs
- * @name prompt
- * @type {string}
- * @description
- * A single prompt.
- */
-
-/**
- * @docs
- * @name turns
- * @type {string[]}
- * @description
- * Several prompts, each run by the harness's `cli` in turn, in the same container and agent
- * session, so a later turn can ask about an earlier one.
- */
-
-/**
- * @docs
  * @name timeoutSeconds
  * @type {number}
  * @description
- * **Required.** How long the agent may take, across every turn together.
+ * **Required.** How long the harness's run script may run before it's killed.
  */
 
 /**
- * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. It is used when
- * the harness runs, so its fragment is usually left out.
- *
- * It's a single `prompt`, or a list of `turns`, each run by the harness's `cli` in turn, in the
- * same container and agent session, so a later turn can ask about an earlier one. Its
- * `timeoutSeconds` covers every turn together.
+ * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. Its fragment
+ * writes the prompt to `/thunderjar/prompt.txt`, for the harness's run script to read, e.g. with
+ * `writePrompt`. It may also set WORKDIR, to run the agent in a subfolder. `timeoutSeconds` is how
+ * long the run script may run before it's killed.
  */
 export type InitialPromptDeclaration<C = unknown, R = unknown> = Applies<C, FragmentCtx, R> & {
   timeoutSeconds: number;
-} & ({ prompt: string; turns?: never } | { turns: string[]; prompt?: never });
+};
 
 export function declareInitialPrompt<C = undefined, R extends ResolvedOf = undefined>(
   declaration: InitialPromptDeclaration<C, R>,
@@ -416,7 +371,7 @@ export type MeasurementContext = {
   writeFile(path: string, contents: string): Promise<void>;
   /** The files matching `pattern`, relative to `workdir`, sorted. */
   glob(pattern: string): Promise<string[]>;
-  /** The text of the result file the harness's `cli` left, or "" if it left none. */
+  /** The text of the result file the run script left, or "" if it left none. */
   harnessResult: string;
   /** The agent's final reply, from its harness's `collectReply`, or why there's none. */
   reply: Reply;

@@ -87,10 +87,9 @@ function containerRunRecord(
   { number: permutationNumber, permutation, version }: PlannedPermutation,
   iteration: PlannedIteration,
   execution: Execution,
-  turns: { harnessResult: string | null; reply: Reply }[],
+  last: { harnessResult: string | null; reply: Reply },
   tokenCosts: TokenCosts,
 ): ContainerRunRecord {
-  const last = turns.at(-1) as { harnessResult: string | null; reply: Reply };
   const { harness } = parsePair(permutation.harnessModel);
   return {
     executionId: plan.executionId,
@@ -116,8 +115,6 @@ function containerRunRecord(
     harnessResult: last.harnessResult,
     reply: last.reply,
     tokenCosts,
-    sessionId: iteration.sessionId,
-    ...(turns.length > 1 && { turns }),
     result: {},
   };
 }
@@ -220,24 +217,23 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   const runAndMeasure = async (permutation: PlannedPermutation, iteration: PlannedIteration) => {
     hooks.onRunning?.(permutation, iteration);
     const at = { executionId, permutation: permutation.number, iteration: iteration.number };
-    log.info({ ...at, permutationHash: permutation.permutation.hash, turns: iteration.turns.length }, "container run starting");
+    log.info({ ...at, permutationHash: permutation.permutation.hash }, "container run starting");
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-    const { execution, harnessResults } = await runInContainer({
+    const { execution, harnessResult: resultFile } = await runInContainer({
       prerunImage: prerunImageOf(permutation),
       postrunImage: iteration.postrunImage,
-      turns: iteration.turns,
       env: permutation.env,
       runOptions: permutation.runOptions,
       timeoutSeconds: permutation.timeoutSeconds,
       container,
       runtime,
     });
-    const turns = harnessResults.map((harnessResult) => ({ harnessResult, reply: collectReply(permutation.harness.collectReply, harnessResult) }));
-    const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, harnessResults, {
+    const ran = { harnessResult: resultFile, reply: collectReply(permutation.harness.collectReply, resultFile) };
+    const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, [resultFile], {
       version: permutation.version,
       modelId: permutation.modelId,
     });
-    const record = containerRunRecord(run, permutation, iteration, execution, turns, tokenCosts);
+    const record = containerRunRecord(run, permutation, iteration, execution, ran, tokenCosts);
     const { harnessResult, reply } = record;
     await store.recordContainerRun(record);
     // Timed out, its exit code is null.
@@ -253,7 +249,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     if (measurements.length === 0) return;
     hooks.onMeasuring?.(permutation, iteration);
     let opened = 0;
-    const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: turns.map((turn) => turn.reply) };
+    const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: [reply as Reply] };
     const open = async (usesContainer: boolean) =>
       usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime) : recordedContext(recorded);
     log.debug({ ...at, measurements: measurements.length }, "measuring");

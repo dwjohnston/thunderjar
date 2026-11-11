@@ -60,7 +60,7 @@ parameters/harnessModels/
   claude-code-2.1.311/
     index.ts      # export default claudeCode({ version: "2.1.311" })
   opencode-1.19.5/
-    index.ts      # declareHarness({ version: "1.19.5", applyParameter, cli, collectReply, … })
+    index.ts      # declareHarness({ version: "1.19.5", applyParameter, collectReply, … })
     files/        # optional: what its fragment copies in, at ctx.dir
 ```
 
@@ -87,20 +87,22 @@ A harness's parameter hash is of what it outputs, as every parameter's is (see
 [060-experiment-parameters.md](060-experiment-parameters.md#hashing)):
 
 1. Its rendered fragment, with its version in it.
-2. Its `cli`, rendered with fixed sample values, for the first turn and a later one.
+2. Its fragment is rendered with a sample model ID, so the model isn't in its hash.
 3. Its `requiredEnv`.
 4. Its `files/` folder.
 
 The model ID isn't in the harness's hash. It joins the permutation hash, beside the five
-parameter hashes, so two models of one harness share a prerun image, and their runs are
-told apart.
+parameter hashes, so their runs are told apart. The harness's fragment also writes the
+model ID into the prerun image, at `/thunderjar/model.txt`, so each model has its own image,
+sharing every layer below the model's.
 
 | Change | Effect on existing hashes |
 |---|---|
 | Add a harness folder, or use a new model ID | None. |
 | Change a pair's model ID | Only the permutation hash of that pair's permutations. No image. |
 | Change the version, or the install fragment | The harness's hash, and its images. |
-| Change its `cli` or `requiredEnv` | The harness's hash. No image. |
+| Change its run script | The harness's hash, and its images. |
+| Change its `requiredEnv` | The harness's hash. No image. |
 | Change `collectReply` or `collectTokenCosts`, or a comment | None. |
 | Rename a folder or a pair string | None. Hashes come from content, not names. |
 

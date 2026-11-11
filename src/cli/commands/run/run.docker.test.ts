@@ -49,8 +49,8 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("run, against real Docker", ()
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
-Building <PREFIX>-prerun:b9cd78e6 ... done
-Building <PREFIX>-prerun:44230271 ... done
+Building <PREFIX>-prerun:32a1d048 ... done
+Building <PREFIX>-prerun:577ed2bd ... done
  1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
       isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
@@ -113,7 +113,7 @@ Recorded in <DATA>/runs.sqlite
     // A postrun image starts as its prerun image does, rather than running the agent again.
     const config = "{{json .Config.Entrypoint}} {{json .Config.Cmd}}";
     expect(await $`docker image inspect --format ${config} ${alpha.postrunImage}`.text()).toBe(
-      await $`docker image inspect --format ${config} ${PREFIX}-prerun:b9cd78e6`.text(),
+      await $`docker image inspect --format ${config} ${PREFIX}-prerun:32a1d048`.text(),
     );
 
     // Every container was removed.
@@ -144,27 +144,6 @@ Recorded in <DATA>/runs.sqlite
     expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${PREFIX}-`}`.text())).toEqual([]);
   }, 600_000);
 
-  test("0205 remember: each turn runs in the same container and session, so the last can answer from the first", async () => {
-    const data = `${DATA_DIR}/remember`;
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0205"), ["run", "remember", "--image-prefix", PREFIX, "--data-dir", data], {
-      docker: "real",
-      paths: { "<PREFIX>": PREFIX, "<DATA>": data },
-    });
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain(`
- 1/1  iteration 1/1  fake-rememberer | tell-then-ask  ... done (<duration>)
-      promisedToRemember: true   remembersName: true
-`);
-    const [record] = (await storedRuns(data)).containerRuns as [ContainerRunRecord];
-    expect(record.turns?.map((turn) => turn.reply)).toEqual([
-      { outcome: "collected", text: "I will remember that: My rubber ducky is called Eli." },
-      { outcome: "collected", text: "You told me: My rubber ducky is called Eli." },
-    ]);
-    expect(await inImage(record.postrunImage, `cat "$HOME/.fake-rememberer/${record.sessionId}"`)).toBe("My rubber ducky is called Eli.");
-  }, 600_000);
-
   test("0206 sandboxed: an agent can make a user namespace, as a sandbox does, only with its base image's run options", async () => {
     const data = `${DATA_DIR}/sandboxed`;
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "sandboxed", "--image-prefix", PREFIX, "--data-dir", data], {
@@ -191,8 +170,8 @@ Recorded in <DATA>/runs.sqlite
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     const [record] = (await storedRuns(data)).containerRuns as [ContainerRunRecord];
-    // fake-echo copies the prompt file into its result file.
-    expect(record.harnessResult).toBe(AWKWARD);
-    expect(await $`docker run --rm ${record.postrunImage} cat /thunderjar/prompt.txt`.text()).toBe(AWKWARD);
+    // fake-echo copies the prompt file into its result file. writePrompt ends it with a newline.
+    expect(record.harnessResult).toBe(`${AWKWARD}\n`);
+    expect(await $`docker run --rm ${record.postrunImage} cat /thunderjar/prompt.txt`.text()).toBe(`${AWKWARD}\n`);
   }, 600_000);
 });

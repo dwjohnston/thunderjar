@@ -25,7 +25,8 @@ export type HashedPermutation = Permutation & {
   modelId: string;
   /**
    * The prerun image hash: of its Dockerfile and each folder parameter's `files/`, and nothing
-   * else, so permutations that build the same image share it, e.g. two models of one harness.
+   * else, so permutations that build the same image share it. The harness writes the model ID into
+   * the image, and the initial prompt the prompt, so each usually has its own.
    */
   imageHash: string;
   /** Its prerun Dockerfile. */

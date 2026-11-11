@@ -21,8 +21,8 @@ have run, and of its `files/` folder:
 |---|---|
 | Base image | Rendered fragment, `files/` contents, `runOptions` |
 | Code state, prompt set | Rendered fragment, `files/` contents |
-| Harness | Rendered fragment (with its version), `cli` rendered with fixed sample values for the first turn and a later one, `requiredEnv`, `files/` contents |
-| Initial prompt | Rendered fragment, prompt text (or turns), `timeoutSeconds` |
+| Harness | Rendered fragment (with its version, and a sample model ID), `requiredEnv`, `files/` contents |
+| Initial prompt | Rendered fragment, which writes the prompt, `timeoutSeconds` |
 
 - **Nothing else of the declaration is hashed.** Comments, formatting, helper code and
   imports from anywhere change no hash, unless they change the text it renders. A harness's
@@ -47,17 +47,21 @@ have run, and of its `files/` folder:
 | Image hash | The prerun Dockerfile, and each folder parameter's `files/` | The prerun image, which is tagged with it |
 
 The image hash covers only what affects the image, so permutations that build the same
-image share it: two models of one harness, or two initial prompts without a fragment. The
-permutation hash covers every parameter, so their runs are still told apart.
+image share it. The harness's fragment writes the model ID into the image, and the initial
+prompt's writes the prompt, so two models of one harness, or two initial prompts, each have
+their own image. They still share every layer below the one they differ in, so building the
+second is cheap.
 
 | Change | Parameter hash | Permutation hash | Image |
 |---|---|---|---|
 | A comment, or a helper, without changing the rendered text | — | — | — |
 | A code state's commit | code state | changed | rebuilt |
 | A file in a parameter's `files/` | that parameter | changed | rebuilt |
-| A harness's `cli` or `requiredEnv` | harness | changed | shared |
-| A pair's model ID | — | changed | shared |
-| An initial prompt's text or timeout | initial prompt | changed | shared, unless it has a fragment |
+| A harness's run script | harness | changed | rebuilt |
+| A harness's `requiredEnv` | harness | changed | shared |
+| A pair's model ID | — | changed | rebuilt |
+| An initial prompt's text | initial prompt | changed | rebuilt |
+| An initial prompt's timeout | initial prompt | changed | shared |
 | A base image's `runOptions` | base image | changed | shared |
 
 ### Floating parameters: `resolve`
@@ -92,8 +96,7 @@ export default declareCodeState({
 - **When.** On the host, once per execution (`plan`, `run`, `build`), before anything is
   hashed. A parameter used by several permutations is resolved once.
 - **Read only.** It may fetch, but it must not build or write anything.
-- **Where it goes.** Its result is `ctx.resolved` in `applyParameter`, and in a harness's
-  `cli`. Its type is inferred from `resolve`'s return type, so declare `resolve` first.
+- **Where it goes.** Its result is `ctx.resolved` in `applyParameter`. Its type is inferred from `resolve`'s return type, so declare `resolve` first.
 - **Not hashed itself.** Only the text it ends up in is, so a resolved value that's never
   used changes nothing. When `main` moves, the commit in the code state's `RUN` changes, so
   its hash, the permutation hash and the image do, and the execution is recorded as a
@@ -126,10 +129,13 @@ applyParameter?(config: C, ctx: Ctx & { resolved: R }): string; // a Dockerfile 
 ```
 
 A folder parameter's `ctx.dir` is where its `files/` folder is in the build context. A
-harness's `ctx.version` is its own `version`.
+harness's `ctx.version` is its own `version`, and its `ctx.modelId` the pair's model ID.
 
 Building a permutation's prerun image is then a fold: each parameter's fragment, in the
-order below. Thunderjar adds only `WORKDIR /workspace`.
+order below. Thunderjar adds only `WORKDIR /workspace`. The harness's fragment writes the
+model ID and `/thunderjar/thunderjar-run.sh`, the script that runs the agent, and the initial
+prompt's writes the prompt, with the `writeModel`, `writeRunScript` and `writePrompt`
+helpers: see [064-harness.md](064-harness.md#applyparameter-installing-and-running-the-agent).
 
 ```dockerfile
 FROM node:20-bookworm                                    # base image
@@ -141,7 +147,24 @@ RUN git clone --quiet https://github.com/acme/widgets.git /workspace \
   && git -C /workspace remote remove origin             # code state
 COPY parameters/promptSet/ /workspace/                   # prompt set, from its files/
 RUN npm install -g @anthropic-ai/claude-code@2.1.311     # harness
+COPY <<'THUNDERJAR_EOF' /thunderjar/model.txt
+claude-haiku-5-5
+THUNDERJAR_EOF
+COPY --chmod=755 <<'THUNDERJAR_EOF' /thunderjar/thunderjar-run.sh
+#!/bin/sh
+claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json > /thunderjar/result.json
+THUNDERJAR_EOF
+COPY <<'THUNDERJAR_EOF' /thunderjar/prompt.txt          # initial prompt
+Create a file isPrime.ts exporting a function that tests for primality.
+THUNDERJAR_EOF
+WORKDIR /workspace/packages/maths                        # initial prompt, optional
 ```
+
+Running an iteration is then only `sh /thunderjar/thunderjar-run.sh`, in the image's
+working directory: the last `WORKDIR` a fragment set, or `/workspace`. A code state or an
+initial prompt sets one to run the agent in a subfolder, e.g. a package of a monorepo, and
+measurements run there too. A prerun image holds everything a run needs, so it can be run,
+or read, without the project's config.
 
 Fragments are Dockerfile source rather than bare shell commands, because the
 prerun build *is* a Dockerfile — so layer caching stays explicit and the base
@@ -151,16 +174,16 @@ The order matches the build sequence in
 
 ### Build-time and run-time parameters
 
-Only four of the five contribute to the image. The initial prompt is consumed when the
-harness is invoked, and its fragment is usually left out:
+All five contribute to the image. The initial prompt's fragment writes its prompt, and may
+set `WORKDIR`:
 
 | Parameter | Build time | Run time |
 |---|---|---|
 | Base image | seed of the build | `runOptions` |
-| Code state | clones the codebase, then dependencies / fixture generation | — |
+| Code state | clones the codebase, then dependencies / fixture generation; may set `WORKDIR` | — |
 | Prompt set | prompt files | — |
-| Harness model pair | installs the agent tool | invoked via `cli`, with `ctx.modelId` |
-| Initial prompt | — | `ctx.initialPrompt` |
+| Harness model pair | installs the agent tool; writes the model ID and the run script | `requiredEnv` |
+| Initial prompt | writes the prompt; may set `WORKDIR` | its `timeoutSeconds` |
 
 This split is the same one the flowchart in
 [080-docker-execution.md](080-docker-execution.md#process) draws as its
@@ -247,11 +270,13 @@ export default claudeCode({ version: "2.1.311" });
 export default declareHarness({
   version: "1.19.5",
 
-  // build: install the tool into the prerun image
-  applyParameter: (_config, ctx) => `RUN npm install -g opencode-ai@${ctx.version}`,
-
-  // run: execute the agent, and write the result file
-  cli: (ctx) => `opencode run --model ${ctx.modelId} --format json "$(cat ${ctx.promptPath})" > ${ctx.resultPath}`,
+  // build: install the tool, and write the model and the script that runs it, which writes the result file
+  applyParameter: (_config, ctx) =>
+    [
+      `RUN npm install -g opencode-ai@${ctx.version}`,
+      writeModel(ctx.modelId),
+      writeRunScript(`opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`),
+    ].join("\n"),
 
   // interpret: the reply, and normalised token costs, from that file
   collectReply: (raw) => { /* … */ },
@@ -270,7 +295,7 @@ initial prompts, in no parameter hash. Detail: [066-task.md](066-task.md).
 ```ts
 // parameters/tasks/is-prime/initial-prompts/plain.ts
 export default declareInitialPrompt({
-  prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
+  applyParameter: () => writePrompt("Create a file isPrime.ts exporting a function that tests for primality."),
   timeoutSeconds: 600,
 });
 ```
@@ -307,7 +332,7 @@ interface MeasurementContext {
   readFile(path: string): Promise<string>;
   writeFile(path: string, contents: string): Promise<void>;
   glob(pattern: string): Promise<string[]>;
-  harnessResult: string; // raw contents of the file `cli` wrote
+  harnessResult: string; // raw contents of the file the run script wrote
   workdir: string;
 }
 

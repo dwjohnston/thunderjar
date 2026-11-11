@@ -1,8 +1,8 @@
 import { declareInitialPrompt } from "thunderjar";
 
-// Both a prompt and turns: which should run?
+// The old way: a prompt given as a field, not written by the fragment.
 export default declareInitialPrompt({
+  // @ts-expect-error `prompt` is no longer a field: write it with writePrompt.
   prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
-  turns: ["Create a file isPrime.ts.", "Now export a primality test from it."],
   timeoutSeconds: 600,
 });
