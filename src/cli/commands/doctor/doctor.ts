@@ -4,6 +4,7 @@ import { loadProjectConfig } from "../../../config/projectConfig.ts";
 import { DockerBuildError, DockerPullError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { probeRuntime } from "../../../execution/runtimeProbe.ts";
+import { printError } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 
 const STEP_LABEL = { build: "Building", push: "Pushing", pull: "Pulling through the runtime" } as const;
@@ -48,16 +49,16 @@ async function doctor(cwd: string): Promise<void> {
   } catch (error) {
     if (step !== undefined) console.log("failed");
     if (error instanceof DockerUnavailableError) {
-      console.error(`Error: Docker can't be reached: ${error.message}`);
+      printError(`Docker can't be reached: ${error.message}`);
     } else if (error instanceof ImageStoreLoginError) {
-      console.error(`Error: ${error.message}`);
+      printError(`${error.message}`);
     } else if (error instanceof DockerBuildError) {
-      console.error(`Error: Building the probe image failed: ${error.message}`);
+      printError(`Building the probe image failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
-      console.error(`Error: Pushing the probe image to the image store failed: ${error.message}`);
+      printError(`Pushing the probe image to the image store failed: ${error.message}`);
     } else if (error instanceof DockerPullError) {
-      console.error(
-        `Error: The runtime couldn't pull from the image store: ${error.message}\nMake sure the runtime can reach the registry and is logged in to it.`,
+      printError(
+        `The runtime couldn't pull from the image store: ${error.message}\nMake sure the runtime can reach the registry and is logged in to it.`,
       );
     } else {
       throw error;

@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
+import { painter } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { GENERATED_PATH, writeParameterNames } from "./parameterNames.ts";
 
@@ -32,7 +33,8 @@ export function createGenerateCommand(): Command {
     .action(
       reportingConfigErrors(async () => {
         const path = await generate(process.cwd());
-        console.log(`Wrote ${relativeTo(process.cwd(), path)}`);
+        const paint = painter();
+        console.log(`${paint.green("Wrote")} ${paint.cyan(relativeTo(process.cwd(), path))}`);
       }),
     );
 }

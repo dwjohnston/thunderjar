@@ -61,6 +61,15 @@ export type ResolveCtx = {
 export type Resolved = string | number | boolean | null | Resolved[] | { [key: string]: Resolved };
 
 /**
+ * @docs
+ * @kind heading
+ * @name Shared parameter options
+ * @description
+ * `declareBaseImage`, `declareCodeState`, `declarePromptSet`, `declareHarness` and
+ * `declareInitialPrompt` all take these.
+ */
+
+/**
  * A parameter declaration's `config`, its optional `resolve`, and the `applyParameter` that
  * receives them. Methods, so a declaration with any `config` is still a `XDeclaration<unknown>`
  * once loaded.
@@ -73,18 +82,72 @@ export type Resolved = string | number | boolean | null | Resolved[] | { [key: s
  * Declare it before `applyParameter`, so `ctx.resolved`'s type is inferred from it.
  */
 type Applies<C, Ctx, R> = {
+  /**
+   * @docs
+   * @name config
+   * @type {C}
+   * @default undefined
+   * @description
+   * Values passed to `resolve` and `applyParameter`, as written.
+   */
   config?: C;
+  /**
+   * @docs
+   * @name resolve
+   * @type {(config: C, ctx: { exec(command: string): Promise<string> }) => Resolved | Promise<Resolved>}
+   * @description
+   * Looks up what a floating parameter currently means, such as a branch's latest commit. Runs on
+   * the host once per `plan`, `run` or `build`, and must only read. Its result is passed on as
+   * `ctx.resolved`, and recorded with each run.
+   *
+   * ```ts
+   * resolve: (config, ctx) => ctx.exec(`git ls-remote ${config.repo} main | cut -f1`),
+   * ```
+   */
   resolve?(config: C, ctx: ResolveCtx): R | Promise<R>;
+  /**
+   * @docs
+   * @name applyParameter
+   * @type {(config: C, ctx: { dir: string; resolved: R }) => string}
+   * @description
+   * Returns the Dockerfile fragment that applies the parameter to the prerun image. `ctx.dir` is
+   * where the parameter folder's `files/` folder is in the build context.
+   *
+   * ```ts
+   * applyParameter: (_config, ctx) => `COPY ${ctx.dir}/ /workspace/`,
+   * ```
+   */
   applyParameter?(config: C, ctx: Ctx & { resolved: R }): string;
 };
 
 /** What a declaration's `resolve` returns, or undefined if it has none. */
 type ResolvedOf = Resolved | undefined;
 
+/**
+ * @docs
+ * @kind heading
+ * @name declareBaseImage
+ * @file parameters/baseImages/<name>/index.ts
+ * @description
+ * The image the agent runs in. Its `applyParameter` is required, and must start with `FROM`.
+ *
+ * ```ts
+ * export default declareBaseImage({
+ *   applyParameter: () => `FROM node:20-bookworm
+ * RUN npm install --global bun@1.3.14`,
+ * });
+ * ```
+ */
+
 /** A base image's fragment is required: it carries the prerun image's `FROM`. */
 export type BaseImageDeclaration<C = unknown, R = unknown> = Applies<C, ApplyParameterCtx, R> & {
   applyParameter(config: C, ctx: ApplyParameterCtx & { resolved: R }): string;
   /**
+   * @docs
+   * @name runOptions
+   * @type {string[]}
+   * @default []
+   * @description
    * More `docker run` options for the agent's containers, for agents that need more of the
    * kernel than Docker allows by default, e.g. Claude Code's bubblewrap sandbox, which needs user
    * namespaces: `["--security-opt", "seccomp=unconfined", "--security-opt", "apparmor=unconfined"]`.
@@ -101,12 +164,42 @@ export function declareBaseImage<C = undefined, R extends ResolvedOf = undefined
   return declared("declareBaseImage", declaration);
 }
 
+/**
+ * @docs
+ * @kind heading
+ * @name declareCodeState
+ * @file parameters/codeStates/<name>/index.ts
+ * @description
+ * What is in `/workspace` when the agent starts. Takes only the shared options.
+ *
+ * ```ts
+ * export default declareCodeState({
+ *   config: { repo: "https://github.com/acme/app.git", commit: "a1b2c3d" },
+ *   applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\
+ *     && git -C /workspace checkout --quiet --detach ${config.commit}`,
+ * });
+ * ```
+ */
 export type CodeStateDeclaration<C = unknown, R = unknown> = Applies<C, ApplyParameterCtx, R>;
 
 export function declareCodeState<C = undefined, R extends ResolvedOf = undefined>(declaration: CodeStateDeclaration<C, R>): CodeStateDeclaration<C, R> {
   return declared("declareCodeState", declaration);
 }
 
+/**
+ * @docs
+ * @kind heading
+ * @name declarePromptSet
+ * @file parameters/promptSets/<name>/index.ts
+ * @description
+ * The `AGENTS.md`, skills and other prompt files the agent sees. Takes only the shared options.
+ *
+ * ```ts
+ * export default declarePromptSet({
+ *   applyParameter: (_config, ctx) => `COPY ${ctx.dir}/ /workspace/`,
+ * });
+ * ```
+ */
 export type PromptSetDeclaration<C = unknown, R = unknown> = Applies<C, ApplyParameterCtx, R>;
 
 export function declarePromptSet<C = undefined, R extends ResolvedOf = undefined>(declaration: PromptSetDeclaration<C, R>): PromptSetDeclaration<C, R> {
@@ -148,26 +241,62 @@ export type HarnessCliCtx = {
   sessionId: string;
 };
 
+/**
+ * @docs
+ * @kind heading
+ * @name declareHarness
+ * @file parameters/harnessModels/<harness>/index.ts
+ * @description
+ * How to install and run an agent. Takes the shared options too.
+ */
 export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApplyCtx, R> & {
   /**
-   * The version of the agent this harness installs, e.g. `"2.1.311"`: `ctx.version` for its
+   * @docs
+   * @name version
+   * @type {string}
+   * @description
+   * **Required.** The version of the agent this harness installs, e.g. `"2.1.311"`: `ctx.version` for its
    * fragment and `cli`. One harness folder pins one version, so name the folder after it, e.g.
    * `claude-code-2.1.311/`, and copy the folder to try another.
    */
   version: string;
-  /** The command that runs the agent for one turn. `ctx.resolved` is what `resolve` returned. */
+  /**
+   * @docs
+   * @name cli
+   * @type {(ctx: HarnessCliCtx) => string}
+   * @description
+   * **Required.** The command that runs the agent for one turn. `ctx` has `version`, `modelId`,
+   * `initialPrompt`, `promptPath`, `resultPath`, `turn`, `sessionId`, and `resolved`, what
+   * `resolve` returned.
+   *
+   * ```ts
+   * cli: (ctx) => `claude -p "$(cat ${ctx.promptPath})" --model ${ctx.modelId} > ${ctx.resultPath}`,
+   * ```
+   */
   cli(ctx: HarnessCliCtx & { resolved: R }): string;
   /**
+   * @docs
+   * @name collectReply
+   * @type {(raw: string) => string}
+   * @description
    * The agent's final reply, read from the text of the result file its `cli` left, for
    * instruments such as `replyMatches` to measure. Without it, a run has no reply.
    */
   collectReply?: (raw: string) => string;
   /**
+   * @docs
+   * @name collectTokenCosts
+   * @type {(raw: string, ctx: { version: string; modelId: string }) => TokenCosts}
+   * @description
    * The run's token costs, read from the text of each turn's result file, once per turn, and
    * summed. A throw is `unparseable`. Without it, every run's are `notReported`.
    */
   collectTokenCosts?: TokenCostCollector;
   /**
+   * @docs
+   * @name requiredEnv
+   * @type {string[]}
+   * @description
    * The names of the environment variables the agent needs, e.g. its API key. Each is passed into
    * this harness's containers only, as `docker run -e NAME`, so its value comes from the shell that
    * runs Thunderjar, and is never written down. `plan` and `run` stop if one is unset.
@@ -205,6 +334,48 @@ export type TokenCosts =
  * it only for a result file that exists, once per turn, and sums them. A throw is `unparseable`.
  */
 export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: string }) => TokenCosts;
+
+/**
+ * @docs
+ * @kind heading
+ * @name declareInitialPrompt
+ * @file parameters/tasks/<task>/initial-prompts/<name>.ts
+ * @description
+ * What the agent is asked. Give either `prompt` or `turns`. Takes the shared options too, but
+ * `applyParameter` gets no `ctx.dir`.
+ *
+ * ```ts
+ * export default declareInitialPrompt({
+ *   prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
+ *   timeoutSeconds: 600,
+ * });
+ * ```
+ */
+
+/**
+ * @docs
+ * @name prompt
+ * @type {string}
+ * @description
+ * A single prompt.
+ */
+
+/**
+ * @docs
+ * @name turns
+ * @type {string[]}
+ * @description
+ * Several prompts, each run by the harness's `cli` in turn, in the same container and agent
+ * session, so a later turn can ask about an earlier one.
+ */
+
+/**
+ * @docs
+ * @name timeoutSeconds
+ * @type {number}
+ * @description
+ * **Required.** How long the agent may take, across every turn together.
+ */
 
 /**
  * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. It is used when
@@ -257,6 +428,48 @@ export type MeasurementContext = {
 /** The agent's final reply, as its harness's `collectReply` read it from the result file, or why there's none. */
 export type Reply = { outcome: "collected"; text: string } | { outcome: "unavailable"; reason: string };
 
+/**
+ * @docs
+ * @kind heading
+ * @name declareMeasurement
+ * @file parameters/tasks/<task>/measurements/<name>.ts
+ * @description
+ * What is measured after each run.
+ *
+ * ```ts
+ * export default declareMeasurement({
+ *   instrument: "fileCreated",
+ *   config: { glob: "**\/isPrime.ts" },
+ *   aggregate: ["rate"],
+ * });
+ * ```
+ */
+
+/**
+ * @docs
+ * @name instrument
+ * @type {"fileCreated" | "grep" | "templateTest" | "replyMatches" | "shell"}
+ * @description
+ * What to measure. Each instrument takes its own `config`:
+ *
+ * | Instrument | `config` | Value |
+ * | --- | --- | --- |
+ * | `fileCreated` | `{ glob }` | Whether the agent left a matching file |
+ * | `grep` | `{ glob, pattern }` | Lines across the matching files that match `pattern` |
+ * | `templateTest` | `{ subject, template }` | Tests passed and failed |
+ * | `replyMatches` | `{ pattern, turn? }` | Whether the agent's reply matches `pattern` |
+ * | `shell` | `{ command }` | Whether `command` exits 0 |
+ */
+
+/**
+ * @docs
+ * @name aggregate
+ * @type {string[]}
+ * @description
+ * How values combine across iterations. Booleans: `rate`, `count`. Numbers: `mean`, `median`,
+ * `min`, `max`, `sum`.
+ */
+
 /** Each built-in instrument's config and value, by name. */
 export type InstrumentTypes = {
   /** Did the agent leave a file matching `glob`? */
@@ -306,16 +519,52 @@ export function declareMeasurement(declaration: MeasurementDeclaration): Measure
 }
 
 /**
+ * @docs
+ * @kind heading
+ * @name declareTestCase
+ * @file test-cases/<name>.ts
+ * @description
+ * Which parameters to run, and how often. Every list is crossed with every other, and each
+ * combination runs `iterations` times. Run `thunderjar generate` after adding a parameter, so its
+ * name type-checks here.
+ *
+ * ```ts
+ * export default declareTestCase({
+ *   baseImage: ["node20"],
+ *   codeState: ["baseline"],
+ *   promptSet: ["snerk"],
+ *   harnessModel: ["claude-code-2.1.311/claude-sonnet-5-5"],
+ *   task: "is-prime",
+ *   initialPrompt: ["plain"],
+ *   iterations: 5,
+ * });
+ * ```
+ */
+
+/**
  * Every name must be declared under `parameters/`, and each initial prompt must be one of
  * `task`'s, once `thunderjar generate` has run.
  */
 export type TestCaseDeclaration<T extends TaskNames = TaskNames> = {
+  /** @docs @name baseImage @type {BaseImageName[]} @description Folders under `parameters/baseImages/`. */
   baseImage: BaseImageNames[];
+  /** @docs @name codeState @type {CodeStateName[]} @description Folders under `parameters/codeStates/`. */
   codeState: CodeStateNames[];
+  /** @docs @name promptSet @type {PromptSetName[]} @description Folders under `parameters/promptSets/`. */
   promptSet: PromptSetNames[];
+  /**
+   * @docs
+   * @name harnessModel
+   * @type {`${harness}/${modelId}`[]}
+   * @description
+   * A folder under `parameters/harnessModels/`, and the model ID to give it.
+   */
   harnessModel: HarnessModelNames[];
+  /** @docs @name task @type {TaskName} @description A folder under `parameters/tasks/`. */
   task: T;
+  /** @docs @name initialPrompt @type {InitialPromptName[]} @description Files in that task's `initial-prompts/`. */
   initialPrompt: (T extends keyof InitialPromptNamesByTask ? InitialPromptNamesByTask[T] : never)[];
+  /** @docs @name iterations @type {number} @description How many times to run each combination. */
   iterations: number;
 };
 
@@ -374,16 +623,51 @@ export type BuildOptions = {
  */
 export type RuntimeConfig = { command: string[] };
 
+/**
+ * @docs
+ * @kind heading
+ * @name declareConfig
+ * @file thunderjar.config.ts
+ * @description
+ * Where images and run data are kept.
+ *
+ * ```ts
+ * export default declareConfig({
+ *   imageStore: null,
+ *   runDataStore: sqliteStore({ path: "./run-data.sqlite" }),
+ * });
+ * ```
+ */
 export type ConfigDeclaration = {
   /**
+   * @docs
+   * @name imageStore
+   * @type {{ repository: string } | null}
+   * @description
    * The registry repository prerun and postrun images are pushed to, e.g.
    * `{ repository: "ghcr.io/acme/thunderjar-images" }`, with the user's `docker login`. `null`
    * keeps them in the local Docker daemon only: nothing is pushed, and no login is needed.
    */
   imageStore: ImageStore | null;
-  /** Where run results are recorded: `sqliteStore` for a local file, or `postgresStore` for a shared database. */
+  /**
+   * @docs
+   * @name runDataStore
+   * @type {SqliteStore | PostgresStore}
+   * @description
+   * Where run results are recorded: `sqliteStore({ path })` for a local file, or
+   * `postgresStore({ urlEnv })` for a shared database.
+   */
   runDataStore: RunDataStoreDeclaration;
-  /** Secrets, and the SSH agent, for prerun builds. None by default. */
+  /**
+   * @docs
+   * @name build
+   * @type {{ secrets?: { id: string; env: string }[]; ssh?: boolean }}
+   * @default {}
+   * @description
+   * Secrets, and the SSH agent, for prerun builds, e.g. to clone a private repository. Each secret
+   * is passed as `docker build --secret id=<id>,env=<env>`, and never written to an image or the
+   * run data. `ssh: true` passes the host's SSH agent as `docker build --ssh default`.
+   */
   build?: BuildOptions;
   /** Where `run` runs containers. The local Docker daemon by default, or with `run --local`. */
   runtime?: RuntimeConfig;
