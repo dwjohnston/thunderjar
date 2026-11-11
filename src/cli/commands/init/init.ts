@@ -1,6 +1,7 @@
 import { $ } from "bun";
 import { Command } from "commander";
 import { type Repository, scaffold } from "./scaffold.ts";
+import { painter } from "../../colour.ts";
 import { print } from "../../output.ts";
 
 const FOLDER = ".thunderjar";
@@ -68,8 +69,9 @@ export function createInitCommand(): Command {
     )
     .action(async () => {
       const { createdFolder, created, existing } = await init(process.cwd());
-      if (createdFolder) print(`Created ${FOLDER}/`);
-      for (const path of created) print(`Created ${FOLDER}/${path}`);
-      for (const path of existing) print(`Exists  ${FOLDER}/${path}`);
+      const paint = painter();
+      if (createdFolder) print(`${paint.green("Created")} ${FOLDER}/`);
+      for (const path of created) print(`${paint.green("Created")} ${FOLDER}/${path}`);
+      for (const path of existing) print(paint.dim(`Exists  ${FOLDER}/${path}`));
     });
 }

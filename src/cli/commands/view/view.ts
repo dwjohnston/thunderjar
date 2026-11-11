@@ -4,6 +4,7 @@
 import { Command, Option } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { type RunDataStore, fileStore, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { painter } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, resolvePath } from "../../dataDir.ts";
 import app from "./app/index.html";
@@ -55,8 +56,9 @@ async function view(cwd: string, port: number, dataDir?: string): Promise<void> 
   // the bundle, on every request. So serve from the bundle's folder. The store's path is absolute.
   process.chdir(import.meta.dir);
   const server = startViewServer(fileStore(store), port);
-  print(`Viewing ${store}`);
-  print(`Open ${server.url}`);
+  const paint = painter();
+  print(`${paint.dim("Viewing")} ${paint.cyan(store)}`);
+  print(`${paint.dim("Open")} ${paint.bold(paint.cyan(String(server.url)))}`);
 }
 
 export function createViewCommand(): Command {

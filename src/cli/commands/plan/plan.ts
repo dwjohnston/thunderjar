@@ -13,10 +13,11 @@ import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerUnavailableError, imagesIn } from "../../../docker/docker.ts";
 import { hashPermutations } from "../../../execution/hashPermutations.ts";
 import { prerunImage, prerunRepository } from "../../../execution/images.ts";
+import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { showResolved } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
-import { print, printError } from "../../output.ts";
+import { print, printWarning } from "../../output.ts";
 
 /** Whether a permutation's prerun image exists: `unknown` when Docker can't be asked. */
 export type ImageStatus = "built" | "missing" | "unknown";
@@ -33,23 +34,28 @@ const ROWS: [label: string, values: (testCase: TestCaseDeclaration) => string][]
 const LABEL_WIDTH = Math.max(...ROWS.map(([label]) => `${label}: `.length));
 
 /** The parameters `testCase` names, one line each. */
-export function renderSummary(testCase: TestCaseDeclaration): string {
-  return ROWS.map(([label, values]) => `${`${label}:`.padEnd(LABEL_WIDTH)}${values(testCase)}`).join("\n");
+export function renderSummary(testCase: TestCaseDeclaration, paint: Paint = plain): string {
+  return ROWS.map(([label, values]) => `${paint.dim(`${label}:`.padEnd(LABEL_WIDTH))}${values(testCase)}`).join("\n");
 }
+
+/** An image status, coloured: built green, missing yellow, unknown dim. */
+const showStatus = (status: ImageStatus, paint: Paint) =>
+  (status === "built" ? paint.green : status === "missing" ? paint.yellow : paint.dim)(status);
 
 /** The matrix's shape, then each permutation, numbered from 1, with its abbreviated hash and image status. */
 export function renderMatrix(
   testCase: TestCaseDeclaration,
   permutations: HashedPermutation[],
   statuses: ImageStatus[],
+  paint: Paint = plain,
 ): string {
   const count = permutations.length;
-  const shape = `Matrix shape: ${matrixShape(testCase).join("/")} (${count} ${count === 1 ? "permutation" : "permutations"})`;
+  const shape = `${paint.bold("Matrix shape:")} ${matrixShape(testCase).join("/")} ${paint.dim(`(${count} ${count === 1 ? "permutation" : "permutations"})`)}`;
   const indexWidth = Math.max(2, String(count).length);
   const widths = AXES.map((axis) => Math.max(...permutations.map((permutation) => permutation[axis].length)));
   const rows = permutations.map((permutation, i) => {
     const columns = AXES.map((axis, a) => permutation[axis].padEnd(widths[a] as number)).join(" | ");
-    return `${String(i + 1).padStart(indexWidth)}  ${columns}   ${abbreviateHash(permutation.hash)}  ${statuses[i]}`;
+    return `${paint.bold(String(i + 1).padStart(indexWidth))}  ${columns}   ${paint.dim(abbreviateHash(permutation.hash))}  ${showStatus(statuses[i]!, paint)}`;
   });
   return [shape, "", ...rows].join("\n");
 }
@@ -58,7 +64,7 @@ export function renderMatrix(
  * What each parameter with a `resolve` resolved to, one line each, `<axis>  <name>  <value>`, in
  * plan's order, or nothing if none has one.
  */
-export function renderResolved(permutations: HashedPermutation[]): string[] {
+export function renderResolved(permutations: HashedPermutation[], paint: Paint = plain): string[] {
   const rows = new Map<string, [string, string, string]>();
   for (const permutation of permutations) {
     for (const axis of AXES) {
@@ -68,7 +74,10 @@ export function renderResolved(permutations: HashedPermutation[]): string[] {
   }
   if (rows.size === 0) return [];
   const widths = [0, 1].map((i) => Math.max(...[...rows.values()].map((row) => row[i]!.length)));
-  return ["Resolved", ...[...rows.values()].map(([axis, name, value]) => `  ${axis.padEnd(widths[0]!)}  ${name.padEnd(widths[1]!)}  ${value}`)];
+  return [
+    paint.bold("Resolved"),
+    ...[...rows.values()].map(([axis, name, value]) => `  ${paint.dim(axis.padEnd(widths[0]!))}  ${name.padEnd(widths[1]!)}  ${paint.cyan(value)}`),
+  ];
 }
 
 /** Whether each permutation's prerun image exists, or, if Docker can't be asked, why not. */
@@ -89,7 +98,7 @@ async function imageStatuses(
  * The plan of test case `name`, of the nearest `.thunderjar/` folder, in `cwd` or above it, and a
  * warning if Docker couldn't say which prerun images exist.
  */
-export async function plan(cwd: string, name: string, imagePrefix?: string): Promise<{ output: string; warning?: string }> {
+export async function plan(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain): Promise<{ output: string; warning?: string }> {
   const root = await findThunderjarRoot(cwd);
   const { build } = await loadProjectConfig(root);
   const testCase = await loadTestCase(root, name);
@@ -98,8 +107,10 @@ export async function plan(cwd: string, name: string, imagePrefix?: string): Pro
   const permutations = await hashPermutations(root, testCase);
   const { statuses, unavailable } = await imageStatuses(permutations, imagePrefix);
   return {
-    output: [renderSummary(testCase), renderMatrix(testCase, permutations, statuses), renderResolved(permutations).join("\n")].filter(Boolean).join("\n\n"),
-    warning: unavailable && `Warning: Docker can't be reached, so whether each prerun image is built is unknown: ${unavailable}`,
+    output: [renderSummary(testCase, paint), renderMatrix(testCase, permutations, statuses, paint), renderResolved(permutations, paint).join("\n")]
+      .filter(Boolean)
+      .join("\n\n"),
+    warning: unavailable && `Docker can't be reached, so whether each prerun image is built is unknown: ${unavailable}`,
   };
 }
 
@@ -112,9 +123,9 @@ export function createPlanCommand(): Command {
     .addOption(imagePrefixOption())
     .action(
       reportingConfigErrors(async (name: string, options: { imagePrefix: string }) => {
-        const { output, warning } = await plan(process.cwd(), name, options.imagePrefix);
+        const { output, warning } = await plan(process.cwd(), name, options.imagePrefix, painter());
         print(output);
-        if (warning) printError(warning);
+        if (warning) printWarning(warning);
       }),
     );
 }

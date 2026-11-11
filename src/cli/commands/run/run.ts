@@ -11,52 +11,54 @@ import { type PlannedExecution, type PlannedPermutation, planExecution } from ".
 import { runExecution } from "../../../execution/runExecution.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { executionFolder, fileStore, type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
+import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath } from "../../dataDir.ts";
-import { agentEnd, dollars, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
-import { print, printError } from "../../output.ts";
+import { print, printError as error } from "../../output.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
 const FIELD_INDENT = "    ";
 const LABEL_WIDTH = 10;
 
 /** `label: value`, the value's later lines lined up under its first. */
-const field = (label: string, value: string) =>
-  `${FIELD_INDENT}${`${label}:`.padEnd(LABEL_WIDTH)}${value.split("\n").join(`\n${FIELD_INDENT}${" ".repeat(LABEL_WIDTH)}`)}`;
+const field = (label: string, value: string, paint: Paint = plain) =>
+  `${FIELD_INDENT}${paint.dim(`${label}:`.padEnd(LABEL_WIDTH))}${value.split("\n").join(`\n${FIELD_INDENT}${" ".repeat(LABEL_WIDTH)}`)}`;
 
 /**
  * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
  * the environment variables its container is given, by name, any more `docker run` options, the
  * prompt file's contents, and its harness command. With several turns, its session ID, and each turn's prompt and command.
  */
-export function renderExecution({ executionId, permutations }: PlannedExecution): string {
+export function renderExecution({ executionId, permutations }: PlannedExecution, paint: Paint = plain): string {
+  const f = (label: string, value: string) => field(label, value, paint);
   const blocks = permutations.map((permutation) =>
     [
-      `Permutation ${permutation.number}: prerun image ${permutation.prerunImage}`,
+      `${paint.bold(`Permutation ${permutation.number}`)}: prerun image ${paint.cyan(permutation.prerunImage)}`,
       ...permutation.iterations.flatMap((iteration) => [
-        `  Iteration ${iteration.number}: postrun image ${iteration.postrunImage}`,
-        ...(permutation.env.length > 0 ? [field("env", permutation.env.join(", "))] : []),
-        ...(permutation.runOptions.length > 0 ? [field("docker", permutation.runOptions.join(" "))] : []),
+        `  ${paint.bold(`Iteration ${iteration.number}`)}: postrun image ${paint.cyan(iteration.postrunImage)}`,
+        ...(permutation.env.length > 0 ? [f("env", permutation.env.join(", "))] : []),
+        ...(permutation.runOptions.length > 0 ? [f("docker", permutation.runOptions.join(" "))] : []),
         ...(iteration.turns.length === 1
-          ? [field("prompt", iteration.turns[0]!.prompt), field("command", iteration.turns[0]!.command)]
+          ? [f("prompt", iteration.turns[0]!.prompt), f("command", iteration.turns[0]!.command)]
           : [
-              field("session", iteration.sessionId),
-              ...iteration.turns.flatMap(({ prompt, command }, t) => [field(`prompt ${t + 1}`, prompt), field(`turn ${t + 1}`, command)]),
+              f("session", iteration.sessionId),
+              ...iteration.turns.flatMap(({ prompt, command }, t) => [f(`prompt ${t + 1}`, prompt), f(`turn ${t + 1}`, command)]),
             ]),
       ]),
     ].join("\n"),
   );
-  return [`Execution ${executionId}`, ...blocks].join("\n\n");
+  return [`${paint.dim("Execution")} ${paint.bold(executionId)}`, ...blocks].join("\n\n");
 }
 
 /** What an execution of test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it, would do. */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string): Promise<string> {
+export async function dryRun(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain): Promise<string> {
   const root = await findThunderjarRoot(cwd);
   const executionId = ulid();
   const testCase = await loadTestCase(root, name);
   await checkRequiredEnv(root, testCase);
-  return renderExecution(await planExecution(root, testCase, executionId, imagePrefix));
+  return renderExecution(await planExecution(root, testCase, executionId, imagePrefix), paint);
 }
 
 /** `n/total`, `n` padded to the width of `total`, so the lines line up. */
@@ -73,18 +75,22 @@ const showValue = (value: unknown): string =>
         .join(", ")}}`
     : (JSON.stringify(value) ?? String(value));
 
+/** A measured value, coloured: `true` green, `false` red, anything else as it is. */
+const paintValue = (paint: Paint, data: unknown) =>
+  data === true ? paint.green("true") : data === false ? paint.red("false") : showValue(data);
+
 /** A measure as `run` prints it: its value, or why it has none. */
-const showOutcome = (outcome: RecordedOutcome) =>
+const showOutcome = (outcome: RecordedOutcome, paint: Paint) =>
   outcome.outcome === "measured"
-    ? showValue(outcome.data)
+    ? paintValue(paint, outcome.data)
     : outcome.outcome === "skipped"
-      ? `skipped${outcome.reason ? ` (${outcome.reason})` : ""}`
-      : `erroredWhileMeasuring (${outcome.error.message})`;
+      ? paint.yellow(`skipped${outcome.reason ? ` (${outcome.reason})` : ""}`)
+      : paint.red(`erroredWhileMeasuring (${outcome.error.message})`);
 
 /** A container run's measures, on one line: `<name>: <value>`, three spaces apart. */
-const showMeasures = (result: Record<string, RecordedMeasure>) =>
+const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
   Object.entries(result)
-    .map(([name, { outcome }]) => `${name}: ${showOutcome(outcome)}`)
+    .map(([name, { outcome }]) => `${paint.blue(`${name}:`)} ${showOutcome(outcome, paint)}`)
     .join("   ");
 
 /**
@@ -115,13 +121,13 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   checkBuildSecrets(build);
   try {
     await checkImageStore(imageStore);
-  } catch (error) {
-    if (error instanceof ImageStoreLoginError) {
-      printError(`Error: ${error.message}`);
-    } else if (error instanceof DockerUnavailableError) {
-      printError(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
+  } catch (caught) {
+    if (caught instanceof ImageStoreLoginError) {
+      error(caught.message);
+    } else if (caught instanceof DockerUnavailableError) {
+      error(`Docker can't be reached, so nothing can be run: ${caught.message}`);
     } else {
-      throw error;
+      throw caught;
     }
     process.exitCode = 1;
     return;
@@ -132,7 +138,13 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   // Where a postrun image's push line goes: under its iteration, lined up with it, like its measures.
   const underIteration = " ".repeat(ordinal(permutations, permutations).length + 3);
 
-  print(`Execution ${plan.executionId}`);
+  // Colour for what's written while running, on a terminal.
+  const paint = painter();
+  const ellipsis = paint.dim("...");
+  const done = paint.green("done");
+  const failed = paint.red("failed");
+
+  print(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
   let building: string | undefined;
   let pushing: string | undefined;
   // Whether a container run has started, so a push is of a postrun image.
@@ -144,62 +156,62 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
       onBuilding: (image) => {
         building = image;
         lineOpen = true;
-        process.stdout.write(`Building ${image} ... `);
+        process.stdout.write(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
       onBuilt: () => {
         building = undefined;
         lineOpen = false;
-        print("done");
+        print(done);
       },
       onPushing: (_image, reference) => {
         pushing = reference;
         lineOpen = true;
-        process.stdout.write(`${running ? underIteration : ""}Pushing ${reference} ... `);
+        process.stdout.write(`${running ? underIteration : ""}Pushing ${paint.cyan(reference)} ${ellipsis} `);
       },
       onPushed: () => {
         pushing = undefined;
         lineOpen = false;
-        print("done");
+        print(done);
       },
       onRunning: (permutation, iteration) => {
         running = true;
         lineOpen = true;
         process.stdout.write(
-          ` ${ordinal(permutation.number, permutations)}  iteration ${ordinal(iteration.number, testCase.iterations)}  ${label(testCase, permutation)}  ... `,
+          ` ${paint.bold(ordinal(permutation.number, permutations))}  iteration ${paint.bold(ordinal(iteration.number, testCase.iterations))}  ${paint.magenta(label(testCase, permutation))}  ${ellipsis} `,
         );
       },
       onRan: (_permutation, _iteration, { execution, harnessResult, tokenCosts }) => {
         lineOpen = false;
-        const ended = agentEnd(execution, harnessResult);
+        const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
         // Its cost if it can be trusted, else its tokens, if it has either.
         const cost = knownCost(tokenCosts);
         const tokens = totalTokens(tokenCosts);
         const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
-        print(execution.timedOut ? ended : `${ended} (${duration(execution.finishedAt - execution.startedAt)}${spent})`);
+        print(execution.timedOut ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`);
       },
       onMeasured: (permutation, _iteration, result) => {
         // Under the iteration, lined up with it.
-        print(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result)}`);
+        print(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
       },
     });
-    print(`Wrote ${displayPath(cwd, executionFolder(store, plan.executionId))}/`);
+    print(paint.dim(`Wrote ${displayPath(cwd, executionFolder(store, plan.executionId))}/`));
     if (record.status === "failed") process.exitCode = 1;
-  } catch (error) {
-    if (error instanceof DockerUnavailableError) {
-      printError(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
-    } else if (error instanceof DockerBuildError) {
-      print("failed");
-      printError(`Error: Building ${building} failed: ${error.message}`);
-    } else if (error instanceof DockerPushError) {
-      print("failed");
-      printError(`Error: ${pushFailure(pushing as string, error)}`);
-    } else if (error instanceof DockerContainerError && lineOpen) {
-      print("failed");
-      printError(`Error: Running a container failed: ${error.message}`);
-    } else if (error instanceof DockerContainerError) {
-      printError(`Error: Measuring a container run failed: ${error.message}`);
+  } catch (caught) {
+    if (caught instanceof DockerUnavailableError) {
+      error(`Docker can't be reached, so nothing can be run: ${caught.message}`);
+    } else if (caught instanceof DockerBuildError) {
+      print(failed);
+      error(`Building ${building} failed: ${caught.message}`);
+    } else if (caught instanceof DockerPushError) {
+      print(failed);
+      error(pushFailure(pushing as string, caught));
+    } else if (caught instanceof DockerContainerError && lineOpen) {
+      print(failed);
+      error(`Running a container failed: ${caught.message}`);
+    } else if (caught instanceof DockerContainerError) {
+      error(`Measuring a container run failed: ${caught.message}`);
     } else {
-      throw error;
+      throw caught;
     }
     process.exitCode = 1;
   }
@@ -219,7 +231,7 @@ export function createRunCommand(): Command {
     .addOption(dataDirOption())
     .action(
       reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string; dataDir?: string }) => {
-        if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix));
+        if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
         else await run(process.cwd(), name, options.imagePrefix, options.dataDir);
       }),
     );

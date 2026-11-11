@@ -12,9 +12,12 @@
  *
  */
 
-// What a command reports to its user: plain lines, its results on stdout and its errors on stderr.
-// Not the diagnostic log, which is src/log/logger.ts.
+// What a command reports to its user: its results on stdout, and its errors and warnings on
+// stderr, coloured on a terminal (see colour.ts). Not the diagnostic log, which is
+// src/log/logger.ts and goes to a file.
 //
+import { painter } from "./colour.ts";
+
 // Every command writes through here, never with `console`: the lint rule `no-console` bans it.
 
 /** Writes `text` as a line on stdout. */
@@ -22,7 +25,12 @@ export function print(text: string): void {
   process.stdout.write(`${text}\n`);
 }
 
-/** Writes `text` as a line on stderr. */
-export function printError(text: string): void {
-  process.stderr.write(`${text}\n`);
+/** Writes `message` to stderr after `Error:`, which is bold red on a terminal. */
+export function printError(message: string): void {
+  process.stderr.write(`${painter(process.stderr).error("Error:")} ${message}\n`);
+}
+
+/** Writes `message` to stderr after `Warning:`, which is yellow on a terminal. */
+export function printWarning(message: string): void {
+  process.stderr.write(`${painter(process.stderr).yellow("Warning:")} ${message}\n`);
 }

@@ -13,7 +13,7 @@ export function reportingConfigErrors<Args extends unknown[]>(
       await action(...args);
     } catch (error) {
       if (!(error instanceof ConfigError)) throw error;
-      for (const problem of error.problems) printError(`Error: ${problem}`);
+      for (const problem of error.problems) printError(problem);
       process.exitCode = 1;
     }
   };
