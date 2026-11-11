@@ -219,7 +219,7 @@ function Execution({ id }: { id: string }) {
                         <td>{run.parameters.codeState?.name}</td>
                         <td>{run.parameters.promptSet?.name}</td>
                         <td>
-                          {run.harnessModel.harness} / {run.harnessModel.model}
+                          {run.harnessModel.harness} / {run.harnessModel.model ?? run.harnessModel.modelId}
                         </td>
                         <td>{duration(run.execution.finishedAt - run.execution.startedAt)}</td>
                         <td>{agentEnd(run.execution, run.harnessResult)}</td>
