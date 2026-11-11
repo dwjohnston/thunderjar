@@ -11,7 +11,7 @@ Project uses changeset and standard semantic versioning.
 |---|---|---|---|---|
 | Stable | `x.y.z` | `0.2.0` | `latest` | Merging the "Release Version x.y.z" PR |
 | Release candidate | `x.y.z-rc.N` | `0.2.0-rc.0`, `0.2.0-rc.1` | `rc` | Merging the "Release candidate" PR |
-| Preview | `x.y.z-preview-<short sha>` | `0.2.0-preview-cb023da` | `preview` | A `/preview` comment on an open PR |
+| Preview | `x.y.z-preview-<short sha>` | `0.3.0-preview-3e68b3b` | `preview` | A `/preview` comment on an open PR |
 
 
 ### Semver while in 0.x
@@ -44,7 +44,7 @@ Basically changes are merged to main, they will be installable via `bunx skills 
 The repo runs thunderjar on itself from [`.thunderjar/`](./.thunderjar/). It uses a published release, installed as an npm alias devDependency:
 
 ```json
-"thunderjar-published": "npm:thunderjar@0.2.0-preview-cb023da"
+"thunderjar-published": "npm:thunderjar@0.3.0-preview-3e68b3b"
 ```
 
 `.thunderjar/` code imports from `thunderjar-published`, not `thunderjar`.
