@@ -93,6 +93,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - uses: superfly/flyctl-actions/setup-flyctl@master
+      # The action installs `flyctl`. The Fly scripts call it as `fly`.
+      - run: command -v fly || sudo ln -s "$(command -v flyctl)" /usr/local/bin/fly
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -109,8 +111,10 @@ jobs:
           status=${PIPESTATUS[0]}
           id=$(grep -m1 -oP '^Execution \K\S+' run.log)
           if [ -n "$id" ]; then
-            echo "execution=$id" >> "$GITHUB_OUTPUT"
-            ./node_modules/.bin/thunderjar show "$id" > show.log 2>&1
+            # Nothing is recorded if the run stopped before its first container, e.g. in beforeRun.
+            if ./node_modules/.bin/thunderjar show "$id" > show.log 2>&1; then
+              echo "execution=$id" >> "$GITHUB_OUTPUT"
+            fi
           fi
           exit "$status"
 
