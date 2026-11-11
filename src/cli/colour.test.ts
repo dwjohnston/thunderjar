@@ -1,3 +1,18 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Model: claude-opus-5-5
+ * Session Id: 59b8836a-3b3e-41c0-9575-a82add14e327
+ * Supervising engineer: blacksheep-bot
+ *
+ *
+ * Humans: add your notes here
+ *
+ *
+ */
+
 import { afterEach, describe, expect, test } from "bun:test";
 import { colourFor, painter } from "./colour.ts";
 

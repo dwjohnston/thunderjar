@@ -1,3 +1,18 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Model: claude-opus-5-5
+ * Session Id: 59b8836a-3b3e-41c0-9575-a82add14e327
+ * Supervising engineer: blacksheep-bot
+ *
+ *
+ * Humans: add your notes here
+ *
+ *
+ */
+
 // Colour for what the CLI writes to a terminal. Anywhere else, e.g. a pipe or a file, text is left
 // plain, so output that's read by scripts and tests stays the same. `NO_COLOR` turns colour off,
 // and `FORCE_COLOR` turns it on, as most CLIs do.
