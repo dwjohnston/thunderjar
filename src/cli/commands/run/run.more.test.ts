@@ -493,6 +493,106 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(exitCode).not.toBe(0);
   });
 
+  /**
+   * A copy of 0211 with two prerun images, one per harness, alpha's then beta's, its runtime
+   * `concurrency` and `build.concurrency`, and their image names.
+   */
+  async function copyWithTwoImages(concurrency: number, buildConcurrency: number) {
+    const copy = await copyScenarioProject("0211");
+    const thunderjarDir = `${copy.dir}/.thunderjar`;
+    const harnesses = `${thunderjarDir}/parameters/harnessModels`;
+    await $`cp -R ${harnesses}/fake-harness-alpha ${harnesses}/fake-harness-beta`.quiet();
+    const beta = `${harnesses}/fake-harness-beta/index.ts`;
+    await Bun.write(beta, (await Bun.file(beta).text()).replace("install fake-harness-alpha", "install fake-harness-beta"));
+    const testCase = `${thunderjarDir}/test-cases/example.ts`;
+    await Bun.write(
+      testCase,
+      (await Bun.file(testCase).text()).replace('"fake-harness-alpha/fake-model-small-001"]', '"fake-harness-alpha/fake-model-small-001", "fake-harness-beta/fake-model-small-001"]'),
+    );
+    const config = `${thunderjarDir}/thunderjar.config.ts`;
+    await Bun.write(
+      config,
+      (await Bun.file(config).text())
+        .replace('"--context", "cloud"]', `"--context", "cloud"], concurrency: ${concurrency}`)
+        .replace("  runDataStore:", `  build: { concurrency: ${buildConcurrency} },\n  runDataStore:`),
+    );
+    const { stdout } = await thunderjar(copy.dir, ["run", "example", "--dry-run"]);
+    const images = stdout.split("\n").flatMap((line) => /^Permutation \d+: prerun image (.*)$/.exec(line)?.[1] ?? []);
+    expect(images).toHaveLength(2);
+    return { copy, alpha: images[0] as string, beta: images[1] as string };
+  }
+
+  test("with build concurrency 2, builds both prerun images at once, writing each line whole", async () => {
+    const { copy, alpha, beta } = await copyWithTwoImages(1, 2);
+    await using _copy = copy;
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], slow: [alpha, beta] });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const lines = stdout.split("\n");
+    expect(lines).toContain("Building up to 2 prerun images at once");
+    expect(stdout).not.toContain("containers at once");
+    const at = (text: string) => lines.indexOf(text);
+    const firstBuilt = Math.min(at(`Built ${alpha}`), at(`Built ${beta}`));
+    expect(at(`Building ${alpha}`)).toBeLessThan(firstBuilt);
+    expect(at(`Building ${beta}`)).toBeLessThan(firstBuilt);
+    expect(lines).toContain(`Pulled ghcr.io/acme/thunderjar-images:prerun-h${alpha.split(":")[1]} into the runtime`);
+    const { execution, containerRuns } = await readStore(data);
+    expect(execution.status).toBe("complete");
+    expect(containerRuns.map((run) => run.permutation).sort()).toEqual([1, 2]);
+  }, 30_000);
+
+  test("with concurrency 2, starts an iteration once its own prerun image is ready, while the next is still building", async () => {
+    const { copy, alpha, beta } = await copyWithTwoImages(2, 1);
+    await using _copy = copy;
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], slow: [beta] });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const lines = stdout.split("\n");
+    const at = (text: string) => lines.findIndex((line) => line.includes(text));
+    expect(at(`Built ${alpha}`)).toBeLessThan(at(`Building ${beta}`));
+    expect(at("fake-harness-alpha | plain  started")).toBeLessThan(at(`Built ${beta}`));
+    expect(at(`Built ${beta}`)).toBeLessThan(at("fake-harness-beta | plain  started"));
+    expect((await readStore(data)).containerRuns).toHaveLength(2);
+  }, 30_000);
+
+  test("when a prerun image fails to build after an iteration has started, it finishes and is recorded, and the execution is failed", async () => {
+    const { copy, alpha, beta } = await copyWithTwoImages(2, 1);
+    await using _copy = copy;
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], failing: [beta] });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain(`Building ${beta} failed: ERROR: failed to build`);
+    expect(stdout).toContain(`Built ${alpha}`);
+    const { execution, containerRuns } = await readStore(data);
+    expect(execution.status).toBe("failed");
+    expect(containerRuns.map((run) => run.permutation)).toEqual([1]);
+    expect(Object.keys(containerRuns[0]?.result ?? {})).toHaveLength(3);
+  }, 30_000);
+
+  test("when the first prerun image fails to build, before any iteration starts, nothing is recorded", async () => {
+    const { copy, alpha } = await copyWithTwoImages(2, 2);
+    await using _copy = copy;
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], failing: [alpha] });
+    const data = dataDir();
+
+    const { stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain(`Building ${alpha} failed`);
+    expect(await Bun.file(data).exists()).toBe(false);
+  }, 30_000);
+
   test("--iterations overrides the test case's, in what's run, written and recorded", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     const data = dataDir();

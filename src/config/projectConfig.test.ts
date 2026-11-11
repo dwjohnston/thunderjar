@@ -45,7 +45,7 @@ describe("imageStoreProblem", () => {
 });
 
 describe("buildOptionsProblem", () => {
-  test.each([[undefined], [{}], [{ ssh: true }], [{ secrets: [] }], [{ secrets: [{ id: "github", env: "GITHUB_TOKEN" }, { id: "npm.rc", env: "NPM_TOKEN" }], ssh: false }]])(
+  test.each([[undefined], [{}], [{ ssh: true }], [{ secrets: [] }], [{ concurrency: 4 }], [{ secrets: [{ id: "github", env: "GITHUB_TOKEN" }, { id: "npm.rc", env: "NPM_TOKEN" }], ssh: false }]])(
     "%p is build options",
     (build: unknown) => {
       expect(buildOptionsProblem(build)).toBeUndefined();
@@ -53,8 +53,10 @@ describe("buildOptionsProblem", () => {
   );
 
   test.each([
-    [null, "must be { secrets: [{ id, env }], ssh: true }, either of them left out, got null"],
+    [null, "must be { secrets: [{ id, env }], ssh: true, concurrency: 2 }, any of them left out, got null"],
     [{ ssh: "yes" }, 'ssh must be true or false, got "yes"'],
+    [{ concurrency: 0 }, "concurrency must be a whole number, 1 or more, got 0"],
+    [{ concurrency: 1.5 }, "concurrency must be a whole number, 1 or more, got 1.5"],
     [{ secrets: { id: "github" } }, 'secrets must be a list of { id, env }, got {"id":"github"}'],
     [{ secrets: [{ id: "git hub", env: "GITHUB_TOKEN" }] }, 'secrets: "git hub" is not a secret ID: letters, digits, ".", "_" and "-"'],
     [{ secrets: [{ id: "github", env: "GITHUB TOKEN" }] }, 'secrets: "GITHUB TOKEN", secret "github"\'s env, is not an environment variable name'],
@@ -65,7 +67,7 @@ describe("buildOptionsProblem", () => {
 });
 
 describe("checkBuildSecrets", () => {
-  const build = { secrets: [{ id: "github", env: "GITHUB_TOKEN" }, { id: "npm", env: "NPM_TOKEN" }], ssh: false };
+  const build = { secrets: [{ id: "github", env: "GITHUB_TOKEN" }, { id: "npm", env: "NPM_TOKEN" }], ssh: false, concurrency: 1 };
 
   test("passes when every secret's variable is set", () => {
     expect(() => checkBuildSecrets(build, { GITHUB_TOKEN: "x", NPM_TOKEN: "y" })).not.toThrow();
@@ -84,7 +86,7 @@ describe("loadProjectConfig", () => {
       imageStore: null,
       runDataStore: { kind: "sqlite", path: "./.thunderjar/.data/runs.sqlite" },
       runtime: null,
-      build: { secrets: [], ssh: false },
+      build: { secrets: [], ssh: false, concurrency: 1 },
     });
   });
 
@@ -93,7 +95,7 @@ describe("loadProjectConfig", () => {
       imageStore: { repository: "ghcr.io/acme/thunderjar-images" },
       runtime: null,
       runDataStore: { kind: "sqlite", path: "./.thunderjar/.data/runs.sqlite" },
-      build: { secrets: [], ssh: false },
+      build: { secrets: [], ssh: false, concurrency: 1 },
     });
   });
 
@@ -101,6 +103,7 @@ describe("loadProjectConfig", () => {
     expect((await loadProjectConfig(await findThunderjarRoot(scenario("0210")))).build).toEqual({
       secrets: [{ id: "github", env: "GITHUB_TOKEN" }],
       ssh: true,
+      concurrency: 1,
     });
   });
 

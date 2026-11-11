@@ -28,7 +28,9 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string, pa
 
 /**
  * Builds each prerun image test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above
- * it, needs that doesn't exist yet, writing `Building <image> ... done` for each, then, with an
+ * it, needs that doesn't exist yet, writing `Building <image> ... done` for each, or, with a build
+ * concurrency above 1, building that many at once and writing `Building <image>` and `Built <image>`
+ * as each starts and ends. Then, with an
  * image store, pushes each of them, writing `Pushing <reference> ... done`, then a count. Exits 1
  * with an error if a build secret's variable is unset, Docker can't be reached, has no login for the
  * image store's registry (before anything is built), or a build or push fails.
@@ -39,8 +41,7 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
   const testCase = await loadTestCase(root, name);
   checkBuildSecrets(buildOptions);
   const permutations = await hashPermutations(root, testCase);
-  let building: string | undefined;
-  let pushing: string | undefined;
+  const concurrent = buildOptions.concurrency > 1;
   // Colour for what's written while building, on a terminal.
   const paint = painter();
   const ellipsis = paint.dim("...");
@@ -51,21 +52,19 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
     await checkImageStore(imageStore);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
       onBuilding: (image) => {
-        building = image;
+        if (concurrent) return console.log(`Building ${paint.cyan(image)}`);
         line = waitingLine(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
-      onBuilt: () => {
-        building = undefined;
+      onBuilt: (image) => {
+        if (concurrent) return console.log(`Built ${paint.cyan(image)}`);
         line?.finish(done);
       },
     }, buildOptions);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
       onPushing: (_image, reference) => {
-        pushing = reference;
         line = waitingLine(`Pushing ${paint.cyan(reference)} ${ellipsis} `);
       },
       onPushed: () => {
-        pushing = undefined;
         line?.finish(done);
       },
     });
@@ -83,10 +82,10 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
       printError(error.message);
     } else if (error instanceof DockerBuildError) {
       line?.fail();
-      printError(`Building ${building} failed: ${error.message}`);
+      printError(`Building ${error.image} failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
       line?.fail();
-      printError(pushFailure(pushing as string, error));
+      printError(pushFailure(error.reference, error));
     } else {
       throw error;
     }
