@@ -1,6 +1,7 @@
 import type { ModelTokenCosts, Resolved, TokenCosts } from "../api/declarations.ts";
 import { registryHost } from "../config/projectConfig.ts";
-import type { ContainerRunRecord, Execution } from "../store/runDataStore.ts";
+import type { ContainerRunRecord, Execution, ExecutionRecord } from "../store/runDataStore.ts";
+import type { Paint } from "./colour.ts";
 
 /**
  * How a container run's agent ended, without how long it took: `done`, `exited 1`, `timed out
@@ -11,6 +12,10 @@ export function agentEnd(execution: Execution, harnessResult: string | null): st
   const ended = execution.exitCode === 0 ? "done" : `exited ${execution.exitCode}`;
   return harnessResult === null ? `${ended}, no result file` : ended;
 }
+
+/** An execution's status, coloured: complete green, failed red, running yellow. */
+export const paintStatus = (status: ExecutionRecord["status"], paint: Paint) =>
+  (status === "complete" ? paint.green : status === "failed" ? paint.red : paint.yellow)(status);
 
 /** Whether a container run's agent exited 0 in time, and left a result file. */
 export const endedCleanly = (execution: Execution, harnessResult: string | null) =>

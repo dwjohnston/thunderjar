@@ -3,10 +3,12 @@
 // read afresh on each request, so a reload shows runs recorded since the page opened.
 import { Command, Option } from "commander";
 import { type ExecutionRecord, type RunDataStore, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { painter } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { type RunTotals, runTotals } from "../../format.ts";
 import { dataDirOption, openStore } from "../../dataDir.ts";
 import app from "./app/index.html";
+import { print } from "../../output.ts";
 
 export const DEFAULT_PORT = 4300;
 
@@ -63,8 +65,9 @@ async function view(cwd: string, port: number, dataDir?: string): Promise<void> 
   // the bundle, on every request. So serve from the bundle's folder. The store's path is absolute.
   process.chdir(import.meta.dir);
   const server = startViewServer(store, port);
-  console.log(`Viewing ${where}`);
-  console.log(`Open ${server.url}`);
+  const paint = painter();
+  print(`${paint.dim("Viewing")} ${paint.cyan(where)}`);
+  print(`${paint.dim("Open")} ${paint.bold(paint.cyan(String(server.url)))}`);
 }
 
 export function createViewCommand(): Command {

@@ -5,6 +5,7 @@ import { DockerBuildError, DockerPullError, DockerPushError, DockerUnavailableEr
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { probeRuntime } from "../../../execution/runtimeProbe.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
+import { print, printError } from "../../output.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 const STEP_LABEL = { build: "Building", push: "Pushing", pull: "Pulling through the runtime" } as const;
@@ -18,12 +19,12 @@ const STEP_LABEL = { build: "Building", push: "Pushing", pull: "Pulling through 
 async function doctor(cwd: string): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const { imageStore, runtime } = await loadProjectConfig(root);
-  console.log("Config ... ok");
+  print("Config ... ok");
   // The line that's waiting for how its check ends.
   let line: WaitingLine | undefined;
   try {
     if (imageStore === null) {
-      console.log("Image store ... none: images stay in the local Docker daemon");
+      print("Image store ... none: images stay in the local Docker daemon");
     } else {
       line = waitingLine(`Docker login for ${imageStore.repository} ... `);
       await checkImageStore(imageStore);
@@ -31,10 +32,10 @@ async function doctor(cwd: string): Promise<void> {
       line = undefined;
     }
     if (runtime === null || imageStore === null) {
-      console.log("Runtime ... none: containers run on the local Docker daemon");
+      print("Runtime ... none: containers run on the local Docker daemon");
       return;
     }
-    console.log(`Runtime: \`${runtime.command.join(" ")}\``);
+    print(`Runtime: \`${runtime.command.join(" ")}\``);
     await probeRuntime(imageStore, runtime, {
       onStep: (s, target) => {
         line = waitingLine(`  ${STEP_LABEL[s]} ${target} ... `);
@@ -44,20 +45,20 @@ async function doctor(cwd: string): Promise<void> {
         line = undefined;
       },
     });
-    console.log("The runtime can run images from the image store.");
+    print("The runtime can run images from the image store.");
   } catch (error) {
     line?.fail();
     if (error instanceof DockerUnavailableError) {
-      console.error(`Error: Docker can't be reached: ${error.message}`);
+      printError(`Docker can't be reached: ${error.message}`);
     } else if (error instanceof ImageStoreLoginError) {
-      console.error(`Error: ${error.message}`);
+      printError(`${error.message}`);
     } else if (error instanceof DockerBuildError) {
-      console.error(`Error: Building the probe image failed: ${error.message}`);
+      printError(`Building the probe image failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
-      console.error(`Error: Pushing the probe image to the image store failed: ${error.message}`);
+      printError(`Pushing the probe image to the image store failed: ${error.message}`);
     } else if (error instanceof DockerPullError) {
-      console.error(
-        `Error: The runtime couldn't pull from the image store: ${error.message}\nMake sure the runtime can reach the registry and is logged in to it.`,
+      printError(
+        `The runtime couldn't pull from the image store: ${error.message}\nMake sure the runtime can reach the registry and is logged in to it.`,
       );
     } else {
       throw error;

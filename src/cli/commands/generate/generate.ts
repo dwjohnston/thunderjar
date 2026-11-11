@@ -1,7 +1,9 @@
 import { Command } from "commander";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
+import { painter } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { GENERATED_PATH, writeParameterNames } from "./parameterNames.ts";
+import { print } from "../../output.ts";
 
 /** `path`, an absolute path under `dir` or a folder above it, relative to `dir`. */
 function relativeTo(dir: string, path: string): string {
@@ -32,7 +34,8 @@ export function createGenerateCommand(): Command {
     .action(
       reportingConfigErrors(async () => {
         const path = await generate(process.cwd());
-        console.log(`Wrote ${relativeTo(process.cwd(), path)}`);
+        const paint = painter();
+        print(`${paint.green("Wrote")} ${paint.cyan(relativeTo(process.cwd(), path))}`);
       }),
     );
 }

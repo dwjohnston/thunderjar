@@ -7,9 +7,11 @@ import { prerunImage } from "../../../execution/images.ts";
 import { checkImageStore, ImageStoreLoginError, pushPrerunImages } from "../../../execution/imageStore.ts";
 import { buildPrerunImages } from "../../../execution/prerunBuilds.ts";
 import { hashPermutations } from "../../../execution/hashPermutations.ts";
+import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { pushFailure } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { print, printError } from "../../output.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /**
@@ -17,12 +19,12 @@ import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
  * it: `# <image>`, then its Dockerfile. Permutations with the same image hash share one image. Docker
  * isn't asked anything.
  */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string): Promise<string> {
+export async function dryRun(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain): Promise<string> {
   const root = await findThunderjarRoot(cwd);
   const testCase = await loadTestCase(root, name);
   const permutations = await hashPermutations(root, testCase);
   const unique = [...new Map(permutations.map((permutation) => [permutation.imageHash, permutation])).values()];
-  return unique.map(({ imageHash, dockerfile }) => `# ${prerunImage(imageHash, imagePrefix)}\n${dockerfile.trimEnd()}`).join("\n\n");
+  return unique.map(({ imageHash, dockerfile }) => `${paint.bold("#")} ${paint.cyan(prerunImage(imageHash, imagePrefix))}\n${dockerfile.trimEnd()}`).join("\n\n");
 }
 
 /**
@@ -43,38 +45,48 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
   const concurrent = buildOptions.concurrency > 1;
   // The line that's waiting for how its build or push ends.
   let line: WaitingLine | undefined;
+  // Colour for what's written while building, on a terminal.
+  const paint = painter();
+  const ellipsis = paint.dim("...");
+  const done = paint.green("done");
   try {
     await checkImageStore(imageStore);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
       onBuilding: (image) => {
-        if (concurrent) return console.log(`Building ${image}`);
-        line = waitingLine(`Building ${image} ... `);
+        if (concurrent) return print(`Building ${paint.cyan(image)}`);
+        line = waitingLine(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
       onBuilt: (image) => {
-        if (concurrent) return console.log(`Built ${image}`);
-        line?.finish("done");
+        if (concurrent) return print(`Built ${paint.cyan(image)}`);
+        line?.finish(done);
       },
     }, buildOptions);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
       onPushing: (_image, reference) => {
-        line = waitingLine(`Pushing ${reference} ... `);
+        line = waitingLine(`Pushing ${paint.cyan(reference)} ${ellipsis} `);
       },
       onPushed: () => {
-        line?.finish("done");
+        line?.finish(done);
       },
     });
-    console.log(`${built.length} built, ${present.length} already present${imageStore ? `, ${pushed.length} pushed` : ""}`);
+    print(
+      [
+        paint.green(`${built.length} built`),
+        paint.dim(`${present.length} already present`),
+        ...(imageStore ? [paint.green(`${pushed.length} pushed`)] : []),
+      ].join(paint.dim(", ")),
+    );
   } catch (error) {
     if (error instanceof DockerUnavailableError) {
-      console.error(`Error: Docker can't be reached, so no image can be built: ${error.message}`);
+      printError(`Docker can't be reached, so no image can be built: ${error.message}`);
     } else if (error instanceof ImageStoreLoginError) {
-      console.error(`Error: ${error.message}`);
+      printError(error.message);
     } else if (error instanceof DockerBuildError) {
       line?.fail();
-      console.error(`Error: Building ${error.image} failed: ${error.message}`);
+      printError(`Building ${error.image} failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
       line?.fail();
-      console.error(`Error: ${pushFailure(error.reference, error)}`);
+      printError(pushFailure(error.reference, error));
     } else {
       throw error;
     }
@@ -94,7 +106,7 @@ export function createBuildCommand(): Command {
     .addOption(imagePrefixOption())
     .action(
       reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string }) => {
-        if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix));
+        if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
         else await build(process.cwd(), name, options.imagePrefix);
       }),
     );

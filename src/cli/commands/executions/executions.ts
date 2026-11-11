@@ -1,19 +1,24 @@
 import { Command } from "commander";
 import { FOLDER } from "../../../config/loader.ts";
 import { type ExecutionRecord, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type Paint, padEnd, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { minute, plural } from "../../format.ts";
+import { minute, paintStatus, plural } from "../../format.ts";
+import { print, printError } from "../../output.ts";
 
 /** One line per execution, in the order given: its ID, test case, when it started, its matrix and its status, in aligned columns. */
-export function renderExecutions(executions: ExecutionRecord[]): string {
+export function renderExecutions(executions: ExecutionRecord[], paint: Paint = plain): string {
   const testCaseWidth = Math.max(...executions.map(({ testCase }) => testCase.length));
   const matrices = executions.map(
     ({ matrix }) => `${plural(matrix.permutations, "permutation")} × ${plural(matrix.iterations, "iteration")}`,
   );
   const width = Math.max(...matrices.map((matrix) => matrix.length));
   return executions
-    .map((execution, i) => `${execution.executionId}  ${execution.testCase.padEnd(testCaseWidth)}  ${minute(execution.startedAt)}  ${matrices[i]!.padEnd(width)}  ${execution.status}`)
+    .map(
+      (execution, i) =>
+        `${paint.bold(execution.executionId)}  ${padEnd(paint.magenta(execution.testCase), testCaseWidth)}  ${paint.dim(minute(execution.startedAt))}  ${matrices[i]!.padEnd(width)}  ${paintStatus(execution.status, paint)}`,
+    )
     .join("\n");
 }
 
@@ -28,15 +33,16 @@ async function executions(cwd: string, testCase?: string, dataDir?: string): Pro
     listed = await store.listExecutions();
   } catch (error) {
     if (!(error instanceof RunDataStoreError)) throw error;
-    console.error(`Error: Can't read ${displayPath(cwd, error.path)}: ${error.message}`);
+    printError(`Can't read ${displayPath(cwd, error.path)}: ${error.message}`);
     process.exitCode = 1;
     return;
   }
+  const paint = painter();
   if (testCase !== undefined) listed = listed.filter((execution) => execution.testCase === testCase);
   if (listed.length === 0) {
-    console.log(testCase === undefined ? "No executions recorded." : `No executions of ${testCase} recorded.`);
+    print(paint.dim(testCase === undefined ? "No executions recorded." : `No executions of ${testCase} recorded.`));
   } else {
-    console.log(renderExecutions(listed));
+    print(renderExecutions(listed, paint));
   }
 }
 

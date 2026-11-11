@@ -100,6 +100,14 @@ describe("applyLayers", () => {
     expect(applied).toEqual({ ...config, overrides: generateOverrides(["project", "cli"], 1, { patterns: [NODE_BAN] }) });
   });
 
+  test("puts the src/ rules first, in an override of their own", () => {
+    const applied = applyLayers(config, ["project", "cli"], ["project/a.ts"], { "no-console": "error" });
+    expect(applied.overrides).toEqual([
+      { files: ["src/**"], rules: { "no-console": "error" } },
+      ...generateOverrides(["project", "cli"], 1, { patterns: [NODE_BAN] }),
+    ]);
+  });
+
   test("replaces existing overrides", () => {
     const stale = { ...config, overrides: [{ files: ["src/old/*"], rules: {} }] };
     expect(applyLayers(stale, ["cli"], ["cli/a.ts"]).overrides).toEqual([]);

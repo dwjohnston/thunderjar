@@ -12,11 +12,12 @@ import { runExecution, runsConcurrently } from "../../../execution/runExecution.
 import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
-import { type Paint, painter } from "../../colour.ts";
+import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { print, printError as error } from "../../output.ts";
 import { type LiveRow, liveRows } from "../../liveRows.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
@@ -25,32 +26,33 @@ const FIELD_INDENT = "    ";
 const LABEL_WIDTH = 10;
 
 /** `label: value`, the value's later lines lined up under its first. */
-const field = (label: string, value: string) =>
-  `${FIELD_INDENT}${`${label}:`.padEnd(LABEL_WIDTH)}${value.split("\n").join(`\n${FIELD_INDENT}${" ".repeat(LABEL_WIDTH)}`)}`;
+const field = (label: string, value: string, paint: Paint = plain) =>
+  `${FIELD_INDENT}${paint.dim(`${label}:`.padEnd(LABEL_WIDTH))}${value.split("\n").join(`\n${FIELD_INDENT}${" ".repeat(LABEL_WIDTH)}`)}`;
 
 /**
  * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
  * the environment variables its container is given, by name, any more `docker run` options, the
  * prompt file's contents, and its harness command. With several turns, its session ID, and each turn's prompt and command.
  */
-export function renderExecution({ executionId, permutations }: PlannedExecution): string {
+export function renderExecution({ executionId, permutations }: PlannedExecution, paint: Paint = plain): string {
+  const f = (label: string, value: string) => field(label, value, paint);
   const blocks = permutations.map((permutation) =>
     [
-      `Permutation ${permutation.number}: prerun image ${permutation.prerunImage}`,
+      `${paint.bold(`Permutation ${permutation.number}`)}: prerun image ${paint.cyan(permutation.prerunImage)}`,
       ...permutation.iterations.flatMap((iteration) => [
-        `  Iteration ${iteration.number}: postrun image ${iteration.postrunImage}`,
-        ...(permutation.env.length > 0 ? [field("env", permutation.env.join(", "))] : []),
-        ...(permutation.runOptions.length > 0 ? [field("docker", permutation.runOptions.join(" "))] : []),
+        `  ${paint.bold(`Iteration ${iteration.number}`)}: postrun image ${paint.cyan(iteration.postrunImage)}`,
+        ...(permutation.env.length > 0 ? [f("env", permutation.env.join(", "))] : []),
+        ...(permutation.runOptions.length > 0 ? [f("docker", permutation.runOptions.join(" "))] : []),
         ...(iteration.turns.length === 1
-          ? [field("prompt", iteration.turns[0]!.prompt), field("command", iteration.turns[0]!.command)]
+          ? [f("prompt", iteration.turns[0]!.prompt), f("command", iteration.turns[0]!.command)]
           : [
-              field("session", iteration.sessionId),
-              ...iteration.turns.flatMap(({ prompt, command }, t) => [field(`prompt ${t + 1}`, prompt), field(`turn ${t + 1}`, command)]),
+              f("session", iteration.sessionId),
+              ...iteration.turns.flatMap(({ prompt, command }, t) => [f(`prompt ${t + 1}`, prompt), f(`turn ${t + 1}`, command)]),
             ]),
       ]),
     ].join("\n"),
   );
-  return [`Execution ${executionId}`, ...blocks].join("\n\n");
+  return [`${paint.dim("Execution")} ${paint.bold(executionId)}`, ...blocks].join("\n\n");
 }
 
 /** `testCase`, with `iterations` in place of its own, if given. */
@@ -58,12 +60,12 @@ const withIterations = (testCase: TestCaseDeclaration, iterations?: number): Tes
   iterations === undefined ? testCase : { ...testCase, iterations };
 
 /** What an execution of test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it, would do. */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string, iterations?: number): Promise<string> {
+export async function dryRun(cwd: string, name: string, imagePrefix?: string, iterations?: number, paint: Paint = plain): Promise<string> {
   const root = await findThunderjarRoot(cwd);
   const executionId = ulid();
   const testCase = withIterations(await loadTestCase(root, name), iterations);
   await checkRequiredEnv(root, testCase);
-  return renderExecution(await planExecution(root, testCase, executionId, imagePrefix));
+  return renderExecution(await planExecution(root, testCase, executionId, imagePrefix), paint);
 }
 
 /** `n/total`, `n` padded to the width of `total`, so the lines line up. */
@@ -97,9 +99,6 @@ const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
   Object.entries(result)
     .map(([name, { outcome }]) => `${paint.blue(`${name}:`)} ${showOutcome(outcome, paint)}`)
     .join("   ");
-
-/** Writes `message` to stderr after `Error:`, which is red on a terminal. */
-const error = (message: string) => console.error(`${painter(process.stderr).error("Error:")} ${message}`);
 
 /**
  * What tells `permutation` apart from the rest of `testCase`'s: each other axis that varies, then
@@ -172,10 +171,10 @@ async function run(
   const ellipsis = paint.dim("...");
   const done = paint.green("done");
 
-  console.log(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
-  if (runtime !== null) console.log(paint.dim(`Running containers with \`${runtime.command.join(" ")}\``));
-  if (concurrency > 1) console.log(paint.dim(`Up to ${concurrency} containers at once`));
-  if (build.concurrency > 1) console.log(paint.dim(`Building up to ${build.concurrency} prerun images at once`));
+  print(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
+  if (runtime !== null) print(paint.dim(`Running containers with \`${runtime.command.join(" ")}\``));
+  if (concurrency > 1) print(paint.dim(`Up to ${concurrency} containers at once`));
+  if (build.concurrency > 1) print(paint.dim(`Building up to ${build.concurrency} prerun images at once`));
   // With several at once: what starts each iteration's lines, and its postrun image's.
   const heads = new Map<string, string>();
   // With several at once, on a terminal: each iteration's line, and how its agent ended, by its postrun image.
@@ -237,7 +236,7 @@ async function run(
     const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
       onBuilding: (image) => {
         if (live !== undefined) return void prerunRows.set(image, live.add(`${paint.cyan(image)}  ${paint.dim("building")} `));
-        if (concurrent) return console.log(`Building ${paint.cyan(image)}`);
+        if (concurrent) return print(`Building ${paint.cyan(image)}`);
         open(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
       onBuilt: (image) => {
@@ -246,7 +245,7 @@ async function run(
           if (imageStore === null) prerunRows.get(image)?.done();
           return showPrerun(image, imageStore === null ? done : "built", false);
         }
-        if (concurrent) return console.log(`Built ${paint.cyan(image)}`);
+        if (concurrent) return print(`Built ${paint.cyan(image)}`);
         close(done);
       },
       onPushing: (image, reference) => {
@@ -263,14 +262,14 @@ async function run(
         const head = heads.get(image);
         if (concurrent && head !== undefined) {
           if (live !== undefined) return showStep(image, "");
-          return console.log(`${head}  pushed ${paint.cyan(reference)}`);
+          return print(`${head}  pushed ${paint.cyan(reference)}`);
         }
         if (live !== undefined) {
           // Without a runtime to pull it, it's ready once pushed.
           if (runtime === null) prerunRows.get(image)?.done();
           return showPrerun(image, runtime === null ? done : "pushed", false);
         }
-        if (concurrent) return console.log(`Pushed ${paint.cyan(reference)}`);
+        if (concurrent) return print(`Pushed ${paint.cyan(reference)}`);
         close(done);
       },
       onPulling: (reference) => {
@@ -285,7 +284,7 @@ async function run(
           showPrerun(image, done, false);
           return prerunRows.get(image)?.done();
         }
-        if (concurrent) return console.log(`Pulled ${paint.cyan(reference)} into the runtime`);
+        if (concurrent) return print(`Pulled ${paint.cyan(reference)} into the runtime`);
         close(done);
       },
       onRunning: (permutation, iteration) => {
@@ -293,7 +292,7 @@ async function run(
         if (concurrent) {
           heads.set(iteration.postrunImage, headOf(permutation, iteration));
           if (live !== undefined) return void rows.set(iteration.postrunImage, live.add(`${headOf(permutation, iteration)}  ${paint.dim("running")} `));
-          return console.log(`${headOf(permutation, iteration)}  started`);
+          return print(`${headOf(permutation, iteration)}  started`);
         }
         open(`${headOf(permutation, iteration)}  ${ellipsis} `);
       },
@@ -308,7 +307,7 @@ async function run(
           outcomes.set(iteration.postrunImage, outcome);
           return showStep(iteration.postrunImage, "");
         }
-        if (concurrent) return console.log(`${headOf(permutation, iteration)}  ${outcome}`);
+        if (concurrent) return print(`${headOf(permutation, iteration)}  ${outcome}`);
         close(outcome);
       },
       onMeasuring: (permutation, iteration) => {
@@ -319,14 +318,14 @@ async function run(
       },
       onMeasured: (permutation, iteration, result) => {
         if (live !== undefined) return showStep(iteration.postrunImage, showMeasures(result, paint));
-        if (concurrent) return console.log(`${headOf(permutation, iteration)}  ${showMeasures(result, paint)}`);
+        if (concurrent) return print(`${headOf(permutation, iteration)}  ${showMeasures(result, paint)}`);
         // Under the iteration, lined up with it.
         close(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
       },
       onDone: (_permutation, iteration) => rows.get(iteration.postrunImage)?.done(),
     });
     live?.stop();
-    console.log(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
+    print(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
     if (record.status === "failed") process.exitCode = 1;
   } catch (caught) {
     // The prerun image whose build, push or pull failed, marked so on its line.
@@ -401,7 +400,7 @@ export function createRunCommand(): Command {
           name: string,
           options: { dryRun?: boolean; local?: boolean; concurrency?: number; iterations?: number; imagePrefix: string; dataDir?: string },
         ) => {
-          if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix, options.iterations));
+          if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, options.iterations, painter()));
           else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, options.iterations);
         },
       ),

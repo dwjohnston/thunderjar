@@ -201,7 +201,8 @@ jobs:
       - name: Parse the comment
         id: comment
         run: |
-          body=$(printf '%s' "$COMMENT_BODY" | tr -s '[:space:]' ' ' | sed -E 's/^ +| +$//g')
+          # Only the first line is the command, so a footer or note below it is ignored.
+          body=$(printf '%s\n' "$COMMENT_BODY" | head -n 1 | tr -s '[:space:]' ' ' | sed -E 's/^ +| +$//g')
           if ! [[ "$body" =~ ^/preview( ([0-9a-f]{7,40}))?$ ]]; then
             echo "Usage: /preview, or /preview <commit sha> to pin the commit."
             exit 1
