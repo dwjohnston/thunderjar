@@ -11,9 +11,10 @@ import { type PlannedExecution, type PlannedPermutation, planExecution } from ".
 import { runExecution } from "../../../execution/runExecution.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { executionFolder, fileStore, type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
+import { type Paint, painter } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath } from "../../dataDir.ts";
-import { agentEnd, dollars, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
@@ -72,19 +73,26 @@ const showValue = (value: unknown): string =>
         .join(", ")}}`
     : (JSON.stringify(value) ?? String(value));
 
+/** A measured value, coloured: `true` green, `false` red, anything else as it is. */
+const paintValue = (paint: Paint, data: unknown) =>
+  data === true ? paint.green("true") : data === false ? paint.red("false") : showValue(data);
+
 /** A measure as `run` prints it: its value, or why it has none. */
-const showOutcome = (outcome: RecordedOutcome) =>
+const showOutcome = (outcome: RecordedOutcome, paint: Paint) =>
   outcome.outcome === "measured"
-    ? showValue(outcome.data)
+    ? paintValue(paint, outcome.data)
     : outcome.outcome === "skipped"
-      ? `skipped${outcome.reason ? ` (${outcome.reason})` : ""}`
-      : `erroredWhileMeasuring (${outcome.error.message})`;
+      ? paint.yellow(`skipped${outcome.reason ? ` (${outcome.reason})` : ""}`)
+      : paint.red(`erroredWhileMeasuring (${outcome.error.message})`);
 
 /** A container run's measures, on one line: `<name>: <value>`, three spaces apart. */
-const showMeasures = (result: Record<string, RecordedMeasure>) =>
+const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
   Object.entries(result)
-    .map(([name, { outcome }]) => `${name}: ${showOutcome(outcome)}`)
+    .map(([name, { outcome }]) => `${paint.blue(`${name}:`)} ${showOutcome(outcome, paint)}`)
     .join("   ");
+
+/** Writes `message` to stderr after `Error:`, which is red on a terminal. */
+const error = (message: string) => console.error(`${painter(process.stderr).error("Error:")} ${message}`);
 
 /**
  * What tells `permutation` apart from the rest of `testCase`'s: each other axis that varies, then
@@ -114,13 +122,13 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   checkBuildSecrets(build);
   try {
     await checkImageStore(imageStore);
-  } catch (error) {
-    if (error instanceof ImageStoreLoginError) {
-      console.error(`Error: ${error.message}`);
-    } else if (error instanceof DockerUnavailableError) {
-      console.error(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
+  } catch (caught) {
+    if (caught instanceof ImageStoreLoginError) {
+      error(caught.message);
+    } else if (caught instanceof DockerUnavailableError) {
+      error(`Docker can't be reached, so nothing can be run: ${caught.message}`);
     } else {
-      throw error;
+      throw caught;
     }
     process.exitCode = 1;
     return;
@@ -131,7 +139,13 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   // Where a postrun image's push line goes: under its iteration, lined up with it, like its measures.
   const underIteration = " ".repeat(ordinal(permutations, permutations).length + 3);
 
-  console.log(`Execution ${plan.executionId}`);
+  // Colour for what's written while running, on a terminal.
+  const paint = painter();
+  const ellipsis = paint.dim("...");
+  const done = paint.green("done");
+  const failed = paint.red("failed");
+
+  console.log(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
   let building: string | undefined;
   let pushing: string | undefined;
   // Whether a container run has started, so a push is of a postrun image.
@@ -143,62 +157,62 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
       onBuilding: (image) => {
         building = image;
         lineOpen = true;
-        process.stdout.write(`Building ${image} ... `);
+        process.stdout.write(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
       onBuilt: () => {
         building = undefined;
         lineOpen = false;
-        console.log("done");
+        console.log(done);
       },
       onPushing: (_image, reference) => {
         pushing = reference;
         lineOpen = true;
-        process.stdout.write(`${running ? underIteration : ""}Pushing ${reference} ... `);
+        process.stdout.write(`${running ? underIteration : ""}Pushing ${paint.cyan(reference)} ${ellipsis} `);
       },
       onPushed: () => {
         pushing = undefined;
         lineOpen = false;
-        console.log("done");
+        console.log(done);
       },
       onRunning: (permutation, iteration) => {
         running = true;
         lineOpen = true;
         process.stdout.write(
-          ` ${ordinal(permutation.number, permutations)}  iteration ${ordinal(iteration.number, testCase.iterations)}  ${label(testCase, permutation)}  ... `,
+          ` ${paint.bold(ordinal(permutation.number, permutations))}  iteration ${paint.bold(ordinal(iteration.number, testCase.iterations))}  ${paint.magenta(label(testCase, permutation))}  ${ellipsis} `,
         );
       },
       onRan: (_permutation, _iteration, { execution, harnessResult, tokenCosts }) => {
         lineOpen = false;
-        const ended = agentEnd(execution, harnessResult);
+        const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
         // Its cost if it can be trusted, else its tokens, if it has either.
         const cost = knownCost(tokenCosts);
         const tokens = totalTokens(tokenCosts);
         const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
-        console.log(execution.timedOut ? ended : `${ended} (${duration(execution.finishedAt - execution.startedAt)}${spent})`);
+        console.log(execution.timedOut ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`);
       },
       onMeasured: (permutation, _iteration, result) => {
         // Under the iteration, lined up with it.
-        console.log(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result)}`);
+        console.log(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
       },
     });
-    console.log(`Wrote ${displayPath(cwd, executionFolder(store, plan.executionId))}/`);
+    console.log(paint.dim(`Wrote ${displayPath(cwd, executionFolder(store, plan.executionId))}/`));
     if (record.status === "failed") process.exitCode = 1;
-  } catch (error) {
-    if (error instanceof DockerUnavailableError) {
-      console.error(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
-    } else if (error instanceof DockerBuildError) {
-      console.log("failed");
-      console.error(`Error: Building ${building} failed: ${error.message}`);
-    } else if (error instanceof DockerPushError) {
-      console.log("failed");
-      console.error(`Error: ${pushFailure(pushing as string, error)}`);
-    } else if (error instanceof DockerContainerError && lineOpen) {
-      console.log("failed");
-      console.error(`Error: Running a container failed: ${error.message}`);
-    } else if (error instanceof DockerContainerError) {
-      console.error(`Error: Measuring a container run failed: ${error.message}`);
+  } catch (caught) {
+    if (caught instanceof DockerUnavailableError) {
+      error(`Docker can't be reached, so nothing can be run: ${caught.message}`);
+    } else if (caught instanceof DockerBuildError) {
+      console.log(failed);
+      error(`Building ${building} failed: ${caught.message}`);
+    } else if (caught instanceof DockerPushError) {
+      console.log(failed);
+      error(pushFailure(pushing as string, caught));
+    } else if (caught instanceof DockerContainerError && lineOpen) {
+      console.log(failed);
+      error(`Running a container failed: ${caught.message}`);
+    } else if (caught instanceof DockerContainerError) {
+      error(`Measuring a container run failed: ${caught.message}`);
     } else {
-      throw error;
+      throw caught;
     }
     process.exitCode = 1;
   }
