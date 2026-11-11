@@ -19,10 +19,6 @@ name: Slow tests
 on:
   issue_comment:
     types: [created]
-  # TEMPORARY, to try this workflow before it's on main: adding the `slow-tests` label to a PR runs
-  # compare-models, from the PR's own copy of this file. Remove before merging.
-  pull_request:
-    types: [labeled]
 
 permissions:
   contents: read
@@ -38,10 +34,9 @@ concurrency:
 jobs:
   slow-tests:
     if: >-
-      (github.event_name == 'pull_request' && github.event.label.name == 'slow-tests') ||
-      (github.event.issue.pull_request &&
+      github.event.issue.pull_request &&
       startsWith(github.event.comment.body, '/slow-tests') &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -59,14 +54,6 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            if (context.eventName === "pull_request") {
-              // TEMPORARY: the label trigger. Take the label off, so adding it again runs again.
-              await github.rest.issues.removeLabel({ ...context.repo, issue_number: context.issue.number, name: "slow-tests" });
-              core.setOutput("test-case", "compare-models");
-              core.setOutput("sha", context.payload.pull_request.head.sha);
-              core.setOutput("repo", context.payload.pull_request.head.repo.full_name);
-              return;
-            }
             const words = context.payload.comment.body.trim().split(/\s+/);
             if (words[0] !== "/slow-tests") return core.setFailed("Not a /slow-tests command");
             const testCase = words[1] ?? "compare-models";
