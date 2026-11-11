@@ -387,6 +387,18 @@ export type RuntimeConfig = {
    * `run --concurrency` overrides it, and `run --local` doesn't use it.
    */
   concurrency?: number;
+  /**
+   * A command `run` runs once before anything runs on the runtime, e.g. to start it, or size it
+   * for the run. It's given `THUNDERJAR_CONCURRENCY` (how many containers will run at once),
+   * `THUNDERJAR_CONTAINERS` (how many iterations the run has) and `THUNDERJAR_EXECUTION_ID`.
+   * If it exits non-zero, nothing is run. `run --local` and `run --dry-run` don't run it.
+   */
+  beforeRun?: string[];
+  /**
+   * A command `run` runs once the run ends, whether it succeeded or failed, e.g. to stop the
+   * runtime. It's given the same variables as `beforeRun`. Not run if `beforeRun` failed.
+   */
+  afterRun?: string[];
 };
 
 export type ConfigDeclaration = {

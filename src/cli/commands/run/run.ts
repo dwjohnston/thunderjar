@@ -9,6 +9,7 @@ import { DockerBuildError, DockerContainerError, DockerPullError, DockerPushErro
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { type PlannedExecution, type PlannedIteration, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
 import { runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
+import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
 import { type Paint, painter } from "../../colour.ts";
@@ -209,6 +210,29 @@ async function run(
     line?.fail();
     line = undefined;
   };
+  const facts: RunFacts = {
+    executionId: plan.executionId,
+    concurrency,
+    containers: plan.permutations.reduce((sum, permutation) => sum + permutation.iterations.length, 0),
+  };
+  /** Runs the runtime's `hook`, if it has one, on a line of its own. False, with the error written, if it fails. */
+  const runHook = async (hook: "beforeRun" | "afterRun"): Promise<boolean> => {
+    const command = runtime?.[hook];
+    if (command === undefined) return true;
+    open(`Running the runtime's ${hook}, ${paint.cyan(`\`${command.join(" ")}\``)} ${ellipsis} `);
+    try {
+      await runRuntimeHook(hook, command, facts);
+      close(done);
+      return true;
+    } catch (caught) {
+      if (!(caught instanceof RuntimeHookError)) throw caught;
+      fail();
+      error(`The runtime's ${hook} failed: ${caught.message}`);
+      process.exitCode = 1;
+      return false;
+    }
+  };
+  if (!(await runHook("beforeRun"))) return;
   try {
     const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
       onBuilding: (image) => {
@@ -339,6 +363,9 @@ async function run(
   } finally {
     live?.stop();
     line?.stop();
+    line = undefined;
+    // So a runtime started for the run is stopped, however it ended.
+    await runHook("afterRun");
   }
 }
 
