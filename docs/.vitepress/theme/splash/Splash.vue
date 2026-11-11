@@ -1,7 +1,15 @@
 <!--
-🤖 This file was created with AI. The home page splash: title, jar, an example test case beside
-the results it produces, and a link to the docs. Dark and light palettes follow the site toggle.
+🤖
+This file was created with AI
+
+Harness: Claude Code
+Session Id: session_01LCLeLiEQXvvk5Xk2ZwwPEi
+Supervising engineer: dwjohnston
+
+Humans: add your notes here
 -->
+<!-- The home page splash: title, jar, an example test case beside the results it produces, and a
+     link to the docs. Dark and light palettes follow the site toggle. -->
 <script setup lang="ts">
 import { withBase } from "vitepress";
 import Jar from "./Jar.vue";

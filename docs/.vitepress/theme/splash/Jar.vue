@@ -1,7 +1,14 @@
 <!--
-🤖 This file was created with AI. A jar holding a yellow lightning bolt, coloured for the light
-and dark palettes.
+🤖
+This file was created with AI
+
+Harness: Claude Code
+Session Id: session_01LCLeLiEQXvvk5Xk2ZwwPEi
+Supervising engineer: dwjohnston
+
+Humans: add your notes here
 -->
+<!-- A jar holding a yellow lightning bolt, coloured for the light and dark palettes. -->
 <template>
   <svg class="thunderjar" viewBox="0 0 200 250" role="img" aria-label="A jar holding a lightning bolt">
     <path
