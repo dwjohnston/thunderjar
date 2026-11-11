@@ -1,6 +1,6 @@
 import type { ModelTokenCosts, Resolved, TokenCosts } from "../api/declarations.ts";
 import { registryHost } from "../config/projectConfig.ts";
-import type { Execution, ExecutionRecord } from "../store/runDataStore.ts";
+import type { ContainerRunRecord, Execution, ExecutionRecord } from "../store/runDataStore.ts";
 import type { Paint } from "./colour.ts";
 
 /**
@@ -41,6 +41,27 @@ export function knownCost(costs: TokenCosts | undefined): number | undefined {
   if (costs?.outcome !== "collected" || costs.models.length === 0) return undefined;
   if (costs.models.some(({ costUsd, costBasis }) => costUsd === undefined || costBasis === "unknown")) return undefined;
   return costs.models.reduce((sum, { costUsd }) => sum + (costUsd as number), 0);
+}
+
+export type RunTotals = { runs: number; tokens?: number; withTokens: number; costUsd?: number; withCost: number };
+
+/**
+ * Container runs' tokens and cost added up, over the runs that have them, never counting a run
+ * without them as zero: `undefined` if none has them. `withTokens` and `withCost` say how many did.
+ */
+export function runTotals(runs: Pick<ContainerRunRecord, "tokenCosts">[]): RunTotals {
+  const tokens = runs.flatMap(({ tokenCosts }) => totalTokens(tokenCosts) ?? []);
+  const costs = runs.flatMap(({ tokenCosts }) => knownCost(tokenCosts) ?? []);
+  const sum = (ns: number[]) => (ns.length === 0 ? undefined : ns.reduce((a, b) => a + b, 0));
+  return { runs: runs.length, tokens: sum(tokens), withTokens: tokens.length, costUsd: sum(costs), withCost: costs.length };
+}
+
+/** `ms` as minutes and seconds, e.g. `0:31`, or with hours once it's that long, e.g. `1:02:05`. */
+export function duration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  const ss = String(seconds % 60).padStart(2, "0");
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}:${ss}`;
+  return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, "0")}:${ss}`;
 }
 
 /** Dollars to three places, e.g. `$0.061`, and anything above nothing but below a tenth of a cent as `<$0.001`. */

@@ -45,6 +45,17 @@ describe("0203 recorded executions", () => {
     ]);
   });
 
+  test("/api/executions: each with its container runs' tokens and cost, over the runs that reported them", async () => {
+    const executions = (await (await serve()("/api/executions")).json()) as { executionId: string; totals: unknown }[];
+
+    expect(executions.map(({ totals }) => totals)).toEqual([
+      { runs: 2, tokens: 9300, withTokens: 1, costUsd: 0.045, withCost: 1 },
+      { runs: 0, withTokens: 0, withCost: 0 },
+      { runs: 2, withTokens: 0, withCost: 0 },
+      { runs: 40, withTokens: 0, withCost: 0 },
+    ]);
+  });
+
   test("/api/executions/:id: the execution, and its container runs by permutation then iteration", async () => {
     const body = (await (await serve()("/api/executions/01m3vf68s54p5eyn5s3t1ygkdj")).json()) as {
       execution: { testCase: string; status: string };
