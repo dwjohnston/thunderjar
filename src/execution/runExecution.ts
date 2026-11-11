@@ -1,6 +1,9 @@
-// Running one execution of a test case: its missing prerun images are built, then every
-// iteration of every permutation, in plan's order, runs in a container (see containerRun.ts),
-// up to `concurrency` of them at once, and is recorded in the run data store as soon as it
+// Running one execution of a test case: its missing prerun images are built, up to the build
+// options' `concurrency` at once, and each pushed to the image store and pulled into the runtime,
+// if there are ones. Every iteration of every permutation, in plan's order, runs in a container
+// (see containerRun.ts), up to `concurrency` of them at once. With either above 1, each starts as
+// soon as its own prerun image is ready, while the rest are still being built; otherwise, once
+// they all are. Each is recorded in the run data store as soon as it
 // finishes, so the runs that finished before a crash are kept. Then the task's measurements are taken of it, each in a measurement
 // container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
@@ -19,14 +22,14 @@ import type {
 } from "../store/runDataStore.ts";
 import { runInContainer } from "./containerRun.ts";
 import { containerName, storedPostrunImage, storedPrerunImage } from "./images.ts";
-import { type PullHooks, pullIntoRuntime, type PushHooks, pushPrerunImages, pushToStore } from "./imageStore.ts";
+import { type PullHooks, pullIntoRuntime, type PushHooks, pushToStore } from "./imageStore.ts";
 import { inParallel } from "./inParallel.ts";
 import { measureContainerRun } from "./measure.ts";
 import { openMeasurementContext, recordedContext } from "./measurementContext.ts";
 import { collectReply } from "./reply.ts";
 import { collectTokenCosts } from "./tokenCosts.ts";
 import type { PlannedExecution, PlannedIteration, PlannedPermutation } from "./planExecution.ts";
-import { buildPrerunImages, type PrerunBuildHooks } from "./prerunBuilds.ts";
+import { buildPrerunImage, type PrerunBuildHooks, type PrerunImage, prerunImages } from "./prerunBuilds.ts";
 
 export type RunHooks = PrerunBuildHooks &
   PushHooks &
@@ -67,6 +70,13 @@ export type ExecutionToRun = {
   /** How many iterations' containers run at once: 1, one after another, by default. */
   concurrency?: number;
 };
+
+/**
+ * Whether an execution runs with `concurrency` containers, and `build`'s, at once: if either is
+ * above 1. Then each iteration starts as soon as its own prerun image is ready, so builds, pushes,
+ * pulls and container runs happen at once, in any order.
+ */
+export const runsConcurrently = (concurrency = 1, build: BuildOptions = {}): boolean => concurrency > 1 || (build.concurrency ?? 1) > 1;
 
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
 function containerRunRecord(
@@ -111,27 +121,67 @@ function containerRunRecord(
 
 /**
  * Runs `run`, recording it in `store`, and returns its execution record. With an image store,
- * its prerun images are pushed once built, and each postrun image as soon as it's recorded,
- * before it's measured. Throws, before anything is recorded, a ConfigError if its task's
- * measurements are wrong, a DockerUnavailableError, ConfigError or DockerBuildError if its
- * prerun images can't be built, and a DockerPushError if one can't be pushed.
- * Throws a DockerContainerError if Docker fails while running or measuring one, after
- * recording the execution as `failed`: no more start, and those running finish first.
+ * each prerun image is pushed once built, and each postrun image as soon as it's recorded,
+ * before it's measured. Throws a ConfigError if its task's measurements are wrong, a
+ * DockerUnavailableError, ConfigError or DockerBuildError if a prerun image can't be built, a
+ * DockerPushError if one can't be pushed, a DockerPullError if the runtime can't pull one, and a
+ * DockerContainerError if Docker fails while running or measuring one. Once anything fails, no
+ * more builds or iterations start, and those going finish first. The execution is recorded as its
+ * first iteration starts, so if one fails before then, nothing is; after, it's recorded as `failed`.
  */
 export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks = {}): Promise<ExecutionRecord> {
   const { root, testCase, plan, imagePrefix, imageStore = null, build = {}, runtime: remote = null } = run;
   if (remote !== null && imageStore === null) throw new Error("A runtime needs an image store: it runs images from it.");
   const runtime = remote === null ? localRuntime() : remoteRuntime(remote.command);
   const measurements = await loadMeasurements(root, testCase.task);
-  const permutations = plan.permutations.map(({ permutation }) => permutation);
-  await buildPrerunImages(root, permutations, imagePrefix, hooks, build);
-  const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, hooks);
+  const images = await prerunImages(
+    plan.permutations.map(({ permutation }) => permutation),
+    imagePrefix,
+  );
   // A remote runtime runs each prerun image as the image store has it, by its stored reference.
   const prerunImageOf = (permutation: PlannedPermutation) =>
     remote === null ? permutation.prerunImage : storedPrerunImage((imageStore as ImageStore).repository, permutation.permutation.imageHash);
-  if (remote !== null) await pullIntoRuntime(pushed, runtime, hooks);
 
-  const startedAt = new Date().toISOString();
+  // The first thing to fail, after which nothing more starts.
+  let failure: { error: unknown } | undefined;
+  const failing = async (job: () => Promise<void>) => {
+    try {
+      await job();
+    } catch (error) {
+      failure ??= { error };
+      throw error;
+    }
+  };
+
+  // Each prerun image, by its hash, once it's built, pushed to the image store and pulled into the runtime.
+  const ready = new Map(images.map(({ permutation }) => [permutation.imageHash, Promise.withResolvers<void>()]));
+  // Awaited only by the iterations that need it, so one that fails with none waiting isn't unhandled.
+  for (const { promise } of ready.values()) promise.catch(() => {});
+  const prepare = async ({ exists, ...image }: PrerunImage & { exists: boolean }) => {
+    if (!exists) await buildPrerunImage(root, image, hooks, build);
+    if (imageStore !== null) {
+      const reference = storedPrerunImage(imageStore.repository, image.permutation.imageHash);
+      await pushToStore(image.image, reference, hooks);
+      // So a runtime that can't reach the image store, or has no login for it, fails before its agent runs.
+      if (remote !== null) await pullIntoRuntime([reference], runtime, hooks);
+    }
+    ready.get(image.permutation.imageHash)?.resolve();
+  };
+  const preparing = inParallel(
+    images.map((image) => () => (failure === undefined ? failing(() => prepare(image)) : Promise.resolve())),
+    build.concurrency ?? 1,
+  )
+    .catch(() => {})
+    // Those not ready never will be: the iterations waiting for them fail, with what failed first.
+    .finally(() => {
+      for (const { reject } of ready.values()) reject(failure?.error);
+    });
+  if (!runsConcurrently(run.concurrency, build)) {
+    await preparing;
+    if (failure !== undefined) throw failure.error;
+  }
+
+  let startedAt = "";
   const executionRecord = (status: ExecutionStatus, finishedAt?: string): ExecutionRecord => ({
     executionId: plan.executionId,
     testCase: run.name,
@@ -141,11 +191,21 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     status,
     matrix: { shape: matrixShape(testCase), permutations: plan.permutations.length, iterations: testCase.iterations },
   });
-  await store.recordExecution(executionRecord("running"));
+  let recording: Promise<void> | undefined;
+  const recordStart = () => {
+    if (recording === undefined) {
+      startedAt = new Date().toISOString();
+      recording = store.recordExecution(executionRecord("running"));
+    }
+    return recording;
+  };
 
   let status: ExecutionStatus = "complete";
   let finished: ExecutionRecord | undefined;
   const runIteration = async (permutation: PlannedPermutation, iteration: PlannedIteration) => {
+    await ready.get(permutation.permutation.imageHash)?.promise;
+    if (failure !== undefined) throw failure.error;
+    await recordStart();
     await runAndMeasure(permutation, iteration);
     hooks.onDone?.(permutation, iteration);
   };
@@ -192,15 +252,21 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
 
   try {
     await inParallel(
-      plan.permutations.flatMap((permutation) => permutation.iterations.map((iteration) => () => runIteration(permutation, iteration))),
+      plan.permutations.flatMap((permutation) => permutation.iterations.map((iteration) => () => failing(() => runIteration(permutation, iteration)))),
       run.concurrency ?? 1,
     );
+    await recordStart();
   } catch (error) {
     status = "failed";
     throw error;
   } finally {
-    finished = executionRecord(status, new Date().toISOString());
-    await store.recordExecution(finished);
+    // Nothing is left building, pushing or pulling.
+    await preparing;
+    if (recording !== undefined) {
+      await recording;
+      finished = executionRecord(status, new Date().toISOString());
+      await store.recordExecution(finished);
+    }
   }
-  return finished;
+  return finished as ExecutionRecord;
 }

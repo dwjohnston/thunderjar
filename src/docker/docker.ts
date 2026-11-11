@@ -11,20 +11,41 @@ import type { BuildOptions } from "../api/declarations.ts";
 /** Thrown when the Docker CLI can't be run, or can't reach its daemon. */
 export class DockerUnavailableError extends Error {}
 
-/** Thrown when `docker build` fails: the message is Docker's reason. */
-export class DockerBuildError extends Error {}
+/** Thrown when `docker build` fails: the message is Docker's reason, and `image` the image it was building. */
+export class DockerBuildError extends Error {
+  constructor(
+    message: string,
+    readonly image = "",
+  ) {
+    super(message);
+  }
+}
 
 /** Thrown when `docker login` finds no valid login for a registry: the message is Docker's reason. */
 export class DockerLoginError extends Error {}
 
-/** Thrown when tagging or pushing an image fails: the message is Docker's reason. */
-export class DockerPushError extends Error {}
+/** Thrown when tagging or pushing an image fails: the message is Docker's reason, and `reference` where it was pushing to. */
+export class DockerPushError extends Error {
+  constructor(
+    message: string,
+    readonly reference = "",
+  ) {
+    super(message);
+  }
+}
 
 /** Thrown when running, reading from, committing or removing a container fails: the message is Docker's reason. */
 export class DockerContainerError extends Error {}
 
-/** Thrown when a runtime can't pull an image from the image store: the message is Docker's reason. */
-export class DockerPullError extends Error {}
+/** Thrown when a runtime can't pull an image from the image store: the message is Docker's reason, and `reference` the image. */
+export class DockerPullError extends Error {
+  constructor(
+    message: string,
+    readonly reference = "",
+  ) {
+    super(message);
+  }
+}
 
 const dockerBinary = () => Bun.env.THUNDERJAR_DOCKER || "docker";
 
@@ -66,7 +87,7 @@ export async function buildImage(contextDir: string, image: string, options: Bui
   // asked for here for older engines.
   const result = await $`${binary} build ${secrets} ${ssh} -t ${image} ${contextDir}`.env({ ...Bun.env, DOCKER_BUILDKIT: "1" }).quiet().nothrow();
   if (result.exitCode !== 0) {
-    throw new DockerBuildError(reasonOf(result.stderr) || `\`${binary} build\` exited ${result.exitCode}`);
+    throw new DockerBuildError(reasonOf(result.stderr) || `\`${binary} build\` exited ${result.exitCode}`, image);
   }
 }
 
@@ -108,7 +129,7 @@ export async function pushImage(image: string, reference: string, runtime: Docke
   for (const args of [["tag", image, reference], ["push", "--quiet", reference]]) {
     const result = await $`${runtime.command} ${args}`.quiet().nothrow();
     if (result.exitCode !== 0) {
-      throw new DockerPushError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`);
+      throw new DockerPushError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`, reference);
     }
   }
 }
@@ -120,7 +141,7 @@ export async function pushImage(image: string, reference: string, runtime: Docke
 export async function pullImage(reference: string, runtime: DockerRuntime): Promise<void> {
   const result = await $`${runtime.command} pull --quiet ${reference}`.quiet().nothrow();
   if (result.exitCode !== 0) {
-    throw new DockerPullError(reasonOf(result.stderr) || `${named(runtime, "pull")} exited ${result.exitCode}`);
+    throw new DockerPullError(reasonOf(result.stderr) || `${named(runtime, "pull")} exited ${result.exitCode}`, reference);
   }
 }
 

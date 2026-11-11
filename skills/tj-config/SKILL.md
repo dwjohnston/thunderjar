@@ -22,7 +22,7 @@ export default declareConfig({
 |---|---|---|
 | `imageStore` | The registry repository prerun and postrun images are pushed to, or `null` | Yes |
 | `runDataStore` | Where run results are recorded: `sqliteStore` or `postgresStore` | Yes |
-| `build` | Secrets and the SSH agent for prerun builds | No |
+| `build` | Secrets and the SSH agent for prerun builds, and how many build at once | No |
 | `runtime` | Where `run` runs containers, instead of the local Docker daemon | No |
 
 ## `imageStore`
@@ -111,6 +111,21 @@ RUN --mount=type=secret,id=github git clone \
 ❌ **Don't** write the secret's value into the config, a fragment, or a build arg.
 
 **Why:** Docker reads a secret from the environment as it builds. It never reaches an image layer, the run data or any hash, so changing a token doesn't rebuild every image.
+
+### `concurrency`
+
+How many prerun images `build` and `run` build at once. It defaults to 1, one after another.
+
+```ts
+build: { concurrency: 4 },
+```
+
+- With more than 1 here, or a runtime `concurrency` above 1, `run` starts each iteration as soon as its own prerun image is built, pushed and pulled, while the rest are still building.
+- If a build fails after some iterations have started, those finish and are recorded, and the execution is recorded as failed.
+
+✅ **Do** size it to the machine that runs `thunderjar`, not to the runtime. Builds and prerun pushes are always local.
+
+**Why:** Each build uses the local CPU, memory and upload bandwidth. Too many at once take longer in total than fewer.
 
 ## `runtime`
 

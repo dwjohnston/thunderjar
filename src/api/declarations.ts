@@ -609,6 +609,13 @@ export type BuildOptions = {
   secrets?: { id: string; env: string }[];
   /** Passes the host's SSH agent as `docker build --ssh default`, for `RUN --mount=type=ssh git clone git@github.com:…`. */
   ssh?: boolean;
+  /**
+   * How many prerun images `build` and `run` build at once: 1, one after another, by default.
+   * Builds run on the machine that runs Thunderjar, so set it to what its CPU, memory and network
+   * can take. With more than 1, or a runtime concurrency above 1, `run` starts each iteration as
+   * soon as its own prerun image is built, pushed and pulled, without waiting for the rest.
+   */
+  concurrency?: number;
 };
 
 /**
@@ -669,12 +676,13 @@ export type ConfigDeclaration = {
   /**
    * @docs
    * @name build
-   * @type {{ secrets?: { id: string; env: string }[]; ssh?: boolean }}
+   * @type {{ secrets?: { id: string; env: string }[]; ssh?: boolean; concurrency?: number }}
    * @default {}
    * @description
-   * Secrets, and the SSH agent, for prerun builds, e.g. to clone a private repository. Each secret
-   * is passed as `docker build --secret id=<id>,env=<env>`, and never written to an image or the
-   * run data. `ssh: true` passes the host's SSH agent as `docker build --ssh default`.
+   * Secrets, and the SSH agent, for prerun builds, e.g. to clone a private repository, and how many
+   * build at once: 1 by default. Each secret is passed as `docker build --secret id=<id>,env=<env>`,
+   * and never written to an image or the run data. `ssh: true` passes the host's SSH agent as
+   * `docker build --ssh default`.
    */
   build?: BuildOptions;
   /** Where `run` runs containers. The local Docker daemon by default, or with `run --local`. */
