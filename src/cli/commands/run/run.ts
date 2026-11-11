@@ -16,6 +16,7 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
 const FIELD_INDENT = "    ";
@@ -144,7 +145,6 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   const paint = painter();
   const ellipsis = paint.dim("...");
   const done = paint.green("done");
-  const failed = paint.red("failed");
 
   console.log(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
   if (runtime !== null) console.log(paint.dim(`Running containers with \`${runtime.command.join(" ")}\``));
@@ -153,59 +153,69 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   let pulling: string | undefined;
   // Whether a container run has started, so a push is of a postrun image.
   let running = false;
-  // Whether the last line written is waiting for how its build, push or container run ends.
-  let lineOpen = false;
+  // The last line written, while it's waiting for how its build, push, pull or container run ends.
+  let line: WaitingLine | undefined;
+  // Whether that line is the one shown while a container run is measured.
+  let measuring = false;
+  const open = (label: string, transient = false) => {
+    measuring = transient;
+    line = waitingLine(label, { transient });
+  };
+  const close = (text: string) => {
+    line?.finish(text);
+    line = undefined;
+  };
+  const fail = () => {
+    line?.fail();
+    line = undefined;
+  };
   try {
     const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime }, store, {
       onBuilding: (image) => {
         building = image;
-        lineOpen = true;
-        process.stdout.write(`Building ${paint.cyan(image)} ${ellipsis} `);
+        open(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
       onBuilt: () => {
         building = undefined;
-        lineOpen = false;
-        console.log(done);
+        close(done);
       },
       onPushing: (_image, reference) => {
         pushing = reference;
-        lineOpen = true;
-        process.stdout.write(`${running ? underIteration : ""}Pushing ${paint.cyan(reference)} ${ellipsis} `);
+        open(`${running ? underIteration : ""}Pushing ${paint.cyan(reference)} ${ellipsis} `);
       },
       onPushed: () => {
         pushing = undefined;
-        lineOpen = false;
-        console.log(done);
+        close(done);
       },
       onPulling: (reference) => {
         pulling = reference;
-        lineOpen = true;
-        process.stdout.write(`Pulling ${paint.cyan(reference)} into the runtime ${ellipsis} `);
+        open(`Pulling ${paint.cyan(reference)} into the runtime ${ellipsis} `);
       },
       onPulled: () => {
         pulling = undefined;
-        lineOpen = false;
-        console.log(done);
+        close(done);
       },
       onRunning: (permutation, iteration) => {
         running = true;
-        lineOpen = true;
-        process.stdout.write(
+        open(
           ` ${paint.bold(ordinal(permutation.number, permutations))}  iteration ${paint.bold(ordinal(iteration.number, testCase.iterations))}  ${paint.magenta(label(testCase, permutation))}  ${ellipsis} `,
         );
       },
       onRan: (_permutation, _iteration, { execution, harnessResult, tokenCosts }) => {
-        lineOpen = false;
         const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
         // Its cost if it can be trusted, else its tokens, if it has either.
         const cost = knownCost(tokenCosts);
         const tokens = totalTokens(tokenCosts);
         const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
-        console.log(execution.timedOut ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`);
+        close(execution.timedOut ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`);
+      },
+      onMeasuring: (permutation) => {
+        // Shown only on a terminal, and only until the measures replace it.
+        open(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${paint.dim("Measuring ...")} `, true);
       },
       onMeasured: (permutation, _iteration, result) => {
         // Under the iteration, lined up with it.
-        console.log(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
+        close(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
       },
     });
     console.log(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
@@ -214,25 +224,28 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
     if (caught instanceof DockerUnavailableError) {
       error(`Docker can't be reached, so nothing can be run: ${caught.message}`);
     } else if (caught instanceof DockerBuildError) {
-      console.log(failed);
+      fail();
       error(`Building ${building} failed: ${caught.message}`);
     } else if (caught instanceof DockerPushError) {
-      console.log(failed);
+      fail();
       error(pushFailure(pushing as string, caught));
     } else if (caught instanceof DockerPullError) {
-      console.log(failed);
+      fail();
       error(
         `The runtime couldn't pull ${pulling}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
       );
-    } else if (caught instanceof DockerContainerError && lineOpen) {
-      console.log(failed);
+    } else if (caught instanceof DockerContainerError && line !== undefined && !measuring) {
+      fail();
       error(`Running a container failed: ${caught.message}`);
     } else if (caught instanceof DockerContainerError) {
+      fail();
       error(`Measuring a container run failed: ${caught.message}`);
     } else {
       throw caught;
     }
     process.exitCode = 1;
+  } finally {
+    line?.stop();
   }
 }
 
