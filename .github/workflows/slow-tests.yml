@@ -82,7 +82,7 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@master
       # The action installs `flyctl`. The Fly scripts call it as `fly`.
       - run: command -v fly || sudo ln -s "$(command -v flyctl)" /usr/local/bin/fly
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
