@@ -56,40 +56,38 @@ function Executions() {
           executions.length === 0 ? (
             <p className="muted">No executions recorded.</p>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Execution</th>
-                    <th>Test case</th>
-                    <th>Task</th>
-                    <th>Started (UTC)</th>
-                    <th>Matrix</th>
-                    <th>Status</th>
+            <table>
+              <thead>
+                <tr>
+                  <th>Execution</th>
+                  <th>Test case</th>
+                  <th>Task</th>
+                  <th>Started (UTC)</th>
+                  <th>Matrix</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {executions.map((e) => (
+                  <tr key={e.executionId}>
+                    <td>
+                      <a href={`#/executions/${e.executionId}`}>
+                        <code>{e.executionId}</code>
+                      </a>
+                    </td>
+                    <td>{e.testCase}</td>
+                    <td>{e.task}</td>
+                    <td>{minute(e.startedAt)}</td>
+                    <td>
+                      {plural(e.matrix.permutations, "permutation")} × {plural(e.matrix.iterations, "iteration")}
+                    </td>
+                    <td>
+                      <Status status={e.status} />
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {executions.map((e) => (
-                    <tr key={e.executionId}>
-                      <td>
-                        <a href={`#/executions/${e.executionId}`}>
-                          <code>{e.executionId}</code>
-                        </a>
-                      </td>
-                      <td>{e.testCase}</td>
-                      <td>{e.task}</td>
-                      <td>{minute(e.startedAt)}</td>
-                      <td>
-                        {plural(e.matrix.permutations, "permutation")} × {plural(e.matrix.iterations, "iteration")}
-                      </td>
-                      <td>
-                        <Status status={e.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           )
         }
       </Pending>
@@ -106,11 +104,7 @@ function measureText({ outcome }: RecordedMeasure): string {
 
 function MeasureCell({ measure }: { measure: RecordedMeasure | undefined }) {
   const text = measure === undefined ? "" : measureText(measure);
-  return (
-    <td className="measure" title={text}>
-      {text}
-    </td>
-  );
+  return <td>{text}</td>;
 }
 
 function Execution({ id }: { id: string }) {
@@ -135,42 +129,40 @@ function Execution({ id }: { id: string }) {
               {containerRuns.length === 0 ? (
                 <p className="muted">No container runs recorded.</p>
               ) : (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Run</th>
-                        <th>Code state</th>
-                        <th>Prompt set</th>
-                        <th>Harness / model</th>
-                        <th>Duration</th>
-                        <th>Agent</th>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Run</th>
+                      <th>Code state</th>
+                      <th>Prompt set</th>
+                      <th>Harness / model</th>
+                      <th>Duration</th>
+                      <th>Agent</th>
+                      {measurements.map((name) => (
+                        <th key={name}>{name}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {containerRuns.map((run) => (
+                      <tr key={`${run.permutation}-${run.iteration}`}>
+                        <td>
+                          {run.permutation}-{run.iteration}
+                        </td>
+                        <td>{run.parameters.codeState?.name}</td>
+                        <td>{run.parameters.promptSet?.name}</td>
+                        <td>
+                          {run.harnessModel.harness} / {run.harnessModel.model}
+                        </td>
+                        <td>{Math.round((run.execution.finishedAt - run.execution.startedAt) / 1000)}s</td>
+                        <td>{agentEnd(run.execution, run.harnessResult)}</td>
                         {measurements.map((name) => (
-                          <th key={name}>{name}</th>
+                          <MeasureCell key={name} measure={run.result[name]} />
                         ))}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {containerRuns.map((run) => (
-                        <tr key={`${run.permutation}-${run.iteration}`}>
-                          <td>
-                            {run.permutation}-{run.iteration}
-                          </td>
-                          <td>{run.parameters.codeState?.name}</td>
-                          <td>{run.parameters.promptSet?.name}</td>
-                          <td>
-                            {run.harnessModel.harness} / {run.harnessModel.model}
-                          </td>
-                          <td>{Math.round((run.execution.finishedAt - run.execution.startedAt) / 1000)}s</td>
-                          <td>{agentEnd(run.execution, run.harnessResult)}</td>
-                          {measurements.map((name) => (
-                            <MeasureCell key={name} measure={run.result[name]} />
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </>
           );
