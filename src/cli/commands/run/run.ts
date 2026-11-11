@@ -8,7 +8,7 @@ import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerBuildError, DockerContainerError, DockerPullError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { type PlannedExecution, type PlannedIteration, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
-import { runExecution } from "../../../execution/runExecution.ts";
+import { runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
 import { type Paint, painter } from "../../colour.ts";
@@ -120,10 +120,12 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  * any agent exits non-zero or times out, or with an error if Docker fails, or, before anything is
  * built, if a variable a harness needs is unset or Docker has no login for the image store.
  *
- * Runs `concurrency` containers at once, or the runtime's, or one at a time. With more than one,
- * each line is written whole, starting with its iteration, as they finish in any order. On a
- * terminal, each iteration has one line instead, rewritten in place as it goes, with how long its
- * current step has taken counting up.
+ * Runs `concurrency` containers at once, or the runtime's, or one at a time, and builds the config's
+ * build concurrency of prerun images at once. With more than one of either, each iteration starts
+ * as soon as its prerun image is ready, and each line is written whole, starting with its
+ * iteration or prerun image, as they finish in any order. On a terminal, each iteration and each
+ * prerun image has one line instead, rewritten in place as it goes, with how long its current
+ * step has taken counting up.
  *
  * Runs `iterations` of each permutation, if given, instead of the test case's.
  */
@@ -141,7 +143,7 @@ async function run(
   const { imageStore, build } = config;
   const runtime = local ? null : config.runtime;
   const concurrency = concurrencyOption ?? runtime?.concurrency ?? 1;
-  const concurrent = concurrency > 1;
+  const concurrent = runsConcurrently(concurrency, build);
   const testCase = withIterations(await loadTestCase(root, name), iterations);
   await checkRequiredEnv(root, testCase);
   checkBuildSecrets(build);
@@ -171,7 +173,8 @@ async function run(
 
   console.log(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
   if (runtime !== null) console.log(paint.dim(`Running containers with \`${runtime.command.join(" ")}\``));
-  if (concurrent) console.log(paint.dim(`Up to ${concurrency} containers at once`));
+  if (concurrency > 1) console.log(paint.dim(`Up to ${concurrency} containers at once`));
+  if (build.concurrency > 1) console.log(paint.dim(`Building up to ${build.concurrency} prerun images at once`));
   // With several at once: what starts each iteration's lines, and its postrun image's.
   const heads = new Map<string, string>();
   // With several at once, on a terminal: each iteration's line, and how its agent ended, by its postrun image.
@@ -183,9 +186,11 @@ async function run(
     rows.get(image)?.set(`${heads.get(image)}  ${outcomes.get(image)}${step === "" ? "" : `  ${step}`}`, counting);
   const headOf = (permutation: PlannedPermutation, iteration: PlannedIteration) =>
     ` ${paint.bold(ordinal(permutation.number, permutations))}  iteration ${paint.bold(ordinal(iteration.number, testCase.iterations))}  ${paint.magenta(label(testCase, permutation))}`;
-  let building: string | undefined;
-  let pushing: string | undefined;
-  let pulling: string | undefined;
+  // With several at once, on a terminal: each prerun image's line, by the image. And each prerun image, by where it's pushed.
+  const prerunRows = new Map<string, LiveRow>();
+  const pulledImages = new Map<string, string>();
+  /** Shows `step` after prerun image `image` on its line, counting how long it takes if `counting`. */
+  const showPrerun = (image: string, step: string, counting = true) => prerunRows.get(image)?.set(`${paint.cyan(image)}  ${step}`, counting);
   // Whether a container run has started, so a push is of a postrun image.
   let running = false;
   // The last line written, while it's waiting for how its build, push, pull or container run ends.
@@ -207,34 +212,56 @@ async function run(
   try {
     const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
       onBuilding: (image) => {
-        building = image;
+        if (live !== undefined) return void prerunRows.set(image, live.add(`${paint.cyan(image)}  ${paint.dim("building")} `));
+        if (concurrent) return console.log(`Building ${paint.cyan(image)}`);
         open(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
-      onBuilt: () => {
-        building = undefined;
+      onBuilt: (image) => {
+        if (live !== undefined) {
+          // Without an image store, it's ready once built.
+          if (imageStore === null) prerunRows.get(image)?.done();
+          return showPrerun(image, imageStore === null ? done : "built", false);
+        }
+        if (concurrent) return console.log(`Built ${paint.cyan(image)}`);
         close(done);
       },
       onPushing: (image, reference) => {
-        pushing = reference;
         if (concurrent && heads.has(image)) return showStep(image, `${paint.dim("pushing")} `, true);
+        pulledImages.set(reference, image);
+        if (live !== undefined) {
+          if (!prerunRows.has(image)) prerunRows.set(image, live.add(""));
+          return showPrerun(image, `${paint.dim("pushing")} `);
+        }
+        if (concurrent) return;
         open(`${running ? underIteration : ""}Pushing ${paint.cyan(reference)} ${ellipsis} `);
       },
       onPushed: (image, reference) => {
-        // With several at once, another push may have started since: it's the one that can fail.
-        if (pushing === reference) pushing = undefined;
         const head = heads.get(image);
         if (concurrent && head !== undefined) {
           if (live !== undefined) return showStep(image, "");
           return console.log(`${head}  pushed ${paint.cyan(reference)}`);
         }
+        if (live !== undefined) {
+          // Without a runtime to pull it, it's ready once pushed.
+          if (runtime === null) prerunRows.get(image)?.done();
+          return showPrerun(image, runtime === null ? done : "pushed", false);
+        }
+        if (concurrent) return console.log(`Pushed ${paint.cyan(reference)}`);
         close(done);
       },
       onPulling: (reference) => {
-        pulling = reference;
+        const image = pulledImages.get(reference);
+        if (live !== undefined && image !== undefined) return showPrerun(image, `${paint.dim("pulling into the runtime")} `);
+        if (concurrent) return;
         open(`Pulling ${paint.cyan(reference)} into the runtime ${ellipsis} `);
       },
-      onPulled: () => {
-        pulling = undefined;
+      onPulled: (reference) => {
+        const image = pulledImages.get(reference);
+        if (live !== undefined && image !== undefined) {
+          showPrerun(image, done, false);
+          return prerunRows.get(image)?.done();
+        }
+        if (concurrent) return console.log(`Pulled ${paint.cyan(reference)} into the runtime`);
         close(done);
       },
       onRunning: (permutation, iteration) => {
@@ -278,22 +305,26 @@ async function run(
     console.log(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
     if (record.status === "failed") process.exitCode = 1;
   } catch (caught) {
+    // The prerun image whose build, push or pull failed, marked so on its line.
+    const failedImage =
+      caught instanceof DockerBuildError ? caught.image : caught instanceof DockerPushError || caught instanceof DockerPullError ? pulledImages.get(caught.reference) : undefined;
+    if (failedImage !== undefined) showPrerun(failedImage, paint.red("failed"), false);
     // Left as they were, so the error is written under them.
     live?.stop();
     if (caught instanceof DockerUnavailableError) {
       error(`Docker can't be reached, so nothing can be run: ${caught.message}`);
     } else if (caught instanceof DockerBuildError) {
       fail();
-      error(`Building ${building} failed: ${caught.message}`);
+      error(`Building ${caught.image} failed: ${caught.message}`);
     } else if (caught instanceof DockerContainerError && concurrent) {
       error(`Running or measuring a container failed: ${caught.message}`);
     } else if (caught instanceof DockerPushError) {
       fail();
-      error(pushFailure(pushing as string, caught));
+      error(pushFailure(caught.reference, caught));
     } else if (caught instanceof DockerPullError) {
       fail();
       error(
-        `The runtime couldn't pull ${pulling}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
+        `The runtime couldn't pull ${caught.reference}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
       );
     } else if (caught instanceof DockerContainerError && line !== undefined && !measuring) {
       fail();
@@ -314,7 +345,7 @@ async function run(
 export function createRunCommand(): Command {
   return new Command("run")
     .description(
-      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency. --iterations overrides the test case's iterations.",
+      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency. Builds up to the config's build concurrency of prerun images at once. With more than one of either, each iteration starts as soon as its own prerun image is ready. --iterations overrides the test case's iterations.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(

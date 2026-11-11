@@ -360,6 +360,13 @@ export type BuildOptions = {
   secrets?: { id: string; env: string }[];
   /** Passes the host's SSH agent as `docker build --ssh default`, for `RUN --mount=type=ssh git clone git@github.com:…`. */
   ssh?: boolean;
+  /**
+   * How many prerun images `build` and `run` build at once: 1, one after another, by default.
+   * Builds run on the machine that runs Thunderjar, so set it to what its CPU, memory and network
+   * can take. With more than 1, or a runtime concurrency above 1, `run` starts each iteration as
+   * soon as its own prerun image is built, pushed and pulled, without waiting for the rest.
+   */
+  concurrency?: number;
 };
 
 /**
@@ -391,7 +398,7 @@ export type ConfigDeclaration = {
   imageStore: ImageStore | null;
   /** Where run results are recorded: `sqliteStore` for a local file, or `postgresStore` for a shared database. */
   runDataStore: RunDataStoreDeclaration;
-  /** Secrets, and the SSH agent, for prerun builds. None by default. */
+  /** Secrets, and the SSH agent, for prerun builds, and how many build at once. None, and 1, by default. */
   build?: BuildOptions;
   /** Where `run` runs containers. The local Docker daemon by default, or with `run --local`. */
   runtime?: RuntimeConfig;

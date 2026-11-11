@@ -112,6 +112,24 @@ Building thunderjar-prerun:e01991db ... done
     ]);
   });
 
+  test("with build concurrency 2, builds two at once, writing a line as each starts and ends", async () => {
+    await using copy = await copyScenarioProject("0202");
+    const config = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
+    await Bun.write(config, (await Bun.file(config).text()).replace("  runDataStore:", "  build: { concurrency: 2 },\n  runDataStore:"));
+    const images = ["thunderjar-prerun:b9cd78e6", "thunderjar-prerun:5e583d26", "thunderjar-prerun:44230271", "thunderjar-prerun:e01991db"];
+    await using docker = await fakeDocker({ slow: images });
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["build", "is-prime-baseline"], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const lines = stdout.trimEnd().split("\n");
+    // The first two start before either ends.
+    expect(lines.slice(0, 2).every((line) => line.startsWith("Building "))).toBe(true);
+    expect(lines.filter((line) => line.startsWith("Built ")).sort()).toEqual(images.map((image) => `Built ${image}`).sort());
+    expect(lines.at(-1)).toBe("4 built, 0 already present");
+  });
+
   test("a second build finds every image present, and builds nothing", async () => {
     await using docker = await fakeDocker();
 

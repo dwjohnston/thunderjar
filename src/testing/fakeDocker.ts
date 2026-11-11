@@ -8,6 +8,7 @@
 //   unreachable   if present, the daemon can't be reached
 //   pull-denied   if present, every pull fails, as for a runtime with no login for the registry
 //   failing       the images whose build or commit fails, and the references whose push or pull fails, one per line
+//   slow          the images whose build takes a second, one per line
 //   logins        the registry hosts Docker holds a valid login for, one per line
 //   pushed        appended to: each reference pushed, one per line
 //   commands      appended to: one line per command, `docker <args…>`, a newline in an argument as `\n`
@@ -68,19 +69,21 @@ const lines = (values: string[]) => values.map((value) => `${value}\n`).join("")
 
 /**
  * State for the fake, in which `images` exist, building or committing the `failing` images, or
- * pushing the `failing` references, fails, Docker is logged in to the registry hosts `loggedIn`,
+ * pushing the `failing` references, fails, building the `slow` images takes a second, Docker is logged in to the registry hosts `loggedIn`,
  * or the daemon is `unreachable`. Remove it when done, or declare it with `await using`.
  */
 export async function fakeDocker({
   images = [],
   failing = [],
+  slow = [],
   loggedIn = [],
   unreachable = false,
   pullDenied = false,
-}: { images?: string[]; failing?: string[]; loggedIn?: string[]; unreachable?: boolean; pullDenied?: boolean } = {}): Promise<FakeDocker> {
+}: { images?: string[]; failing?: string[]; slow?: string[]; loggedIn?: string[]; unreachable?: boolean; pullDenied?: boolean } = {}): Promise<FakeDocker> {
   const dir = `${FIXTURES_DIR}/.tmp/docker-${crypto.randomUUID()}`;
   await Bun.write(`${dir}/images`, lines(images));
   await Bun.write(`${dir}/failing`, lines(failing));
+  await Bun.write(`${dir}/slow`, lines(slow));
   await Bun.write(`${dir}/logins`, lines(loggedIn));
   if (unreachable) await Bun.write(`${dir}/unreachable`, "");
   if (pullDenied) await Bun.write(`${dir}/pull-denied`, "");
@@ -179,6 +182,7 @@ if (import.meta.main) {
       if (!secret && !(flag === "--ssh" && value === "default")) fail(`fake docker: unknown build option ${flag} ${value}`);
     }
     if (!(await Bun.file(`${context}/Dockerfile`).exists())) fail(`fake docker: no Dockerfile in the build context ${context}`);
+    if (dir && (await list("slow")).includes(image)) await Bun.sleep(1000);
     if ((await list("failing")).includes(image)) {
       fail(`ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1`);
     }

@@ -50,10 +50,11 @@ const SECRET_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export function buildOptionsProblem(build: unknown): string | undefined {
   if (build === undefined) return undefined;
   if (typeof build !== "object" || build === null || Array.isArray(build)) {
-    return `must be { secrets: [{ id, env }], ssh: true }, either of them left out, got ${show(build)}`;
+    return `must be { secrets: [{ id, env }], ssh: true, concurrency: 2 }, any of them left out, got ${show(build)}`;
   }
-  const { secrets, ssh } = build as { secrets?: unknown; ssh?: unknown };
+  const { secrets, ssh, concurrency } = build as { secrets?: unknown; ssh?: unknown; concurrency?: unknown };
   if (ssh !== undefined && typeof ssh !== "boolean") return `ssh must be true or false, got ${show(ssh)}`;
+  if (concurrency !== undefined && !isConcurrency(concurrency)) return `concurrency must be a whole number, 1 or more, got ${show(concurrency)}`;
   if (secrets === undefined) return undefined;
   if (!Array.isArray(secrets)) return `secrets must be a list of { id, env }, got ${show(secrets)}`;
   const ids = new Set<string>();
@@ -67,7 +68,7 @@ export function buildOptionsProblem(build: unknown): string | undefined {
   return undefined;
 }
 
-/** Whether `value` can be a concurrency: how many containers run at once. */
+/** Whether `value` can be a concurrency: how many containers run, or images build, at once. */
 export const isConcurrency = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 1;
 
 /** Why `runtime`, as loaded, isn't a RuntimeConfig that can be used with `imageStore`, or undefined if it is. */
@@ -104,7 +105,7 @@ export type ProjectConfig = {
    * (the one holding `.thunderjar/`) unless absolute, or the variable holding a Postgres URL.
    */
   runDataStore: { kind: "sqlite"; path: string } | { kind: "postgres"; urlEnv: string };
-  /** What prerun builds are given: no secrets and no SSH agent, unless the config gives them. */
+  /** What prerun builds are given, and how many build at once: no secrets, no SSH agent and 1, unless the config gives them. */
   build: Required<BuildOptions>;
 };
 
@@ -139,6 +140,6 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
     imageStore: imageStore === null ? null : { repository: imageStore.repository },
     runDataStore: runDataStore.kind === "postgres" ? { kind: "postgres", urlEnv: runDataStore.urlEnv } : { kind: "sqlite", path: runDataStore.path },
     runtime: runtime === undefined ? null : { command: [...runtime.command], concurrency: runtime.concurrency ?? 1 },
-    build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false },
+    build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false, concurrency: build?.concurrency ?? 1 },
   };
 }
