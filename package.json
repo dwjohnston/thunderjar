@@ -35,6 +35,7 @@
     "test:agent": "THUNDERJAR_AGENT_TESTS=1 bun test --timeout 900000 .agent.test",
     "test:package": "bun scripts/package-smoke-test.ts",
     "fixture": "bun scripts/fixture.ts",
+    "dogfood:local": "thunderjar run compare-models --local",
     "docs:dev": "bun --bun vitepress dev docs",
     "docs:build": "bun --bun vitepress build docs",
     "docs:build:versions": "bun scripts/build-versioned-docs.ts",
@@ -54,7 +55,7 @@
     "react-dom": "19"
   },
   "devDependencies": {
-    "thunderjar-published": "npm:thunderjar@0.2.0-preview-cb023da",
+    "thunderjar-published": "npm:thunderjar@0.3.0-preview-3e68b3b",
     "@changesets/cli": "^2.31.0",
     "@changesets/get-release-plan": "^4.0.16",
     "@types/bun": "^1.4.3",
