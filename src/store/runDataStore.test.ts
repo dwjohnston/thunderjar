@@ -1,7 +1,9 @@
-import { $, Glob } from "bun";
+import { $ } from "bun";
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { TMP_DIR } from "../testing/cli.ts";
-import { type ContainerRunRecord, type ExecutionRecord, executionFolder, fileStore, RunDataStoreError } from "./runDataStore.ts";
+import { SQL } from "bun";
+import { type ContainerRunRecord, type ExecutionRecord, postgresStore, RunDataStoreError, sqliteStore, storeFileIn } from "./runDataStore.ts";
 
 const dirs: string[] = [];
 const dataDir = () => {
@@ -46,46 +48,47 @@ const containerRun = (executionId: string, permutation: number, iteration: numbe
   result: {},
 });
 
-const filesIn = (dir: string) => [...new Glob("**").scanSync({ cwd: dir, dot: true })].sort();
+const errorOf = (error: unknown) => (error instanceof RunDataStoreError ? { path: error.path, message: error.message } : error);
 
-describe("fileStore", () => {
-  test("a missing folder is an empty store", async () => {
-    const store = fileStore(dataDir());
+describe("sqliteStore", () => {
+  test("a missing file is an empty store, and reading doesn't create it", async () => {
+    const file = storeFileIn(dataDir());
+    const store = sqliteStore(file);
 
     expect(await store.listExecutions()).toEqual([]);
     expect(await store.containerRunsOf("01kxxxxxxxxxxxxxxxxxxxxxxx")).toEqual([]);
+    expect(await Bun.file(file).exists()).toBe(false);
   });
 
-  test("writes an execution's records as pretty JSON, one folder per execution", async () => {
-    const dir = dataDir();
-    const store = fileStore(dir);
+  test("the first write creates the file, and its folder; another store of the file reads what was written", async () => {
+    const file = `${dataDir()}/nested/runs.sqlite`;
+    const store = sqliteStore(file);
     const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
 
     await store.recordExecution(execution(id));
     await store.recordContainerRun(containerRun(id, 1, 1));
     await store.recordContainerRun(containerRun(id, 2, 1));
 
-    expect(filesIn(dir)).toEqual([
-      `runs/${id}/container-runs/1-1.json`,
-      `runs/${id}/container-runs/2-1.json`,
-      `runs/${id}/execution.json`,
-    ]);
-    expect(await Bun.file(`${executionFolder(dir, id)}/execution.json`).text()).toBe(`${JSON.stringify(execution(id), null, 2)}\n`);
-    expect(await Bun.file(`${executionFolder(dir, id)}/container-runs/2-1.json`).json()).toEqual(containerRun(id, 2, 1));
+    const reopened = sqliteStore(file);
+    expect(await reopened.listExecutions()).toEqual([execution(id)]);
+    expect(await reopened.containerRunsOf(id)).toEqual([containerRun(id, 1, 1), containerRun(id, 2, 1)]);
   });
 
-  test("recording an execution again replaces its record", async () => {
-    const store = fileStore(dataDir());
+  test("recording an execution or a container run again replaces its record", async () => {
+    const store = sqliteStore(storeFileIn(dataDir()));
     const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
 
     await store.recordExecution(execution(id, "running"));
     await store.recordExecution(execution(id, "failed"));
+    await store.recordContainerRun(containerRun(id, 1, 1));
+    await store.recordContainerRun({ ...containerRun(id, 1, 1), postrunImage: "again" });
 
     expect(await store.listExecutions()).toEqual([execution(id, "failed")]);
+    expect((await store.containerRunsOf(id)).map((record) => record.postrunImage)).toEqual(["again"]);
   });
 
   test("lists executions newest first", async () => {
-    const store = fileStore(dataDir());
+    const store = sqliteStore(storeFileIn(dataDir()));
 
     await store.recordExecution(execution("01kfa1bgz0bbbbbbbbbbbbbbbb"));
     await store.recordExecution(execution("01kfa1bgz1aaaaaaaaaaaaaaaa"));
@@ -99,7 +102,7 @@ describe("fileStore", () => {
   });
 
   test("gives an execution's container runs by permutation, then iteration, and only its own", async () => {
-    const store = fileStore(dataDir());
+    const store = sqliteStore(storeFileIn(dataDir()));
     const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
     const other = "01kfa1bgz0bbbbbbbbbbbbbbbb";
 
@@ -115,27 +118,84 @@ describe("fileStore", () => {
     ]);
   });
 
-  test("leaves no temporary files behind", async () => {
-    const dir = dataDir();
-    const store = fileStore(dir);
+  test("a record that isn't JSON is a RunDataStoreError naming the file and the record", async () => {
+    const file = storeFileIn(dataDir());
+    const store = sqliteStore(file);
     const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
-
+    await store.recordExecution(execution(id));
     await store.recordContainerRun(containerRun(id, 1, 1));
-    await store.recordContainerRun(containerRun(id, 1, 1));
+    const db = new Database(file);
+    db.exec("UPDATE executions SET record = '{'; UPDATE container_runs SET record = '';");
+    db.close();
 
-    expect(filesIn(dir)).toEqual([`runs/${id}/container-runs/1-1.json`]);
+    expect(await sqliteStore(file).listExecutions().catch(errorOf)).toEqual({ path: file, message: expect.stringMatching(new RegExp(`^execution ${id}: `)) });
+    expect(await sqliteStore(file).containerRunsOf(id).catch(errorOf)).toEqual({ path: file, message: expect.stringMatching(new RegExp(`^container run ${id} 1-1: `)) });
   });
 
-  test("a record that isn't JSON is a RunDataStoreError with its path", async () => {
-    const dir = dataDir();
-    const store = fileStore(dir);
-    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
-    await store.recordContainerRun(containerRun(id, 1, 1));
-    await Bun.write(`${dir}/runs/${id}/container-runs/1-1.json`, "{");
-    await Bun.write(`${dir}/runs/${id}/execution.json`, "");
+  test("a file that isn't a store is a RunDataStoreError naming it", async () => {
+    const file = storeFileIn(dataDir());
+    await Bun.write(file, "not a database, just some text that is long enough to be a header and more");
 
-    const pathOf = (error: unknown) => (error instanceof RunDataStoreError ? error.path : error);
-    expect(await store.containerRunsOf(id).catch(pathOf)).toBe(`${dir}/runs/${id}/container-runs/1-1.json`);
-    expect(await store.listExecutions().catch(pathOf)).toBe(`${dir}/runs/${id}/execution.json`);
+    expect(await sqliteStore(file).listExecutions().catch(errorOf)).toEqual({ path: file, message: expect.any(String) });
+    expect(await sqliteStore(file).recordExecution(execution("01kfa1bgz0aaaaaaaaaaaaaaaa")).catch(errorOf)).toEqual({ path: file, message: expect.any(String) });
   });
+});
+
+// Against a real Postgres, only with THUNDERJAR_POSTGRES_URL set to one it may create and drop
+// schemas in, e.g. `THUNDERJAR_POSTGRES_URL=postgres://postgres@localhost/postgres bun test runDataStore`.
+// Each test gets its own schema, so they don't see each other's records.
+const POSTGRES_URL = Bun.env.THUNDERJAR_POSTGRES_URL;
+
+describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
+  const schemas: string[] = [];
+  /** A URL for a fresh, empty schema of the test database, dropped after the test. */
+  const freshDatabase = async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+    const admin = new SQL(POSTGRES_URL!);
+    await admin.unsafe(`CREATE SCHEMA ${schema}`);
+    await admin.close();
+    const url = new URL(POSTGRES_URL!);
+    url.searchParams.set("options", `-c search_path=${schema}`);
+    return url.toString();
+  };
+
+  afterEach(async () => {
+    const admin = new SQL(POSTGRES_URL!);
+    for (const schema of schemas.splice(0)) await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`);
+    await admin.close();
+  });
+
+  test("an empty database is an empty store", async () => {
+    const store = postgresStore(await freshDatabase(), "test db");
+
+    expect(await store.listExecutions()).toEqual([]);
+    expect(await store.containerRunsOf("01kxxxxxxxxxxxxxxxxxxxxxxx")).toEqual([]);
+  });
+
+  test("records and replaces executions and container runs; another store of the database reads them, in order", async () => {
+    const url = await freshDatabase();
+    const store = postgresStore(url, "test db");
+    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+    const other = "01kfa1bgz1aaaaaaaaaaaaaaaa";
+
+    await store.recordExecution(execution(id, "running"));
+    await store.recordExecution(execution(id, "complete"));
+    await store.recordExecution(execution(other));
+    for (const [p, i] of [[10, 1], [2, 1], [1, 10], [1, 2]] as const) await store.recordContainerRun(containerRun(id, p, i));
+    await store.recordContainerRun({ ...containerRun(id, 2, 1), postrunImage: "again" });
+    await store.recordContainerRun(containerRun(other, 1, 1));
+
+    const reopened = postgresStore(url, "test db");
+    expect(await reopened.listExecutions()).toEqual([execution(other), execution(id, "complete")]);
+    const runs = await reopened.containerRunsOf(id);
+    expect(runs.map((record) => [record.permutation, record.iteration])).toEqual([[1, 2], [1, 10], [2, 1], [10, 1]]);
+    expect(runs[2]).toEqual({ ...containerRun(id, 2, 1), postrunImage: "again" });
+  });
+});
+
+test("a Postgres that can't be reached is a RunDataStoreError named by its label, not its URL", async () => {
+  const store = postgresStore("postgres://user:secret@127.0.0.1:1/none", "Postgres at $THUNDERJAR_DB_URL");
+
+  expect(await store.listExecutions().catch(errorOf)).toEqual({ path: "Postgres at $THUNDERJAR_DB_URL", message: expect.any(String) });
 });

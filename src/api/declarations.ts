@@ -574,9 +574,23 @@ export function declareTestCase<T extends TaskNames>(declaration: TestCaseDeclar
 
 export type SqliteStore = { kind: "sqlite"; path: string };
 
+/** A SQLite file: `path` is relative to the project folder, the one holding `.thunderjar/`, unless absolute. */
 export function sqliteStore(options: { path: string }): SqliteStore {
   return { kind: "sqlite", ...options };
 }
+
+export type PostgresStore = { kind: "postgres"; urlEnv: string };
+
+/**
+ * A Postgres database, shared by every machine that runs Thunderjar against it. `urlEnv` names
+ * the environment variable holding its connection URL, e.g. `postgres://user:pass@host/db`, so
+ * no credential is ever in the config.
+ */
+export function postgresStore(options: { urlEnv: string }): PostgresStore {
+  return { kind: "postgres", ...options };
+}
+
+export type RunDataStoreDeclaration = SqliteStore | PostgresStore;
 
 export type ImageStore = { repository: string };
 
@@ -638,11 +652,12 @@ export type ConfigDeclaration = {
   /**
    * @docs
    * @name runDataStore
-   * @type {SqliteStore}
+   * @type {SqliteStore | PostgresStore}
    * @description
-   * Where run data is kept. Make one with `sqliteStore({ path })`.
+   * Where run results are recorded: `sqliteStore({ path })` for a local file, or
+   * `postgresStore({ urlEnv })` for a shared database.
    */
-  runDataStore: SqliteStore;
+  runDataStore: RunDataStoreDeclaration;
   /**
    * @docs
    * @name build

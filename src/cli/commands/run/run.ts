@@ -10,10 +10,10 @@ import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageS
 import { type PlannedExecution, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
 import { runExecution } from "../../../execution/runExecution.ts";
 import { ulid } from "../../../execution/ulid.ts";
-import { executionFolder, fileStore, type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
+import { type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
 import { type Paint, painter, plain, printError as error } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
-import { dataDirOf, dataDirOption, displayPath } from "../../dataDir.ts";
+import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 
@@ -108,7 +108,7 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  * Runs test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it: builds its
  * missing prerun images, then runs each iteration in a container, writing a line for each as it
  * finishes, and one of its measures once they're taken, and records them in the run data store
- * under `dataDir`. With an image store, pushes each prerun image once built, and each postrun
+ * the config names, or the one in `dataDir`. With an image store, pushes each prerun image once built, and each postrun
  * image once its container run is recorded, writing `Pushing <reference> ... done`. Exits 1 if
  * any agent exits non-zero or times out, or with an error if Docker fails, or, before anything is
  * built, if a variable a harness needs is unset or Docker has no login for the image store.
@@ -135,7 +135,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
     return;
   }
   const plan = await planExecution(root, testCase, ulid(), imagePrefix);
-  const store = dataDirOf(cwd, root, dataDir);
+  const { store, where } = await openStore(cwd, dataDir, root);
   const permutations = plan.permutations.length;
   // Where a postrun image's push line goes: under its iteration, lined up with it, like its measures.
   const underIteration = " ".repeat(ordinal(permutations, permutations).length + 3);
@@ -156,7 +156,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   // Whether the last line written is waiting for how its build, push or container run ends.
   let lineOpen = false;
   try {
-    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime }, fileStore(store), {
+    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime }, store, {
       onBuilding: (image) => {
         building = image;
         lineOpen = true;
@@ -208,7 +208,7 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
         console.log(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
       },
     });
-    console.log(paint.dim(`Wrote ${displayPath(cwd, executionFolder(store, plan.executionId))}/`));
+    console.log(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
     if (record.status === "failed") process.exitCode = 1;
   } catch (caught) {
     if (caught instanceof DockerUnavailableError) {

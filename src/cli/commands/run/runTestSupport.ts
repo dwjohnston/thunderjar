@@ -1,8 +1,8 @@
 // Shared by run.test.ts and run.more.test.ts: `thunderjar run`'s tests, split in two so that
 // `bun test --parallel` runs them in two workers.
 import { expect } from "bun:test";
-import { $, Glob } from "bun";
-import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure, RecordedOutcome } from "../../../store/runDataStore.ts";
+import { $, Glob, SQL } from "bun";
+import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { TMP_DIR } from "../../../testing/cli.ts";
 import type { FakeDocker } from "../../../testing/fakeDocker.ts";
 
@@ -57,14 +57,12 @@ export const dataDir = () => {
 
 /** The execution record and container run records in the store under `dir`, for its one execution. */
 export async function readStore(dir: string) {
-  const [executionDir] = [...new Glob("runs/*").scanSync({ cwd: dir, onlyFiles: false })];
-  const containerRuns = [...new Glob("container-runs/*.json").scanSync({ cwd: `${dir}/${executionDir}` })].sort();
+  const store = sqliteStore(storeFileIn(dir));
+  const [execution] = await store.listExecutions();
   return {
     files: filesIn(dir),
-    execution: (await Bun.file(`${dir}/${executionDir}/execution.json`).json()) as ExecutionRecord,
-    containerRuns: (await Promise.all(
-      containerRuns.map((file) => Bun.file(`${dir}/${executionDir}/${file}`).json()),
-    )) as ContainerRunRecord[],
+    execution: execution as ExecutionRecord,
+    containerRuns: execution ? await store.containerRunsOf(execution.executionId) : [],
   };
 }
 
@@ -87,4 +85,32 @@ export const measured = (instrument: string, data: unknown) => measure(instrumen
 /** Removes the folders `dataDir` made: call after each test. */
 export async function removeDataDirs() {
   for (const dir of dataDirs.splice(0)) await $`rm -rf ${dir}`.quiet();
+}
+
+/** Points the config of the project in `dir` at a postgresStore, its URL in THUNDERJAR_DB_URL. */
+export async function usePostgres(dir: string) {
+  const config = `${dir}/.thunderjar/thunderjar.config.ts`;
+  const text = await Bun.file(config).text();
+  await Bun.write(
+    config,
+    text
+      .replace("import { declareConfig, sqliteStore }", "import { declareConfig, postgresStore }")
+      .replace(/runDataStore: sqliteStore\(\{[^}]*\}\)/, 'runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })'),
+  );
+}
+
+/** A fresh schema of the Postgres at THUNDERJAR_POSTGRES_URL, and a URL that uses it; dropped when disposed. */
+export async function postgresSchema() {
+  const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+  const admin = new SQL(Bun.env.THUNDERJAR_POSTGRES_URL!);
+  await admin.unsafe(`CREATE SCHEMA ${schema}`);
+  const url = new URL(Bun.env.THUNDERJAR_POSTGRES_URL!);
+  url.searchParams.set("options", `-c search_path=${schema}`);
+  return {
+    url: url.toString(),
+    async [Symbol.asyncDispose]() {
+      await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`);
+      await admin.close();
+    },
+  };
 }
