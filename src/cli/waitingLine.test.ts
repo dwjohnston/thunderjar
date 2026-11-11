@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { elapsed, waitingLine } from "./waitingLine.ts";
 
 /** An output that records what's written to it, a clock, and a ticker that's ticked by hand. */
-function setup(isTTY: boolean, transient = false) {
+function setup(isTTY: boolean, transient = false, colour = false) {
   const written: string[] = [];
   let time = 0;
   let tick: (() => void) | undefined;
   let stopped = false;
   const line = waitingLine("Building img ... ", {
     transient,
+    colour,
     out: { isTTY, write: (text) => written.push(text) },
     ticker: (t) => {
       tick = t;
@@ -67,6 +68,24 @@ describe("waitingLine", () => {
 
     expect(written).toEqual(["Building img ... ", "0s"]);
     expect(isStopped()).toBe(true);
+  });
+});
+
+describe("a coloured waitingLine", () => {
+  test("a terminal: the count is dim, and moving back over it skips its colour codes", () => {
+    const { written, advance } = setup(true, false, true);
+
+    advance(10_000);
+
+    expect(written).toEqual(["Building img ... ", "\x1b[2m0s\x1b[22m", "\x1b[2D\x1b[K\x1b[2m10s\x1b[22m"]);
+  });
+
+  test("failed is red", () => {
+    const { line, written } = setup(true, false, true);
+
+    line.fail();
+
+    expect(written.at(-1)).toBe("\x1b[2D\x1b[K\x1b[31mfailed\x1b[39m\n");
   });
 });
 

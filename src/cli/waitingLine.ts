@@ -3,6 +3,8 @@
 // label, once a second, until it's finished. Anywhere else, e.g. a pipe or a file, nothing is
 // written in between, so the output is the same as it always was.
 
+import { painter } from "./colour.ts";
+
 /** Where a waiting line is written: `process.stdout`, or a stand-in for it in tests. */
 export type LineOutput = { isTTY?: boolean; write(text: string): unknown };
 
@@ -31,6 +33,8 @@ export type WaitingLineOptions = {
   out?: LineOutput;
   ticker?: Ticker;
   now?: () => number;
+  /** Whether to colour the count and `failed`. By default, if `out` should be coloured. */
+  colour?: boolean;
 };
 
 /** Once a second, without keeping the process alive. */
@@ -55,19 +59,25 @@ export function elapsed(ms: number): string {
  */
 export function waitingLine(label: string, options: WaitingLineOptions = {}): WaitingLine {
   const { transient = false, out = process.stdout, ticker = everySecond, now = Date.now } = options;
+  const paint = painter(out, options.colour);
   if (!out.isTTY) {
     if (!transient) out.write(label);
-    return { finish: (text) => void out.write(`${text}\n`), fail: () => void (transient || out.write("failed\n")), stop: () => {} };
+    return {
+      finish: (text) => void out.write(`${text}\n`),
+      fail: () => void (transient || out.write(`${paint.red("failed")}\n`)),
+      stop: () => {},
+    };
   }
 
   out.write(label);
   const startedAt = now();
+  // The count shown, without its colour, so its length is how far to move back over it.
   let count = "";
   // Moves back over the count and clears it, so the label is never rewritten: it may have wrapped.
   const erase = () => (count === "" ? "" : `\x1b[${count.length}D\x1b[K`);
   const show = () => {
     const next = elapsed(now() - startedAt);
-    out.write(`${erase()}${next}`);
+    out.write(`${erase()}${paint.dim(next)}`);
     count = next;
   };
   show();
@@ -80,7 +90,7 @@ export function waitingLine(label: string, options: WaitingLineOptions = {}): Wa
   return {
     // A transient line is cleared from its start.
     finish: (text) => (transient ? end(`\r\x1b[2K${text}`) : end(text)),
-    fail: () => end("failed"),
+    fail: () => end(paint.red("failed")),
     stop,
   };
 }
