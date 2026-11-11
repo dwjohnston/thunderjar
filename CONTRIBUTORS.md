@@ -51,4 +51,12 @@ The repo runs thunderjar on itself from [`.thunderjar/`](./.thunderjar/). It use
 
 Why the alias: Changesets rewrites any dependency named `thunderjar` to the version it's about to release. That version isn't on npm yet, so `bun install` fails on the "Release Version x.y.z" PR. The alias has a different name and an `npm:` range, so Changesets leaves it alone.
 
-To dogfood a newer release, bump the version in the alias by hand. See [.thunderjar/AGENTS.md](./.thunderjar/AGENTS.md).
+To dogfood a newer release, bump the version in the alias by hand.
+
+To run it, with Docker and `ANTHROPIC_API_KEY`:
+
+```sh
+bun run dogfood:local
+```
+
+It runs the `compare-models` test case with the installed `thunderjar-published`, on the local Docker daemon. See [.thunderjar/AGENTS.md](./.thunderjar/AGENTS.md).
