@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DefaultTheme from "vitepress/theme";
+import Splash from "./splash/Splash.vue";
 import UnderConstruction from "./under-construction/UnderConstruction.vue";
 import VersionSwitcher from "./VersionSwitcher.vue";
 
@@ -10,6 +11,9 @@ const { Layout } = DefaultTheme;
   <Layout>
     <template #nav-bar-content-after>
       <VersionSwitcher />
+    </template>
+    <template #home-hero-before>
+      <Splash />
     </template>
     <template #home-hero-after>
       <UnderConstruction />

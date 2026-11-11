@@ -12,7 +12,8 @@ const commands = createProgram().commands;
 export default defineConfig({
   title: "Thunderjar",
   base: "/thunderjar/",
-  appearance: false,
+  // Dark by default, with the light/dark toggle in the nav.
+  appearance: "dark",
   themeConfig: {
     nav: [{ text: "Docs", link: "/getting-started" }],
     sidebar: [
