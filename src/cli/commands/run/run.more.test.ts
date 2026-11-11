@@ -431,6 +431,68 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(commands.find((command) => command.startsWith("docker run --name"))).toContain("--pull never");
   });
 
+  /** A copy of 0211 whose example test case has 3 iterations, its runtime `concurrency`, and, if `slow`, an agent that takes a second. */
+  async function copyWith(concurrency: number, slow = false) {
+    const copy = await copyScenarioProject("0211");
+    const thunderjarDir = `${copy.dir}/.thunderjar`;
+    const harness = `${thunderjarDir}/parameters/harnessModels/fake-harness-alpha/index.ts`;
+    if (slow) await Bun.write(harness, (await Bun.file(harness).text()).replace("`printf", "`sleep 1 && printf"));
+    const testCase = `${thunderjarDir}/test-cases/example.ts`;
+    await Bun.write(testCase, (await Bun.file(testCase).text()).replace("iterations: 1", "iterations: 3"));
+    const config = `${thunderjarDir}/thunderjar.config.ts`;
+    await Bun.write(config, (await Bun.file(config).text()).replace('"--context", "cloud"]', `"--context", "cloud"], concurrency: ${concurrency}`));
+    return copy;
+  }
+
+  test("with concurrency 2, runs two containers at once, writing each line whole, and records every run", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWith(2, true);
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const lines = stdout.split("\n");
+    expect(lines).toContain("Up to 2 containers at once");
+    const at = (text: string) => lines.findIndex((line) => line.includes(text));
+    const firstDone = at("  done (");
+    // The first two start before either is done; the third once one is.
+    expect(at("iteration 1/3  fake-harness-alpha | plain  started")).toBeLessThan(firstDone);
+    expect(at("iteration 2/3  fake-harness-alpha | plain  started")).toBeLessThan(firstDone);
+    expect(at("iteration 3/3  fake-harness-alpha | plain  started")).toBeGreaterThan(firstDone);
+    for (const n of [1, 2, 3]) {
+      expect(lines.filter((line) => line.startsWith(` 1/1  iteration ${n}/3  fake-harness-alpha | plain  `))).toEqual([
+        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  started`,
+        expect.stringMatching(/  done \(.*\)$/),
+        expect.stringMatching(/  pushed ghcr\.io\/acme\/thunderjar-images:postrun-/),
+        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1`,
+      ]);
+    }
+    const { execution, containerRuns } = await readStore(data);
+    expect(execution.status).toBe("complete");
+    expect(containerRuns.map((run) => run.iteration).sort()).toEqual([1, 2, 3]);
+    expect(containerRuns.every((run) => run.result !== undefined && Object.keys(run.result).length === 3)).toBe(true);
+  }, 30_000);
+
+  test("--concurrency 1 overrides the runtime's, running them one after another as before", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWith(3);
+
+    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example", "--concurrency", "1", "--data-dir", dataDir()], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toContain("containers at once");
+    expect(stdout).toContain(" 1/1  iteration 1/3  fake-harness-alpha | plain  ... done (");
+  }, 30_000);
+
+  test.each([["0"], ["two"], ["1.5"]])("--concurrency %p is a usage error", async (value) => {
+    const { stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--concurrency", value]);
+
+    expect(stderr).toContain("It must be a whole number, 1 or more.");
+    expect(exitCode).not.toBe(0);
+  });
+
   test("a pull the runtime can't make is an error saying what to check, and nothing is run or written", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:ae60c784"], pullDenied: true });
     const data = dataDir();

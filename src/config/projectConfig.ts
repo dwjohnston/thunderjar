@@ -67,16 +67,20 @@ export function buildOptionsProblem(build: unknown): string | undefined {
   return undefined;
 }
 
+/** Whether `value` can be a concurrency: how many containers run at once. */
+export const isConcurrency = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 1;
+
 /** Why `runtime`, as loaded, isn't a RuntimeConfig that can be used with `imageStore`, or undefined if it is. */
 export function runtimeProblem(runtime: unknown, imageStore: unknown): string | undefined {
   if (runtime === undefined) return undefined;
   if (typeof runtime !== "object" || runtime === null || Array.isArray(runtime)) {
     return `must be { command: ["docker", "--context", "<context>"] }, got ${show(runtime)}`;
   }
-  const { command } = runtime as { command?: unknown };
+  const { command, concurrency } = runtime as { command?: unknown; concurrency?: unknown };
   if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === "string" && part.length > 0)) {
     return `command must be a non-empty list of non-empty strings, e.g. ["docker", "--context", "cloud"], got ${show(command)}`;
   }
+  if (concurrency !== undefined && !isConcurrency(concurrency)) return `concurrency must be a whole number, 1 or more, got ${show(concurrency)}`;
   if (imageStore === null) return "needs an imageStore: the runtime pulls the images it runs from it";
   return undefined;
 }
@@ -93,8 +97,8 @@ export function runDataStoreProblem(runDataStore: unknown): string | undefined {
 
 export type ProjectConfig = {
   imageStore: ImageStore | null;
-  /** Where `run` runs containers, or `null` for the local Docker daemon. */
-  runtime: RuntimeConfig | null;
+  /** Where `run` runs containers, and how many at once, or `null` for the local Docker daemon. */
+  runtime: Required<RuntimeConfig> | null;
   /**
    * The run data store, as the config gives it: a SQLite file, relative to the project folder
    * (the one holding `.thunderjar/`) unless absolute, or the variable holding a Postgres URL.
@@ -134,7 +138,7 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
   return {
     imageStore: imageStore === null ? null : { repository: imageStore.repository },
     runDataStore: runDataStore.kind === "postgres" ? { kind: "postgres", urlEnv: runDataStore.urlEnv } : { kind: "sqlite", path: runDataStore.path },
-    runtime: runtime === undefined ? null : { command: [...runtime.command] },
+    runtime: runtime === undefined ? null : { command: [...runtime.command], concurrency: runtime.concurrency ?? 1 },
     build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false },
   };
 }

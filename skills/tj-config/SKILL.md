@@ -132,6 +132,23 @@ runtime: { command: ["docker", "--context", "cloud"] },
 
 **Why:** The runtime pulls from and pushes to the registry itself. Thunderjar never sends credentials to it, and each platform sets up registry access its own way.
 
+### `concurrency`
+
+How many containers run on the runtime at once. It defaults to 1, one after another.
+
+```ts
+runtime: { command: ["docker", "--context", "cloud"], concurrency: 4 },
+```
+
+- `thunderjar run --concurrency <n>` overrides it for one run, and is the only way to run several at once with `--local`.
+- With more than one at once, `run` writes each line whole, starting with its iteration, as containers finish in any order.
+
+✅ **Do** ask the user how much CPU and memory the runtime has, and size `concurrency` to it.
+
+❌ **Don't** set it to the number of iterations just to finish sooner.
+
+**Why:** Each container is an agent that also runs builds and tests. Too many at once starve each other, so timings and timeouts stop being comparable between runs.
+
 ## Check the change
 
 ```sh

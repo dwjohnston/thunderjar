@@ -1,7 +1,7 @@
 // Running one execution of a test case: its missing prerun images are built, then every
 // iteration of every permutation, in plan's order, runs in a container (see containerRun.ts),
-// and is recorded in the run data store as soon as it finishes, so the runs that finished
-// before a crash are kept. Then the task's measurements are taken of it, each in a measurement
+// up to `concurrency` of them at once, and is recorded in the run data store as soon as it
+// finishes, so the runs that finished before a crash are kept. Then the task's measurements are taken of it, each in a measurement
 // container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
 // recorded and measured, and the rest still run, but the execution is `failed`.
@@ -20,6 +20,7 @@ import type {
 import { runInContainer } from "./containerRun.ts";
 import { containerName, storedPostrunImage, storedPrerunImage } from "./images.ts";
 import { type PullHooks, pullIntoRuntime, type PushHooks, pushPrerunImages, pushToStore } from "./imageStore.ts";
+import { inParallel } from "./inParallel.ts";
 import { measureContainerRun } from "./measure.ts";
 import { openMeasurementContext, recordedContext } from "./measurementContext.ts";
 import { collectReply } from "./reply.ts";
@@ -61,6 +62,8 @@ export type ExecutionToRun = {
    * pushes each postrun image there itself.
    */
   runtime?: RuntimeConfig | null;
+  /** How many iterations' containers run at once: 1, one after another, by default. */
+  concurrency?: number;
 };
 
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
@@ -111,7 +114,7 @@ function containerRunRecord(
  * measurements are wrong, a DockerUnavailableError, ConfigError or DockerBuildError if its
  * prerun images can't be built, and a DockerPushError if one can't be pushed.
  * Throws a DockerContainerError if Docker fails while running or measuring one, after
- * recording the execution as `failed`.
+ * recording the execution as `failed`: no more start, and those running finish first.
  */
 export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks = {}): Promise<ExecutionRecord> {
   const { root, testCase, plan, imagePrefix, imageStore = null, build = {}, runtime: remote = null } = run;
@@ -140,49 +143,52 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
 
   let status: ExecutionStatus = "complete";
   let finished: ExecutionRecord | undefined;
-  try {
-    for (const permutation of plan.permutations) {
-      for (const iteration of permutation.iterations) {
-        hooks.onRunning?.(permutation, iteration);
-        const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-        const { execution, harnessResults } = await runInContainer({
-          prerunImage: prerunImageOf(permutation),
-          postrunImage: iteration.postrunImage,
-          turns: iteration.turns,
-          env: permutation.env,
-          runOptions: permutation.runOptions,
-          timeoutSeconds: permutation.timeoutSeconds,
-          container,
-          runtime,
-        });
-        const turns = harnessResults.map((harnessResult) => ({ harnessResult, reply: collectReply(permutation.harness.collectReply, harnessResult) }));
-        const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, harnessResults, {
-          version: permutation.version,
-          modelId: permutation.modelId,
-        });
-        const record = containerRunRecord(run, permutation, iteration, execution, turns, tokenCosts);
-        const { harnessResult, reply } = record;
-        await store.recordContainerRun(record);
-        // Timed out, its exit code is null.
-        if (execution.exitCode !== 0) status = "failed";
-        hooks.onRan?.(permutation, iteration, record);
-        if (imageStore !== null) {
-          const reference = storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);
-          // Committed in the runtime, so pushed from there.
-          await pushToStore(iteration.postrunImage, reference, hooks, runtime);
-        }
-
-        if (measurements.length === 0) continue;
-        hooks.onMeasuring?.(permutation, iteration);
-        let opened = 0;
-        const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: turns.map((turn) => turn.reply) };
-        const open = async (usesContainer: boolean) =>
-          usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime) : recordedContext(recorded);
-        const result = await measureContainerRun(measurements, open);
-        await store.recordContainerRun({ ...record, result });
-        hooks.onMeasured?.(permutation, iteration, result);
-      }
+  const runIteration = async (permutation: PlannedPermutation, iteration: PlannedIteration) => {
+    hooks.onRunning?.(permutation, iteration);
+    const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
+    const { execution, harnessResults } = await runInContainer({
+      prerunImage: prerunImageOf(permutation),
+      postrunImage: iteration.postrunImage,
+      turns: iteration.turns,
+      env: permutation.env,
+      runOptions: permutation.runOptions,
+      timeoutSeconds: permutation.timeoutSeconds,
+      container,
+      runtime,
+    });
+    const turns = harnessResults.map((harnessResult) => ({ harnessResult, reply: collectReply(permutation.harness.collectReply, harnessResult) }));
+    const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, harnessResults, {
+      version: permutation.version,
+      modelId: permutation.modelId,
+    });
+    const record = containerRunRecord(run, permutation, iteration, execution, turns, tokenCosts);
+    const { harnessResult, reply } = record;
+    await store.recordContainerRun(record);
+    // Timed out, its exit code is null.
+    if (execution.exitCode !== 0) status = "failed";
+    hooks.onRan?.(permutation, iteration, record);
+    if (imageStore !== null) {
+      const reference = storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);
+      // Committed in the runtime, so pushed from there.
+      await pushToStore(iteration.postrunImage, reference, hooks, runtime);
     }
+
+    if (measurements.length === 0) return;
+    hooks.onMeasuring?.(permutation, iteration);
+    let opened = 0;
+    const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: turns.map((turn) => turn.reply) };
+    const open = async (usesContainer: boolean) =>
+      usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime) : recordedContext(recorded);
+    const result = await measureContainerRun(measurements, open);
+    await store.recordContainerRun({ ...record, result });
+    hooks.onMeasured?.(permutation, iteration, result);
+  };
+
+  try {
+    await inParallel(
+      plan.permutations.flatMap((permutation) => permutation.iterations.map((iteration) => () => runIteration(permutation, iteration))),
+      run.concurrency ?? 1,
+    );
   } catch (error) {
     status = "failed";
     throw error;
