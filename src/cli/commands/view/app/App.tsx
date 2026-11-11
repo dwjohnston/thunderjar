@@ -2,7 +2,8 @@
 // `#/` or `#/executions/<ID>`, so the server only ever serves one page.
 import { useEffect, useState } from "react";
 import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure } from "../../../../store/runDataStore.ts";
-import { agentEnd, minute, plural } from "../../../format.ts";
+import { agentEnd, dollars, duration, knownCost, minute, plural, type RunTotals, runTotals, thousands, totalTokens } from "../../../format.ts";
+import type { ExecutionSummary } from "../view.ts";
 
 type Loaded<T> = { state: "loading" } | { state: "loaded"; data: T } | { state: "error"; message: string };
 
@@ -46,8 +47,58 @@ function Pending<T>({ loaded, children }: { loaded: Loaded<T>; children: (data: 
   return <>{children(loaded.data)}</>;
 }
 
+/** How long an execution took, or a dash if it hasn't ended. Its JSON may have `finishedAt: null`. */
+const executionDuration = ({ startedAt, finishedAt }: ExecutionRecord) =>
+  !finishedAt ? "—" : duration(Date.parse(finishedAt) - Date.parse(startedAt));
+
+/** A total, starred with how many runs it covers if that leaves any out, or a dash if it covers none. */
+function Total({ value, covered, runs }: { value: string | undefined; covered: number; runs: number }) {
+  if (value === undefined) return <span className="muted">—</span>;
+  if (covered === runs) return <>{value}</>;
+  return <span title={`Of the ${covered} of ${runs} runs that reported it`}>{value}*</span>;
+}
+
+function TokensTotal({ totals }: { totals: RunTotals }) {
+  return <Total value={totals.tokens === undefined ? undefined : thousands(totals.tokens)} covered={totals.withTokens} runs={totals.runs} />;
+}
+
+function CostTotal({ totals }: { totals: RunTotals }) {
+  return <Total value={totals.costUsd === undefined ? undefined : dollars(totals.costUsd)} covered={totals.withCost} runs={totals.runs} />;
+}
+
+/** A dash, explained on hover, for a run without tokens or a cost. */
+const Missing = ({ why }: { why: string }) => (
+  <span className="muted" title={why}>
+    —
+  </span>
+);
+
+/** Why a run has no tokens. */
+function noTokens({ tokenCosts }: ContainerRunRecord): string {
+  if (tokenCosts === undefined) return "Not recorded: the run predates token costs";
+  if (tokenCosts.outcome === "unavailable") return `Not reported (${tokenCosts.reason})`;
+  return "Not reported";
+}
+
+/** Why a run has no cost it can be trusted for. */
+function noCost(run: ContainerRunRecord): string {
+  if (run.tokenCosts?.outcome !== "collected") return noTokens(run);
+  if (run.tokenCosts.models.some(({ costBasis }) => costBasis === "unknown")) return "Not reported: the harness's price table doesn't know the model";
+  return "Not reported by the harness";
+}
+
+function TokensCell({ run }: { run: ContainerRunRecord }) {
+  const tokens = totalTokens(run.tokenCosts);
+  return <td>{tokens === undefined ? <Missing why={noTokens(run)} /> : thousands(tokens)}</td>;
+}
+
+function CostCell({ run }: { run: ContainerRunRecord }) {
+  const cost = knownCost(run.tokenCosts);
+  return <td>{cost === undefined ? <Missing why={noCost(run)} /> : dollars(cost)}</td>;
+}
+
 function Executions() {
-  const loaded = useJson<ExecutionRecord[]>("/api/executions");
+  const loaded = useJson<ExecutionSummary[]>("/api/executions");
   return (
     <>
       <h1>Executions</h1>
@@ -64,6 +115,9 @@ function Executions() {
                   <th>Task</th>
                   <th>Started (UTC)</th>
                   <th>Matrix</th>
+                  <th>Duration</th>
+                  <th>Tokens</th>
+                  <th>Cost</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -80,6 +134,13 @@ function Executions() {
                     <td>{minute(e.startedAt)}</td>
                     <td>
                       {plural(e.matrix.permutations, "permutation")} × {plural(e.matrix.iterations, "iteration")}
+                    </td>
+                    <td>{executionDuration(e)}</td>
+                    <td>
+                      <TokensTotal totals={e.totals} />
+                    </td>
+                    <td>
+                      <CostTotal totals={e.totals} />
                     </td>
                     <td>
                       <Status status={e.status} />
@@ -117,6 +178,7 @@ function Execution({ id }: { id: string }) {
       <Pending loaded={loaded}>
         {({ execution, containerRuns }) => {
           const measurements = [...new Set(containerRuns.flatMap((run) => Object.keys(run.result)))];
+          const totals = runTotals(containerRuns);
           return (
             <>
               <h1>
@@ -125,6 +187,9 @@ function Execution({ id }: { id: string }) {
               <p className="muted">
                 <code>{execution.executionId}</code> · task {execution.task} · {plural(execution.matrix.permutations, "permutation")} ×{" "}
                 {plural(execution.matrix.iterations, "iteration")}
+              </p>
+              <p>
+                Took {executionDuration(execution)} · <TokensTotal totals={totals} /> tokens · <CostTotal totals={totals} />
               </p>
               {containerRuns.length === 0 ? (
                 <p className="muted">No container runs recorded.</p>
@@ -138,6 +203,8 @@ function Execution({ id }: { id: string }) {
                       <th>Harness / model</th>
                       <th>Duration</th>
                       <th>Agent</th>
+                      <th>Tokens</th>
+                      <th>Cost</th>
                       {measurements.map((name) => (
                         <th key={name}>{name}</th>
                       ))}
@@ -154,8 +221,10 @@ function Execution({ id }: { id: string }) {
                         <td>
                           {run.harnessModel.harness} / {run.harnessModel.model}
                         </td>
-                        <td>{Math.round((run.execution.finishedAt - run.execution.startedAt) / 1000)}s</td>
+                        <td>{duration(run.execution.finishedAt - run.execution.startedAt)}</td>
                         <td>{agentEnd(run.execution, run.harnessResult)}</td>
+                        <TokensCell run={run} />
+                        <CostCell run={run} />
                         {measurements.map((name) => (
                           <MeasureCell key={name} measure={run.result[name]} />
                         ))}

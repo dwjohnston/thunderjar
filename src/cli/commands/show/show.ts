@@ -10,7 +10,7 @@ import { type AggregatedValue, type AggregateMethod, aggregatePermutation } from
 import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { agentEnd, dollars, showResolved, endedCleanly, knownCost, minute, plural, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, duration, showResolved, endedCleanly, knownCost, minute, plural, thousands, totalTokens } from "../../format.ts";
 
 const GAP = "   ";
 
@@ -51,12 +51,6 @@ function showOutcome(outcome: RecordedOutcome | undefined): string {
   if (outcome.outcome === "skipped") return `skipped${outcome.reason === undefined ? "" : `  (${outcome.reason})`}`;
   if (outcome.outcome === "erroredWhileMeasuring") return `errored while measuring  (${outcome.error.message})`;
   return showValue(outcome.data);
-}
-
-/** `ms` as minutes and seconds, e.g. `0:31`. */
-function duration(ms: number): string {
-  const seconds = Math.round(ms / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 /** A container run's name in its execution: `<permutation>-<iteration>`, as its record's file is named. */
