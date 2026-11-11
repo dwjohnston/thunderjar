@@ -6,6 +6,7 @@ import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageS
 import { probeRuntime } from "../../../execution/runtimeProbe.ts";
 import { printError } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
+import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 const STEP_LABEL = { build: "Building", push: "Pushing", pull: "Pulling through the runtime" } as const;
 
@@ -19,35 +20,34 @@ async function doctor(cwd: string): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const { imageStore, runtime } = await loadProjectConfig(root);
   console.log("Config ... ok");
-  let step: string | undefined;
+  // The line that's waiting for how its check ends.
+  let line: WaitingLine | undefined;
   try {
     if (imageStore === null) {
       console.log("Image store ... none: images stay in the local Docker daemon");
     } else {
-      process.stdout.write(`Docker login for ${imageStore.repository} ... `);
-      step = "login";
+      line = waitingLine(`Docker login for ${imageStore.repository} ... `);
       await checkImageStore(imageStore);
-      console.log("ok");
+      line.finish("ok");
+      line = undefined;
     }
     if (runtime === null || imageStore === null) {
       console.log("Runtime ... none: containers run on the local Docker daemon");
-      step = undefined;
       return;
     }
     console.log(`Runtime: \`${runtime.command.join(" ")}\``);
     await probeRuntime(imageStore, runtime, {
       onStep: (s, target) => {
-        step = s;
-        process.stdout.write(`  ${STEP_LABEL[s]} ${target} ... `);
+        line = waitingLine(`  ${STEP_LABEL[s]} ${target} ... `);
       },
       onStepDone: () => {
-        step = undefined;
-        console.log("ok");
+        line?.finish("ok");
+        line = undefined;
       },
     });
     console.log("The runtime can run images from the image store.");
   } catch (error) {
-    if (step !== undefined) console.log("failed");
+    line?.fail();
     if (error instanceof DockerUnavailableError) {
       printError(`Docker can't be reached: ${error.message}`);
     } else if (error instanceof ImageStoreLoginError) {
@@ -64,6 +64,8 @@ async function doctor(cwd: string): Promise<void> {
       throw error;
     }
     process.exitCode = 1;
+  } finally {
+    line?.stop();
   }
 }
 
