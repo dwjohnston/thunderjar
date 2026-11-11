@@ -83,7 +83,7 @@ jobs:
         with:
           publish: bun run release
           version: bun run version
-          title: Release Version ${{ steps.next.outputs.version }}
+          title: "🚀 Release Version ${{ steps.next.outputs.version }}"
           commit: Release Version ${{ steps.next.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
