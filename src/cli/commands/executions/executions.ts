@@ -1,10 +1,11 @@
 import { Command } from "commander";
 import { FOLDER } from "../../../config/loader.ts";
 import { type ExecutionRecord, RunDataStoreError } from "../../../store/runDataStore.ts";
-import { type Paint, padEnd, painter, plain, printError } from "../../colour.ts";
+import { type Paint, padEnd, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { minute, paintStatus, plural } from "../../format.ts";
+import { print, printError } from "../../output.ts";
 
 /** One line per execution, in the order given: its ID, test case, when it started, its matrix and its status, in aligned columns. */
 export function renderExecutions(executions: ExecutionRecord[], paint: Paint = plain): string {
@@ -39,9 +40,9 @@ async function executions(cwd: string, testCase?: string, dataDir?: string): Pro
   const paint = painter();
   if (testCase !== undefined) listed = listed.filter((execution) => execution.testCase === testCase);
   if (listed.length === 0) {
-    console.log(paint.dim(testCase === undefined ? "No executions recorded." : `No executions of ${testCase} recorded.`));
+    print(paint.dim(testCase === undefined ? "No executions recorded." : `No executions of ${testCase} recorded.`));
   } else {
-    console.log(renderExecutions(listed, paint));
+    print(renderExecutions(listed, paint));
   }
 }
 

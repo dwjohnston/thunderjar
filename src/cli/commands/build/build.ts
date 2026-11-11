@@ -7,10 +7,11 @@ import { prerunImage } from "../../../execution/images.ts";
 import { checkImageStore, ImageStoreLoginError, pushPrerunImages } from "../../../execution/imageStore.ts";
 import { buildPrerunImages } from "../../../execution/prerunBuilds.ts";
 import { hashPermutations } from "../../../execution/hashPermutations.ts";
-import { type Paint, painter, plain, printError } from "../../colour.ts";
+import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { pushFailure } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { print, printError } from "../../output.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /**
@@ -42,21 +43,21 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
   checkBuildSecrets(buildOptions);
   const permutations = await hashPermutations(root, testCase);
   const concurrent = buildOptions.concurrency > 1;
+  // The line that's waiting for how its build or push ends.
+  let line: WaitingLine | undefined;
   // Colour for what's written while building, on a terminal.
   const paint = painter();
   const ellipsis = paint.dim("...");
   const done = paint.green("done");
-  // The line that's waiting for how its build or push ends.
-  let line: WaitingLine | undefined;
   try {
     await checkImageStore(imageStore);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
       onBuilding: (image) => {
-        if (concurrent) return console.log(`Building ${paint.cyan(image)}`);
+        if (concurrent) return print(`Building ${paint.cyan(image)}`);
         line = waitingLine(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
       onBuilt: (image) => {
-        if (concurrent) return console.log(`Built ${paint.cyan(image)}`);
+        if (concurrent) return print(`Built ${paint.cyan(image)}`);
         line?.finish(done);
       },
     }, buildOptions);
@@ -68,7 +69,7 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
         line?.finish(done);
       },
     });
-    console.log(
+    print(
       [
         paint.green(`${built.length} built`),
         paint.dim(`${present.length} already present`),
@@ -105,7 +106,7 @@ export function createBuildCommand(): Command {
     .addOption(imagePrefixOption())
     .action(
       reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string }) => {
-        if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
+        if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
         else await build(process.cwd(), name, options.imagePrefix);
       }),
     );

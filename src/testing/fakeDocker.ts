@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// oxlint-disable no-console -- it prints what `docker` would print, so it writes with `console`, which src/ otherwise bans.
 // A stand-in for the `docker` CLI. Set THUNDERJAR_DOCKER to this file and Thunderjar runs it in
 // place of `docker`: nothing reaches a real daemon, and each command is recorded.
 //

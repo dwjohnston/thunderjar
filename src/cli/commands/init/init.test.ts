@@ -60,7 +60,7 @@ describe("0101 empty project", () => {
       type: "module",
       dependencies: { thunderjar: "latest" },
     });
-    expect(await read(copy.dir, ".gitignore")).toBe("_generated/\n.data/\nnode_modules/\n");
+    expect(await read(copy.dir, ".gitignore")).toBe("_generated/\n.data/\nlogs/\nnode_modules/\n");
     expect(await read(copy.dir, "thunderjar.config.ts")).toBe(`import { declareConfig, sqliteStore } from "thunderjar";
 
 export default declareConfig({
@@ -191,7 +191,7 @@ describe("0102 JavaScript project", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(createdLines(SCAFFOLD));
     expect(filesIn(copy.dir)).toEqual(SCAFFOLD.toSorted());
-    expect(await read(copy.dir, ".gitignore")).toBe("_generated/\n.data/\n");
+    expect(await read(copy.dir, ".gitignore")).toBe("_generated/\n.data/\nlogs/\n");
     expect(await Bun.file(`${copy.dir}/package.json`).text()).toBe(rootPackage);
   });
 });
