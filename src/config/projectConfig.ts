@@ -71,15 +71,22 @@ export function buildOptionsProblem(build: unknown): string | undefined {
 /** Whether `value` can be a concurrency: how many containers run, or images build, at once. */
 export const isConcurrency = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 1;
 
+/** Whether `value` is a command: a program and its arguments, none of them empty. */
+const isCommand = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.length > 0 && value.every((part) => typeof part === "string" && part.length > 0);
+
 /** Why `runtime`, as loaded, isn't a RuntimeConfig that can be used with `imageStore`, or undefined if it is. */
 export function runtimeProblem(runtime: unknown, imageStore: unknown): string | undefined {
   if (runtime === undefined) return undefined;
   if (typeof runtime !== "object" || runtime === null || Array.isArray(runtime)) {
     return `must be { command: ["docker", "--context", "<context>"] }, got ${show(runtime)}`;
   }
-  const { command, concurrency } = runtime as { command?: unknown; concurrency?: unknown };
-  if (!Array.isArray(command) || command.length === 0 || !command.every((part) => typeof part === "string" && part.length > 0)) {
+  const { command, concurrency, beforeRun, afterRun } = runtime as { command?: unknown; concurrency?: unknown; beforeRun?: unknown; afterRun?: unknown };
+  if (!isCommand(command)) {
     return `command must be a non-empty list of non-empty strings, e.g. ["docker", "--context", "cloud"], got ${show(command)}`;
+  }
+  for (const [field, hook] of [["beforeRun", beforeRun], ["afterRun", afterRun]] as const) {
+    if (hook !== undefined && !isCommand(hook)) return `${field} must be a non-empty list of non-empty strings, e.g. ["./scripts/start-runtime.sh"], got ${show(hook)}`;
   }
   if (concurrency !== undefined && !isConcurrency(concurrency)) return `concurrency must be a whole number, 1 or more, got ${show(concurrency)}`;
   if (imageStore === null) return "needs an imageStore: the runtime pulls the images it runs from it";
@@ -99,7 +106,7 @@ export function runDataStoreProblem(runDataStore: unknown): string | undefined {
 export type ProjectConfig = {
   imageStore: ImageStore | null;
   /** Where `run` runs containers, and how many at once, or `null` for the local Docker daemon. */
-  runtime: Required<RuntimeConfig> | null;
+  runtime: (Required<Pick<RuntimeConfig, "command" | "concurrency">> & Pick<RuntimeConfig, "beforeRun" | "afterRun">) | null;
   /**
    * The run data store, as the config gives it: a SQLite file, relative to the project folder
    * (the one holding `.thunderjar/`) unless absolute, or the variable holding a Postgres URL.
@@ -139,7 +146,15 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
   return {
     imageStore: imageStore === null ? null : { repository: imageStore.repository },
     runDataStore: runDataStore.kind === "postgres" ? { kind: "postgres", urlEnv: runDataStore.urlEnv } : { kind: "sqlite", path: runDataStore.path },
-    runtime: runtime === undefined ? null : { command: [...runtime.command], concurrency: runtime.concurrency ?? 1 },
+    runtime:
+      runtime === undefined
+        ? null
+        : {
+            command: [...runtime.command],
+            concurrency: runtime.concurrency ?? 1,
+            ...(runtime.beforeRun !== undefined && { beforeRun: [...runtime.beforeRun] }),
+            ...(runtime.afterRun !== undefined && { afterRun: [...runtime.afterRun] }),
+          },
     build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false, concurrency: build?.concurrency ?? 1 },
   };
 }

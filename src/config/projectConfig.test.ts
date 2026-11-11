@@ -178,6 +178,16 @@ describe("runtimeProblem", () => {
     },
   );
 
+  test("beforeRun and afterRun are commands", () => {
+    expect(runtimeProblem({ command: ["docker"], beforeRun: ["./up.sh"], afterRun: ["./down.sh", "now"] }, STORE)).toBeUndefined();
+    expect(runtimeProblem({ command: ["docker"], beforeRun: "./up.sh" }, STORE)).toBe(
+      'beforeRun must be a non-empty list of non-empty strings, e.g. ["./scripts/start-runtime.sh"], got "./up.sh"',
+    );
+    expect(runtimeProblem({ command: ["docker"], afterRun: [] }, STORE)).toBe(
+      'afterRun must be a non-empty list of non-empty strings, e.g. ["./scripts/start-runtime.sh"], got []',
+    );
+  });
+
   test("a runtime needs an image store", () => {
     expect(runtimeProblem({ command: ["docker"] }, null)).toBe("needs an imageStore: the runtime pulls the images it runs from it");
   });
