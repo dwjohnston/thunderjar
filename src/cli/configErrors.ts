@@ -1,5 +1,5 @@
 import { ConfigError } from "../config/loader.ts";
-import { printError } from "./colour.ts";
+import { printError } from "./output.ts";
 
 /**
  * `action`, but a ConfigError it throws is printed as `Error: <problem>` lines on stderr, with

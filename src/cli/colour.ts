@@ -78,8 +78,3 @@ export const padEnd = (text: string, width: number) => text + " ".repeat(Math.ma
 /** `text` padded with spaces on the left to `width`, not counting its colour codes. */
 export const padStart = (text: string, width: number) => " ".repeat(Math.max(0, width - visibleLength(text))) + text;
 
-/** Writes `message` to stderr after `Error:`, which is bold red on a terminal. */
-export const printError = (message: string) => console.error(`${painter(process.stderr).error("Error:")} ${message}`);
-
-/** Writes `message` to stderr after `Warning:`, which is yellow on a terminal. */
-export const printWarning = (message: string) => console.error(`${painter(process.stderr).yellow("Warning:")} ${message}`);

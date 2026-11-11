@@ -8,10 +8,11 @@ import { AXES, abbreviateHash } from "../../../config/permutations.ts";
 import type { ModelTokenCosts, Reply, TokenCosts } from "../../../api/declarations.ts";
 import { type AggregatedValue, type AggregateMethod, aggregatePermutation } from "../../../execution/aggregate.ts";
 import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
-import { type Paint, padEnd, painter, plain, printError, visibleLength } from "../../colour.ts";
+import { type Paint, padEnd, painter, plain, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { agentEnd, dollars, duration, showResolved, endedCleanly, knownCost, minute, paintStatus, plural, thousands, totalTokens } from "../../format.ts";
+import { print, printError } from "../../output.ts";
 
 const GAP = "   ";
 
@@ -298,12 +299,12 @@ async function show(cwd: string, executionId: string, containerRun?: string, dat
   }
 
   if (containerRun === undefined) {
-    console.log(renderExecution(execution, runs, await loadMeasurements(root!, execution.task), painter()));
+    print(renderExecution(execution, runs, await loadMeasurements(root!, execution.task), painter()));
     return;
   }
   const record = runs.find((run) => runName(run) === containerRun || run.postrunImage === containerRun);
   if (!record) return fail(`Execution ${executionId} has no container run ${containerRun}.`);
-  console.log(renderContainerRun(record, painter()));
+  print(renderContainerRun(record, painter()));
 }
 
 export function createShowCommand(): Command {

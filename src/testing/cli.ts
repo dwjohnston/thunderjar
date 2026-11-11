@@ -10,7 +10,13 @@ const CLI = `${REPO_ROOT}/src/cli/index.ts`;
 // `thunderjar` through fixtures/node_modules, as scenarios do.
 export const TMP_DIR = `${FIXTURES_DIR}/.tmp`;
 
-export type CliResult = { stdout: string; stderr: string; exitCode: number };
+export type CliResult = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  /** The diagnostic log it wrote, or "" if none: only if `log` was asked for. */
+  log?: string;
+};
 
 export type CliOptions = {
   /**
@@ -20,6 +26,8 @@ export type CliOptions = {
   docker?: "fake" | "real";
   /** More environment variables. */
   env?: Record<string, string>;
+  /** Return its diagnostic log too, as `log`. */
+  log?: boolean;
   /** More paths to replace, e.g. `{ "<TMP>": dataDir }`. `<PROJECT>` (the cwd) and `<REPO>` are always replaced. */
   paths?: PathPlaceholders;
 };
@@ -32,16 +40,22 @@ export type CliOptions = {
 export async function thunderjar(cwd: string, args: string[], options: CliOptions = {}): Promise<CliResult> {
   await $`mkdir -p ${TMP_DIR}`.quiet();
   const docker = options.docker === "real" ? { THUNDERJAR_DOCKER: "docker" } : { THUNDERJAR_DOCKER: FAKE_DOCKER, FAKE_DOCKER_DIR: "" };
+  // Its log goes under fixtures/.tmp/, never into the scenario's .thunderjar/logs/, and is removed after.
+  const logFile = `${TMP_DIR}/logs/${crypto.randomUUID()}.log`;
   const result = await $`bun ${CLI} ${args}`
     .cwd(cwd)
-    .env({ ...Bun.env, TMPDIR: TMP_DIR, ...docker, ...options.env })
+    .env({ ...Bun.env, TMPDIR: TMP_DIR, THUNDERJAR_LOG_FILE: logFile, ...docker, ...options.env })
     .quiet()
     .nothrow();
+  const log = Bun.file(logFile);
+  const logText = (await log.exists()) ? await log.text() : "";
+  if (await log.exists()) await log.delete();
   const paths = { "<PROJECT>": cwd, "<REPO>": REPO_ROOT, ...options.paths };
   return {
     stdout: applyPlaceholders(result.stdout.toString(), paths),
     stderr: applyPlaceholders(result.stderr.toString(), paths),
     exitCode: result.exitCode,
+    ...(options.log && { log: applyPlaceholders(logText, paths) }),
   };
 }
 
