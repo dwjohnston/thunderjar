@@ -1,0 +1,135 @@
+name: Slow tests
+
+# Comment `/slow-tests` on a PR to run the dogfood test case `compare-models` remotely: containers
+# on Fly.io, images in ghcr, run data in Supabase. `/slow-tests <test case>` runs another one.
+# The outcome is posted back as a PR comment.
+#
+# Each run spends real money on models and on Fly, so only the repo's owner, members and
+# collaborators can start one. GitHub only runs issue_comment workflows from the default branch,
+# so changes to this file take effect once they're on main.
+#
+# Repository secrets:
+#   FLYIO_TOKEN        Fly.io API token for the runtime's app
+#   THUNDERJAR_DB_URL  Supabase Postgres URL (the pooler one: the direct one is IPv6 only)
+#   ANTHROPIC_API_KEY  for Claude Code
+#   COPILOT_GITHUB_TOKEN, OPENCODE_API_KEY  only for test cases with those harnesses
+# Optional repository variables:
+#   FLY_APP, FLY_ORG              the Fly app and org, if not thunderjar-runtime-dwj and personal
+#   THUNDERJAR_IMAGE_REPOSITORY   if not ghcr.io/dwjohnston/thunderjar-images
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  packages: write
+  issues: write
+  pull-requests: write
+
+# One run at a time: they share the Fly machine, and each run stops it when it ends.
+concurrency:
+  group: slow-tests
+  cancel-in-progress: false
+
+jobs:
+  slow-tests:
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/slow-tests') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      THUNDERJAR_REMOTE: "1"
+      THUNDERJAR_IMAGE_REPOSITORY: ${{ vars.THUNDERJAR_IMAGE_REPOSITORY }}
+      FLY_APP: ${{ vars.FLY_APP }}
+      FLY_ORG: ${{ vars.FLY_ORG }}
+      FLYIO_TOKEN: ${{ secrets.FLYIO_TOKEN }}
+      THUNDERJAR_DB_URL: ${{ secrets.THUNDERJAR_DB_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+    steps:
+      - name: Read the command, and acknowledge it
+        id: command
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const words = context.payload.comment.body.trim().split(/\s+/);
+            if (words[0] !== "/slow-tests") return core.setFailed("Not a /slow-tests command");
+            const testCase = words[1] ?? "compare-models";
+            const reply = (body) =>
+              github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+            if (!/^[A-Za-z0-9_-]+$/.test(testCase)) {
+              await reply(`\`/slow-tests\`: \`${testCase}\` isn't a test case name.`);
+              return core.setFailed(`Bad test case name: ${testCase}`);
+            }
+            await github.rest.reactions.createForIssueComment({
+              ...context.repo,
+              comment_id: context.payload.comment.id,
+              content: "rocket",
+            });
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.issue.number });
+            core.setOutput("test-case", testCase);
+            core.setOutput("sha", pr.head.sha);
+            core.setOutput("repo", pr.head.repo.full_name);
+
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ steps.command.outputs.repo }}
+          ref: ${{ steps.command.outputs.sha }}
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run the test case
+        id: run
+        env:
+          TEST_CASE: ${{ steps.command.outputs.test-case }}
+        run: |
+          set +e
+          ./node_modules/.bin/thunderjar run "$TEST_CASE" 2>&1 | tee run.log
+          status=${PIPESTATUS[0]}
+          id=$(grep -m1 -oP '^Execution \K\S+' run.log)
+          if [ -n "$id" ]; then
+            echo "execution=$id" >> "$GITHUB_OUTPUT"
+            ./node_modules/.bin/thunderjar show "$id" > show.log 2>&1
+          fi
+          exit "$status"
+
+      - name: Post the outcome
+        if: always() && steps.command.outputs.test-case != ''
+        uses: actions/github-script@v8
+        env:
+          TEST_CASE: ${{ steps.command.outputs.test-case }}
+          SHA: ${{ steps.command.outputs.sha }}
+          EXECUTION: ${{ steps.run.outputs.execution }}
+          OUTCOME: ${{ steps.run.outcome }}
+        with:
+          script: |
+            // github-script runs on Node, so this uses fs: the Bun-only rule is for Thunderjar's own code.
+            const fs = require("fs");
+            const read = (path, max) => {
+              if (!fs.existsSync(path)) return "";
+              const text = fs.readFileSync(path, "utf8").replace(/\x1b\[[0-9;]*m/g, "").trim();
+              return text.length > max ? `...\n${text.slice(-max)}` : text;
+            };
+            const { TEST_CASE, SHA, EXECUTION, OUTCOME } = process.env;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const icon = OUTCOME === "success" ? "✅" : "❌";
+            const lines = [
+              `${icon} \`/slow-tests\`: \`${TEST_CASE}\` ${OUTCOME === "success" ? "ran" : OUTCOME === "failure" ? "failed" : "didn't get to run"} on ${SHA.slice(0, 7)}. [Workflow run](${runUrl})`,
+            ];
+            if (EXECUTION) lines.push("", `Execution \`${EXECUTION}\`:`, "", "```", read("show.log", 20000), "```");
+            const log = read("run.log", 30000);
+            if (log) lines.push("", "<details><summary>Run output</summary>", "", "```", log, "```", "", "</details>");
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: lines.join("\n"),
+            });
