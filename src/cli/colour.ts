@@ -61,3 +61,25 @@ export function painter(out: { isTTY?: boolean } = process.stdout, enabled = col
     error: style("bold", "red"),
   };
 }
+
+/** Styles that leave text as it is: the default for anything that renders output, e.g. in tests. */
+export const plain = painter({}, false);
+
+/** `text` without its colour codes. */
+// oxlint-disable-next-line no-control-regex -- matching the escape character is the point.
+export const unstyled = (text: string) => text.replace(/\x1b\[\d+m/g, "");
+
+/** How wide `text` is on a terminal: its length without colour codes. */
+export const visibleLength = (text: string) => unstyled(text).length;
+
+/** `text` padded with spaces on the right to `width`, not counting its colour codes. */
+export const padEnd = (text: string, width: number) => text + " ".repeat(Math.max(0, width - visibleLength(text)));
+
+/** `text` padded with spaces on the left to `width`, not counting its colour codes. */
+export const padStart = (text: string, width: number) => " ".repeat(Math.max(0, width - visibleLength(text))) + text;
+
+/** Writes `message` to stderr after `Error:`, which is bold red on a terminal. */
+export const printError = (message: string) => console.error(`${painter(process.stderr).error("Error:")} ${message}`);
+
+/** Writes `message` to stderr after `Warning:`, which is yellow on a terminal. */
+export const printWarning = (message: string) => console.error(`${painter(process.stderr).yellow("Warning:")} ${message}`);

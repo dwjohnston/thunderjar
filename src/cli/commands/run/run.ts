@@ -11,7 +11,7 @@ import { type PlannedExecution, type PlannedPermutation, planExecution } from ".
 import { runExecution } from "../../../execution/runExecution.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { executionFolder, fileStore, type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
-import { type Paint, painter } from "../../colour.ts";
+import { type Paint, painter, plain, printError as error } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath } from "../../dataDir.ts";
 import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
@@ -22,41 +22,42 @@ const FIELD_INDENT = "    ";
 const LABEL_WIDTH = 10;
 
 /** `label: value`, the value's later lines lined up under its first. */
-const field = (label: string, value: string) =>
-  `${FIELD_INDENT}${`${label}:`.padEnd(LABEL_WIDTH)}${value.split("\n").join(`\n${FIELD_INDENT}${" ".repeat(LABEL_WIDTH)}`)}`;
+const field = (label: string, value: string, paint: Paint = plain) =>
+  `${FIELD_INDENT}${paint.dim(`${label}:`.padEnd(LABEL_WIDTH))}${value.split("\n").join(`\n${FIELD_INDENT}${" ".repeat(LABEL_WIDTH)}`)}`;
 
 /**
  * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
  * the environment variables its container is given, by name, any more `docker run` options, the
  * prompt file's contents, and its harness command. With several turns, its session ID, and each turn's prompt and command.
  */
-export function renderExecution({ executionId, permutations }: PlannedExecution): string {
+export function renderExecution({ executionId, permutations }: PlannedExecution, paint: Paint = plain): string {
+  const f = (label: string, value: string) => field(label, value, paint);
   const blocks = permutations.map((permutation) =>
     [
-      `Permutation ${permutation.number}: prerun image ${permutation.prerunImage}`,
+      `${paint.bold(`Permutation ${permutation.number}`)}: prerun image ${paint.cyan(permutation.prerunImage)}`,
       ...permutation.iterations.flatMap((iteration) => [
-        `  Iteration ${iteration.number}: postrun image ${iteration.postrunImage}`,
-        ...(permutation.env.length > 0 ? [field("env", permutation.env.join(", "))] : []),
-        ...(permutation.runOptions.length > 0 ? [field("docker", permutation.runOptions.join(" "))] : []),
+        `  ${paint.bold(`Iteration ${iteration.number}`)}: postrun image ${paint.cyan(iteration.postrunImage)}`,
+        ...(permutation.env.length > 0 ? [f("env", permutation.env.join(", "))] : []),
+        ...(permutation.runOptions.length > 0 ? [f("docker", permutation.runOptions.join(" "))] : []),
         ...(iteration.turns.length === 1
-          ? [field("prompt", iteration.turns[0]!.prompt), field("command", iteration.turns[0]!.command)]
+          ? [f("prompt", iteration.turns[0]!.prompt), f("command", iteration.turns[0]!.command)]
           : [
-              field("session", iteration.sessionId),
-              ...iteration.turns.flatMap(({ prompt, command }, t) => [field(`prompt ${t + 1}`, prompt), field(`turn ${t + 1}`, command)]),
+              f("session", iteration.sessionId),
+              ...iteration.turns.flatMap(({ prompt, command }, t) => [f(`prompt ${t + 1}`, prompt), f(`turn ${t + 1}`, command)]),
             ]),
       ]),
     ].join("\n"),
   );
-  return [`Execution ${executionId}`, ...blocks].join("\n\n");
+  return [`${paint.dim("Execution")} ${paint.bold(executionId)}`, ...blocks].join("\n\n");
 }
 
 /** What an execution of test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it, would do. */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string): Promise<string> {
+export async function dryRun(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain): Promise<string> {
   const root = await findThunderjarRoot(cwd);
   const executionId = ulid();
   const testCase = await loadTestCase(root, name);
   await checkRequiredEnv(root, testCase);
-  return renderExecution(await planExecution(root, testCase, executionId, imagePrefix));
+  return renderExecution(await planExecution(root, testCase, executionId, imagePrefix), paint);
 }
 
 /** `n/total`, `n` padded to the width of `total`, so the lines line up. */
@@ -91,8 +92,6 @@ const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
     .map(([name, { outcome }]) => `${paint.blue(`${name}:`)} ${showOutcome(outcome, paint)}`)
     .join("   ");
 
-/** Writes `message` to stderr after `Error:`, which is red on a terminal. */
-const error = (message: string) => console.error(`${painter(process.stderr).error("Error:")} ${message}`);
 
 /**
  * What tells `permutation` apart from the rest of `testCase`'s: each other axis that varies, then
@@ -232,7 +231,7 @@ export function createRunCommand(): Command {
     .addOption(dataDirOption())
     .action(
       reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string; dataDir?: string }) => {
-        if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix));
+        if (options.dryRun) console.log(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
         else await run(process.cwd(), name, options.imagePrefix, options.dataDir);
       }),
     );

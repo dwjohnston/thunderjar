@@ -8,29 +8,32 @@ import { AXES, abbreviateHash } from "../../../config/permutations.ts";
 import type { ModelTokenCosts, Reply, TokenCosts } from "../../../api/declarations.ts";
 import { type AggregatedValue, type AggregateMethod, aggregatePermutation } from "../../../execution/aggregate.ts";
 import { type ContainerRunRecord, type ExecutionRecord, fileStore, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type Paint, padEnd, painter, plain, printError, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOf, dataDirOption, displayPath, resolvePath } from "../../dataDir.ts";
-import { agentEnd, dollars, showResolved, endedCleanly, knownCost, minute, plural, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, showResolved, endedCleanly, knownCost, minute, paintStatus, plural, thousands, totalTokens } from "../../format.ts";
 
 const GAP = "   ";
 
 /** `label  value` lines, the labels padded to the widest so the values line up. */
-const labelled = (lines: [label: string, value: string][]) => {
+const labelled = (lines: [label: string, value: string][], paint: Paint) => {
   const width = Math.max(...lines.map(([label]) => label.length));
-  return lines.map(([label, value]) => `${label.padEnd(width)}  ${value}`);
+  return lines.map(([label, value]) => `${paint.dim(label.padEnd(width))}  ${value}`);
 };
 
 /** Rows of cells in columns two spaces apart, each padded to its widest cell, indented by two. */
 function columns(rows: string[][]): string[] {
-  const widths = rows[0]!.map((_, i) => Math.max(...rows.map((row) => row[i]?.length ?? 0)));
-  return rows.map((row) => `  ${row.map((cell, i) => cell.padEnd(widths[i]!)).join("  ")}`.trimEnd());
+  const widths = rows[0]!.map((_, i) => Math.max(...rows.map((row) => visibleLength(row[i] ?? ""))));
+  return rows.map((row) => `  ${row.map((cell, i) => padEnd(cell, widths[i]!)).join("  ")}`.trimEnd());
 }
 
 /** A number as it is, or to `places` decimal places. */
 const decimal = (n: number, places?: number) => (places === undefined ? String(n) : n.toFixed(places));
 
 /** A value as recorded or combined; a record of numbers as `{passed: 3, failed: 2}`. */
-function showValue(value: unknown, places?: number): string {
+function showValue(value: unknown, places?: number, paint: Paint = plain): string {
+  if (value === true) return paint.green("true");
+  if (value === false) return paint.red("false");
   if (typeof value === "number") return decimal(value, places);
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
     const entries = Object.entries(value).map(([key, v]) => `${key}: ${typeof v === "number" ? decimal(v, places) : JSON.stringify(v)}`);
@@ -46,11 +49,11 @@ function showAggregate(method: AggregateMethod, value: AggregatedValue, measured
 }
 
 /** A recorded measure's value, or why it has none, with its reason. */
-function showOutcome(outcome: RecordedOutcome | undefined): string {
-  if (outcome === undefined) return "not measured";
-  if (outcome.outcome === "skipped") return `skipped${outcome.reason === undefined ? "" : `  (${outcome.reason})`}`;
-  if (outcome.outcome === "erroredWhileMeasuring") return `errored while measuring  (${outcome.error.message})`;
-  return showValue(outcome.data);
+function showOutcome(outcome: RecordedOutcome | undefined, paint: Paint): string {
+  if (outcome === undefined) return paint.dim("not measured");
+  if (outcome.outcome === "skipped") return paint.yellow(`skipped${outcome.reason === undefined ? "" : `  (${outcome.reason})`}`);
+  if (outcome.outcome === "erroredWhileMeasuring") return paint.red(`errored while measuring  (${outcome.error.message})`);
+  return showValue(outcome.data, undefined, paint);
 }
 
 /** `ms` as minutes and seconds, e.g. `0:31`. */
@@ -63,34 +66,38 @@ function duration(ms: number): string {
 const runName = ({ permutation, iteration }: ContainerRunRecord) => `${permutation}-${iteration}`;
 
 /** Why a run's token costs weren't collected. */
-const notCollected = (costs: TokenCosts | undefined) =>
-  costs === undefined ? "not recorded" : costs.outcome === "unavailable" ? `not reported  (${costs.reason})` : "";
+const notCollected = (costs: TokenCosts | undefined, paint: Paint) =>
+  paint.dim(costs === undefined ? "not recorded" : costs.outcome === "unavailable" ? `not reported  (${costs.reason})` : "");
 
 /**
  * A permutation's mean tokens and mean cost, over the runs that have them, starred if that leaves
  * one out: never counting a run without them as zero. A cost only from runs whose cost can be
  * trusted, and `—` if none's can.
  */
-function costColumns(runs: ContainerRunRecord[]): [tokens: string, cost: string] {
+function costColumns(runs: ContainerRunRecord[], paint: Paint): [tokens: string, cost: string] {
   const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
   const tokens = runs.flatMap(({ tokenCosts }) => totalTokens(tokenCosts) ?? []);
   const costs = runs.flatMap(({ tokenCosts }) => knownCost(tokenCosts) ?? []);
-  const star = (n: number) => (n < runs.length ? "*" : "");
+  const star = (n: number) => (n < runs.length ? paint.yellow("*") : "");
   return [
-    tokens.length === 0 ? "not reported" : `${thousands(mean(tokens))}${star(tokens.length)}`,
-    costs.length === 0 ? "—" : `${dollars(mean(costs))}${star(costs.length)}`,
+    tokens.length === 0 ? paint.dim("not reported") : `${thousands(mean(tokens))}${star(tokens.length)}`,
+    costs.length === 0 ? paint.dim("—") : `${dollars(mean(costs))}${star(costs.length)}`,
   ];
 }
 
 /** A run's token costs, a row per model, or why there are none. */
-function tokenCostLines(costs: TokenCosts): string[] {
-  if (costs.outcome === "unavailable") return [`  none  (${costs.reason})`];
+function tokenCostLines(costs: TokenCosts, paint: Paint): string[] {
+  if (costs.outcome === "unavailable") return [paint.dim(`  none  (${costs.reason})`)];
   const cost = ({ costUsd, costBasis }: ModelTokenCosts) =>
-    costUsd === undefined ? "not reported" : costBasis === "unknown" ? `not reported  (its price table doesn't know the model)` : dollars(costUsd);
+    costUsd === undefined
+      ? paint.dim("not reported")
+      : costBasis === "unknown"
+        ? paint.dim(`not reported  (its price table doesn't know the model)`)
+        : dollars(costUsd);
   return columns([
-    ["model", "input", "output", "cache write", "cache read", "cost"],
+    ["model", "input", "output", "cache write", "cache read", "cost"].map(paint.dim),
     ...costs.models.map((model) => [
-      model.model,
+      paint.magenta(model.model),
       thousands(model.inputTokens),
       thousands(model.outputTokens),
       thousands(model.cacheCreationTokens),
@@ -113,7 +120,7 @@ function varyingAxes(runs: ContainerRunRecord[]) {
  * An aggregate that leaves an iteration out is starred, and the iterations left out listed below.
  * A measure whose recorded values its methods can't combine shows `?`, and why below.
  */
-function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[], measurements: Measurement[]): string[] {
+function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[], measurements: Measurement[], paint: Paint): string[] {
   const axes = varyingAxes(runs);
   const methodColumns = measurements.flatMap(({ name, declaration }) => declaration.aggregate.map((method, i) => ({ name, method, first: i === 0 })));
   const numberWidth = String(execution.matrix.permutations).length;
@@ -128,7 +135,7 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
     const own = runs.filter((run) => run.permutation === permutation);
     const [first] = own;
     if (!first) {
-      rows.push([number, "no container runs"]);
+      rows.push([paint.bold(number), paint.dim("no container runs")]);
       continue;
     }
     const measures = aggregatePermutation(own, measurements);
@@ -138,32 +145,32 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
     for (const { name } of measurements) {
       for (const run of own) {
         const outcome = run.result[name]?.outcome;
-        if (outcome?.outcome !== "measured") leftOut.push([runName(run), name, showOutcome(outcome)]);
+        if (outcome?.outcome !== "measured") leftOut.push([paint.bold(runName(run)), paint.blue(name), showOutcome(outcome, paint)]);
       }
     }
-    const costs = withCosts ? costColumns(own) : [];
+    const costs = withCosts ? costColumns(own, paint) : [];
     if (withCosts) {
       for (const run of own) {
-        if (run.tokenCosts?.outcome !== "collected") leftOut.push([runName(run), "tokens", notCollected(run.tokenCosts)]);
+        if (run.tokenCosts?.outcome !== "collected") leftOut.push([paint.bold(runName(run)), paint.blue("tokens"), notCollected(run.tokenCosts, paint)]);
       }
     }
     rows.push([
-      number,
-      axes.map((axis) => first.parameters[axis].name).join(" | "),
-      `${own.length}/${execution.matrix.iterations}`,
+      paint.bold(number),
+      paint.magenta(axes.map((axis) => first.parameters[axis].name).join(" | ")),
+      (own.length < execution.matrix.iterations ? paint.yellow : paint.dim)(`${own.length}/${execution.matrix.iterations}`),
       ...methodColumns.map(({ name, method }) => {
         const { measured, values, incompatible } = measures[name]!;
-        if (incompatible !== undefined) return "?";
+        if (incompatible !== undefined) return paint.yellow("?");
         const value = values[method];
-        if (value === undefined) return "—";
-        return `${showAggregate(method, value, measured)}${measured < own.length ? "*" : ""}`;
+        if (value === undefined) return paint.dim("—");
+        return `${showAggregate(method, value, measured)}${measured < own.length ? paint.yellow("*") : ""}`;
       }),
       ...costs,
     ]);
   }
 
   const header = ["", axes.join(" | "), "runs", ...methodColumns.map(({ method }) => method), ...(withCosts ? ["tokens (mean)", "cost (mean)"] : [])];
-  const widths = header.map((cell, i) => Math.max(cell.length, ...rows.map((row) => row[i]?.length ?? 0)));
+  const widths = header.map((cell, i) => Math.max(cell.length, ...rows.map((row) => visibleLength(row[i] ?? ""))));
   // Widen a measurement's last column until its name fits above its methods.
   for (const { name, declaration } of measurements) {
     const start = 3 + methodColumns.findIndex((column) => column.name === name);
@@ -171,90 +178,109 @@ function permutationTable(execution: ExecutionRecord, runs: ContainerRunRecord[]
     const span = widths.slice(start, end + 1).reduce((a, b) => a + b, 0) + GAP.length * (end - start);
     if (span < name.length) widths[end]! += name.length - span;
   }
-  const line = (cells: string[]) => ` ${cells.map((cell, i) => cell.padEnd(widths[i]!)).join(GAP)}`.trimEnd();
+  const line = (cells: string[]) => ` ${cells.map((cell, i) => padEnd(cell, widths[i]!)).join(GAP)}`.trimEnd();
   const column = (i: number) => 1 + widths.slice(0, i).reduce((a, b) => a + b + GAP.length, 0);
-  const names = methodColumns.reduce((text, { name, first }, i) => (first ? `${text.padEnd(column(3 + i))}${name}` : text), "");
+  const names = methodColumns.reduce((text, { name, first }, i) => (first ? `${padEnd(text, column(3 + i))}${paint.blue(name)}` : text), "");
 
-  const lines = [...(measurements.length > 0 ? [names] : []), line(header), ...rows.map(line)];
+  const lines = [...(measurements.length > 0 ? [names] : []), paint.dim(line(header)), ...rows.map(line)];
   const unclean = runs.filter(({ execution, harnessResult }) => !endedCleanly(execution, harnessResult));
   if (unclean.length > 0) {
-    lines.push("", "! Agents that didn't end cleanly:", ...columns(unclean.map((run) => [runName(run), agentEnd(run.execution, run.harnessResult)])));
+    lines.push(
+      "",
+      paint.red("! Agents that didn't end cleanly:"),
+      ...columns(unclean.map((run) => [paint.bold(runName(run)), paint.red(agentEnd(run.execution, run.harnessResult))])),
+    );
   }
-  if (leftOut.length > 0) lines.push("", "* Left out of the aggregate:", ...columns(leftOut));
+  if (leftOut.length > 0) lines.push("", paint.yellow("* Left out of the aggregate:"), ...columns(leftOut));
   if (incompatible.size > 0) {
-    const reasons = [...incompatible].flatMap(([name, why]) => [...why].map((reason) => [`${name}:`, `${reason} (remeasure)`]));
-    lines.push("", "? Can't aggregate as declared today:", ...columns(reasons));
+    const reasons = [...incompatible].flatMap(([name, why]) => [...why].map((reason) => [paint.blue(`${name}:`), `${reason} ${paint.dim("(remeasure)")}`]));
+    lines.push("", paint.yellow("? Can't aggregate as declared today:"), ...columns(reasons));
   }
   return lines;
 }
 
 /** One execution: what it was, then its permutation table, or that it has no container runs. */
-export function renderExecution(execution: ExecutionRecord, runs: ContainerRunRecord[], measurements: Measurement[]): string {
+export function renderExecution(execution: ExecutionRecord, runs: ContainerRunRecord[], measurements: Measurement[], paint: Paint = plain): string {
   const { executionId, testCase, task, startedAt, status, matrix } = execution;
-  const header = labelled([
-    ["Execution", executionId],
-    ["Test case", testCase],
-    ["Task", task],
-    ["Started", minute(startedAt)],
-    ["Status", status],
-    ["Matrix", `${plural(matrix.permutations, "permutation")} × ${plural(matrix.iterations, "iteration")}`],
-  ]);
-  const body = runs.length === 0 ? ["No container runs recorded."] : permutationTable(execution, runs, measurements);
+  const header = labelled(
+    [
+      ["Execution", paint.bold(executionId)],
+      ["Test case", paint.magenta(testCase)],
+      ["Task", task],
+      ["Started", minute(startedAt)],
+      ["Status", paintStatus(status, paint)],
+      ["Matrix", `${plural(matrix.permutations, "permutation")} × ${plural(matrix.iterations, "iteration")}`],
+    ],
+    paint,
+  );
+  const body = runs.length === 0 ? [paint.dim("No container runs recorded.")] : permutationTable(execution, runs, measurements, paint);
   return [...header, "", ...body].join("\n");
 }
 
 /** A recorded reply, after `label`, its later lines lined up under its first: its text, or why there's none. */
-const showReply = (reply: Reply, label = "") => {
-  const lines = reply.outcome === "collected" ? reply.text.split("\n") : [`none  (${reply.reason})`];
-  return lines.map((line, i) => `  ${i === 0 ? label : " ".repeat(label.length)}${line}`.trimEnd());
+const showReply = (reply: Reply, paint: Paint, label = "") => {
+  const lines = reply.outcome === "collected" ? reply.text.split("\n") : [paint.dim(`none  (${reply.reason})`)];
+  return lines.map((line, i) => `  ${i === 0 ? paint.dim(label) : " ".repeat(label.length)}${line}`.trimEnd());
 };
 
 /** A container run's reply, or with several turns, each turn's, numbered from 1. */
-const showReplies = ({ reply, turns }: ContainerRunRecord) =>
-  turns ? turns.flatMap((turn, i) => showReply(turn.reply, `Turn ${i + 1}:  `)) : showReply(reply as Reply);
+const showReplies = ({ reply, turns }: ContainerRunRecord, paint: Paint) =>
+  turns ? turns.flatMap((turn, i) => showReply(turn.reply, paint, `Turn ${i + 1}:  `)) : showReply(reply as Reply, paint);
 
 /** One container run: where it sits, its parameters, how the agent ran, its reply if it was recorded with one, and its measures. */
-export function renderContainerRun(record: ContainerRunRecord): string {
+export function renderContainerRun(record: ContainerRunRecord, paint: Paint = plain): string {
   const { executionId, testCase, permutation, permutationHash, iteration, postrunImage, ranAt, parameters, harnessModel, execution, harnessResult, reply, result } =
     record;
   const turnsRan = execution.turns === undefined ? [] : [["Turns", `${execution.turns.length} of ${record.turns?.length ?? "?"} ran`] as [string, string]];
   const names = Object.keys(result).toSorted();
+  const exit = execution.timedOut ? paint.red(`timed out after ${execution.timeoutSeconds}s`) : (execution.exitCode === 0 ? paint.green : paint.red)(String(execution.exitCode));
   return [
-    ...labelled([
-      ["Container run", runName(record)],
-      ["Execution", `${executionId}  (${testCase})`],
-      ["Permutation", `${permutation}  (${abbreviateHash(permutationHash)}), iteration ${iteration}`],
-      ["Postrun image", postrunImage],
-      ["Ran at", minute(ranAt)],
-    ]),
+    ...labelled(
+      [
+        ["Container run", paint.bold(runName(record))],
+        ["Execution", `${paint.bold(executionId)}  ${paint.dim(`(${testCase})`)}`],
+        ["Permutation", `${permutation}  ${paint.dim(`(${abbreviateHash(permutationHash)})`)}, iteration ${iteration}`],
+        ["Postrun image", paint.cyan(postrunImage)],
+        ["Ran at", minute(ranAt)],
+      ],
+      paint,
+    ),
     "",
-    "Parameters",
+    paint.bold("Parameters"),
     ...columns(
       AXES.map((axis) => {
         const { name, parameterHash, resolved } = parameters[axis];
-        return [axis, name, abbreviateHash(parameterHash), ...(resolved === undefined ? [] : [`resolved ${showResolved(resolved)}`])];
+        return [
+          paint.dim(axis),
+          paint.magenta(name),
+          paint.dim(abbreviateHash(parameterHash)),
+          ...(resolved === undefined ? [] : [`${paint.dim("resolved")} ${paint.cyan(showResolved(resolved))}`]),
+        ];
       }),
     ),
     "",
-    ...labelled([
-      ["Harness", `${harnessModel.harness} ${harnessModel.version}`],
-      ["Model", harnessModel.model === undefined ? harnessModel.modelId : `${harnessModel.model}  (${harnessModel.modelId})`],
-      ["Duration", duration(execution.finishedAt - execution.startedAt)],
-      ["Exit", execution.timedOut ? `timed out after ${execution.timeoutSeconds}s` : String(execution.exitCode)],
-      ...turnsRan,
-      ["Result file", harnessResult === null ? "none" : plural(new TextEncoder().encode(harnessResult).length, "byte")],
-    ]),
+    ...labelled(
+      [
+        ["Harness", `${harnessModel.harness} ${harnessModel.version}`],
+        ["Model", harnessModel.model === undefined ? harnessModel.modelId : `${harnessModel.model}  ${paint.dim(`(${harnessModel.modelId})`)}`],
+        ["Duration", duration(execution.finishedAt - execution.startedAt)],
+        ["Exit", exit],
+        ...turnsRan,
+        ["Result file", harnessResult === null ? paint.red("none") : plural(new TextEncoder().encode(harnessResult).length, "byte")],
+      ],
+      paint,
+    ),
     "",
-    ...(reply === undefined ? [] : ["Reply", ...showReplies(record), ""]),
-    ...(record.tokenCosts === undefined ? [] : ["Token costs", ...tokenCostLines(record.tokenCosts), ""]),
-    "Measures",
-    ...(names.length === 0 ? ["  none"] : columns(names.map((name) => [name, showOutcome(result[name]!.outcome)]))),
+    ...(reply === undefined ? [] : [paint.bold("Reply"), ...showReplies(record, paint), ""]),
+    ...(record.tokenCosts === undefined ? [] : [paint.bold("Token costs"), ...tokenCostLines(record.tokenCosts, paint), ""]),
+    paint.bold("Measures"),
+    ...(names.length === 0 ? [paint.dim("  none")] : columns(names.map((name) => [paint.blue(name), showOutcome(result[name]!.outcome, paint)]))),
   ].join("\n");
 }
 
 /** Prints `message` as an error, with exit code 1. */
 function fail(message: string): void {
-  console.error(`Error: ${message}`);
+  printError(message);
   process.exitCode = 1;
 }
 
@@ -278,12 +304,12 @@ async function show(cwd: string, executionId: string, containerRun?: string, dat
   }
 
   if (containerRun === undefined) {
-    console.log(renderExecution(execution, runs, await loadMeasurements(root!, execution.task)));
+    console.log(renderExecution(execution, runs, await loadMeasurements(root!, execution.task), painter()));
     return;
   }
   const record = runs.find((run) => runName(run) === containerRun || run.postrunImage === containerRun);
   if (!record) return fail(`Execution ${executionId} has no container run ${containerRun}.`);
-  console.log(renderContainerRun(record));
+  console.log(renderContainerRun(record, painter()));
 }
 
 export function createShowCommand(): Command {
