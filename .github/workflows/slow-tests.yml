@@ -12,7 +12,7 @@ name: Slow tests
 #   FLYIO_TOKEN        Fly.io API token for the runtime's app
 #   THUNDERJAR_DB_URL  Supabase Postgres URL (the pooler one: the direct one is IPv6 only)
 #   ANTHROPIC_API_KEY  for Claude Code
-#   COPILOT_GITHUB_TOKEN, OPENCODE_API_KEY  only for test cases with those harnesses
+#   OPENROUTER_API_KEY for Copilot and OpenCode, only in test cases with those harnesses
 # Optional repository variables:
 #   FLY_APP, FLY_ORG              the Fly app and org, if not thunderjar-runtime-dwj and personal
 #   THUNDERJAR_IMAGE_REPOSITORY   if not ghcr.io/dwjohnston/thunderjar-images
@@ -47,8 +47,7 @@ jobs:
       FLYIO_TOKEN: ${{ secrets.FLYIO_TOKEN }}
       THUNDERJAR_DB_URL: ${{ secrets.THUNDERJAR_DB_URL }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
       - name: Read the command, and acknowledge it
         id: command
