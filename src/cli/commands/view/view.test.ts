@@ -81,7 +81,7 @@ describe("a store that doesn't exist", () => {
 
 describe("through the CLI", () => {
   test("serves the project's store, and says where", async () => {
-    const proc = Bun.spawn(["bun", `${import.meta.dir}/../../index.ts`, "view", "--port", "0"], { cwd: scenario("0203"), stdout: "pipe", stderr: "pipe" });
+    const proc = Bun.spawn(["bun", `${import.meta.dir}/../../index.ts`, "--log-level", "silent", "view", "--port", "0"], { cwd: scenario("0203"), stdout: "pipe", stderr: "pipe" });
     try {
       const reader = proc.stdout.getReader();
       let stdout = "";

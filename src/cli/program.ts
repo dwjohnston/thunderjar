@@ -8,7 +8,9 @@ import { createPlanCommand } from "./commands/plan/plan.ts";
 import { createRunCommand } from "./commands/run/run.ts";
 import { createShowCommand } from "./commands/show/show.ts";
 import { createViewCommand } from "./commands/view/view.ts";
-import { LOG_LEVELS, type LogLevel, moduleLogger, setLogLevel } from "../log/logger.ts";
+import { ConfigError, findThunderjarRoot } from "../config/loader.ts";
+import { configureLog, DEFAULT_LOG_LEVEL, LOG_LEVELS, type LogLevel, moduleLogger } from "../log/logger.ts";
+import { resolvePath } from "./dataDir.ts";
 
 const log = moduleLogger("cli");
 import { painter } from "./colour.ts";
@@ -38,19 +40,39 @@ const HELP_STYLES = {
   styleArgumentTerm: paint.yellow,
 };
 
+type LogOptions = { logFile?: string; logLevel?: LogLevel; verbose?: boolean };
+
+/**
+ * Where `command`'s diagnostic log goes: `--log-file`, or a new file in `.thunderjar/logs/`,
+ * named for when it started and the command, e.g. `2026-11-11T06-07-11.679Z-run.log`. Outside a
+ * project, e.g. before `init`, there's no log without `--log-file`.
+ */
+async function logFile({ logFile }: LogOptions, command: string): Promise<string | undefined> {
+  const cwd = process.cwd();
+  // An empty THUNDERJAR_LOG_FILE is no file.
+  if (logFile) return resolvePath(cwd, logFile);
+  try {
+    const root = await findThunderjarRoot(cwd);
+    return `${root}/logs/${new Date().toISOString().replaceAll(":", "-")}-${command}.log`;
+  } catch (error) {
+    if (error instanceof ConfigError) return undefined;
+    throw error;
+  }
+}
+
 export function createProgram(): Command {
   const program = new Command()
     .name("thunderjar")
     .description(pkg.description)
     .version(pkg.version)
-    .addOption(
-      new Option("--log-level <level>", "write a diagnostic log to stderr, as JSON lines, at this level (default: THUNDERJAR_LOG_LEVEL, or silent)").choices(
-        LOG_LEVELS,
-      ),
-    )
-    .hook("preAction", (program, command) => {
-      const { logLevel } = program.opts<{ logLevel?: LogLevel }>();
-      if (logLevel !== undefined) setLogLevel(logLevel);
+    .addOption(new Option("--log-file <path>", "where to write the diagnostic log, instead of .thunderjar/logs/").env("THUNDERJAR_LOG_FILE"))
+    .addOption(new Option("--log-level <level>", "how much goes in the diagnostic log").choices(LOG_LEVELS).env("THUNDERJAR_LOG_LEVEL"))
+    .addOption(new Option("-v, --verbose", "log at the debug level: --log-level debug").conflicts("logLevel"))
+    .hook("preAction", async (program, command) => {
+      const options = program.opts<LogOptions>();
+      const path = await logFile(options, command.name());
+      if (path === undefined) return;
+      configureLog({ path, level: options.verbose ? "debug" : (options.logLevel ?? DEFAULT_LOG_LEVEL) });
       log.debug({ command: command.name(), args: command.args, options: command.opts(), version: pkg.version, cwd: process.cwd() }, "command started");
     })
     .addCommand(createInitCommand())

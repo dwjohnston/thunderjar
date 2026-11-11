@@ -12,62 +12,84 @@
  *
  */
 
-// The diagnostic log: JSON lines on stderr, at the level `--log-level` or THUNDERJAR_LOG_LEVEL asks
-// for, and none by default. A command's output on stdout is the same either way.
+// The diagnostic log: readable lines in a file, by default a new one in .thunderjar/logs/, at the
+// level `-v`, `--log-level` or THUNDERJAR_LOG_LEVEL asks for, or info. Nothing of it reaches the
+// terminal. The test harness points THUNDERJAR_LOG_FILE at a file under fixtures/.tmp/.
 import { afterEach, describe, expect, test } from "bun:test";
-import { thunderjar } from "../testing/cli.ts";
+import { Glob } from "bun";
+import { copyScenarioProject, thunderjar } from "../testing/cli.ts";
 import { fakeDocker } from "../testing/fakeDocker.ts";
 import { scenario } from "../testing/scenario.ts";
 import { dataDir, removeDataDirs } from "./commands/run/runTestSupport.ts";
 
 afterEach(removeDataDirs);
 
-type Line = { level: number; module?: string; msg: string; [key: string]: unknown };
-const linesOf = (stderr: string): Line[] => stderr.split("\n").filter(Boolean).map((line) => JSON.parse(line));
+/** Each line's level, module and message, e.g. `INFO: docker: building image`, without its time or details. */
+const messages = (log: string) =>
+  log
+    .split("\n")
+    .filter((line) => line.startsWith("["))
+    .map((line) => line.replace(/^\[[\d:.]+\] /, ""));
 
 async function run(args: string[], env: Record<string, string> = {}) {
   await using docker = await fakeDocker();
-  const data = dataDir();
-  return thunderjar(scenario("0205"), ["run", "remember", "--data-dir", data, ...args], { env: { ...docker.env, ...env } });
+  return thunderjar(scenario("0205"), [...args, "run", "remember", "--data-dir", dataDir()], { env: { ...docker.env, ...env }, log: true });
 }
 
 describe("the diagnostic log", () => {
-  test("is silent by default", async () => {
-    const { stderr, exitCode } = await run([]);
+  test("by default: the execution, its builds and container runs, at info, and nothing on the terminal", async () => {
+    const quiet = await run(["--log-level", "silent"]);
+    const { stdout, stderr, exitCode, log } = await run([]);
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-  });
-
-  test("--log-level info: the execution and its container runs, by module, and stdout unchanged", async () => {
-    const silent = await run([]);
-    const { stdout, stderr, exitCode } = await run(["--log-level", "info"]);
-
-    expect(exitCode).toBe(0);
-    expect(stdout.replace(/\(\d[^)]*\)/g, "")).toBe(silent.stdout.replace(/\(\d[^)]*\)/g, ""));
-    const lines = linesOf(stderr);
-    expect(lines.every((line) => line.level >= 30)).toBe(true);
-    expect(lines.map(({ module, msg }) => `${module}: ${msg}`)).toEqual([
-      "execution: execution starting",
-      "docker: building image",
-      "docker: built image",
-      "execution: container run starting",
-      "docker: running container",
-      "docker: container finished",
-      "execution: container run finished",
-      "execution: measured",
-      "execution: execution finished",
+    expect(stdout.replace(/\(\d[^)]*\)/g, "")).toBe(quiet.stdout.replace(/\(\d[^)]*\)/g, ""));
+    expect(messages(log as string)).toEqual([
+      "INFO: execution: execution starting",
+      "INFO: docker: building image",
+      "INFO: docker: built image",
+      "INFO: execution: container run starting",
+      "INFO: docker: running container",
+      "INFO: docker: container finished",
+      "INFO: execution: container run finished",
+      "INFO: execution: measured",
+      "INFO: execution: execution finished",
     ]);
-    expect(lines.at(-1)).toMatchObject({ status: "complete" });
+    expect(log).toContain('    status: "complete"');
+    expect(log).not.toContain("\x1b[");
   });
 
-  test("THUNDERJAR_LOG_LEVEL=debug: each Docker command too, and the command that started", async () => {
-    const { stderr, exitCode } = await run([], { THUNDERJAR_LOG_LEVEL: "debug" });
+  test("-v: each Docker command too, and the command that started", async () => {
+    const { stderr, exitCode, log } = await run(["-v"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(messages(log as string)[0]).toBe("DEBUG: cli: command started");
+    expect(messages(log as string)).toContain("DEBUG: docker: running docker");
+  });
+
+  test("THUNDERJAR_LOG_LEVEL=warn: nothing, as nothing went wrong", async () => {
+    const { exitCode, log } = await run([], { THUNDERJAR_LOG_LEVEL: "warn" });
 
     expect(exitCode).toBe(0);
-    const lines = linesOf(stderr);
-    expect(lines.some((line) => line.level === 20 && line.module === "docker")).toBe(true);
-    expect(lines.find((line) => line.module === "cli")).toMatchObject({ msg: "command started", command: "run", args: ["remember"] });
+    expect(log).toBe("");
+  });
+
+  test("--log-level silent: no file", async () => {
+    const { log } = await run(["--log-level", "silent"]);
+
+    expect(log).toBe("");
+  });
+
+  test("without --log-file: a new file in .thunderjar/logs/, named for when and the command", async () => {
+    await using copy = await copyScenarioProject("0205");
+
+    const { exitCode } = await thunderjar(copy.dir, ["plan", "remember"], { env: { THUNDERJAR_LOG_FILE: "" } });
+
+    expect(exitCode).toBe(0);
+    const files = [...new Glob("*").scanSync(`${copy.dir}/.thunderjar/logs`)];
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-plan\.log$/);
   });
 
   test("--log-level rejects a level pino doesn't have", async () => {

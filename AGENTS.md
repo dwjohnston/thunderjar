@@ -102,8 +102,11 @@ execSync("git status --short");
 
 Never use `console` in `src/`. The `no-console` lint rule bans it.
 
-- A command's output, what the user reads, goes through `src/cli/output.ts`: `print` for stdout, `printError` for stderr. Tests assert on it.
-- Diagnostics go through the pino logger in `src/log/logger.ts`. Take one per module with `moduleLogger("<module>")`. It writes JSON lines to stderr, and is silent unless `--log-level` or `THUNDERJAR_LOG_LEVEL` asks for a level.
+- A command's output, what the user reads, goes through `src/cli/output.ts`: `print` for stdout, `printError` and `printWarning` for stderr. Tests assert on it.
+- Diagnostics go through the pino logger in `src/log/logger.ts`. Take one per module with `moduleLogger("<module>")`.
+  - It writes readable lines to a file, never the terminal: a new file in `.thunderjar/logs/` (git-ignored) per command, or `--log-file`.
+  - It logs at `info`, unless `-v` (debug), `--log-level` or `THUNDERJAR_LOG_LEVEL` says otherwise.
+  - The test harness sends it to a file under `fixtures/.tmp/`. Pass `{ log: true }` to `thunderjar()` to read it.
 
 ```ts
 // ✅ Do
@@ -115,7 +118,7 @@ print(`${built.length} built`);
 console.log(`docker failed: ${stderr}`);
 ```
 
-**Why:** stdout is the command's output, which users and tests read, so it stays plain text. The log can say far more, e.g. Docker's whole error, where the output shows only its last line, without cluttering it.
+**Why:** stdout is the command's output, which users and tests read, and on a terminal parts of it are redrawn in place. Log lines written to the terminal in between would garble that, so the log goes to a file, where it can say far more, e.g. Docker's whole error, where the output shows only its last line.
 
 ## Versioning while in 0.x
 

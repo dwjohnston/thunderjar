@@ -215,7 +215,7 @@ export function scaffold({ nestedPackage, repository }: { nestedPackage: boolean
       "package.json": json({ name: "thunderjar-config", private: true, type: "module", dependencies: { thunderjar: "latest" } }),
     }),
     "tsconfig.json": tsconfig,
-    ".gitignore": ["_generated/", ".data/", ...(nestedPackage ? ["node_modules/"] : [])].join("\n") + "\n",
+    ".gitignore": ["_generated/", ".data/", "logs/", ...(nestedPackage ? ["node_modules/"] : [])].join("\n") + "\n",
     "thunderjar.config.ts": config,
     "test-cases/compare-models.ts": compareModels,
     "test-cases/compare-harnesses.ts": compareHarnesses,

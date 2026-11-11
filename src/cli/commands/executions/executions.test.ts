@@ -34,7 +34,7 @@ describe("0203 recorded executions", () => {
   });
 
   test("lists the store's execution IDs", async () => {
-    const { stdout } = await $`bun ${import.meta.dir}/../../index.ts executions`.cwd(scenario("0203")).quiet();
+    const { stdout } = await $`bun ${import.meta.dir}/../../index.ts --log-level silent executions`.cwd(scenario("0203")).quiet();
 
     expect(stdout.toString().match(/^\w{26}/gm)).toEqual([
       "01m430hgt00w0g80g80m3g2102",

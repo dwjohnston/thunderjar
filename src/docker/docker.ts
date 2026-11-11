@@ -142,8 +142,8 @@ export async function runContainer(
   const passed = env.flatMap((variable) => ["-e", variable]);
   const args = ["run", "--name", name, "--pull", "never", ...passed, ...runOptions, "--entrypoint", "sh", image, "-c", script];
   // Only the variables' names: their values are never logged.
-  log.info({ image, name, env, runOptions, timeoutSeconds }, "running container");
-  log.trace({ name, script }, "container script");
+  log.info({ image, container: name, env, runOptions, timeoutSeconds }, "running container");
+  log.trace({ container: name, script }, "container script");
   const startedAt = Date.now();
   const child = Bun.spawn([binary, ...args], { env: { ...Bun.env }, stdin: "ignore", stdout: "ignore", stderr: "pipe" });
   let killing: Promise<number | undefined> | undefined;
@@ -152,7 +152,7 @@ export async function runContainer(
       ? undefined
       : setTimeout(() => {
           const killedAt = Date.now();
-          log.warn({ name, timeoutSeconds }, "container timed out, killing it");
+          log.warn({ container: name, timeoutSeconds }, "container timed out, killing it");
           // If it finished just as the time ran out, there's nothing to kill: it didn't time out.
           killing = mustRun(["kill", name]).then(
             () => killedAt,
@@ -164,14 +164,14 @@ export async function runContainer(
   const killedAt = await killing;
   const ms = Date.now() - startedAt;
   if (killedAt !== undefined) {
-    log.info({ name, ms }, "container killed");
+    log.info({ container: name, ms }, "container killed");
     return { timedOut: true, killedAt };
   }
   if (exitCode !== 0) {
-    log.error({ name, exitCode, ms, stderr }, "container failed");
+    log.error({ container: name, exitCode, ms, stderr }, "container failed");
     throw new DockerContainerError(reasonOf(stderr) || `\`${binary} run\` exited ${exitCode}`);
   }
-  log.info({ name, ms }, "container finished");
+  log.info({ container: name, ms }, "container finished");
   return { timedOut: false };
 }
 
@@ -184,12 +184,12 @@ export async function readContainerFile(name: string, path: string): Promise<str
   await $`mkdir -p ${dir}`.quiet();
   try {
     const binary = dockerBinary();
-    log.debug({ name, path }, "reading file from container");
+    log.debug({ container: name, path }, "reading file from container");
     const result = await $`${binary} cp ${`${name}:${path}`} ${dir}/file`.quiet().nothrow();
     if (result.exitCode !== 0) {
       const reason = reasonOf(result.stderr);
       if (reason?.includes("Could not find the file")) {
-        log.debug({ name, path }, "no such file in container");
+        log.debug({ container: name, path }, "no such file in container");
         return undefined;
       }
       throw new DockerContainerError(reason || `\`${binary} cp\` exited ${result.exitCode}`);
@@ -241,7 +241,7 @@ export async function execInContainer(name: string, workdir: string, command: st
     stdin === undefined
       ? await $`${binary} ${args}`.quiet().nothrow()
       : await $`${binary} ${args} < ${new Response(stdin)}`.quiet().nothrow();
-  log.debug({ name, workdir, command, exitCode: result.exitCode, stderr: result.stderr.toString() }, "ran command in container");
+  log.debug({ container: name, workdir, command, exitCode: result.exitCode, stderr: result.stderr.toString() }, "ran command in container");
   // `docker exec` exits as the command did, or 1 or 127 when Docker fails, saying why.
   if (result.exitCode !== 0 && /^(Error response from daemon|OCI runtime exec failed|Cannot connect to the Docker daemon)/.test(result.stderr.toString())) {
     throw new DockerContainerError(reasonOf(result.stderr) || `\`${binary} exec\` exited ${result.exitCode}`);
