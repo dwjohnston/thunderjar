@@ -3,7 +3,7 @@ name: Release
 # Everything that publishes to npm lives in this file, because npm trusted
 # publishing trusts a single workflow file per package.
 #
-# - Stable: the changesets "Version Packages" PR. Merging it publishes to `latest`.
+# - Stable: the changesets "Release Version x.y.z" PR. Merging it publishes to `latest`.
 # - Release candidate: the "Release candidate" PR. Merging it publishes x.y.z-rc.N to `rc`.
 # - Preview: a `/preview` comment on an open PR, by someone with write access.
 #   Publishes x.y.z-preview-<short sha> to `preview`. npm won't exchange an OIDC
@@ -72,12 +72,19 @@ jobs:
       - name: Build
         run: bun run build
 
+      # Only used when changesets are pending, which is when the release PR is opened or updated.
+      - name: Work out the next version
+        id: next
+        run: echo "version=$(bun scripts/release-versions.ts next)" >> "$GITHUB_OUTPUT"
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
         with:
           publish: bun run release
           version: bun run version
+          title: Release Version ${{ steps.next.outputs.version }}
+          commit: Release Version ${{ steps.next.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

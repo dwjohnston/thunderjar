@@ -56,6 +56,13 @@ Release candidates (RCs) are tracked in ${RC_FILE}. The RC PR only changes that 
     });
 
   program
+    .command("next")
+    .description("print <next>. The stable release PR is titled with it")
+    .action(async () => {
+      console.log(await nextVersion(REPO_ROOT));
+    });
+
+  program
     .command("preview")
     .description("print the preview version for a commit: <next>-preview-<short sha>")
     .requiredOption("--sha <sha>", "full or short commit sha the preview is built from")
@@ -189,7 +196,7 @@ export function renderNotes(rc: RcFile): string {
 function renderPrBody(rc: RcFile): string {
   return `Merging this PR publishes \`${rc.version}\` to npm with the \`rc\` tag, and creates a GitHub pre-release.
 
-It only changes \`${RC_FILE}\`. Versions on \`main\` are left alone, so the stable "Version Packages" PR is unaffected. This PR is updated whenever a PR with changesets is merged to \`main\`, and closed once a stable release uses them.
+It only changes \`${RC_FILE}\`. Versions on \`main\` are left alone, so the stable "Release Version x.y.z" PR is unaffected. This PR is updated whenever a PR with changesets is merged to \`main\`, and closed once a stable release uses them.
 
 ## ${rc.version}
 
