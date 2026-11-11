@@ -42,6 +42,8 @@ export type RunHooks = PrerunBuildHooks &
   onMeasuring?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
   /** Called once each container run's measures are taken, if the task has any measurements. */
   onMeasured?: (permutation: PlannedPermutation, iteration: PlannedIteration, result: Record<string, RecordedMeasure>) => void;
+  /** Called once each iteration has nothing left to do: run, pushed and measured. Not if it throws. */
+  onDone?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
 };
 
 export type ExecutionToRun = {
@@ -144,6 +146,10 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   let status: ExecutionStatus = "complete";
   let finished: ExecutionRecord | undefined;
   const runIteration = async (permutation: PlannedPermutation, iteration: PlannedIteration) => {
+    await runAndMeasure(permutation, iteration);
+    hooks.onDone?.(permutation, iteration);
+  };
+  const runAndMeasure = async (permutation: PlannedPermutation, iteration: PlannedIteration) => {
     hooks.onRunning?.(permutation, iteration);
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
     const { execution, harnessResults } = await runInContainer({

@@ -16,6 +16,7 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { type LiveRow, liveRows } from "../../liveRows.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
@@ -119,7 +120,9 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  * built, if a variable a harness needs is unset or Docker has no login for the image store.
  *
  * Runs `concurrency` containers at once, or the runtime's, or one at a time. With more than one,
- * each line is written whole, starting with its iteration, as they finish in any order.
+ * each line is written whole, starting with its iteration, as they finish in any order. On a
+ * terminal, each iteration has one line instead, rewritten in place as it goes, with how long its
+ * current step has taken counting up.
  *
  * Runs `iterations` of each permutation, if given, instead of the test case's.
  */
@@ -170,6 +173,13 @@ async function run(
   if (concurrent) console.log(paint.dim(`Up to ${concurrency} containers at once`));
   // With several at once: what starts each iteration's lines, and its postrun image's.
   const heads = new Map<string, string>();
+  // With several at once, on a terminal: each iteration's line, and how its agent ended, by its postrun image.
+  const live = concurrent && process.stdout.isTTY ? liveRows() : undefined;
+  const rows = new Map<string, LiveRow>();
+  const outcomes = new Map<string, string>();
+  /** Shows `step` after the iteration's outcome on its line, counting how long it takes if `counting`. */
+  const showStep = (image: string, step: string, counting = false) =>
+    rows.get(image)?.set(`${heads.get(image)}  ${outcomes.get(image)}${step === "" ? "" : `  ${step}`}`, counting);
   const headOf = (permutation: PlannedPermutation, iteration: PlannedIteration) =>
     ` ${paint.bold(ordinal(permutation.number, permutations))}  iteration ${paint.bold(ordinal(iteration.number, testCase.iterations))}  ${paint.magenta(label(testCase, permutation))}`;
   let building: string | undefined;
@@ -205,14 +215,17 @@ async function run(
       },
       onPushing: (image, reference) => {
         pushing = reference;
-        if (concurrent && heads.has(image)) return;
+        if (concurrent && heads.has(image)) return showStep(image, `${paint.dim("pushing")} `, true);
         open(`${running ? underIteration : ""}Pushing ${paint.cyan(reference)} ${ellipsis} `);
       },
       onPushed: (image, reference) => {
         // With several at once, another push may have started since: it's the one that can fail.
         if (pushing === reference) pushing = undefined;
         const head = heads.get(image);
-        if (concurrent && head !== undefined) return console.log(`${head}  pushed ${paint.cyan(reference)}`);
+        if (concurrent && head !== undefined) {
+          if (live !== undefined) return showStep(image, "");
+          return console.log(`${head}  pushed ${paint.cyan(reference)}`);
+        }
         close(done);
       },
       onPulling: (reference) => {
@@ -227,6 +240,7 @@ async function run(
         running = true;
         if (concurrent) {
           heads.set(iteration.postrunImage, headOf(permutation, iteration));
+          if (live !== undefined) return void rows.set(iteration.postrunImage, live.add(`${headOf(permutation, iteration)}  ${paint.dim("running")} `));
           return console.log(`${headOf(permutation, iteration)}  started`);
         }
         open(`${headOf(permutation, iteration)}  ${ellipsis} `);
@@ -238,23 +252,33 @@ async function run(
         const tokens = totalTokens(tokenCosts);
         const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
         const outcome = execution.timedOut ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`;
+        if (live !== undefined) {
+          outcomes.set(iteration.postrunImage, outcome);
+          return showStep(iteration.postrunImage, "");
+        }
         if (concurrent) return console.log(`${headOf(permutation, iteration)}  ${outcome}`);
         close(outcome);
       },
-      onMeasuring: (permutation) => {
+      onMeasuring: (permutation, iteration) => {
+        if (live !== undefined) return showStep(iteration.postrunImage, `${paint.dim("measuring")} `, true);
         if (concurrent) return;
         // Shown only on a terminal, and only until the measures replace it.
         open(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${paint.dim("Measuring ...")} `, true);
       },
       onMeasured: (permutation, iteration, result) => {
+        if (live !== undefined) return showStep(iteration.postrunImage, showMeasures(result, paint));
         if (concurrent) return console.log(`${headOf(permutation, iteration)}  ${showMeasures(result, paint)}`);
         // Under the iteration, lined up with it.
         close(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
       },
+      onDone: (_permutation, iteration) => rows.get(iteration.postrunImage)?.done(),
     });
+    live?.stop();
     console.log(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
     if (record.status === "failed") process.exitCode = 1;
   } catch (caught) {
+    // Left as they were, so the error is written under them.
+    live?.stop();
     if (caught instanceof DockerUnavailableError) {
       error(`Docker can't be reached, so nothing can be run: ${caught.message}`);
     } else if (caught instanceof DockerBuildError) {
@@ -281,6 +305,7 @@ async function run(
     }
     process.exitCode = 1;
   } finally {
+    live?.stop();
     line?.stop();
   }
 }
