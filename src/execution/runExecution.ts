@@ -37,6 +37,8 @@ export type RunHooks = PrerunBuildHooks &
    * out, with its record, before it's measured.
    */
   onRan?: (permutation: PlannedPermutation, iteration: PlannedIteration, record: ContainerRunRecord) => void;
+  /** Called as each container run's measures start being taken, if the task has any measurements. */
+  onMeasuring?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
   /** Called once each container run's measures are taken, if the task has any measurements. */
   onMeasured?: (permutation: PlannedPermutation, iteration: PlannedIteration, result: Record<string, RecordedMeasure>) => void;
 };
@@ -171,6 +173,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
         }
 
         if (measurements.length === 0) continue;
+        hooks.onMeasuring?.(permutation, iteration);
         let opened = 0;
         const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: turns.map((turn) => turn.reply) };
         const open = async (usesContainer: boolean) =>

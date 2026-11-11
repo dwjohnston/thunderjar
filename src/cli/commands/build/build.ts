@@ -10,6 +10,7 @@ import { hashPermutations } from "../../../execution/hashPermutations.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { pushFailure } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /**
  * Each prerun image test case `name` needs, of the nearest `.thunderjar/` folder in `cwd` or above
@@ -39,26 +40,28 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
   const permutations = await hashPermutations(root, testCase);
   let building: string | undefined;
   let pushing: string | undefined;
+  // The line that's waiting for how its build or push ends.
+  let line: WaitingLine | undefined;
   try {
     await checkImageStore(imageStore);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
       onBuilding: (image) => {
         building = image;
-        process.stdout.write(`Building ${image} ... `);
+        line = waitingLine(`Building ${image} ... `);
       },
       onBuilt: () => {
         building = undefined;
-        console.log("done");
+        line?.finish("done");
       },
     }, buildOptions);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
       onPushing: (_image, reference) => {
         pushing = reference;
-        process.stdout.write(`Pushing ${reference} ... `);
+        line = waitingLine(`Pushing ${reference} ... `);
       },
       onPushed: () => {
         pushing = undefined;
-        console.log("done");
+        line?.finish("done");
       },
     });
     console.log(`${built.length} built, ${present.length} already present${imageStore ? `, ${pushed.length} pushed` : ""}`);
@@ -68,15 +71,17 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
     } else if (error instanceof ImageStoreLoginError) {
       console.error(`Error: ${error.message}`);
     } else if (error instanceof DockerBuildError) {
-      console.log("failed");
+      line?.fail();
       console.error(`Error: Building ${building} failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
-      console.log("failed");
+      line?.fail();
       console.error(`Error: ${pushFailure(pushing as string, error)}`);
     } else {
       throw error;
     }
     process.exitCode = 1;
+  } finally {
+    line?.stop();
   }
 }
 

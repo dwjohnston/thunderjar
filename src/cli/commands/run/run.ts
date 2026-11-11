@@ -15,6 +15,7 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { agentEnd, dollars, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
 const FIELD_INDENT = "    ";
@@ -140,59 +141,69 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
   let pulling: string | undefined;
   // Whether a container run has started, so a push is of a postrun image.
   let running = false;
-  // Whether the last line written is waiting for how its build, push or container run ends.
-  let lineOpen = false;
+  // The last line written, while it's waiting for how its build, push, pull or container run ends.
+  let line: WaitingLine | undefined;
+  // Whether that line is the one shown while a container run is measured.
+  let measuring = false;
+  const open = (label: string, transient = false) => {
+    measuring = transient;
+    line = waitingLine(label, { transient });
+  };
+  const close = (text: string) => {
+    line?.finish(text);
+    line = undefined;
+  };
+  const fail = () => {
+    line?.fail();
+    line = undefined;
+  };
   try {
     const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime }, store, {
       onBuilding: (image) => {
         building = image;
-        lineOpen = true;
-        process.stdout.write(`Building ${image} ... `);
+        open(`Building ${image} ... `);
       },
       onBuilt: () => {
         building = undefined;
-        lineOpen = false;
-        console.log("done");
+        close("done");
       },
       onPushing: (_image, reference) => {
         pushing = reference;
-        lineOpen = true;
-        process.stdout.write(`${running ? underIteration : ""}Pushing ${reference} ... `);
+        open(`${running ? underIteration : ""}Pushing ${reference} ... `);
       },
       onPushed: () => {
         pushing = undefined;
-        lineOpen = false;
-        console.log("done");
+        close("done");
       },
       onPulling: (reference) => {
         pulling = reference;
-        lineOpen = true;
-        process.stdout.write(`Pulling ${reference} into the runtime ... `);
+        open(`Pulling ${reference} into the runtime ... `);
       },
       onPulled: () => {
         pulling = undefined;
-        lineOpen = false;
-        console.log("done");
+        close("done");
       },
       onRunning: (permutation, iteration) => {
         running = true;
-        lineOpen = true;
-        process.stdout.write(
+        open(
           ` ${ordinal(permutation.number, permutations)}  iteration ${ordinal(iteration.number, testCase.iterations)}  ${label(testCase, permutation)}  ... `,
         );
       },
       onRan: (_permutation, _iteration, { execution, harnessResult, tokenCosts }) => {
-        lineOpen = false;
         const ended = agentEnd(execution, harnessResult);
         // Its cost if it can be trusted, else its tokens, if it has either.
         const cost = knownCost(tokenCosts);
         const tokens = totalTokens(tokenCosts);
         const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
-        console.log(execution.timedOut ? ended : `${ended} (${duration(execution.finishedAt - execution.startedAt)}${spent})`);
+        close(execution.timedOut ? ended : `${ended} (${duration(execution.finishedAt - execution.startedAt)}${spent})`);
+      },
+      onMeasuring: (permutation) => {
+        // Shown only on a terminal, and only until the measures replace it.
+        open(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}Measuring ... `, true);
       },
       onMeasured: (permutation, _iteration, result) => {
         // Under the iteration, lined up with it.
-        console.log(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result)}`);
+        close(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result)}`);
       },
     });
     console.log(`Recorded in ${displayPath(cwd, where)}`);
@@ -201,25 +212,28 @@ async function run(cwd: string, name: string, imagePrefix: string, dataDir?: str
     if (error instanceof DockerUnavailableError) {
       console.error(`Error: Docker can't be reached, so nothing can be run: ${error.message}`);
     } else if (error instanceof DockerBuildError) {
-      console.log("failed");
+      fail();
       console.error(`Error: Building ${building} failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
-      console.log("failed");
+      fail();
       console.error(`Error: ${pushFailure(pushing as string, error)}`);
     } else if (error instanceof DockerPullError) {
-      console.log("failed");
+      fail();
       console.error(
         `Error: The runtime couldn't pull ${pulling}: ${error.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
       );
-    } else if (error instanceof DockerContainerError && lineOpen) {
-      console.log("failed");
+    } else if (error instanceof DockerContainerError && line !== undefined && !measuring) {
+      fail();
       console.error(`Error: Running a container failed: ${error.message}`);
     } else if (error instanceof DockerContainerError) {
+      fail();
       console.error(`Error: Measuring a container run failed: ${error.message}`);
     } else {
       throw error;
     }
     process.exitCode = 1;
+  } finally {
+    line?.stop();
   }
 }
 
