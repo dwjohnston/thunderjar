@@ -598,6 +598,18 @@ export type BuildOptions = {
 };
 
 /**
+ * Where `run` runs containers, instead of the local Docker daemon: any command that takes the
+ * `docker` CLI's arguments. Thunderjar puts `command` in front of each `docker` subcommand it
+ * would run, e.g. `["docker", "--context", "cloud"]`, `["docker", "-H", "ssh://me@build-host"]`
+ * or `["podman", "--remote"]`.
+ *
+ * Images are still built and pushed locally. The runtime pulls them from the image store, so
+ * `imageStore` must be set, and the runtime must be able to pull from it, and push to it: its
+ * registry login is set up on the runtime, not by Thunderjar. `thunderjar doctor` checks it.
+ */
+export type RuntimeConfig = { command: string[] };
+
+/**
  * @docs
  * @kind heading
  * @name declareConfig
@@ -642,6 +654,8 @@ export type ConfigDeclaration = {
    * run data. `ssh: true` passes the host's SSH agent as `docker build --ssh default`.
    */
   build?: BuildOptions;
+  /** Where `run` runs containers. The local Docker daemon by default, or with `run --local`. */
+  runtime?: RuntimeConfig;
 };
 
 export function declareConfig(config: ConfigDeclaration): ConfigDeclaration {

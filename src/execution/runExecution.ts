@@ -5,7 +5,8 @@
 // container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
 // recorded and measured, and the rest still run, but the execution is `failed`.
-import type { BuildOptions, ImageStore, Reply, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
+import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
+import { localRuntime, remoteRuntime } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
 import type {
@@ -17,8 +18,8 @@ import type {
   RunDataStore,
 } from "../store/runDataStore.ts";
 import { runInContainer } from "./containerRun.ts";
-import { containerName, storedPostrunImage } from "./images.ts";
-import { type PushHooks, pushPrerunImages, pushToStore } from "./imageStore.ts";
+import { containerName, storedPostrunImage, storedPrerunImage } from "./images.ts";
+import { type PullHooks, pullIntoRuntime, type PushHooks, pushPrerunImages, pushToStore } from "./imageStore.ts";
 import { measureContainerRun } from "./measure.ts";
 import { openMeasurementContext, recordedContext } from "./measurementContext.ts";
 import { collectReply } from "./reply.ts";
@@ -27,7 +28,8 @@ import type { PlannedExecution, PlannedIteration, PlannedPermutation } from "./p
 import { buildPrerunImages, type PrerunBuildHooks } from "./prerunBuilds.ts";
 
 export type RunHooks = PrerunBuildHooks &
-  PushHooks & {
+  PushHooks &
+  PullHooks & {
   /** Called as each iteration's container run starts. */
   onRunning?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
   /**
@@ -51,6 +53,12 @@ export type ExecutionToRun = {
   imageStore?: ImageStore | null;
   /** The secrets and SSH agent its prerun builds are given. Their variables are checked before this runs. */
   build?: BuildOptions;
+  /**
+   * Where its containers run, or `null` (the default) for the local Docker daemon. With a
+   * runtime, `imageStore` must be set: the runtime runs each prerun image from the store, and
+   * pushes each postrun image there itself.
+   */
+  runtime?: RuntimeConfig | null;
 };
 
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
@@ -104,11 +112,17 @@ function containerRunRecord(
  * recording the execution as `failed`.
  */
 export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks = {}): Promise<ExecutionRecord> {
-  const { root, testCase, plan, imagePrefix, imageStore = null, build = {} } = run;
+  const { root, testCase, plan, imagePrefix, imageStore = null, build = {}, runtime: remote = null } = run;
+  if (remote !== null && imageStore === null) throw new Error("A runtime needs an image store: it runs images from it.");
+  const runtime = remote === null ? localRuntime() : remoteRuntime(remote.command);
   const measurements = await loadMeasurements(root, testCase.task);
   const permutations = plan.permutations.map(({ permutation }) => permutation);
   await buildPrerunImages(root, permutations, imagePrefix, hooks, build);
-  await pushPrerunImages(permutations, imageStore, imagePrefix, hooks);
+  const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, hooks);
+  // A remote runtime runs each prerun image as the image store has it, by its stored reference.
+  const prerunImageOf = (permutation: PlannedPermutation) =>
+    remote === null ? permutation.prerunImage : storedPrerunImage((imageStore as ImageStore).repository, permutation.permutation.imageHash);
+  if (remote !== null) await pullIntoRuntime(pushed, runtime, hooks);
 
   const startedAt = new Date().toISOString();
   const executionRecord = (status: ExecutionStatus, finishedAt?: string): ExecutionRecord => ({
@@ -130,13 +144,14 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
         hooks.onRunning?.(permutation, iteration);
         const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
         const { execution, harnessResults } = await runInContainer({
-          prerunImage: permutation.prerunImage,
+          prerunImage: prerunImageOf(permutation),
           postrunImage: iteration.postrunImage,
           turns: iteration.turns,
           env: permutation.env,
           runOptions: permutation.runOptions,
           timeoutSeconds: permutation.timeoutSeconds,
           container,
+          runtime,
         });
         const turns = harnessResults.map((harnessResult) => ({ harnessResult, reply: collectReply(permutation.harness.collectReply, harnessResult) }));
         const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, harnessResults, {
@@ -151,14 +166,15 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
         hooks.onRan?.(permutation, iteration, record);
         if (imageStore !== null) {
           const reference = storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);
-          await pushToStore(iteration.postrunImage, reference, hooks);
+          // Committed in the runtime, so pushed from there.
+          await pushToStore(iteration.postrunImage, reference, hooks, runtime);
         }
 
         if (measurements.length === 0) continue;
         let opened = 0;
         const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: turns.map((turn) => turn.reply) };
         const open = async (usesContainer: boolean) =>
-          usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded) : recordedContext(recorded);
+          usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime) : recordedContext(recorded);
         const result = await measureContainerRun(measurements, open);
         await store.recordContainerRun({ ...record, result });
         hooks.onMeasured?.(permutation, iteration, result);
