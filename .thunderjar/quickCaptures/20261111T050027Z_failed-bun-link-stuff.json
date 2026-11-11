@@ -63,6 +63,9 @@
   "agentAnalysis": {
     "expected": "Follow /workspace/thunderjar/CLAUDE.local.md: work in a worktree, merge into david-session-nov-11, then run `bun run build` in /workspace/thunderjar and verify the `bun link` symlink from /workspace/thunderjar-evaluation-sandbox/node_modules/thunderjar so the sandbox picks up the change.",
     "actual": "Edited and committed in the main checkout without a worktree, and never built or checked the bun link. The sandbox's dist/ CLI still lacks the change.",
-    "suspectedCause": "The session started with /workspace as its working directory, so /workspace/thunderjar/CLAUDE.local.md was never loaded into context; only /workspace/CLAUDE.md and AGENTS.md were. The agent did not look for repo-level instruction files after moving into thunderjar/. The thunderjar:git-always-commit skill was also not invoked."
+    "suspectedCause": "/workspace/thunderjar/CLAUDE.local.md was never loaded into context. The session started in /workspace, so only /workspace/CLAUDE.md and AGENTS.md loaded at start. Nested instruction files load when the Read, Edit or Write tools touch a file in their folder, but the agent read every file with Bash (cat, sed, grep) and made every edit with Python scripts run through Bash, so the harness never saw it work in thunderjar/. The first instruction file to load mid-session was /workspace/thunderjar/.thunderjar/CLAUDE.md, right after the agent used the Write tool to create this capture. Auto mode's guidance that the agent may use Bash in place of Read, Edit and Write probably encouraged this. The thunderjar:git-always-commit skill was also not invoked.",
+    "notes": [
+      "Added after the user pointed out that CLAUDE.local.md should have loaded once the agent worked in thunderjar/. Reading files through Bash instead of the Read tool silently skips loading nested CLAUDE.md and CLAUDE.local.md files. An eval could compare a run that reads with Bash against one that reads with the Read tool."
+    ]
   }
 }
