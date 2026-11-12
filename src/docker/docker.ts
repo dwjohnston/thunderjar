@@ -306,6 +306,18 @@ export async function removeContainer(name: string, runtime: DockerRuntime = loc
 }
 
 /**
+ * Removes every container in `runtime`, running or stopped, whose name starts with `prefix`, and
+ * returns their names. A running one is killed first. Throws a DockerContainerError.
+ */
+export async function removeContainersNamed(prefix: string, runtime: DockerRuntime = localRuntime()): Promise<string[]> {
+  // Docker's name filter matches anywhere in a name, so the start is checked here.
+  const listed = await mustRun(["ps", "--all", "--filter", `name=${prefix}`, "--format", "{{.Names}}"], runtime);
+  const names = listed.split("\n").filter((name) => name.startsWith(prefix));
+  if (names.length > 0) await mustRun(["rm", "--force", ...names], runtime);
+  return names;
+}
+
+/**
  * Removes each of `images`, tags of images in `runtime`: an image goes once its last tag does.
  * Throws a DockerContainerError, e.g. if a container still uses one.
  */

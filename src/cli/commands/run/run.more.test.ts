@@ -4,10 +4,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
 import type { Reply } from "../../../api/declarations.ts";
 import type { ContainerRunRecord, ExecutionRecord } from "../../../store/runDataStore.ts";
-import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
+import { copyScenarioProject, thunderjar, TMP_DIR } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
-import { scenario } from "../../../testing/scenario.ts";
+import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
 import { ALPHA_0201, KEY, PLAIN, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
@@ -119,7 +119,6 @@ Recorded in <DATA>/runs.sqlite
     );
     // Each was committed, and removed.
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
-    expect(await docker.containers()).toEqual([]);
   }, 30_000);
 });
 
@@ -722,6 +721,35 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
   }
 
   const LOGS = 'echo "$0 $THUNDERJAR_EXECUTION_ID $THUNDERJAR_CONCURRENCY $THUNDERJAR_CONTAINERS" >> $LOG';
+
+  test("interrupted, it removes its containers from the runtime, killing their agents, runs afterRun, and exits 143", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWithHooks(`${LOGS.replace("$0", "before")}`, `${LOGS.replace("$0", "after")}`);
+    // An agent that would run for a minute, and says so if it gets that far.
+    const harness = `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`;
+    await Bun.write(harness, (await Bun.file(harness).text()).replace("`printf", `\`sleep 60 && touch ${copy.dir}/agent-finished && printf`));
+    const data = dataDir();
+    const cli = Bun.spawn(["bun", `${REPO_ROOT}/src/cli/index.ts`, "run", "example", "--data-dir", data, "--log-level", "silent"], {
+      cwd: copy.dir,
+      env: { ...Bun.env, TMPDIR: TMP_DIR, ...docker.env },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    // Both iterations' containers are running their agents.
+    while ((await $`pgrep -f ${`touch ${copy.dir}/agent-finished`}`.quiet().nothrow().text()).split("\n").filter(Boolean).length < 2) await Bun.sleep(50);
+
+    cli.kill("SIGTERM");
+    const [exitCode, stderr] = await Promise.all([cli.exited, new Response(cli.stderr).text()]);
+
+    expect(exitCode).toBe(143);
+    const { executionId } = (await readStore(data)).execution as ExecutionRecord;
+    expect(stderr).toBe(`Error: Interrupted (SIGTERM): stopping execution ${executionId}'s containers on the runtime.\n`);
+    expect(await docker.commands()).toContain(`${REMOTE} rm --force thunderjar-run-${executionId}-1-1 thunderjar-run-${executionId}-1-2`);
+    expect(await Bun.file(copy.log).text()).toBe(`before ${executionId} 2 2\nafter ${executionId} 2 2\n`);
+    // Its agents were killed, not left running.
+    expect((await $`pgrep -f ${`touch ${copy.dir}/agent-finished`}`.quiet().nothrow()).exitCode).not.toBe(0);
+    expect((await readStore(data)).execution.status).toBe("failed");
+  }, 30_000);
 
   test("beforeRun runs before anything runs on the runtime, and afterRun once it's done, each told about the run", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });

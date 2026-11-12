@@ -8,11 +8,11 @@ import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerBuildError, DockerContainerError, DockerPullError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { type PlannedExecution, type PlannedIteration, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
-import { runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
+import { removeExecutionContainers, runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
 import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
 import type { ExecutionTimings } from "../../../execution/timings.ts";
 import { ulid } from "../../../execution/ulid.ts";
-import { type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
@@ -142,6 +142,9 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
   const harness = harnesses.size === testCase.harnessModel.length ? parsePair(permutation.harnessModel).harness : permutation.harnessModel;
   return [...varying.map((axis) => permutation[axis]), harness, permutation.initialPrompt].join(" | ");
 }
+
+/** How long an interrupted run waits for its execution to be recorded as failed, before it stops the runtime. */
+const INTERRUPT_SETTLE_MS = 15_000;
 
 /** A container run whose agent didn't end cleanly: its name, how it ended, and a hint of why. */
 export type UncleanRun = { run: string; end: string; why?: string };
@@ -341,10 +344,37 @@ async function run(
     }
   };
   if (!(await runHook("beforeRun"))) return;
+  // Ctrl-C, or a cancelled CI job: without this, its containers would keep running, their agents
+  // still spending, and a runtime started by beforeRun would never be stopped by afterRun.
+  let interrupted = false;
+  let executing: Promise<ExecutionRecord> | undefined;
+  const interrupt = (signal: "SIGINT" | "SIGTERM") => {
+    if (interrupted) return;
+    interrupted = true;
+    void (async () => {
+      live?.stop();
+      line?.stop();
+      line = undefined;
+      error(`Interrupted (${signal}): stopping execution ${plan.executionId}'s containers${runtime === null ? "" : " on the runtime"}.`);
+      try {
+        await removeExecutionContainers(plan.executionId, imagePrefix, runtime);
+      } catch (caught) {
+        error(`Couldn't remove its containers: ${caught instanceof Error ? caught.message : String(caught)}`);
+      }
+      // Its container runs fail, now their containers are gone: once they have, the execution is recorded as failed.
+      await Promise.race([executing?.catch(() => {}), Bun.sleep(INTERRUPT_SETTLE_MS)]);
+      await runHook("afterRun");
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    })();
+  };
+  const onInt = () => interrupt("SIGINT");
+  const onTerm = () => interrupt("SIGTERM");
+  process.on("SIGINT", onInt);
+  process.on("SIGTERM", onTerm);
   let timings: ExecutionTimings | undefined;
   const unclean: UncleanRun[] = [];
   try {
-    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
+    executing = runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
       onBuilding: (image) => {
         if (live !== undefined) return void prerunRows.set(image, live.add(`${paint.cyan(image)}  ${paint.dim("building")} `));
         if (concurrent) return print(`Building ${paint.cyan(image)}`);
@@ -441,12 +471,15 @@ async function run(
       onDone: (_permutation, iteration) => rows.get(iteration.postrunImage)?.done(),
       onTimings: (spent) => void (timings = spent),
     });
+    const record = await executing;
     live?.stop();
     for (const line of showUnclean(unclean, facts.containers, paint)) print(line);
     print(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
     if (json) printJson({ execution: record, recordedIn: where, containerRuns: await store.containerRunsOf(record.executionId) });
     if (record.status === "failed") process.exitCode = 1;
   } catch (caught) {
+    // Its containers were removed under it: `interrupt` says so, and ends the process.
+    if (interrupted) return await new Promise<never>(() => {});
     // The prerun image whose build, push or pull failed, marked so on its line.
     const failedImage =
       caught instanceof DockerBuildError ? caught.image : caught instanceof DockerPushError || caught instanceof DockerPullError ? pulledImages.get(caught.reference) : undefined;
@@ -485,6 +518,10 @@ async function run(
     live?.stop();
     line?.stop();
     line = undefined;
+    // `interrupt` runs afterRun itself, and ends the process.
+    if (interrupted) await new Promise<never>(() => {});
+    process.off("SIGINT", onInt);
+    process.off("SIGTERM", onTerm);
     // So a runtime started for the run is stopped, however it ended.
     await runHook("afterRun");
     if (showsTimings && timings !== undefined) print(showTimings(timings));

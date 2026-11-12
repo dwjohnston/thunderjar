@@ -9,7 +9,7 @@
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
 // recorded and measured, and the rest still run, but the execution is `failed`.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
-import { diskUsage, localRuntime, remoteRuntime, removeImages } from "../docker/docker.ts";
+import { diskUsage, localRuntime, remoteRuntime, removeContainersNamed, removeImages } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
@@ -23,7 +23,7 @@ import type {
 } from "../store/runDataStore.ts";
 import { agentOutput, head, storedStderr } from "./agentOutput.ts";
 import { runInContainer } from "./containerRun.ts";
-import { containerName, storedPostrunImage, storedPrerunImage } from "./images.ts";
+import { containerName, executionContainerPrefix, storedPostrunImage, storedPrerunImage } from "./images.ts";
 import { type PullHooks, pullIntoRuntime, type PushHooks, pushToStore } from "./imageStore.ts";
 import { inParallel } from "./inParallel.ts";
 import { measureContainerRun } from "./measure.ts";
@@ -91,6 +91,17 @@ export type ExecutionToRun = {
  * pulls and container runs happen at once, in any order.
  */
 export const runsConcurrently = (concurrency = 1, build: BuildOptions = {}): boolean => concurrency > 1 || (build.concurrency ?? 1) > 1;
+
+/**
+ * Removes every container of execution `executionId`, where they run: `runtime`, or the local
+ * Docker daemon for `null`. For a run that's interrupted, so its agents stop, and none is left on
+ * a runtime that's about to be stopped. Returns their names. Throws a DockerContainerError.
+ */
+export async function removeExecutionContainers(executionId: string, imagePrefix: string | undefined, runtime: RuntimeConfig | null): Promise<string[]> {
+  const removed = await removeContainersNamed(executionContainerPrefix(executionId, imagePrefix), runtime === null ? localRuntime() : remoteRuntime(runtime.command));
+  log.warn({ executionId, removed }, "execution interrupted: removed its containers");
+  return removed;
+}
 
 /** One turn of a container run, as recorded: its result file, the end of its stderr, and its reply. */
 type RecordedTurn = { harnessResult: string | null; harnessStderr: string | null; reply: Reply };

@@ -37,6 +37,8 @@
 //
 // A leading `--context <name>`, as a runtime's command may give, is recorded and otherwise ignored:
 // the runtime shares the fake's state. `run` takes `--pull missing` as well as `--pull never`.
+// `ps --all --filter name=<text> --format {{.Names}}` lists the containers not yet removed whose
+// name has `<text>` in it. `rm --force <name>…` kills a running container's script first.
 // `pull --quiet <reference>` succeeds only for a reference that was pushed. `image rm <image>…`
 // removes tags from images, failing for one that doesn't exist or is in failing, or for any if
 // FAKE_DOCKER_FAIL_IMAGE_RM is set. `system df`
@@ -144,6 +146,12 @@ if (import.meta.main) {
     if (name !== "images") return listed(name);
     const removed = new Set(await listed("removed"));
     return (await listed("images")).filter((image) => !removed.has(image));
+  };
+
+  /** The process `pid`, and every process under it. */
+  const processTree = async (pid: string): Promise<string[]> => {
+    const children = (await $`pgrep -P ${pid}`.quiet().nothrow().text()).split("\n").filter(Boolean);
+    return [pid, ...(await Promise.all(children.map(processTree))).flat()];
   };
 
   const filesystemOf = (image: string) => `${dir}/filesystems/${encodeURIComponent(image)}`;
@@ -265,12 +273,7 @@ if (import.meta.main) {
     // docker kill <name>
     const pidFile = state(`containers/${subcommand}/pid`);
     if (!dir || !(await pidFile.exists())) fail(`Error response from daemon: cannot kill container: ${subcommand}: container is not running`);
-    // The script's process, and every process under it.
-    const tree = async (pid: string): Promise<string[]> => {
-      const children = (await $`pgrep -P ${pid}`.quiet().nothrow().text()).split("\n").filter(Boolean);
-      return [pid, ...(await Promise.all(children.map(tree))).flat()];
-    };
-    const pids = await tree((await pidFile.text()).trim());
+    const pids = await processTree((await pidFile.text()).trim());
     await $`kill -KILL ${pids}`.quiet().nothrow();
     console.log(subcommand);
   } else if (command === "login" && subcommand !== undefined && rest.length === 0) {
@@ -315,9 +318,22 @@ if (import.meta.main) {
     // docker system df --format <template>
     console.log(`Images: ${(await list("images")).length * 100}MB (0B (0%) reclaimable)`);
     console.log("Containers: 0B (0B reclaimable)");
-  } else if (command === "rm" && subcommand === "--force" && rest.length === 1) {
-    // docker rm --force <name>
-    if (dir) await $`rm -rf ${dir}/containers/${rest[0] as string}`.quiet();
+  } else if (command === "ps" && subcommand === "--all" && rest[0] === "--filter" && rest[2] === "--format" && rest.length === 4) {
+    // docker ps --all --filter name=<text> --format {{.Names}}
+    const text = (rest[1] as string).replace(/^name=/, "");
+    if (dir && (await $`test -d ${dir}/containers`.quiet().nothrow()).exitCode === 0) {
+      for await (const file of new Glob("*/image").scan({ cwd: `${dir}/containers` })) {
+        const name = file.slice(0, -"/image".length);
+        if (name.includes(text)) console.log(name);
+      }
+    }
+  } else if (command === "rm" && subcommand === "--force" && rest.length >= 1) {
+    // docker rm --force <name>…: a running container's script is killed first, with everything it started.
+    for (const name of rest) {
+      const pidFile = state(`containers/${name}/pid`);
+      if (dir && (await pidFile.exists())) await $`kill -KILL ${await processTree((await pidFile.text()).trim())}`.quiet().nothrow();
+      if (dir) await $`rm -rf ${dir}/containers/${name}`.quiet();
+    }
   } else {
     fail(`fake docker: unsupported command: docker ${args.join(" ")}`);
   }

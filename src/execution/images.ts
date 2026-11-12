@@ -37,6 +37,12 @@ export const containerName = (
   prefix: string = DEFAULT_IMAGE_PREFIX,
 ) => `${prefix}-run-${executionId}-${permutation}-${iteration}`;
 
+/**
+ * What the name of every container of execution `executionId` starts with: its container runs',
+ * and their measurement containers', which add `-measure-<n>`.
+ */
+export const executionContainerPrefix = (executionId: string, prefix: string = DEFAULT_IMAGE_PREFIX) => `${prefix}-run-${executionId}-`;
+
 // In the image store, both kinds of image share one repository, told apart by their tag's prefix:
 // see project-md/prd/081-docker-tagging.md.
 
