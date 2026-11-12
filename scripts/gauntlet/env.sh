@@ -17,6 +17,10 @@ export THUNDERJAR_REMOTE=1
 # This sandbox's egress proxy only carries HTTPS, so Supabase's Postgres (raw TCP) is unreachable:
 # record run data in the local SQLite file instead. Set THUNDERJAR_RUN_DATA=postgres to use Supabase.
 [ -z "${THUNDERJAR_RUN_DATA:-}" ] && export THUNDERJAR_RUN_DATA=sqlite
+# Build prerun images on the Fly machine's daemon, not the local one: this sandbox's egress proxy
+# re-signs TLS, and build steps (npm, git) don't trust its CA. It also leaves the prerun images
+# where the containers run. Docker's client still uses this machine's `docker login`.
+[ -z "${THUNDERJAR_DOCKER:-}" ] && export THUNDERJAR_DOCKER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.thunderjar/fly-docker.sh"
 # Without ANTHROPIC_API_KEY, gauntlet test cases run only their OpenRouter pairs (Copilot, OpenCode).
 [ -z "${THUNDERJAR_GAUNTLET_PAIRS:-}" ] && [ -z "${ANTHROPIC_API_KEY:-}" ] && export THUNDERJAR_GAUNTLET_PAIRS=openrouter
 case ":$PATH:" in *":$HOME/.fly/bin:"*) ;; *) export PATH="$HOME/.fly/bin:$PATH" ;; esac
