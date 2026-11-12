@@ -20,7 +20,8 @@
     "node_modules",
     "dist",
     "fixtures/.tmp",
-    "**/*.template.ts"
+    "**/*.template.ts",
+    "src/gauntlet"
   ],
   "overrides": [
     {

@@ -3,8 +3,10 @@
 //
 //   bun scripts/lint-layers.ts           rewrite .oxlintrc.json
 //   bun scripts/lint-layers.ts --check   fail if .oxlintrc.json is out of date, or a folder in src/ is not a layer
+//
+// Folders in NOT_LAYERS, e.g. src/gauntlet, are skipped.
 import { file, write } from "bun";
-import { LAYERS, SRC_RULES } from "./layers.ts";
+import { LAYERS, NOT_LAYERS, SRC_RULES } from "./layers.ts";
 
 const REPO_ROOT = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const CONFIG_FILE = ".oxlintrc.json";
@@ -71,7 +73,8 @@ export function applyLayers(
 export const renderConfig = (config: OxlintConfig) => `${JSON.stringify(config, null, 2)}\n`;
 
 if (import.meta.main) {
-  const srcFiles = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: `${REPO_ROOT}/src` }));
+  const allSrcFiles = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: `${REPO_ROOT}/src` }));
+  const srcFiles = allSrcFiles.filter((f) => !NOT_LAYERS.includes(f.split("/")[0]!));
   const undeclared = undeclaredFolders(srcFiles, LAYERS);
   if (undeclared.length > 0) {
     console.error(undeclared.map((f) => `src/${f} is not a layer. Add it to scripts/layers.ts.`).join("\n"));

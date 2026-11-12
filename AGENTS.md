@@ -28,6 +28,7 @@ Thunderjar is a TypeScript/Bun CLI for
   - `log/`: the diagnostic logger (pino).
   - `config/`: finds a project's `.thunderjar/` folder and loads its declarations.
   - `testing/`: the fixture harness that tests use to run the CLI in a scenario.
+  - `gauntlet/`: challenges that Thunderjar's own experiments set agents, one folder each. Not Thunderjar code: see below.
 - `docs/`: the VitePress docs site.
   - `.vitepress/`: site config.
   - `cli/`: CLI reference pages, generated per command.
@@ -69,6 +70,8 @@ export const LAYERS: readonly string[] = ["project", "cli"];
 `bun run lint` fails when a folder in `src/` is not a layer, or when `.oxlintrc.json` is out of date. Rules also apply to files in subfolders, so re-run `bun run lint:generate` after adding a deeper folder too.
 
 **Why:** later modules land in their final place, so nothing needs restructuring. Overrides replace a top-level rule rather than adding to it, so the generator copies the top-level `no-restricted-imports` patterns (the `node:` ban) into each one.
+
+`src/gauntlet` is the exception: it's in `NOT_LAYERS`, not `LAYERS`. Each folder in it is a small project of its own, with its own instructions and tools, that the test cases in `.thunderjar/` set agents to work on. oxlint and `bun test` skip it (`.oxlintrc.json`'s `ignorePatterns`, and `bunfig.toml`).
 
 ## Use Bun
 
