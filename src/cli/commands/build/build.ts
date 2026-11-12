@@ -11,20 +11,27 @@ import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { pushFailure } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
-import { print, printError } from "../../output.ts";
+import { jsonOption } from "../../json.ts";
+import { print, printError, printJson } from "../../output.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /**
  * Each prerun image test case `name` needs, of the nearest `.thunderjar/` folder in `cwd` or above
- * it: `# <image>`, then its Dockerfile. Permutations with the same image hash share one image. Docker
- * isn't asked anything.
+ * it, with its Dockerfile. Permutations with the same image hash share one image. Docker isn't
+ * asked anything.
  */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain): Promise<string> {
+export async function prerunDockerfiles(cwd: string, name: string, imagePrefix?: string): Promise<{ prerunImage: string; dockerfile: string }[]> {
   const root = await findThunderjarRoot(cwd);
   const testCase = await loadTestCase(root, name);
   const permutations = await hashPermutations(root, testCase);
   const unique = [...new Map(permutations.map((permutation) => [permutation.imageHash, permutation])).values()];
-  return unique.map(({ imageHash, dockerfile }) => `${paint.bold("#")} ${paint.cyan(prerunImage(imageHash, imagePrefix))}\n${dockerfile.trimEnd()}`).join("\n\n");
+  return unique.map(({ imageHash, dockerfile }) => ({ prerunImage: prerunImage(imageHash, imagePrefix), dockerfile }));
+}
+
+/** Each prerun image test case `name` needs, as `# <image>`, then its Dockerfile. See `prerunDockerfiles`. */
+export async function dryRun(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain): Promise<string> {
+  const images = await prerunDockerfiles(cwd, name, imagePrefix);
+  return images.map(({ prerunImage, dockerfile }) => `${paint.bold("#")} ${paint.cyan(prerunImage)}\n${dockerfile.trimEnd()}`).join("\n\n");
 }
 
 /**
@@ -34,9 +41,10 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string, pa
  * as each starts and ends. Then, with an
  * image store, pushes each of them, writing `Pushing <reference> ... done`, then a count. Exits 1
  * with an error if a build secret's variable is unset, Docker can't be reached, has no login for the
- * image store's registry (before anything is built), or a build or push fails.
+ * image store's registry (before anything is built), or a build or push fails. With `json`, prints
+ * the images built, those already present and the references pushed as JSON once it's done.
  */
-async function build(cwd: string, name: string, imagePrefix?: string): Promise<void> {
+async function build(cwd: string, name: string, imagePrefix?: string, json = false): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const { imageStore, build: buildOptions } = await loadProjectConfig(root);
   const testCase = await loadTestCase(root, name);
@@ -69,7 +77,8 @@ async function build(cwd: string, name: string, imagePrefix?: string): Promise<v
         line?.finish(done);
       },
     });
-    print(
+    if (json) printJson({ built, present, pushed });
+    else print(
       [
         paint.green(`${built.length} built`),
         paint.dim(`${present.length} already present`),
@@ -104,10 +113,12 @@ export function createBuildCommand(): Command {
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option("--dry-run", "print each prerun image's name and Dockerfile, without building anything")
     .addOption(imagePrefixOption())
+    .addOption(jsonOption())
     .action(
-      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string }) => {
-        if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
-        else await build(process.cwd(), name, options.imagePrefix);
+      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string; json?: boolean }) => {
+        if (options.dryRun && options.json) printJson(await prerunDockerfiles(process.cwd(), name, options.imagePrefix));
+        else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
+        else await build(process.cwd(), name, options.imagePrefix, options.json);
       }),
     );
 }

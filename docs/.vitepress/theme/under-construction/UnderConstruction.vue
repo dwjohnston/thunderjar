@@ -332,7 +332,7 @@
   --uc-cloud-ink: #2f3644;
   --uc-verge: #c79a5b;
   --uc-verge-edge: #a67c3d;
-  margin-bottom: 2.5rem;
+  margin-bottom: 0;
   border-block: 3px solid var(--uc-ink);
 }
 

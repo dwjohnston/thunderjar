@@ -4,6 +4,7 @@
 // written in between, so the output is the same as it always was.
 
 import { painter } from "./colour.ts";
+import { textOutput } from "./textOutput.ts";
 
 /** Where a waiting line is written: `process.stdout`, or a stand-in for it in tests. */
 export type LineOutput = { isTTY?: boolean; write(text: string): unknown };
@@ -58,7 +59,7 @@ export function elapsed(ms: number): string {
  * after it until it's finished.
  */
 export function waitingLine(label: string, options: WaitingLineOptions = {}): WaitingLine {
-  const { transient = false, out = process.stdout, ticker = everySecond, now = Date.now } = options;
+  const { transient = false, out = textOutput(), ticker = everySecond, now = Date.now } = options;
   const paint = painter(out, options.colour);
   if (!out.isTTY) {
     if (!transient) out.write(label);

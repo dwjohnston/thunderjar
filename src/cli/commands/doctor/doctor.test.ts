@@ -65,3 +65,55 @@ Make sure the runtime can reach the registry and is logged in to it.
     expect(await docker.commands()).toEqual(["docker login ghcr.io"]);
   });
 });
+
+describe("doctor --json", () => {
+  test("0201: each check as JSON, with its lines on stderr", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0201"), ["doctor", "--json"], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toEqual({
+      ok: true,
+      checks: [
+        { check: "config", status: "ok" },
+        { check: "imageStore", status: "none" },
+        { check: "runtime", status: "none" },
+      ],
+    });
+    expect(stderr).toContain("Config ... ok\n");
+  });
+
+  test("0211: the image store and runtime checked, by what they are", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+
+    const { stdout, exitCode } = await thunderjar(scenario("0211"), ["doctor", "--json"], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toEqual({
+      ok: true,
+      checks: [
+        { check: "config", status: "ok" },
+        { check: "imageStore", status: "ok", target: REPOSITORY },
+        { check: "runtime", status: "ok", target: "<REPO>/src/testing/fakeDocker.ts --context cloud" },
+      ],
+    });
+  });
+
+  test("0211, when the runtime can't pull: that check failed, with why, and exit code 1", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], pullDenied: true });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["doctor", "--json"], { env: docker.env });
+
+    expect(exitCode).toBe(1);
+    const report = JSON.parse(stdout);
+    expect(report.ok).toBe(false);
+    expect(report.checks.at(-1)).toEqual({
+      check: "runtime",
+      status: "failed",
+      target: "<REPO>/src/testing/fakeDocker.ts --context cloud",
+      error: expect.stringMatching(/^The runtime couldn't pull from the image store/),
+    });
+    expect(stderr).toContain("Error: The runtime couldn't pull from the image store");
+  });
+});

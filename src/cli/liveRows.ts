@@ -3,6 +3,7 @@
 // piped or written to a file can't be rewritten, so callers write lines one after another there.
 
 import { painter } from "./colour.ts";
+import { textOutput } from "./textOutput.ts";
 import { elapsed, type LineOutput, type Ticker } from "./waitingLine.ts";
 
 /** One line of a LiveRows. */
@@ -39,7 +40,7 @@ const everySecond: Ticker = (tick) => {
 type Row = { text: string; since?: number; done: boolean };
 
 export function liveRows(options: LiveRowsOptions = {}): LiveRows {
-  const { out = process.stdout, ticker = everySecond, now = Date.now } = options;
+  const { out = textOutput(), ticker = everySecond, now = Date.now } = options;
   const paint = painter(out, options.colour);
   // The rows still being redrawn: from the first that isn't done.
   let rows: Row[] = [];

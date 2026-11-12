@@ -409,3 +409,32 @@ Check that your Docker login for ghcr.io can push to ghcr.io/acme/thunderjar-ima
     expect(await docker.commands()).toEqual([]);
   });
 });
+
+describe("--json", () => {
+  test("prints the images built and already present as JSON, with its progress on stderr", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["build", "example", "--json"], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toEqual({ built: ["thunderjar-prerun:b9cd78e6"], present: [], pushed: [] });
+    expect(stderr).toBe("Building thunderjar-prerun:b9cd78e6 ... done\n");
+  });
+
+  test("a failed build is an error on stderr, with nothing on stdout", async () => {
+    await using docker = await fakeDocker({ failing: ["thunderjar-prerun:44230271"] });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["build", "is-prime-baseline", "--json"], { env: docker.env });
+
+    expect({ stdout, exitCode }).toEqual({ stdout: "", exitCode: 1 });
+    expect(stderr).toContain("Error: Building thunderjar-prerun:44230271 failed");
+  });
+
+  test("--dry-run prints each prerun image and its Dockerfile as JSON", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["build", "example", "--dry-run", "--json"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toEqual([{ prerunImage: "thunderjar-prerun:b9cd78e6", dockerfile: expect.stringContaining("FROM ") }]);
+  });
+});
