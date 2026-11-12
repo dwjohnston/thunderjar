@@ -139,6 +139,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   if (remote !== null && imageStore === null) throw new Error("A runtime needs an image store: it runs images from it.");
   const runtime = remote === null ? localRuntime() : remoteRuntime(remote.command);
   const { executionId } = plan;
+  const executionStartedAt = Date.now();
   log.info(
     { executionId, testCase: run.name, task: testCase.task, permutations: plan.permutations.length, imageStore: imageStore?.repository, runtime: remote?.command, concurrency: run.concurrency ?? 1 },
     "execution starting",
@@ -266,8 +267,9 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     const open = async (usesContainer: boolean) =>
       usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime) : recordedContext(recorded);
     log.debug({ ...at, measurements: measurements.length }, "measuring");
+    const measuringAt = Date.now();
     const result = await measureContainerRun(measurements, open);
-    log.info({ ...at, result }, "measured");
+    log.info({ ...at, ms: Date.now() - measuringAt, containers: opened, result }, "measured");
     await store.recordContainerRun({ ...record, result });
     hooks.onMeasured?.(permutation, iteration, result);
   };
@@ -289,7 +291,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       await recording;
       finished = executionRecord(status, new Date().toISOString());
       await store.recordExecution(finished);
-      log.info({ executionId, status }, "execution finished");
+      log.info({ executionId, status, ms: Date.now() - executionStartedAt }, "execution finished");
     }
   }
   return finished as ExecutionRecord;

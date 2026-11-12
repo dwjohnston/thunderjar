@@ -138,14 +138,16 @@ export async function checkLogin(host: string): Promise<void> {
  * Throws a DockerPushError with Docker's reason.
  */
 export async function pushImage(image: string, reference: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
-  log.info({ image, reference }, "pushing image");
+  log.info({ image, reference, runtime: runtime.command }, "pushing image");
+  const startedAt = Date.now();
   for (const args of [["tag", image, reference], ["push", "--quiet", reference]]) {
     const result = await $`${runtime.command} ${args}`.quiet().nothrow();
     if (result.exitCode !== 0) {
-      log.error({ args, exitCode: result.exitCode, stderr: result.stderr.toString() }, "pushing image failed");
+      log.error({ args, exitCode: result.exitCode, ms: Date.now() - startedAt, stderr: result.stderr.toString() }, "pushing image failed");
       throw new DockerPushError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`, reference);
     }
   }
+  log.info({ reference, ms: Date.now() - startedAt }, "pushed image");
 }
 
 /**
@@ -154,11 +156,13 @@ export async function pushImage(image: string, reference: string, runtime: Docke
  */
 export async function pullImage(reference: string, runtime: DockerRuntime): Promise<void> {
   log.info({ reference, runtime: runtime.command }, "pulling image into the runtime");
+  const startedAt = Date.now();
   const result = await $`${runtime.command} pull --quiet ${reference}`.quiet().nothrow();
   if (result.exitCode !== 0) {
-    log.error({ reference, exitCode: result.exitCode, stderr: result.stderr.toString() }, "pulling image failed");
+    log.error({ reference, exitCode: result.exitCode, ms: Date.now() - startedAt, stderr: result.stderr.toString() }, "pulling image failed");
     throw new DockerPullError(reasonOf(result.stderr) || `${named(runtime, "pull")} exited ${result.exitCode}`, reference);
   }
+  log.info({ reference, ms: Date.now() - startedAt }, "pulled image");
 }
 
 /** Runs `binary args…`, throwing a DockerContainerError with Docker's reason if it fails. */
@@ -267,7 +271,9 @@ export async function commitContainer(name: string, image: string, like: string,
   const [entrypoint, cmd] = inspected.trim().split("\t");
   // `ENTRYPOINT []` is ignored; `[""]` clears it.
   const changes = [`ENTRYPOINT ${entrypoint === "null" ? '[""]' : entrypoint}`, `CMD ${cmd === "null" ? '["sh"]' : cmd}`];
+  const startedAt = Date.now();
   await mustRun(["commit", ...changes.flatMap((change) => ["--change", change]), name, image], runtime);
+  log.info({ container: name, image, ms: Date.now() - startedAt }, "committed container");
 }
 
 /** Removes the container `name`, stopped or not. Throws a DockerContainerError. */
