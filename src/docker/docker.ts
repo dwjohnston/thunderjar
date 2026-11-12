@@ -276,6 +276,12 @@ export async function commitContainer(name: string, image: string, like: string,
   log.info({ container: name, image, ms: Date.now() - startedAt }, "committed container");
 }
 
+/** Removes the images `references`, tags of images in `runtime`. Throws a DockerContainerError. */
+export async function removeImages(references: string[], runtime: DockerRuntime = localRuntime()): Promise<void> {
+  await mustRun(["image", "rm", ...references], runtime);
+  log.debug({ references }, "removed images");
+}
+
 /** Removes the container `name`, stopped or not. Throws a DockerContainerError. */
 export async function removeContainer(name: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
   await mustRun(["rm", "--force", name], runtime);

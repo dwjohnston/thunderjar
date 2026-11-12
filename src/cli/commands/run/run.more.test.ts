@@ -341,6 +341,11 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(commands.find((command) => command.startsWith(`${REMOTE} run --name`))).toContain(` ${PRERUN} -c `);
     expect(commands).toContain(`${REMOTE} push --quiet ${postrun}`);
     expect(commands.some((command) => command.startsWith(`${REMOTE} run --detach`))).toBe(true);
+    // Once pushed and measured, the postrun image is removed from the runtime, so its disk doesn't fill.
+    const postrunLocal = `thunderjar-postrun:${executionId}-1-1`;
+    expect(commands.at(-1)).toBe(`${REMOTE} image rm ${postrunLocal} ${postrun}`);
+    expect(await docker.images()).not.toContain(postrunLocal);
+    expect(await docker.images()).not.toContain(postrun);
   });
 
   test("--local runs on the local Docker daemon, ignoring the runtime", async () => {

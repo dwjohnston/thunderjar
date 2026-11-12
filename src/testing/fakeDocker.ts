@@ -6,6 +6,7 @@
 // Its state is a folder, FAKE_DOCKER_DIR, which a test writes and reads:
 //
 //   images        the images that exist, `<repository>:<tag>`, one per line; a build or commit adds one
+//   removed       appended to: each image `image rm` removed, which no longer exists, one per line
 //   unreachable   if present, the daemon can't be reached
 //   pull-denied   if present, every pull fails, as for a runtime with no login for the registry
 //   failing       the images whose build or commit fails, and the references whose push or pull fails, one per line
@@ -99,7 +100,10 @@ export async function fakeDocker({
     env: { THUNDERJAR_DOCKER: FAKE_DOCKER, FAKE_DOCKER_DIR: dir },
     commands: async () => ((await commandsFile.exists()) ? (await commandsFile.text()).split("\n").filter(Boolean) : []),
     contextOf: (image) => `${dir}/contexts/${image}`,
-    images: () => listOf(`${dir}/images`),
+    images: async () => {
+      const removed = (await Bun.file(`${dir}/removed`).exists()) ? new Set(await listOf(`${dir}/removed`)) : new Set<string>();
+      return (await listOf(`${dir}/images`)).filter((image) => !removed.has(image));
+    },
     pushed: async () => ((await Bun.file(`${dir}/pushed`).exists()) ? listOf(`${dir}/pushed`) : []),
     containers: async () =>
       (await Bun.file(`${dir}/containers`).exists())
@@ -133,7 +137,13 @@ if (import.meta.main) {
     fail("Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?");
   }
 
-  const list = async (name: string) => (dir && (await state(name).exists()) ? (await state(name).text()).split("\n").filter(Boolean) : []);
+  const read = async (name: string) => (dir && (await state(name).exists()) ? (await state(name).text()).split("\n").filter(Boolean) : []);
+  // An image removed stays removed: `removed` is appended to, as `images` is.
+  const list = async (name: string) => {
+    if (name !== "images") return read(name);
+    const removed = new Set(await read("removed"));
+    return (await read("images")).filter((image) => !removed.has(image));
+  };
 
   const filesystemOf = (image: string) => `${dir}/filesystems/${encodeURIComponent(image)}`;
 
@@ -311,6 +321,13 @@ if (import.meta.main) {
       fail(`Error response from daemon: pull access denied for ${reference}, repository does not exist or may require 'docker login'`);
     }
     console.log(reference);
+  } else if (command === "image" && subcommand === "rm" && rest.length >= 1) {
+    // docker image rm <image>…
+    const images = await list("images");
+    for (const image of rest) {
+      if (!images.includes(image)) fail(`Error response from daemon: No such image: ${image}`);
+      if (dir) await append("removed", image);
+    }
   } else if (command === "rm" && subcommand === "--force" && rest.length === 1) {
     // docker rm --force <name>
     if (dir) await $`rm -rf ${dir}/containers/${rest[0] as string}`.quiet();
