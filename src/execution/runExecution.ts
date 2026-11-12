@@ -9,7 +9,7 @@
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
 // recorded and measured, and the rest still run, but the execution is `failed`.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
-import { localRuntime, remoteRuntime, removeImages } from "../docker/docker.ts";
+import { inRegistry, localRuntime, remoteRuntime, removeImages } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
@@ -169,9 +169,17 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   // Awaited only by the iterations that need it, so one that fails with none waiting isn't unhandled.
   for (const { promise } of ready.values()) promise.catch(() => {});
   const prepare = async ({ exists, ...image }: PrerunImage & { exists: boolean }) => {
+    const reference = imageStore === null ? undefined : storedPrerunImage(imageStore.repository, image.permutation.imageHash);
+    // A remote runtime needs it only in the image store: if it's there, from an earlier run on
+    // this machine or another, it's neither built nor pushed again.
+    if (!exists && reference !== undefined && remote !== null && (await inRegistry(reference))) {
+      log.info({ image: image.image, reference }, "prerun image already in the image store: not built or pushed");
+      await pullIntoRuntime([reference], runtime, hooks);
+      ready.get(image.permutation.imageHash)?.resolve();
+      return;
+    }
     if (!exists) await buildPrerunImage(root, image, hooks, build);
-    if (imageStore !== null) {
-      const reference = storedPrerunImage(imageStore.repository, image.permutation.imageHash);
+    if (reference !== undefined) {
       await pushToStore(image.image, reference, hooks);
       // So a runtime that can't reach the image store, or has no login for it, fails before its agent runs.
       if (remote !== null) await pullIntoRuntime([reference], runtime, hooks);

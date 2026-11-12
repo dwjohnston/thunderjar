@@ -151,6 +151,17 @@ export async function pushImage(image: string, reference: string, runtime: Docke
 }
 
 /**
+ * Whether the registry has `reference`, asked with `docker manifest inspect`, which reads only its
+ * manifest. False if it can't tell, e.g. it can't reach the registry: then it's built and pushed as
+ * if it weren't there.
+ */
+export async function inRegistry(reference: string): Promise<boolean> {
+  const result = await $`${dockerBinary()} manifest inspect ${reference}`.quiet().nothrow();
+  log.debug({ reference, exitCode: result.exitCode, stderr: result.stderr.toString() }, "asked the registry for an image");
+  return result.exitCode === 0;
+}
+
+/**
  * Pulls `reference` from its registry into `runtime`. Throws a DockerPullError with Docker's
  * reason, e.g. that the runtime can't reach the registry or has no login for it.
  */
