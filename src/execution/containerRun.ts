@@ -35,26 +35,31 @@ export const NOW_MS_FUNCTION = [
 ].join("\n");
 
 /** A turn as the execution wrapper runs it. */
-export type WrappedTurn = Pick<PlannedTurn, "prompt" | "promptPath" | "command"> & Partial<Pick<PlannedTurn, "stderrPath">>;
+export type WrappedTurn = Pick<PlannedTurn, "prompt" | "promptPath" | "resultPath" | "command">;
+
+/**
+ * Where, inside the container, the execution wrapper sends the standard error of the turn whose
+ * result file is `resultPath`: beside it. Otherwise it would be lost: the container's own output
+ * is discarded, and the wrapper itself always exits 0.
+ */
+export const stderrPathOf = (resultPath: string) => `${resultPath.slice(0, resultPath.lastIndexOf("/"))}/stderr.log`;
 
 /**
  * The execution wrapper: writes each turn's prompt to its prompt path, exactly, then runs each
- * turn's command in order, stopping at the first that exits non-zero, sending each one's stderr to
- * its stderr path, if it has one, and writes when it started
+ * turn's command in order, its standard error to `stderrPathOf` its result file, stopping at the
+ * first that exits non-zero, and writes when it started
  * and finished (ms since the epoch) and how it exited to RUN_PATH, which is committed into the
  * postrun image with the rest. With several turns, it records each turn that ran under `turns`.
  * When it starts, RUN_PATH holds only its start, so a run killed for taking too long still says
  * when it started.
  */
 export function executionWrapper(turns: WrappedTurn[]): string {
-  const folderOf = (path: string) => path.slice(0, path.lastIndexOf("/"));
-  const paths = turns.flatMap(({ promptPath, stderrPath }) => (stderrPath === undefined ? [promptPath] : [promptPath, stderrPath]));
-  const folders = [...new Set(["/thunderjar", ...paths.map(folderOf)])];
+  const folders = [...new Set(["/thunderjar", ...turns.map(({ promptPath }) => promptPath.slice(0, promptPath.lastIndexOf("/")))])];
   const many = turns.length > 1;
-  const runTurn = ({ command, stderrPath }: WrappedTurn, i: number) => {
+  const runTurn = ({ command, resultPath }: WrappedTurn, i: number) => {
     const run = [
       "turn_start=$(now_ms)",
-      `sh -c ${shellQuote(command)}${stderrPath === undefined ? "" : ` 2> ${stderrPath}`}`,
+      `sh -c ${shellQuote(command)} 2> ${stderrPathOf(resultPath)}`,
       "code=$?",
       ...(many ? [`turns="$turns${i === 0 ? "" : ","}{\\"startedAt\\":$turn_start,\\"finishedAt\\":$(now_ms),\\"exitCode\\":$code}"`] : []),
     ];
@@ -77,7 +82,7 @@ export type ContainerRun = {
   prerunImage: string;
   postrunImage: string;
   /** Its turns: one, unless its initial prompt has several. */
-  turns: (WrappedTurn & Pick<PlannedTurn, "resultPath" | "stderrPath">)[];
+  turns: (WrappedTurn & Pick<PlannedTurn, "resultPath">)[];
   /** The names of the environment variables passed into the container, from Thunderjar's own. */
   env: string[];
   /** More `docker run` options, from its base image. */
@@ -94,19 +99,9 @@ export type ContainerRunOutcome = {
   execution: Execution;
   /** The text of each turn's result file, or null if it left none, in order. */
   harnessResults: (string | null)[];
-  /** The tail of each turn's stderr, or null if it left none, in order: of the turns that ran. */
-  harnessStderrs: (string | null)[];
+  /** The standard error of each turn, or null if it never ran, in order. */
+  stderrs: (string | null)[];
 };
-
-/** How much of a turn's stderr is kept: its last 16 KiB. */
-export const STDERR_TAIL_BYTES = 16 * 1024;
-
-/** The last `bytes` bytes of `text`, about: cut at a character, so never mid-character. */
-export function tail(text: string, bytes: number = STDERR_TAIL_BYTES): string {
-  const encoded = new TextEncoder().encode(text);
-  if (encoded.length <= bytes) return text;
-  return new TextDecoder().decode(encoded.subarray(encoded.length - bytes)).replace(/^\uFFFD+/, "");
-}
 
 /** Whether `value` is plausibly ms since the epoch: from 2001-09-09 (13 digits) up to 2286. */
 const isEpochMs = (value: unknown): value is number =>
@@ -157,14 +152,13 @@ export async function runInContainer(run: ContainerRun): Promise<ContainerRunOut
     const killedAt = stop.timedOut ? stop.killedAt : undefined;
     const execution = parseExecution(await readContainerFile(run.container, RUN_PATH, runtime), run.timeoutSeconds, killedAt);
     const harnessResults: (string | null)[] = [];
-    const harnessStderrs: (string | null)[] = [];
-    for (const { resultPath, stderrPath } of run.turns) {
+    const stderrs: (string | null)[] = [];
+    for (const { resultPath } of run.turns) {
       harnessResults.push((await readContainerFile(run.container, resultPath, runtime)) ?? null);
-      const stderr = await readContainerFile(run.container, stderrPath, runtime);
-      harnessStderrs.push(stderr === undefined ? null : tail(stderr));
+      stderrs.push((await readContainerFile(run.container, stderrPathOf(resultPath), runtime)) ?? null);
     }
     await commitContainer(run.container, run.postrunImage, run.prerunImage, runtime);
-    return { execution, harnessResults, harnessStderrs };
+    return { execution, harnessResults, stderrs };
   } finally {
     await removeContainer(run.container, runtime).catch(() => {});
   }

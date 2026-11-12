@@ -417,7 +417,7 @@ Recorded in <DATA>/runs.sqlite
     ]);
     // Why it exited non-zero is kept, and logged.
     expect(store.containerRuns.map(({ harnessStderr }) => harnessStderr)).toEqual(["Error: unknown model\n", ""]);
-    expect(log).toMatch(/WARN.*agent didn't exit 0[\s\S]*stderr: "Error: unknown model\\n"/);
+    expect(log).toMatch(/WARN: execution: agent exited non-zero[\s\S]*"stderr": "Error: unknown model"/);
     // A failed run is committed too, so what the agent left can be looked at.
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
     expect(await docker.containers()).toEqual([]);

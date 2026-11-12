@@ -21,6 +21,7 @@ import type {
   RecordedMeasure,
   RunDataStore,
 } from "../store/runDataStore.ts";
+import { agentOutput, head, tail } from "./agentOutput.ts";
 import { runInContainer } from "./containerRun.ts";
 import { containerName, storedPostrunImage, storedPrerunImage } from "./images.ts";
 import { type PullHooks, pullIntoRuntime, type PushHooks, pushToStore } from "./imageStore.ts";
@@ -34,10 +35,8 @@ import { buildPrerunImage, type PrerunBuildHooks, type PrerunImage, prerunImages
 
 const log = moduleLogger("execution");
 
-/** How much of an agent's stderr and result file is logged when it exits non-zero: their ends. */
-const LOGGED_TAIL_CHARS = 2000;
-/** How much of a result file is logged when its token costs can't be parsed: its start. */
-const LOGGED_HEAD_CHARS = 500;
+/** How much of each turn's standard error is kept on its record, in characters: its end. */
+const RECORDED_STDERR_LIMIT = 16_000;
 
 export type RunHooks = PrerunBuildHooks &
   PushHooks &
@@ -228,7 +227,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     const at = { executionId, permutation: permutation.number, iteration: iteration.number };
     log.info({ ...at, permutationHash: permutation.permutation.hash, turns: iteration.turns.length }, "container run starting");
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-    const { execution, harnessResults, harnessStderrs } = await runInContainer({
+    const { execution, harnessResults, stderrs } = await runInContainer({
       prerunImage: prerunImageOf(permutation),
       postrunImage: iteration.postrunImage,
       turns: iteration.turns,
@@ -240,37 +239,27 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     });
     const turns = harnessResults.map((harnessResult, i) => ({
       harnessResult,
-      harnessStderr: harnessStderrs[i] ?? null,
+      // Its end, where an agent's error usually is: kept on the record, so `show` can say why it failed.
+      harnessStderr: stderrs[i] === null || stderrs[i] === undefined ? null : tail(stderrs[i], RECORDED_STDERR_LIMIT),
       reply: collectReply(permutation.harness.collectReply, harnessResult),
     }));
     const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, harnessResults, {
       version: permutation.version,
       modelId: permutation.modelId,
     });
-    if (tokenCosts.outcome === "unavailable" && tokenCosts.reason === "unparseable") {
-      log.debug({ ...at, resultFiles: harnessResults.map((raw) => raw?.slice(0, LOGGED_HEAD_CHARS) ?? null) }, "token costs unparseable");
-    }
     const record = containerRunRecord(run, permutation, iteration, execution, turns, tokenCosts);
     const { harnessResult, reply } = record;
     await store.recordContainerRun(record);
     // Timed out, its exit code is null.
     if (execution.exitCode !== 0) status = "failed";
     log.info({ ...at, exitCode: execution.exitCode, timedOut: execution.timedOut, tokenCosts }, "container run finished");
-    if (execution.exitCode !== 0) {
-      // Of the last turn that ran: the one that exited non-zero, or was killed.
-      const turn = turns.findLastIndex((t) => t.harnessStderr !== null || t.harnessResult !== null);
-      const { harnessStderr = null, harnessResult = null } = turns[turn] ?? {};
-      log.warn(
-        {
-          ...at,
-          ...(turns.length > 1 && { turn: turn + 1 }),
-          exitCode: execution.exitCode,
-          timedOut: execution.timedOut,
-          stderr: harnessStderr === null ? null : harnessStderr.slice(-LOGGED_TAIL_CHARS),
-          resultFile: harnessResult === null ? null : harnessResult.slice(-LOGGED_TAIL_CHARS),
-        },
-        "agent didn't exit 0",
-      );
+    // What the agent said, so the log says why it failed: its stderr is otherwise lost (#140).
+    const output = agentOutput(harnessResults, stderrs);
+    if (execution.timedOut) log.warn({ ...at, timeoutSeconds: execution.timeoutSeconds, output }, "agent timed out");
+    else if (execution.exitCode !== 0) log.warn({ ...at, exitCode: execution.exitCode, output }, "agent exited non-zero");
+    else if (output.some((turn) => turn.stderr !== undefined)) log.debug({ ...at, output }, "agent output");
+    if (tokenCosts.outcome === "unavailable" && tokenCosts.reason === "unparseable") {
+      log.debug({ ...at, results: harnessResults.map((result) => result && head(result, 500)) }, "token costs unparseable from result files");
     }
     hooks.onRan?.(permutation, iteration, record);
     if (imageStore !== null) {
