@@ -1,6 +1,9 @@
 // A container run's token costs: each turn's result file read by its harness's
 // `collectTokenCosts`, and summed per model. Collected for every run, not declared (PRD 087).
 import type { ModelTokenCosts, TokenCostCollector, TokenCosts } from "../api/declarations.ts";
+import { moduleLogger } from "../log/logger.ts";
+
+const log = moduleLogger("tokenCosts");
 
 type Unavailable = Extract<TokenCosts, { outcome: "unavailable" }>;
 
@@ -24,8 +27,12 @@ function collectOne(collect: TokenCostCollector, raw: string | null, ctx: { vers
   if (raw === null) return { outcome: "unavailable", reason: "absent" };
   try {
     const costs: unknown = collect(raw, ctx);
-    return isTokenCosts(costs) ? costs : { outcome: "unavailable", reason: "unparseable" };
-  } catch {
+    if (isTokenCosts(costs)) return costs;
+    // At warn, with what it returned: "unparseable" alone doesn't say what to fix in the collector.
+    log.warn({ ...ctx, returned: JSON.stringify(costs)?.slice(0, 500) }, "collectTokenCosts returned something that isn't token costs");
+    return { outcome: "unavailable", reason: "unparseable" };
+  } catch (error) {
+    log.warn({ ...ctx, error: error instanceof Error ? error.message : String(error) }, "collectTokenCosts threw");
     return { outcome: "unavailable", reason: "unparseable" };
   }
 }

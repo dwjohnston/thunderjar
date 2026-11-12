@@ -283,7 +283,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     else if (execution.exitCode !== 0) log.warn({ ...at, exitCode: execution.exitCode, output }, "agent exited non-zero");
     else if (output.some((turn) => turn.stderr !== undefined)) log.debug({ ...at, output }, "agent output");
     if (tokenCosts.outcome === "unavailable" && tokenCosts.reason === "unparseable") {
-      log.debug({ ...at, result: resultFile && head(resultFile, 500) }, "token costs unparseable from the result file");
+      log.warn({ ...at, result: resultFile && head(resultFile, 500) }, "token costs unparseable from the result file");
     }
     hooks.onRan?.(permutation, iteration, record);
     // Committed in the runtime, so pushed from there.
