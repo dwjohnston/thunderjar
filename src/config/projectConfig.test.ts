@@ -134,6 +134,7 @@ export default declareConfig({
     expect((await loadProjectConfig(await findThunderjarRoot(scenario("0211")))).runtime).toEqual({
       command: [env ?? "docker", "--context", "cloud"],
       concurrency: 1,
+      keepPostrunImages: false,
     });
   });
 
@@ -165,6 +166,11 @@ describe("runtimeProblem", () => {
     expect(runtimeProblem(undefined, null)).toBeUndefined();
     expect(runtimeProblem({ command: ["docker", "--context", "cloud"] }, STORE)).toBeUndefined();
     expect(runtimeProblem({ command: ["docker"], concurrency: 4 }, STORE)).toBeUndefined();
+  });
+
+  test("keepPostrunImages is true or false", () => {
+    expect(runtimeProblem({ command: ["docker"], keepPostrunImages: true }, STORE)).toBeUndefined();
+    expect(runtimeProblem({ command: ["docker"], keepPostrunImages: "yes" }, STORE)).toBe('keepPostrunImages must be true or false, got "yes"');
   });
 
   test.each([[0], [-1], [1.5], ["4"], [null]])("concurrency %p is not a number of containers", (concurrency) => {

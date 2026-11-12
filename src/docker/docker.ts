@@ -162,14 +162,16 @@ export async function checkLogin(host: string): Promise<void> {
  * Throws a DockerPushError with Docker's reason.
  */
 export async function pushImage(image: string, reference: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
-  log.info({ image, reference }, "pushing image");
+  log.info({ image, reference, runtime: runtime.command }, "pushing image");
+  const startedAt = Date.now();
   for (const args of [["tag", image, reference], ["push", "--quiet", reference]]) {
     const result = await $`${runtime.command} ${args}`.quiet().nothrow();
     if (result.exitCode !== 0) {
-      log.error({ args, exitCode: result.exitCode, stderr: result.stderr.toString() }, "pushing image failed");
+      log.error({ args, exitCode: result.exitCode, ms: Date.now() - startedAt, stderr: result.stderr.toString() }, "pushing image failed");
       throw new DockerPushError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`, reference);
     }
   }
+  log.info({ reference, ms: Date.now() - startedAt }, "pushed image");
 }
 
 /**
@@ -178,19 +180,23 @@ export async function pushImage(image: string, reference: string, runtime: Docke
  */
 export async function pullImage(reference: string, runtime: DockerRuntime): Promise<void> {
   log.info({ reference, runtime: runtime.command }, "pulling image into the runtime");
+  const startedAt = Date.now();
   const result = await $`${runtime.command} pull --quiet ${reference}`.quiet().nothrow();
   if (result.exitCode !== 0) {
-    log.error({ reference, exitCode: result.exitCode, stderr: result.stderr.toString() }, "pulling image failed");
+    log.error({ reference, exitCode: result.exitCode, ms: Date.now() - startedAt, stderr: result.stderr.toString() }, "pulling image failed");
     throw new DockerPullError(reasonOf(result.stderr) || `${named(runtime, "pull")} exited ${result.exitCode}`, reference);
   }
+  log.info({ reference, ms: Date.now() - startedAt }, "pulled image into the runtime");
 }
 
 /** Runs `binary args…`, throwing a DockerContainerError with Docker's reason if it fails. */
 async function mustRun(args: string[], runtime: DockerRuntime = localRuntime()): Promise<string> {
-  log.debug({ command: [...runtime.command, ...args] }, "running docker");
+  const startedAt = Date.now();
   const result = await $`${runtime.command} ${args}`.quiet().nothrow();
+  log.debug({ command: [...runtime.command, ...args], exitCode: result.exitCode, ms: Date.now() - startedAt }, "ran docker");
   if (result.exitCode !== 0) {
-    log.debug({ command: [...runtime.command, ...args], exitCode: result.exitCode, stderr: result.stderr.toString() }, "docker failed");
+    // At warn, so the default log level keeps Docker's whole reason: the error carries only its last line.
+    log.warn({ command: [...runtime.command, ...args], exitCode: result.exitCode, stderr: result.stderr.toString() }, "docker failed");
     throw new DockerContainerError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`);
   }
   return result.stdout.toString();
@@ -297,6 +303,23 @@ export async function commitContainer(name: string, image: string, like: string,
 /** Removes the container `name`, stopped or not. Throws a DockerContainerError. */
 export async function removeContainer(name: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
   await mustRun(["rm", "--force", name], runtime);
+}
+
+/**
+ * Removes each of `images`, tags of images in `runtime`: an image goes once its last tag does.
+ * Throws a DockerContainerError, e.g. if a container still uses one.
+ */
+export async function removeImages(images: string[], runtime: DockerRuntime = localRuntime()): Promise<void> {
+  await mustRun(["image", "rm", ...images], runtime);
+}
+
+/**
+ * How much disk `runtime`'s Docker uses, as `docker system df` reports it: a line per kind, e.g.
+ * `Images: 37.33GB (25.4GB (68%) reclaimable)`. Throws a DockerContainerError.
+ */
+export async function diskUsage(runtime: DockerRuntime = localRuntime()): Promise<string[]> {
+  const out = await mustRun(["system", "df", "--format", "{{.Type}}: {{.Size}} ({{.Reclaimable}} reclaimable)"], runtime);
+  return out.split("\n").filter(Boolean);
 }
 
 /**

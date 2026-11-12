@@ -648,6 +648,12 @@ export type RuntimeConfig = {
    * runtime. It's given the same variables as `beforeRun`. Not run if `beforeRun` failed.
    */
   afterRun?: string[];
+  /**
+   * Whether each postrun image stays on the runtime once it's pushed to the image store and
+   * measured. `false` by default: it's removed, so the runtime's disk doesn't fill up, one image
+   * per container run. The image store still has it. Prerun images always stay, for the next run.
+   */
+  keepPostrunImages?: boolean;
 };
 
 /**

@@ -10,6 +10,7 @@ import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageS
 import { type PlannedExecution, type PlannedIteration, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
 import { runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
 import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
+import type { ExecutionTimings } from "../../../execution/timings.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, painter, plain } from "../../colour.ts";
@@ -142,6 +143,33 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
   return [...varying.map((axis) => permutation[axis]), harness, permutation.initialPrompt].join(" | ");
 }
 
+/** What `--timings` calls each phase. */
+const PHASE_LABELS: Record<string, string> = {
+  build: "building prerun images",
+  pushPrerun: "pushing prerun images",
+  pullPrerun: "pulling prerun images into the runtime",
+  agent: "running agents",
+  collect: "reading what agents left",
+  commit: "committing postrun images",
+  pushPostrun: "pushing postrun images",
+  measure: "measuring",
+  cleanup: "removing images from the runtime",
+};
+
+/**
+ * `--timings`' lines: how long the execution took, then each phase that ran, with how many
+ * times, how long they took together, and the longest. Phases overlap when several run at once,
+ * so their totals can add up to more than the whole.
+ */
+export function showTimings({ wallMs, phases }: ExecutionTimings): string {
+  const rows = Object.entries(phases).map(([phase, { count, totalMs, maxMs }]) => [PHASE_LABELS[phase] ?? phase, `${count}×`, `total ${duration(totalMs)}`, `longest ${duration(maxMs)}`]);
+  const widths = [0, 1, 2].map((column) => Math.max(0, ...rows.map((row) => (row[column] as string).length)));
+  return [
+    `Timings: ${duration(wallMs)} in all`,
+    ...rows.map(([label, count, total, longest]) => `  ${(label as string).padEnd(widths[0] as number)}  ${(count as string).padStart(widths[1] as number)}  ${(total as string).padEnd(widths[2] as number)}  ${longest}`),
+  ].join("\n");
+}
+
 /** What to say when the run data store can't be used, and what that meant for the run. */
 const storeFailure = (cwd: string, { path, message }: RunDataStoreError, consequence: string) =>
   `Can't use the run data store, ${displayPath(cwd, path)}, ${consequence}: ${message}\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead.`;
@@ -177,6 +205,7 @@ async function run(
   concurrencyOption?: number,
   iterations?: number,
   json = false,
+  showsTimings = false,
 ): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const config = await loadProjectConfig(root);
@@ -281,6 +310,7 @@ async function run(
     }
   };
   if (!(await runHook("beforeRun"))) return;
+  let timings: ExecutionTimings | undefined;
   try {
     const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
       onBuilding: (image) => {
@@ -372,6 +402,7 @@ async function run(
         close(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
       },
       onDone: (_permutation, iteration) => rows.get(iteration.postrunImage)?.done(),
+      onTimings: (spent) => void (timings = spent),
     });
     live?.stop();
     print(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
@@ -418,6 +449,7 @@ async function run(
     line = undefined;
     // So a runtime started for the run is stopped, however it ended.
     await runHook("afterRun");
+    if (showsTimings && timings !== undefined) print(showTimings(timings));
   }
 }
 
@@ -445,6 +477,7 @@ export function createRunCommand(): Command {
         return Number(value);
       }),
     )
+    .option("--timings", "once the execution ends, print how long each of its phases took: builds, pushes, pulls, agents, commits and measuring")
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())
     .addOption(jsonOption())
@@ -452,11 +485,11 @@ export function createRunCommand(): Command {
       reportingConfigErrors(
         async (
           name: string,
-          options: { dryRun?: boolean; local?: boolean; concurrency?: number; iterations?: number; imagePrefix: string; dataDir?: string; json?: boolean },
+          options: { dryRun?: boolean; local?: boolean; concurrency?: number; iterations?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean },
         ) => {
           if (options.dryRun && options.json) printJson(executionPlanJson(await planDryRun(process.cwd(), name, options.imagePrefix, options.iterations)));
           else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, options.iterations, painter()));
-          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, options.iterations, options.json);
+          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, options.iterations, options.json, options.timings);
         },
       ),
     );

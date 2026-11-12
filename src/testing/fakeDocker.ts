@@ -6,6 +6,7 @@
 // Its state is a folder, FAKE_DOCKER_DIR, which a test writes and reads:
 //
 //   images        the images that exist, `<repository>:<tag>`, one per line; a build or commit adds one
+//   removed       appended to: each image removed with `image rm`, which no longer exists
 //   unreachable   if present, the daemon can't be reached
 //   pull-denied   if present, every pull fails, as for a runtime with no login for the registry
 //   failing       the images whose build or commit fails, and the references whose push or pull fails, one per line
@@ -36,7 +37,10 @@
 //
 // A leading `--context <name>`, as a runtime's command may give, is recorded and otherwise ignored:
 // the runtime shares the fake's state. `run` takes `--pull missing` as well as `--pull never`.
-// `pull --quiet <reference>` succeeds only for a reference that was pushed.
+// `pull --quiet <reference>` succeeds only for a reference that was pushed. `image rm <image>…`
+// removes tags from images, failing for one that doesn't exist or is in failing, or for any if
+// FAKE_DOCKER_FAIL_IMAGE_RM is set. `system df`
+// reports made-up sizes: 100MB an image.
 //
 // Without FAKE_DOCKER_DIR the daemon is reachable, no image exists, nothing is recorded, and no
 // container can run. Tests make its state with `fakeDocker()`.
@@ -97,7 +101,10 @@ export async function fakeDocker({
     env: { THUNDERJAR_DOCKER: FAKE_DOCKER, FAKE_DOCKER_DIR: dir },
     commands: async () => ((await commandsFile.exists()) ? (await commandsFile.text()).split("\n").filter(Boolean) : []),
     contextOf: (image) => `${dir}/contexts/${image}`,
-    images: () => listOf(`${dir}/images`),
+    images: async () => {
+      const removed = new Set((await Bun.file(`${dir}/removed`).exists()) ? await listOf(`${dir}/removed`) : []);
+      return (await listOf(`${dir}/images`)).filter((image) => !removed.has(image));
+    },
     pushed: async () => ((await Bun.file(`${dir}/pushed`).exists()) ? listOf(`${dir}/pushed`) : []),
     containers: async () =>
       (await Bun.file(`${dir}/containers`).exists())
@@ -131,7 +138,13 @@ if (import.meta.main) {
     fail("Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?");
   }
 
-  const list = async (name: string) => (dir && (await state(name).exists()) ? (await state(name).text()).split("\n").filter(Boolean) : []);
+  const listed = async (name: string) => (dir && (await state(name).exists()) ? (await state(name).text()).split("\n").filter(Boolean) : []);
+  /** The lines of the state file `name`. For `images`: without those removed with `image rm`. */
+  const list = async (name: string) => {
+    if (name !== "images") return listed(name);
+    const removed = new Set(await listed("removed"));
+    return (await listed("images")).filter((image) => !removed.has(image));
+  };
 
   const filesystemOf = (image: string) => `${dir}/filesystems/${encodeURIComponent(image)}`;
 
@@ -286,6 +299,22 @@ if (import.meta.main) {
       fail(`Error response from daemon: pull access denied for ${reference}, repository does not exist or may require 'docker login'`);
     }
     console.log(reference);
+  } else if (command === "image" && subcommand === "rm" && rest.length > 0) {
+    // docker image rm <image>…
+    const images = await list("images");
+    for (const image of rest) {
+      if (!images.includes(image)) fail(`Error response from daemon: No such image: ${image}`);
+      if (Bun.env.FAKE_DOCKER_FAIL_IMAGE_RM || (await list("failing")).includes(image)) {
+        fail(`Error response from daemon: conflict: unable to remove repository reference "${image}" (must force)`);
+      }
+    }
+    // Appended, like images: never rewritten, so commands running at once don't lose each other's lines.
+    for (const image of rest) if (dir) await append("removed", image);
+    for (const image of rest) console.log(`Untagged: ${image}`);
+  } else if (command === "system" && subcommand === "df" && rest[0] === "--format") {
+    // docker system df --format <template>
+    console.log(`Images: ${(await list("images")).length * 100}MB (0B (0%) reclaimable)`);
+    console.log("Containers: 0B (0B reclaimable)");
   } else if (command === "rm" && subcommand === "--force" && rest.length === 1) {
     // docker rm --force <name>
     if (dir) await $`rm -rf ${dir}/containers/${rest[0] as string}`.quiet();

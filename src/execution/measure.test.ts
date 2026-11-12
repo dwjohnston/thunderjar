@@ -69,6 +69,20 @@ describe("measureContainerRun", () => {
     });
   });
 
+  test("with a concurrency above 1, contexts are open at once, each still its own, and the measures keep their declared order", async () => {
+    const log: string[] = [];
+
+    const result = await measureContainerRun([EXISTS, IGNORES, SAYS_ELI], opener({ "isPrime.ts": "// @ts-ignore\n" }, log), () => NOW, 2);
+
+    // The second opens before the first closes; the third waits for one of them.
+    expect(log.slice(0, 2)).toEqual(["open 1", "open 2"]);
+    expect(log.indexOf("open 3")).toBeGreaterThan(Math.min(log.indexOf("close 1"), log.indexOf("close 2")));
+    expect(log.toSorted()).toEqual(["close 1", "close 2", "close 3", "open 1", "open 2", "open 3"]);
+    expect(Object.keys(result)).toEqual(["exists", "ignores", "saysEli"]);
+    expect(result.exists?.outcome).toEqual({ outcome: "measured", data: true });
+    expect(result.ignores?.outcome).toEqual({ outcome: "measured", data: 1 });
+  });
+
   test("an instrument that throws gives its measure erroredWhileMeasuring, by message, and the rest are still taken", async () => {
     const log: string[] = [];
     const open = opener({ "isPrime.ts": "export {};\n" }, log);

@@ -437,6 +437,64 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(commands.find((command) => command.startsWith(`${REMOTE} run --name`))).toContain(` ${PRERUN} -c `);
     expect(commands).toContain(`${REMOTE} push --quiet ${postrun}`);
     expect(commands.some((command) => command.startsWith(`${REMOTE} run --detach`))).toBe(true);
+    // Pushed and measured, the postrun image is removed from the runtime, by both its tags. The prerun image stays.
+    expect(commands.filter((command) => command.includes(" image rm "))).toEqual([`${REMOTE} image rm thunderjar-postrun:${executionId}-1-1 ${postrun}`]);
+    // Its disk usage is logged before and after.
+    expect(commands.filter((command) => command.startsWith(`${REMOTE} system df`))).toHaveLength(2);
+    expect(await docker.images()).toEqual(["thunderjar-prerun:ae60c784", PRERUN]);
+  });
+
+  test("with keepPostrunImages, each postrun image stays on the runtime", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyScenarioProject("0211");
+    const config = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
+    await Bun.write(config, (await Bun.file(config).text()).replace('"--context", "cloud"]', '"--context", "cloud"], keepPostrunImages: true'));
+    const data = dataDir();
+
+    const { exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    const { executionId } = (await readStore(data)).execution as ExecutionRecord;
+    expect((await docker.commands()).some((command) => command.includes(" image rm "))).toBe(false);
+    expect(await docker.images()).toContain(`thunderjar-postrun:${executionId}-1-1`);
+  });
+
+  test("a postrun image that can't be removed from the runtime doesn't fail the run: it's recorded, pushed and measured", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    const data = dataDir();
+    // The fake fails to remove any image named in `failing`; the postrun image's name isn't known until it runs.
+    const { stdout, stderr, exitCode, log } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", data], {
+      env: { ...docker.env, FAKE_DOCKER_FAIL_IMAGE_RM: "1" },
+      log: true,
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("isPrimeTemplateTest: {passed: 3, failed: 2}");
+    expect((await readStore(data)).execution.status).toBe("complete");
+    expect(log).toContain("WARN: execution: couldn't remove the postrun image from the runtime");
+  });
+
+  test("--timings prints how long each phase took, once the run and the runtime's afterRun are done", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+
+    const { stdout, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--timings", "--data-dir", dataDir()], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    const lines = stdout.split("\n");
+    const from = lines.indexOf("Timings: <duration> in all");
+    expect(from).toBeGreaterThan(lines.findIndex((line) => line.startsWith("Recorded in ")));
+    expect(lines.slice(from + 1, -1).map((line) => line.trim().replace(/ {2,}/g, "  "))).toEqual([
+      "building prerun images  1×  total <duration>  longest <duration>",
+      "pushing prerun images  1×  total <duration>  longest <duration>",
+      "pulling prerun images into the runtime  1×  total <duration>  longest <duration>",
+      "running agents  1×  total <duration>  longest <duration>",
+      "reading what agents left  1×  total <duration>  longest <duration>",
+      "committing postrun images  1×  total <duration>  longest <duration>",
+      "pushing postrun images  1×  total <duration>  longest <duration>",
+      "measuring  1×  total <duration>  longest <duration>",
+      "removing images from the runtime  1×  total <duration>  longest <duration>",
+    ]);
   });
 
   test("--local runs on the local Docker daemon, ignoring the runtime", async () => {
@@ -482,11 +540,12 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(at("iteration 2/3  fake-harness-alpha | plain  started")).toBeLessThan(firstDone);
     expect(at("iteration 3/3  fake-harness-alpha | plain  started")).toBeGreaterThan(firstDone);
     for (const n of [1, 2, 3]) {
-      expect(lines.filter((line) => line.startsWith(` 1/1  iteration ${n}/3  fake-harness-alpha | plain  `))).toEqual([
-        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  started`,
-        expect.stringMatching(/  done \(.*\)$/),
-        expect.stringMatching(/  pushed ghcr\.io\/acme\/thunderjar-images:postrun-/),
+      const mine = lines.filter((line) => line.startsWith(` 1/1  iteration ${n}/3  fake-harness-alpha | plain  `));
+      expect(mine.slice(0, 2)).toEqual([` 1/1  iteration ${n}/3  fake-harness-alpha | plain  started`, expect.stringMatching(/  done \(.*\)$/)]);
+      // Its postrun image is pushed while it's measured, so these two come in either order.
+      expect(mine.slice(2).toSorted()).toEqual([
         ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1`,
+        expect.stringMatching(/  pushed ghcr\.io\/acme\/thunderjar-images:postrun-/),
       ]);
     }
     const { execution, containerRuns } = await readStore(data);
