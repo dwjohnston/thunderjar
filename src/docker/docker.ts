@@ -68,8 +68,20 @@ export const remoteRuntime = (command: string[]): DockerRuntime => ({ command, p
 /** How a failed command is named in an error: `docker run`, or the runtime's command and its subcommand. */
 const named = (runtime: DockerRuntime, subcommand: string | undefined) => `\`${[...runtime.command, subcommand].join(" ")}\``;
 
-/** The last line of a failed command's stderr: where Docker puts its reason. */
-const reasonOf = (stderr: { toString(): string }) => stderr.toString().trim().split("\n").at(-1);
+/** How much of a connection error is shown: it quotes the whole command and URL that failed. */
+const CONNECT_REASON_LENGTH = 400;
+
+/**
+ * Why a command failed, from its stderr: its last line, where Docker puts its reason. Unless the
+ * daemon couldn't be reached: then the line that says so, since what follows it is the output of
+ * whatever was connecting, e.g. an SSH proxy's hints, whose last line says nothing.
+ */
+export function reasonOf(stderr: { toString(): string }): string | undefined {
+  const lines = stderr.toString().trim().split("\n");
+  const connect = lines.find((line) => /^(error during connect|Cannot connect to the Docker daemon)/.test(line));
+  if (connect === undefined) return lines.at(-1);
+  return connect.length <= CONNECT_REASON_LENGTH ? connect : `${connect.slice(0, CONNECT_REASON_LENGTH - 1)}…`;
+}
 
 /** How many lines of a failed build step's output are shown with Docker's reason. */
 const BUILD_STEP_LINES = 5;

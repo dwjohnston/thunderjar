@@ -17,6 +17,7 @@ import {
   imagesIn,
   pushImage,
   readContainerFile,
+  reasonOf,
   removeContainer,
   runContainer,
   startContainer,
@@ -226,4 +227,18 @@ ERROR: failed to build: failed to solve: process "/bin/sh -c npm install --globa
 test("buildFailureReason is Docker's last line when no step's output is repeated", () => {
   expect(buildFailureReason("#1 load\nERROR: failed to build: secret id=npm: env NPM_TOKEN is not set\n")).toBe("ERROR: failed to build: secret id=npm: env NPM_TOKEN is not set");
   expect(buildFailureReason("")).toBe("");
+});
+
+test("reasonOf is the last line, unless the daemon couldn't be reached: then the line that says so", () => {
+  expect(reasonOf("Unable to find image\nError response from daemon: pull access denied\n")).toBe("Error response from daemon: pull access denied");
+  const unreachable = `error during connect: Get "http://docker.example.com/v1.56/images/json": command [ssh -T -- tjfly docker system dial-stdio] has exited with exit status 255: stderr=Error: app thunderjar-runtime has no started VMs.
+It may be unhealthy or not have been deployed yet.
+Try the following command to verify:
+
+fly status
+`;
+  expect(reasonOf(unreachable)).toBe(
+    'error during connect: Get "http://docker.example.com/v1.56/images/json": command [ssh -T -- tjfly docker system dial-stdio] has exited with exit status 255: stderr=Error: app thunderjar-runtime has no started VMs.',
+  );
+  expect(reasonOf(`error during connect: ${"x".repeat(900)}`)).toHaveLength(400);
 });
