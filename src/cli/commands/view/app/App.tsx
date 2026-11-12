@@ -3,7 +3,20 @@
 import { useEffect, useState } from "react";
 import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure } from "../../../../store/runDataStore.ts";
 import { agentEnd, dollars, duration, knownCost, minute, plural, type RunTotals, runTotals, thousands, totalTokens } from "../../../format.ts";
+import type { Axis } from "../../../../config/permutations.ts";
 import type { ExecutionSummary } from "../view.ts";
+import {
+  commonParameters,
+  groupByPermutation,
+  PARAMETER_COLUMNS,
+  parameterText,
+  type Summary,
+  summariseAgent,
+  summariseCost,
+  summariseDuration,
+  summariseMeasure,
+  summariseTokens,
+} from "./aggregate.ts";
 
 type Loaded<T> = { state: "loading" } | { state: "loaded"; data: T } | { state: "error"; message: string };
 
@@ -165,7 +178,165 @@ function measureText({ outcome }: RecordedMeasure): string {
 
 function MeasureCell({ measure }: { measure: RecordedMeasure | undefined }) {
   const text = measure === undefined ? "" : measureText(measure);
-  return <td>{text}</td>;
+  return <td className="measure">{text}</td>;
+}
+
+/** A summary, with its smaller line beneath it if it has one. */
+function SummaryCell({ summary, className }: { summary: Summary | undefined; className?: string }) {
+  if (summary === undefined)
+    return (
+      <td>
+        <span className="muted">—</span>
+      </td>
+    );
+  return (
+    <td className={className}>
+      {summary.text}
+      {summary.detail !== undefined && <span className="detail">{summary.detail}</span>}
+    </td>
+  );
+}
+
+/** One container run's row. */
+function RunRow({ run, columns, measurements, nested }: { run: ContainerRunRecord; columns: Axis[]; measurements: string[]; nested?: boolean }) {
+  return (
+    <tr className={nested ? "iteration" : undefined}>
+      <td>
+        {run.permutation}-{run.iteration}
+      </td>
+      {columns.map((axis) => (
+        <td key={axis}>{parameterText(run, axis)}</td>
+      ))}
+      <td>{duration(run.execution.finishedAt - run.execution.startedAt)}</td>
+      <td>{agentEnd(run.execution, run.harnessResult)}</td>
+      <TokensCell run={run} />
+      <CostCell run={run} />
+      {measurements.map((name) => (
+        <MeasureCell key={name} measure={run.result[name]} />
+      ))}
+    </tr>
+  );
+}
+
+/** A permutation's iterations as one row, summarised, which expands to show each of them. */
+function PermutationRows({
+  permutation,
+  runs,
+  columns,
+  measurements,
+  open,
+  onToggle,
+}: {
+  permutation: number;
+  runs: ContainerRunRecord[];
+  columns: Axis[];
+  measurements: string[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  if (runs.length === 1) return <RunRow run={runs[0]!} columns={columns} measurements={measurements} />;
+  return (
+    <>
+      <tr className={`permutation${open ? " open" : ""}`} onClick={onToggle} aria-expanded={open}>
+        <td>
+          <span className="chevron">▶</span> {permutation}
+          <span className="detail">×{runs.length} iterations</span>
+        </td>
+        {columns.map((axis) => (
+          <td key={axis}>{parameterText(runs[0]!, axis)}</td>
+        ))}
+        <SummaryCell summary={summariseDuration(runs)} />
+        <SummaryCell summary={summariseAgent(runs)} />
+        <SummaryCell summary={summariseTokens(runs)} />
+        <SummaryCell summary={summariseCost(runs)} />
+        {measurements.map((name) => (
+          <SummaryCell key={name} className="measure" summary={summariseMeasure(runs.map((run) => run.result[name]))} />
+        ))}
+      </tr>
+      {open && runs.map((run) => <RunRow key={run.iteration} run={run} columns={columns} measurements={measurements} nested />)}
+    </>
+  );
+}
+
+/** One execution's container runs, a row per permutation, and the parameters they all share. */
+function ContainerRuns({ containerRuns }: { containerRuns: ContainerRunRecord[] }) {
+  const [hideCommon, setHideCommon] = useState(true);
+  const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
+  const measurements = [...new Set(containerRuns.flatMap((run) => Object.keys(run.result)))];
+  const permutations = groupByPermutation(containerRuns);
+  const common = commonParameters(containerRuns);
+  const hidden = new Set(hideCommon ? common.map(({ axis }) => axis) : []);
+  const columns = PARAMETER_COLUMNS.filter(({ axis }) => !hidden.has(axis));
+  const expandable = permutations.filter(({ runs }) => runs.length > 1).map(({ permutation }) => permutation);
+  const toggle = (permutation: number) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (!next.delete(permutation)) next.add(permutation);
+      return next;
+    });
+
+  return (
+    <>
+      <p className="controls muted">
+        <label>
+          <input type="checkbox" checked={hideCommon} onChange={(e) => setHideCommon(e.target.checked)} /> Hide common parameters
+        </label>
+        {expandable.length > 0 && (
+          <>
+            {" · "}
+            <button type="button" className="link" onClick={() => setOpen(new Set(expandable))}>
+              Expand all
+            </button>
+            {" · "}
+            <button type="button" className="link" onClick={() => setOpen(new Set())}>
+              Collapse all
+            </button>
+          </>
+        )}
+      </p>
+      {hideCommon && common.length > 0 && (
+        <p className="muted">
+          Common to all runs:{" "}
+          {common.map(({ axis, label, value }, i) => (
+            <span key={axis}>
+              {i > 0 && " · "}
+              {label} <strong className="common-value">{value}</strong>
+            </span>
+          ))}
+        </p>
+      )}
+      <table>
+        <thead>
+          <tr>
+            <th>Run</th>
+            {columns.map(({ axis, label }) => (
+              <th key={axis}>{label}</th>
+            ))}
+            <th>Duration</th>
+            <th>Agent</th>
+            <th>Tokens</th>
+            <th>Cost</th>
+            {measurements.map((name) => (
+              <th key={name}>{name}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {permutations.map(({ permutation, runs }) => (
+            <PermutationRows
+              key={permutation}
+              permutation={permutation}
+              runs={runs}
+              columns={columns.map(({ axis }) => axis)}
+              measurements={measurements}
+              open={open.has(permutation)}
+              onToggle={() => toggle(permutation)}
+            />
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
 }
 
 function Execution({ id }: { id: string }) {
@@ -177,7 +348,6 @@ function Execution({ id }: { id: string }) {
       </p>
       <Pending loaded={loaded}>
         {({ execution, containerRuns }) => {
-          const measurements = [...new Set(containerRuns.flatMap((run) => Object.keys(run.result)))];
           const totals = runTotals(containerRuns);
           return (
             <>
@@ -191,48 +361,7 @@ function Execution({ id }: { id: string }) {
               <p>
                 Took {executionDuration(execution)} · <TokensTotal totals={totals} /> tokens · <CostTotal totals={totals} />
               </p>
-              {containerRuns.length === 0 ? (
-                <p className="muted">No container runs recorded.</p>
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Run</th>
-                      <th>Code state</th>
-                      <th>Prompt set</th>
-                      <th>Harness / model</th>
-                      <th>Duration</th>
-                      <th>Agent</th>
-                      <th>Tokens</th>
-                      <th>Cost</th>
-                      {measurements.map((name) => (
-                        <th key={name}>{name}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {containerRuns.map((run) => (
-                      <tr key={`${run.permutation}-${run.iteration}`}>
-                        <td>
-                          {run.permutation}-{run.iteration}
-                        </td>
-                        <td>{run.parameters.codeState?.name}</td>
-                        <td>{run.parameters.promptSet?.name}</td>
-                        <td>
-                          {run.harnessModel.harness} / {run.harnessModel.model ?? run.harnessModel.modelId}
-                        </td>
-                        <td>{duration(run.execution.finishedAt - run.execution.startedAt)}</td>
-                        <td>{agentEnd(run.execution, run.harnessResult)}</td>
-                        <TokensCell run={run} />
-                        <CostCell run={run} />
-                        {measurements.map((name) => (
-                          <MeasureCell key={name} measure={run.result[name]} />
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              {containerRuns.length === 0 ? <p className="muted">No container runs recorded.</p> : <ContainerRuns containerRuns={containerRuns} />}
             </>
           );
         }}
