@@ -204,6 +204,10 @@ Preservation precedes measurement deliberately — see
 
 An **iteration** is one repeat of a container run for the same permutation, used to gather pass-rate statistics. Each iteration gets its own container and a separate ID within the permutation.
 
+### Measure and metric
+
+A **measure** is what a measurement's instrument returned for one container run, stored as it is: a boolean, a number, or a record of any shape, such as `{ passed, total }`. A **metric** reads a score from a measure, a number or a boolean, or `undefined` where it doesn't apply, and has one statistic across a permutation's iterations, such as `mean` or `rate`, and optionally a direction, `better: "higher" | "lower"`. A measurement declares one or more metrics; each is named `<measurement>.<metric>`, e.g. `isPrimeTests.passRate`. Metrics are computed when results are read, so they can change without re-measuring. See [085-experiment-results.md](085-experiment-results.md#measures-and-metrics).
+
 ### Aggregation result
 
 An **aggregation result** combines the Results of every iteration of one permutation within one experiment execution, even when there is only one iteration. It is the unit that gets compared: the result of experiment executions with different permutation hashes, but the same shapped aggregation result can be compared. See [085-experiment-results.md](085-experiment-results.md#aggregation-results).
