@@ -5,8 +5,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { scenario } from "../../../testing/scenario.ts";
-import { thunderjar } from "../../../testing/cli.ts";
-import { startViewServer } from "./view.ts";
+import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
+import { loadMeasurements } from "../../../config/measurements.ts";
+import { type ExecutionPage, startViewServer } from "./view.ts";
 
 const STORE = () => `${scenario("0203")}/.thunderjar/.data`;
 
@@ -14,7 +15,7 @@ const servers: ReturnType<typeof startViewServer>[] = [];
 
 /** A viewer of `dataDir`'s store on a free port, stopped after the test. */
 function serve(dataDir = STORE()) {
-  const server = startViewServer(sqliteStore(storeFileIn(dataDir)), 0);
+  const server = startViewServer(sqliteStore(storeFileIn(dataDir)), 0, (task) => loadMeasurements(`${scenario("0203")}/.thunderjar`, task));
   servers.push(server);
   return (path: string) => fetch(new URL(path, server.url));
 }
@@ -56,13 +57,12 @@ describe("0203 recorded executions", () => {
     ]);
   });
 
-  test("/api/executions/:id: the execution, and its container runs by permutation then iteration", async () => {
-    const body = (await (await serve()("/api/executions/01m3vf68s54p5eyn5s3t1ygkdj")).json()) as {
-      execution: { testCase: string; status: string };
-      containerRuns: { permutation: number; iteration: number }[];
-    };
+  test("/api/executions/:id: the execution's summary, as show --json prints it, and its container runs by permutation then iteration", async () => {
+    const body = (await (await serve()("/api/executions/01m3vf68s54p5eyn5s3t1ygkdj")).json()) as ExecutionPage;
 
-    expect(body.execution).toMatchObject({ testCase: "is-prime-baseline", status: "complete" });
+    expect(body.summary.execution).toMatchObject({ testCase: "is-prime-baseline", status: "complete" });
+    expect(body.summary.permutations).toHaveLength(8);
+    expect(body.summary.permutations[1]!.measures.isPrimeTsExists).toEqual({ measured: 5, values: { rate: 1 } });
     expect(body.containerRuns).toHaveLength(40);
     expect(body.containerRuns.slice(0, 6).map(({ permutation, iteration }) => `${permutation}-${iteration}`)).toEqual(["1-1", "1-2", "1-3", "1-4", "1-5", "2-1"]);
   });
@@ -111,6 +111,16 @@ describe("through the CLI", () => {
       proc.kill();
       await proc.exited;
     }
+  });
+
+  test("outside a project it's an error, as show is: it needs the measurements to aggregate by", async () => {
+    // Outside the repo, whose own .thunderjar/ would otherwise be found above it.
+    await using copy = await copyScenarioProject("0101", { outsideRepo: true });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["view", "--port", "0", "--data-dir", STORE()]);
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe("Error: No .thunderjar/ folder in <PROJECT> or any folder above it. Run `thunderjar init` first.\n");
+    expect(exitCode).toBe(1);
   });
 
   test("--port that isn't a port is an error", async () => {

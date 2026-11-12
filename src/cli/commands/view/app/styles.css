@@ -49,9 +49,13 @@ td {
   text-align: left;
   padding: 6px 10px;
   border-bottom: 1px solid var(--line);
-  /* Wrap long values rather than scroll the table sideways. */
-  overflow-wrap: anywhere;
+  /* Wrap at words, and break a word only if it can't fit otherwise. */
+  overflow-wrap: break-word;
   vertical-align: top;
+}
+/* Wrap long values, e.g. a measure's JSON, anywhere rather than scroll the table sideways. */
+td.measure {
+  overflow-wrap: anywhere;
 }
 th {
   font-weight: 600;
@@ -74,4 +78,54 @@ code {
 }
 .error {
   color: var(--failed);
+}
+/* A smaller line beneath a value, e.g. the range of a permutation's iterations. */
+.detail {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.controls label {
+  cursor: pointer;
+}
+button.link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.common-value {
+  color: var(--fg);
+  font-weight: 500;
+}
+tr.permutation {
+  cursor: pointer;
+  font-weight: 500;
+}
+.chevron {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+tr.permutation.open .chevron {
+  transform: rotate(90deg);
+}
+tr.iteration td:first-child {
+  padding-left: 28px;
+}
+tr.iteration {
+  color: var(--muted);
+}
+/* A measurement's name, above a column per method it aggregates by. */
+th.measurement {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+th.method {
+  font-weight: 400;
 }
