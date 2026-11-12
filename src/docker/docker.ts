@@ -71,6 +71,30 @@ const named = (runtime: DockerRuntime, subcommand: string | undefined) => `\`${[
 /** The last line of a failed command's stderr: where Docker puts its reason. */
 const reasonOf = (stderr: { toString(): string }) => stderr.toString().trim().split("\n").at(-1);
 
+/** How many lines of a failed build step's output are shown with Docker's reason. */
+const BUILD_STEP_LINES = 5;
+
+/**
+ * Why a build failed, from its stderr: Docker's last line, which only names the step and its exit
+ * code, then the end of what that step wrote, which says why, e.g. npm's `getaddrinfo EAI_AGAIN`.
+ * BuildKit repeats a failed step's output between `------` lines, under ` > [2/7] RUN …:`, each
+ * line starting with its time, which is dropped. Without that block, just the last line.
+ */
+export function buildFailureReason(stderr: string): string | undefined {
+  const last = reasonOf(stderr);
+  const lines = stderr.split("\n");
+  const start = lines.findLastIndex((line) => /^ > \[.*\].*:$/.test(line));
+  if (start === -1) return last;
+  const end = lines.indexOf("------", start);
+  const output = lines
+    .slice(start + 1, end === -1 ? undefined : end)
+    .map((line) => line.replace(/^\d+\.\d+ /, "").trimEnd())
+    .filter((line) => line !== "")
+    .slice(-BUILD_STEP_LINES);
+  if (output.length === 0) return last;
+  return [last, ...output.map((line) => `  ${line}`)].join("\n");
+}
+
 /**
  * Builds the Dockerfile at the root of the build context `contextDir`, and tags the image `image`,
  * given `options`' secrets, by the variables they're read from, and the SSH agent. Throws a
@@ -95,7 +119,7 @@ export async function buildImage(contextDir: string, image: string, options: Bui
   if (result.exitCode !== 0) {
     // The user is told only the last line of Docker's output: the whole of it is here.
     log.error({ image, exitCode: result.exitCode, ms, stderr: result.stderr.toString() }, "image build failed");
-    throw new DockerBuildError(reasonOf(result.stderr) || `\`${binary} build\` exited ${result.exitCode}`, image);
+    throw new DockerBuildError(buildFailureReason(result.stderr.toString()) || `\`${binary} build\` exited ${result.exitCode}`, image);
   }
   log.info({ image, ms }, "built image");
 }

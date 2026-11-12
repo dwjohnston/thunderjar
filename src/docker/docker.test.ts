@@ -4,6 +4,7 @@ import { FAKE_DOCKER, fakeDocker } from "../testing/fakeDocker.ts";
 import { $ } from "bun";
 import { FIXTURES_DIR } from "../testing/scenario.ts";
 import {
+  buildFailureReason,
   buildImage,
   checkLogin,
   commitContainer,
@@ -193,4 +194,36 @@ test("pushImage throws a DockerPushError with the registry's reason", async () =
   const error = await pushImage("tj-prerun:aaaaaaaa", "ghcr.io/acme/images:prerun-haaaaaaaa").catch((e: unknown) => e);
   expect(error).toBeInstanceOf(DockerPushError);
   expect((error as Error).message).toStartWith("denied: ");
+});
+
+test("buildFailureReason adds the end of the failed step's output to Docker's last line", () => {
+  const stderr = `#5 [2/7] RUN npm install --global bun@1.3.14
+#5 71.42 npm error code EAI_AGAIN
+#5 ERROR: process "/bin/sh -c npm install --global bun@1.3.14" did not complete successfully: exit code: 1
+------
+ > [2/7] RUN npm install --global bun@1.3.14:
+71.42 npm error code EAI_AGAIN
+71.42 npm error syscall getaddrinfo
+71.42 npm error errno EAI_AGAIN
+71.42 npm error request to https://registry.npmjs.org/bun failed, reason: getaddrinfo EAI_AGAIN registry.npmjs.org
+71.42 npm error A complete log of this run can be found in: /root/.npm/_logs/debug-0.log
+71.43 npm error and one more line
+------
+Dockerfile:2
+--------------------
+   2 | >>> RUN npm install --global bun@1.3.14
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm install --global bun@1.3.14" did not complete successfully: exit code: 1
+`;
+  expect(buildFailureReason(stderr)).toBe(`ERROR: failed to build: failed to solve: process "/bin/sh -c npm install --global bun@1.3.14" did not complete successfully: exit code: 1
+  npm error syscall getaddrinfo
+  npm error errno EAI_AGAIN
+  npm error request to https://registry.npmjs.org/bun failed, reason: getaddrinfo EAI_AGAIN registry.npmjs.org
+  npm error A complete log of this run can be found in: /root/.npm/_logs/debug-0.log
+  npm error and one more line`);
+});
+
+test("buildFailureReason is Docker's last line when no step's output is repeated", () => {
+  expect(buildFailureReason("#1 load\nERROR: failed to build: secret id=npm: env NPM_TOKEN is not set\n")).toBe("ERROR: failed to build: secret id=npm: env NPM_TOKEN is not set");
+  expect(buildFailureReason("")).toBe("");
 });
