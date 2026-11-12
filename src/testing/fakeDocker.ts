@@ -39,7 +39,7 @@
 //
 // A leading `--context <name>`, as a runtime's command may give, is recorded and otherwise ignored:
 // the runtime shares the fake's state. `run` takes `--pull missing` as well as `--pull never`.
-// `pull --quiet <reference>` succeeds only for a reference that was pushed.
+// `pull --quiet <reference>` and `manifest inspect <reference>` succeed only for a reference that was pushed.
 //
 // Without FAKE_DOCKER_DIR the daemon is reachable, no image exists, nothing is recorded, and no
 // container can run. Tests make its state with `fakeDocker()`.
@@ -83,7 +83,17 @@ export async function fakeDocker({
   loggedIn = [],
   unreachable = false,
   pullDenied = false,
-}: { images?: string[]; failing?: string[]; slow?: string[]; loggedIn?: string[]; unreachable?: boolean; pullDenied?: boolean } = {}): Promise<FakeDocker> {
+  stored = [],
+}: {
+  images?: string[];
+  failing?: string[];
+  slow?: string[];
+  loggedIn?: string[];
+  unreachable?: boolean;
+  pullDenied?: boolean;
+  /** References already in the registry, as if pushed before. */
+  stored?: string[];
+} = {}): Promise<FakeDocker> {
   const dir = `${FIXTURES_DIR}/.tmp/docker-${crypto.randomUUID()}`;
   await Bun.write(`${dir}/images`, lines(images));
   await Bun.write(`${dir}/failing`, lines(failing));
@@ -91,14 +101,16 @@ export async function fakeDocker({
   await Bun.write(`${dir}/logins`, lines(loggedIn));
   if (unreachable) await Bun.write(`${dir}/unreachable`, "");
   if (pullDenied) await Bun.write(`${dir}/pull-denied`, "");
-  const commandsFile = Bun.file(`${dir}/commands`);
+  if (stored.length > 0) await Bun.write(`${dir}/pushed`, lines(stored));
+  // A new Bun.file each time: one read caches the file's size, so a second would miss what was appended since.
+  const commandsFile = () => Bun.file(`${dir}/commands`);
   const listOf = async (file: string) => (await Bun.file(file).text()).split("\n").filter(Boolean);
   const remove = async () => {
     await $`rm -rf ${dir}`.quiet();
   };
   return {
     env: { THUNDERJAR_DOCKER: FAKE_DOCKER, FAKE_DOCKER_DIR: dir },
-    commands: async () => ((await commandsFile.exists()) ? (await commandsFile.text()).split("\n").filter(Boolean) : []),
+    commands: async () => ((await commandsFile().exists()) ? (await commandsFile().text()).split("\n").filter(Boolean) : []),
     contextOf: (image) => `${dir}/contexts/${image}`,
     images: async () => {
       const removed = (await Bun.file(`${dir}/removed`).exists()) ? new Set(await listOf(`${dir}/removed`)) : new Set<string>();
@@ -322,6 +334,10 @@ if (import.meta.main) {
       fail(`Error response from daemon: pull access denied for ${reference}, repository does not exist or may require 'docker login'`);
     }
     console.log(reference);
+  } else if (command === "manifest" && subcommand === "inspect" && rest.length === 1) {
+    // docker manifest inspect <reference>: found if it was pushed
+    if (!(await list("pushed")).includes(rest[0] as string)) fail(`no such manifest: ${rest[0]}`);
+    console.log("{}");
   } else if (command === "image" && subcommand === "rm" && rest.length >= 1) {
     // docker image rm <image>…
     const images = await list("images");
