@@ -220,7 +220,9 @@ export async function runContainer(
   const exitCode = await child.exited;
   // Once it has exited, its stderr is read for at most a few seconds more: when it was killed, a
   // process it started, such as the ssh that reaches a remote runtime, may still hold it open.
-  const stderr = await Promise.race([reading, Bun.sleep(5000).then(() => "")]);
+  let waiting: ReturnType<typeof setTimeout> | undefined;
+  const stderr = await Promise.race([reading, new Promise<string>((resolve) => (waiting = setTimeout(() => resolve(""), 5000)))]);
+  clearTimeout(waiting);
   clearTimeout(timer);
   const killedAt = await killing;
   const ms = Date.now() - startedAt;
