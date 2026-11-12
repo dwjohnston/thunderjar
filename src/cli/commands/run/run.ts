@@ -16,7 +16,7 @@ import { type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from ".
 import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, endedCleanly, failureHint, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError as error, printJson } from "../../output.ts";
@@ -141,6 +141,37 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
   const harnesses = new Set(testCase.harnessModel.map((pair) => parsePair(pair).harness));
   const harness = harnesses.size === testCase.harnessModel.length ? parsePair(permutation.harnessModel).harness : permutation.harnessModel;
   return [...varying.map((axis) => permutation[axis]), harness, permutation.initialPrompt].join(" | ");
+}
+
+/** A container run whose agent didn't end cleanly: its name, how it ended, and a hint of why. */
+export type UncleanRun = { run: string; end: string; why?: string };
+
+/** How many container runs a line of `showUnclean` names before `…`. */
+const NAMED_RUNS = 8;
+
+/**
+ * What `run` says, once it's done, about the agents that didn't end cleanly, of `total`: how many,
+ * then a line for each way they ended and why, most first, with how many and which. So a run with
+ * many failures says at once whether they share a cause, e.g. a provider out of credits.
+ */
+export function showUnclean(unclean: UncleanRun[], total: number, paint: Paint = plain): string[] {
+  if (unclean.length === 0) return [];
+  const groups = new Map<string, UncleanRun[]>();
+  for (const run of unclean) {
+    const key = `${run.end}\n${run.why ?? ""}`;
+    groups.set(key, [...(groups.get(key) ?? []), run]);
+  }
+  const sorted = [...groups.values()].sort((a, b) => b.length - a.length);
+  const width = String(sorted[0]?.length ?? 1).length;
+  return [
+    paint.red(`${unclean.length} of ${total} agents didn't end cleanly:`),
+    ...sorted.map((runs) => {
+      const { end, why } = runs[0] as UncleanRun;
+      const names = runs.slice(0, NAMED_RUNS).map(({ run }) => run);
+      const which = `${names.join(", ")}${runs.length > NAMED_RUNS ? ", …" : ""}`;
+      return `  ${String(runs.length).padStart(width)}×  ${paint.red(end)}${why === undefined ? "" : `  ${why}`}  ${paint.dim(`(${which})`)}`;
+    }),
+  ];
 }
 
 /** What `--timings` calls each phase. */
@@ -311,6 +342,7 @@ async function run(
   };
   if (!(await runHook("beforeRun"))) return;
   let timings: ExecutionTimings | undefined;
+  const unclean: UncleanRun[] = [];
   try {
     const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
       onBuilding: (image) => {
@@ -375,7 +407,12 @@ async function run(
         }
         open(`${headOf(permutation, iteration)}  ${ellipsis} `);
       },
-      onRan: (permutation, iteration, { execution, harnessResult, tokenCosts }) => {
+      onRan: (permutation, iteration, record) => {
+        const { execution, harnessResult, tokenCosts } = record;
+        if (!endedCleanly(execution, harnessResult)) {
+          const why = failureHint(record);
+          unclean.push({ run: `${permutation.number}-${iteration.number}`, end: agentEnd(execution, harnessResult), ...(why !== undefined && { why }) });
+        }
         const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
         // Its cost if it can be trusted, else its tokens, if it has either.
         const cost = knownCost(tokenCosts);
@@ -405,6 +442,7 @@ async function run(
       onTimings: (spent) => void (timings = spent),
     });
     live?.stop();
+    for (const line of showUnclean(unclean, facts.containers, paint)) print(line);
     print(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
     if (json) printJson({ execution: record, recordedIn: where, containerRuns: await store.containerRunsOf(record.executionId) });
     if (record.status === "failed") process.exitCode = 1;

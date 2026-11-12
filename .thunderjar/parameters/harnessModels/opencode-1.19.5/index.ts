@@ -42,8 +42,11 @@ function opencodeReply(raw: string): string {
  * own estimate in dollars, from the models.dev price table, not what OpenRouter charged.
  */
 function opencodeTokenCosts(raw: string, ctx: { modelId: string }): TokenCosts {
-  const steps = events(raw).filter((e) => e.type === "step_finish");
-  if (steps.length === 0) return { outcome: "unavailable", reason: "unparseable" };
+  const all = events(raw);
+  const steps = all.filter((e) => e.type === "step_finish");
+  // No step finished, but OpenCode did write events: it stopped before any model call came back,
+  // e.g. on a provider's 402. Nothing was reported, which isn't the same as output that can't be read.
+  if (steps.length === 0) return { outcome: "unavailable", reason: all.length > 0 ? "notReported" : "unparseable" };
   let inputTokens = 0, outputTokens = 0, cacheReadTokens = 0, cacheCreationTokens = 0, costUsd = 0;
   for (const { part } of steps) {
     const t = part?.tokens;
@@ -64,13 +67,20 @@ function opencodeTokenCosts(raw: string, ctx: { modelId: string }): TokenCosts {
 
 export default declareHarness({
   version: "1.19.5",
+  // As `node`, OpenCode's plugin package is installed where OpenCode looks for it. Otherwise every
+  // run installs it as it starts: 175 MB of ~/.config and ~/.npm in each postrun image, to commit and push.
   applyParameter: (_config, ctx) => `RUN npm install -g opencode-ai@${ctx.version}
 RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
-USER node`,
+USER node
+RUN mkdir -p ~/.config/opencode && cd ~/.config/opencode \\
+  && echo '{"dependencies":{"@opencode-ai/plugin":"${ctx.version}"}}' > package.json \\
+  && npm install --no-audit --no-fund && npm cache clean --force`,
   // The prompt is read from its file, so quotes and newlines reach the agent intact. Any turn after
   // the first continues the session.
+  // OPENCODE_PERMISSION: with nobody to ask, `opencode run` rejects a command that touches a path
+  // outside /workspace (the external_directory permission), and then stops, exiting 0 with no reply.
   cli: (ctx) =>
-    `opencode run --model ${ctx.modelId} --format json${ctx.turn === 0 ? "" : " --continue"}` +
+    `OPENCODE_PERMISSION='{"external_directory":"allow"}' opencode run --model ${ctx.modelId} --format json${ctx.turn === 0 ? "" : " --continue"}` +
     ` "$(cat ${ctx.promptPath})" > ${ctx.resultPath}`,
   collectReply: opencodeReply,
   collectTokenCosts: opencodeTokenCosts,

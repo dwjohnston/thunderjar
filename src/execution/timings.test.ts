@@ -1,3 +1,14 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Session Id: session_01LCLeLkjATuQXxaawiKKoPy
+ * Supervising engineer: Claude
+ *
+ * Humans: add your notes here
+ */
+
 import { expect, test } from "bun:test";
 import { timings } from "./timings.ts";
 

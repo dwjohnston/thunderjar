@@ -419,6 +419,8 @@ export default declareHarness({ version: "1.0.0", cli: () => "echo partial > isP
       isPrimeTemplateTest: erroredWhileMeasuring (isPrime.ts has no export to bind {{defaultExport}} to)   isPrimeTsExists: true   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: 0
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
 ${BETA_MEASURES}
+1 of 2 agents didn't end cleanly:
+  1×  exited 3, no result file  Error: unknown model  (1-1)
 Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
@@ -461,6 +463,8 @@ export default declareHarness({ version: "1.0.0", cli: () => "true" });
     expect(exitCode).toBe(0);
     expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done, no result file (<duration>)
       isPrimeTemplateTest: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
+1 of 1 agents didn't end cleanly:
+  1×  done, no result file  (1-1)
 Recorded in <DATA>/runs.sqlite
 `);
     const [record] = (await readStore(data)).containerRuns;

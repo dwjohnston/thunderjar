@@ -66,9 +66,12 @@ function copilotTokenCosts(raw: string): TokenCosts {
 
 export default declareHarness({
   version: "1.0.105",
+  // As `node`, Copilot is run once, so it unpacks itself into ~/.cache/copilot in the image.
+  // Otherwise every run does: 500 MB in each postrun image, to commit and push.
   applyParameter: (_config, ctx) => `RUN npm install -g @github/copilot@${ctx.version}
 RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
-USER node`,
+USER node
+RUN copilot --version`,
   // The prompt is read from its file, so quotes and newlines reach the agent intact. Any turn after
   // the first continues the session. Copilot's exit code is kept as the command's, after the usage
   // line is appended.
@@ -79,6 +82,9 @@ USER node`,
     `rm -f ${USAGE_FILE}; ` +
     `COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY"` +
     ` COPILOT_PROVIDER_MODEL_ID=${ctx.modelId.split("/").pop()}` +
+    // OpenAI's GPT models take Copilot's tools only over the responses API: over chat completions,
+    // the default, every call fails with 400 "Missing required parameter: 'tools[4].name'".
+    `${ctx.modelId.startsWith("openai/") ? " COPILOT_PROVIDER_WIRE_API=responses" : ""}` +
     ` copilot -p "$(cat ${ctx.promptPath})" --model ${ctx.modelId} --allow-all-tools --no-color` +
     ` --output-format json --usage-output-file ${USAGE_FILE}` +
     `${ctx.turn === 0 ? "" : " --continue"} > ${ctx.resultPath}; code=$?; ` +

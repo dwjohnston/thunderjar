@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+# 🤖
+# This file was created with AI
+#
+# Harness: Claude Code
+# Session Id: session_01LCLeLkjATuQXxaawiKKoPy
+# Supervising engineer: Claude
+#
+# Humans: add your notes here
+
 # `docker`, on the Fly machine's daemon, for THUNDERJAR_DOCKER: what env.sh points Thunderjar's
 # local Docker commands at when this container can't build (see env.sh). Everything goes to
 # .thunderjar/fly-docker.sh unchanged, except `build`, which is given `--network host`.

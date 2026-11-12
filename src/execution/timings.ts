@@ -1,3 +1,14 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Session Id: session_01LCLeLkjATuQXxaawiKKoPy
+ * Supervising engineer: Claude
+ *
+ * Humans: add your notes here
+ */
+
 // How long each phase of an execution took, summed over everything that went through it: its
 // builds, pushes, pulls, agents, commits and measurements. Logged when the execution ends, and
 // shown by `run --timings`, so a slow run says where its time went.

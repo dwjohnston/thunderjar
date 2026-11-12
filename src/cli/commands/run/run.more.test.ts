@@ -82,6 +82,10 @@ describe("0204 misbehaving agents", () => {
       isPrimeTsExists: false
  3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
       isPrimeTsExists: true
+3 of 3 agents didn't end cleanly:
+  1×  timed out after <duration>  (1-1)
+  1×  exited 1  fake-crasher: no space left on device  (2-1)
+  1×  done, no result file  (3-1)
 Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
