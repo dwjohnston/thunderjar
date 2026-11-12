@@ -35,8 +35,9 @@ const SCAFFOLD = [
   ...HARNESSES.map((harness) => `${P}/harnessModels/${harness}/index.ts`),
   `${P}/tasks/is-prime/initial-prompts/plain.ts`,
   `${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`,
-  `${P}/tasks/is-prime/measurements/isPrimeTemplateTest.ts`,
-  `${P}/tasks/is-prime/measurements/templates/isPrime.test.ts.template`,
+  `${P}/tasks/is-prime/measurements/isPrimeTests.ts`,
+  `${P}/tasks/is-prime/measurements/isPrime.test.ts`,
+  `${P}/tasks/is-prime/measurements/isPrime.reference.ts`,
   `${P}/tasks/is-prime/measurements/tsIgnoreCount.ts`,
 ];
 
@@ -134,12 +135,14 @@ export default declareTestCase({
   && git config --system user.email agent@thunderjar.invalid\``);
   });
 
-  test("every TypeScript file it scaffolds imports thunderjar and loads", async () => {
+  test("every declaration it scaffolds imports thunderjar and loads", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
 
-    const files = filesIn(copy.dir).filter((path) => path.endsWith(".ts"));
-    expect(files).toHaveLength(SCAFFOLD.filter((path) => path.endsWith(".ts")).length);
+    // A file whose name has a further dot, like a measurement's `isPrime.test.ts`, comes with a declaration.
+    const isDeclaration = (path: string) => /^[^.]+\.ts$/.test(path.slice(path.lastIndexOf("/") + 1));
+    const files = filesIn(copy.dir).filter(isDeclaration);
+    expect(files).toHaveLength(SCAFFOLD.filter(isDeclaration).length);
     for (const path of files) {
       const module = await import(`${copy.dir}/.thunderjar/${path}`);
       expect(module.default).toBeDefined();

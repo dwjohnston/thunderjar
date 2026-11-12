@@ -24,8 +24,8 @@ export default declareConfig({
 });
 `;
 
-// `allowImportingTsExtensions` because thunderjar ships its TypeScript source. A measurement's
-// template named like `*.template.ts` isn't TypeScript until it's rendered (`init`'s own is `*.ts.template`).
+// `allowImportingTsExtensions` because thunderjar ships its TypeScript source. A measurement's Bun
+// test, like `isPrime.test.ts`, needs Bun's types: add `@types/bun` to type-check it too.
 const tsconfig = json({
   compilerOptions: {
     target: "ESNext",
@@ -37,7 +37,7 @@ const tsconfig = json({
     allowImportingTsExtensions: true,
   },
   include: ["**/*.ts"],
-  exclude: ["node_modules", ".data", "**/*.template.ts"],
+  exclude: ["node_modules", ".data", "**/*.test.ts"],
 });
 
 // Two experiments on the is-prime task. Each varies one thing, so a difference in the measurements
@@ -81,7 +81,7 @@ export default declareTestCase({
 
 const baseImage = `import { declareBaseImage } from "thunderjar";
 
-// With bun, which the templateTest measurement runs its tests with, and a git identity, so the
+// With bun, which the bunTestFile measurement runs its tests with, and a git identity, so the
 // agent and a prompt set can commit. \`--system\`, so a harness that runs as another user has it too.
 export default declareBaseImage({
   applyParameter: () => \`FROM node:20-bookworm
@@ -108,25 +108,35 @@ const measurement = declaration(
 }`,
 );
 
-// Renders templates/isPrime.test.ts.template against the agent's isPrime.ts, runs it with `bun test`, and
-// records how many tests pass and fail.
-const templateTestMeasurement = declaration(
+// Runs isPrime.test.ts against the agent's isPrime.ts with `bun test`, and records how many tests
+// pass and fail.
+const bunTestFileMeasurement = declaration(
   "declareMeasurement",
   `{
-  instrument: "templateTest",
-  config: { subject: "**/isPrime.ts", template: "./templates/isPrime.test.ts.template" },
+  instrument: "bunTestFile",
+  config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
   aggregate: ["sum", "mean"],
 }`,
 );
 
-// \`{{defaultExport}}\` and \`{{subjectPath}}\` are filled in from the agent's file, whatever it names its function.
-const isPrimeTestTemplate = `import { {{defaultExport}} } from "{{subjectPath}}";
+// An ordinary Bun test. Measured, it imports the agent's file, from \`THUNDERJAR_SUBJECT\`; run
+// yourself, with \`bun test\`, it imports the reference implementation beside it.
+const isPrimeTest = `import { expect, test } from "bun:test";
 
-test("2 is prime", () => expect({{defaultExport}}(2)).toBe(true));
-test("17 is prime", () => expect({{defaultExport}}(17)).toBe(true));
-test("15 is not prime", () => expect({{defaultExport}}(15)).toBe(false));
-test("0 is not prime", () => expect({{defaultExport}}(0)).toBe(false));
-test("1 is not prime", () => expect({{defaultExport}}(1)).toBe(false));
+const { isPrime }: typeof import("./isPrime.reference.ts") = await import(Bun.env.THUNDERJAR_SUBJECT ?? "./isPrime.reference.ts");
+
+test("2 is prime", () => expect(isPrime(2)).toBe(true));
+test("17 is prime", () => expect(isPrime(17)).toBe(true));
+test("15 is not prime", () => expect(isPrime(15)).toBe(false));
+test("0 is not prime", () => expect(isPrime(0)).toBe(false));
+test("1 is not prime", () => expect(isPrime(1)).toBe(false));
+`;
+
+const isPrimeReference = `export function isPrime(n: number): boolean {
+  if (n < 2) return false;
+  for (let i = 2; i * i <= n; i++) if (n % i === 0) return false;
+  return true;
+}
 `;
 
 // How many \`@ts-ignore\`s the agent left. A count of 0 means none; \`max\` shows whether any run had one.
@@ -231,8 +241,9 @@ export function scaffold({ nestedPackage, repository }: { nestedPackage: boolean
     ...Object.fromEntries(Object.entries(STARTER_HARNESSES).map(([harness, index]) => [`${P}/harnessModels/${harness}/index.ts`, index])),
     [`${P}/tasks/is-prime/initial-prompts/plain.ts`]: initialPrompt,
     [`${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`]: measurement,
-    [`${P}/tasks/is-prime/measurements/isPrimeTemplateTest.ts`]: templateTestMeasurement,
-    [`${P}/tasks/is-prime/measurements/templates/isPrime.test.ts.template`]: isPrimeTestTemplate,
+    [`${P}/tasks/is-prime/measurements/isPrimeTests.ts`]: bunTestFileMeasurement,
+    [`${P}/tasks/is-prime/measurements/isPrime.test.ts`]: isPrimeTest,
+    [`${P}/tasks/is-prime/measurements/isPrime.reference.ts`]: isPrimeReference,
     [`${P}/tasks/is-prime/measurements/tsIgnoreCount.ts`]: tsIgnoreCountMeasurement,
   };
 }

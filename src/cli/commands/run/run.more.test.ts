@@ -249,7 +249,7 @@ describe("0402 broken declarations", () => {
 
     expect(stdout).toBe("");
     expect(stderr).toBe(
-      'Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest, replyMatches, shell\n',
+      'Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell\n',
     );
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual([]);
@@ -338,7 +338,7 @@ Building thunderjar-prerun:ae60c784 ... done
 Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
-      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
+      isPrimeTests: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
 Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     expect(await docker.pushed()).toEqual([PRERUN, postrun]);
@@ -399,7 +399,7 @@ Pushing ${PRERUN} ... done
 Pulling ${PRERUN} into the runtime ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
-      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
+      isPrimeTests: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
 Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     const commands = await docker.commands();
@@ -466,7 +466,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
         ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  started`,
         expect.stringMatching(/  done \(.*\)$/),
         expect.stringMatching(/  pushed ghcr\.io\/acme\/thunderjar-images:postrun-/),
-        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1`,
+        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  isPrimeTests: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1`,
       ]);
     }
     const { execution, containerRuns } = await readStore(data);

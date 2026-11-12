@@ -12,7 +12,7 @@ describe("loadMeasurements", () => {
   test("loads each measurement of the task, named by its file, sorted, leaving out the files that come with them", async () => {
     const measurements = await loadMeasurements(root, "is-prime");
 
-    expect(measurements.map(({ name }) => name)).toEqual(["isPrimeTemplateTest", "isPrimeTsExists", "saysArr", "tsIgnoreCount"]);
+    expect(measurements.map(({ name }) => name)).toEqual(["isPrimeTests", "isPrimeTsExists", "saysArr", "tsIgnoreCount"]);
     expect(measurements[1]).toEqual({
       name: "isPrimeTsExists",
       declaration: { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] },
@@ -21,17 +21,17 @@ describe("loadMeasurements", () => {
     });
   });
 
-  test("gives a template as an absolute path", async () => {
-    const [templateTest] = await loadMeasurements(root, "is-prime");
+  test("gives a test as an absolute path", async () => {
+    const [isPrimeTests] = await loadMeasurements(root, "is-prime");
 
-    expect(templateTest?.config).toEqual({ subject: "**/isPrime.ts", template: `${root}/${MEASUREMENTS}/isPrime.test.template.ts` });
+    expect(isPrimeTests?.config).toEqual({ subject: "**/isPrime.ts", test: `${root}/${MEASUREMENTS}/isPrime.test.ts` });
   });
 
   test("a task without a measurements folder has none", async () => {
     expect(await loadMeasurements(`${scenario("0402")}/.thunderjar`, "fizz-buzz")).toEqual([]);
   });
 
-  test("a measurement's content hash is of its instrument, config and template, not its name or how its values combine", async () => {
+  test("a measurement's content hash is of its instrument, config and test, not its name, how its values combine, or the test's reference implementation", async () => {
     const hashes = async (change?: (dir: string) => Promise<void>) => {
       await using copy = await copyScenarioProject("0202");
       await change?.(`${copy.dir}/.thunderjar/${MEASUREMENTS}`);
@@ -53,9 +53,12 @@ describe("loadMeasurements", () => {
     const configChanged = await hashes(edit("tsIgnoreCount.ts", '"@ts-ignore"', '"@ts-expect-error"'));
     expect(configChanged.tsIgnoreCount).not.toBe(before.tsIgnoreCount as string);
     expect(configChanged.isPrimeTsExists).toBe(before.isPrimeTsExists as string);
-    const templateChanged = await hashes(edit("isPrime.test.template.ts", "17", "19"));
-    expect(templateChanged.isPrimeTemplateTest).not.toBe(before.isPrimeTemplateTest as string);
-    expect(templateChanged.tsIgnoreCount).toBe(before.tsIgnoreCount as string);
+    const testChanged = await hashes(edit("isPrime.test.ts", "17", "19"));
+    expect(testChanged.isPrimeTests).not.toBe(before.isPrimeTests as string);
+    expect(testChanged.tsIgnoreCount).toBe(before.tsIgnoreCount as string);
+    // The reference implementation is only for running the test on the host: the test doesn't
+    // import it when measured.
+    expect(await hashes(edit("isPrime.reference.ts", "n < 2", "n <= 1"))).toEqual(before);
   });
 
   test("fails, naming every problem, for measurements that don't fit their instrument", async () => {

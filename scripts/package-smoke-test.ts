@@ -27,8 +27,8 @@ const STEPS: { args: string[]; expect: string[] }[] = [
       "test-cases/compare-harnesses.ts",
       "promptSets/house-style/files/AGENTS.md",
       "harnessModels/opencode-1.19.5/index.ts",
-      "measurements/isPrimeTemplateTest.ts",
-      "measurements/templates/isPrime.test.ts.template",
+      "measurements/isPrimeTests.ts",
+      "measurements/isPrime.test.ts",
       "measurements/tsIgnoreCount.ts",
     ],
   },
@@ -38,7 +38,7 @@ const STEPS: { args: string[]; expect: string[] }[] = [
     args: ["plan", "compare-harnesses"],
     expect: ["claude-code-2.1.311/claude-haiku-5-5", "copilot-1.0.105/claude-haiku-5.5", "opencode-1.19.5/opencode/claude-haiku-5-5"],
   },
-  // bun, which the templateTest measurement runs its tests with, is in the base image.
+  // bun, which the bunTestFile measurement runs its tests with, is in the base image.
   { args: ["build", "compare-models", "--dry-run"], expect: ["npm install --global bun@1.3.14", "@anthropic-ai/claude-code@2.1.311"] },
   { args: ["run", "compare-models", "--dry-run"], expect: ["claude -p"] },
 ];

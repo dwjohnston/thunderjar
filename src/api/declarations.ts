@@ -448,7 +448,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "templateTest" | "replyMatches" | "shell"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell"}
  * @description
  * What to measure. Each instrument takes its own `config`:
  *
@@ -456,7 +456,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * | --- | --- | --- |
  * | `fileCreated` | `{ glob }` | Whether the agent left a matching file |
  * | `grep` | `{ glob, pattern }` | Lines across the matching files that match `pattern` |
- * | `templateTest` | `{ subject, template }` | Tests passed and failed |
+ * | `bunTestFile` | `{ subject, test }` | Tests passed and failed |
  * | `replyMatches` | `{ pattern, turn? }` | Whether the agent's reply matches `pattern` |
  * | `shell` | `{ command }` | Whether `command` exits 0 |
  */
@@ -477,10 +477,11 @@ export type InstrumentTypes = {
   /** How many lines, across the files matching `glob`, match `pattern`, a JavaScript regular expression? */
   grep: { config: { glob: string; pattern: string }; value: number };
   /**
-   * How many tests pass and fail when `template`, a path relative to the measurement's file, is
-   * rendered against each file matching `subject` and run with `bun test`?
+   * How many tests pass and fail when `test`, a Bun test file at a path relative to the
+   * measurement's file, is run with `bun test` against each file matching `subject`? The test
+   * finds the subject's absolute path in `Bun.env.THUNDERJAR_SUBJECT`.
    */
-  templateTest: { config: { subject: string; template: string }; value: { passed: number; failed: number } };
+  bunTestFile: { config: { subject: string; test: string }; value: { passed: number; failed: number } };
   /**
    * Does the agent's reply match `pattern`, a JavaScript regular expression? Its reply to `turn`,
    * counting from 1, of an initial prompt of several turns, or by default its last.

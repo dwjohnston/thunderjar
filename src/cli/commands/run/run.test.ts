@@ -184,7 +184,7 @@ Recorded in <DATA>/runs.sqlite
       },
       sessionId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
       result: {
-        isPrimeTemplateTest: measured("templateTest", { passed: 3, failed: 2 }),
+        isPrimeTests: measured("bunTestFile", { passed: 3, failed: 2 }),
         isPrimeTsExists: measured("fileCreated", true),
         saysArr: measured("replyMatches", true),
         tsIgnoreCount: measured("grep", 1),
@@ -199,7 +199,7 @@ Recorded in <DATA>/runs.sqlite
     expect(beta.parameters.baseImage).toEqual(alpha.parameters.baseImage);
     expect(beta.parameters.harnessModel).not.toEqual(alpha.parameters.harnessModel);
     expect(beta.result).toEqual({
-      isPrimeTemplateTest: measured("templateTest", { passed: 5, failed: 0 }),
+      isPrimeTests: measured("bunTestFile", { passed: 5, failed: 0 }),
       isPrimeTsExists: measured("fileCreated", true),
       saysArr: measured("replyMatches", false),
       tsIgnoreCount: measured("grep", 0),
@@ -396,7 +396,7 @@ export default declareHarness({ version: "1.0.0", cli: () => "echo partial > isP
     expect(exitCode).toBe(1);
     expect(stdout).toEndWith(`
  1/2  iteration 1/1  fake-harness-alpha | plain  ... exited 3, no result file (<duration>)
-      isPrimeTemplateTest: erroredWhileMeasuring (isPrime.ts has no export to bind {{defaultExport}} to)   isPrimeTsExists: true   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: 0
+      isPrimeTests: erroredWhileMeasuring (isPrime.test.ts didn't run against isPrime.ts: ReferenceError: partial is not defined)   isPrimeTsExists: true   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: 0
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
 ${BETA_MEASURES}
 Recorded in <DATA>/runs.sqlite
@@ -404,9 +404,9 @@ Recorded in <DATA>/runs.sqlite
     const store = await readStore(data);
     expect(store.execution.status).toBe("failed");
     // What the agent left is measured all the same.
-    expect(store.containerRuns[0]?.result.isPrimeTemplateTest?.outcome).toEqual({
+    expect(store.containerRuns[0]?.result.isPrimeTests?.outcome).toEqual({
       outcome: "erroredWhileMeasuring",
-      error: { message: "isPrime.ts has no export to bind {{defaultExport}} to" },
+      error: { message: "isPrime.test.ts didn't run against isPrime.ts: ReferenceError: partial is not defined" },
     });
     expect(store.containerRuns.map(({ execution, harnessResult }) => [execution.exitCode, harnessResult])).toEqual([
       [3, null],
@@ -437,12 +437,12 @@ export default declareHarness({ version: "1.0.0", cli: () => "true" });
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done, no result file (<duration>)
-      isPrimeTemplateTest: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
+      isPrimeTests: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
 Recorded in <DATA>/runs.sqlite
 `);
     const [record] = (await readStore(data)).containerRuns;
     expect(record?.result).toEqual({
-      isPrimeTemplateTest: measure("templateTest", { outcome: "skipped", reason: "no file matches **/isPrime.ts" }),
+      isPrimeTests: measure("bunTestFile", { outcome: "skipped", reason: "no file matches **/isPrime.ts" }),
       isPrimeTsExists: measured("fileCreated", false),
       saysArr: measure("replyMatches", { outcome: "skipped", reason: "no reply: the agent left no result file" }),
       tsIgnoreCount: measure("grep", { outcome: "skipped", reason: "no file matches **/*.ts" }),

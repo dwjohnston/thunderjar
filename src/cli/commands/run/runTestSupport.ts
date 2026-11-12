@@ -76,8 +76,8 @@ export const ISO = expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}
 export const SHA = expect.stringMatching(/^[0-9a-f]{64}$/);
 
 /** The measures line of a fake agent's container run, in 0202's is-prime task. */
-export const ALPHA_MEASURES = "      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1";
-export const BETA_MEASURES = "      isPrimeTemplateTest: {passed: 5, failed: 0}   isPrimeTsExists: true   saysArr: false   tsIgnoreCount: 0";
+export const ALPHA_MEASURES = "      isPrimeTests: {passed: 3, failed: 2}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1";
+export const BETA_MEASURES = "      isPrimeTests: {passed: 5, failed: 0}   isPrimeTsExists: true   saysArr: false   tsIgnoreCount: 0";
 
 /** A measure as recorded, taken by `instrument`, with `outcome`. */
 export const measure = (instrument: string, outcome: RecordedOutcome): RecordedMeasure => ({ instrument, contentHash: SHA, measuredAt: ISO, outcome });

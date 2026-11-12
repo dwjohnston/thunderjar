@@ -87,7 +87,7 @@ Use the cheapest instrument that answers the question.
 |---|---|
 | Does a file exist? | `fileCreated` |
 | How often does some text appear? | `grep` |
-| Does the code behave? | `templateTest` |
+| Does the code behave? | `bunTestFile` |
 | Does this command pass? | `shell` |
 | What did the agent say? | `replyMatches` |
 

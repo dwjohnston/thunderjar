@@ -48,7 +48,7 @@ Started    2026-10-01 10:12
 Status     complete
 Matrix     8 permutations × 5 iterations
 
-                                                                        isPrimeTemplateTest                                      isPrimeTsExists   tsIgnoreCount
+                                                                        isPrimeTests                                             isPrimeTsExists   tsIgnoreCount
      promptSet | harnessModel | initialPrompt                    runs   sum                        mean                          rate              mean   max
  1   snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5/5    {passed: 16, failed: 9}    {passed: 3.2, failed: 1.8}    5/5               1.0    1
  2   snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   5/5    {passed: 12, failed: 8}*   {passed: 3.0, failed: 2.0}*   5/5               1.2    2
@@ -60,9 +60,9 @@ Matrix     8 permutations × 5 iterations
  8   glurk | fake-harness-beta@1.0.0/fake-model-large | terse    5/5    {passed: 25, failed: 0}    {passed: 5.0, failed: 0.0}    5/5               0.0    0
 
 * Left out of the aggregate:
-  2-4  isPrimeTemplateTest  errored while measuring  (isPrime.ts has 2 exports (isPrime, isComposite); {{defaultExport}} binds to a single one)
-  6-3  isPrimeTemplateTest  skipped  (no file matches **/isPrime.ts)
-  6-3  tsIgnoreCount        skipped  (no file matches **/*.ts)
+  2-4  isPrimeTests   errored while measuring  (isPrime.test.ts didn't run against isPrime.ts: error: Unexpected end of file)
+  6-3  isPrimeTests   skipped  (no file matches **/isPrime.ts)
+  6-3  tsIgnoreCount  skipped  (no file matches **/*.ts)
 `,
       stderr: "",
       exitCode: 0,
@@ -75,7 +75,7 @@ Matrix     8 permutations × 5 iterations
     const summary = JSON.parse(stdout);
 
     expect(summary.measurements).toEqual([
-      { name: "isPrimeTemplateTest", aggregate: ["sum", "mean"] },
+      { name: "isPrimeTests", aggregate: ["sum", "mean"] },
       { name: "isPrimeTsExists", aggregate: ["rate"] },
       { name: "tsIgnoreCount", aggregate: ["mean", "max"] },
     ]);
@@ -89,13 +89,13 @@ Matrix     8 permutations × 5 iterations
     expect(second.parameters).toMatchObject({ promptSet: "snerk", initialPrompt: "terse" });
     expect(second.iterations).toBe(5);
     expect(second.agent).toEqual([{ end: "done", runs: 5 }]);
-    expect(second.measures.isPrimeTemplateTest).toEqual({ measured: 4, values: { sum: { passed: 12, failed: 8 }, mean: { passed: 3, failed: 2 } } });
+    expect(second.measures.isPrimeTests).toEqual({ measured: 4, values: { sum: { passed: 12, failed: 8 }, mean: { passed: 3, failed: 2 } } });
     expect(second.measures.isPrimeTsExists).toEqual({ measured: 5, values: { rate: 1 } });
     expect(second.leftOut).toEqual([
       {
         run: "2-4",
-        measure: "isPrimeTemplateTest",
-        outcome: { outcome: "erroredWhileMeasuring", error: { message: "isPrime.ts has 2 exports (isPrime, isComposite); {{defaultExport}} binds to a single one" } },
+        measure: "isPrimeTests",
+        outcome: { outcome: "erroredWhileMeasuring", error: { message: "isPrime.test.ts didn't run against isPrime.ts: error: Unexpected end of file" } },
       },
     ]);
     expect(second.durationMs).toMatchObject({ of: 5 });
@@ -116,7 +116,7 @@ Started    2026-10-02 14:40
 Status     failed
 Matrix     2 permutations × 1 iteration
 
-                                                        isPrimeTemplateTest                                   isPrimeTsExists   tsIgnoreCount
+                                                        isPrimeTests                                          isPrimeTsExists   tsIgnoreCount
      harnessModel                                runs   sum                      mean                         rate              mean   max
  1   fake-harness-alpha@1.0.0/fake-model-small   1/1    {passed: 3, failed: 2}   {passed: 3.0, failed: 2.0}   1/1               1.0    1
  2   fake-harness-beta@1.0.0/fake-model-large    1/1    —                        —                            0/1               —      —
@@ -125,8 +125,8 @@ Matrix     2 permutations × 1 iteration
   2-1  exited 3, no result file
 
 * Left out of the aggregate:
-  2-1  isPrimeTemplateTest  skipped  (no file matches **/isPrime.ts)
-  2-1  tsIgnoreCount        skipped  (no file matches **/*.ts)
+  2-1  isPrimeTests   skipped  (no file matches **/isPrime.ts)
+  2-1  tsIgnoreCount  skipped  (no file matches **/*.ts)
 `,
       stderr: "",
       exitCode: 0,
@@ -171,9 +171,9 @@ Exit         0
 Result file  33 bytes
 
 Measures
-  isPrimeTemplateTest  skipped  (no file matches **/isPrime.ts)
-  isPrimeTsExists      false
-  tsIgnoreCount        skipped  (no file matches **/*.ts)
+  isPrimeTests     skipped  (no file matches **/isPrime.ts)
+  isPrimeTsExists  false
+  tsIgnoreCount    skipped  (no file matches **/*.ts)
 `,
       stderr: "",
       exitCode: 0,
@@ -185,7 +185,7 @@ Measures
     const { stdout: failed } = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "2-1"]);
 
     expect(errored).toContain(
-      "  isPrimeTemplateTest  errored while measuring  (isPrime.ts has 2 exports (isPrime, isComposite); {{defaultExport}} binds to a single one)\n",
+      "  isPrimeTests     errored while measuring  (isPrime.test.ts didn't run against isPrime.ts: error: Unexpected end of file)\n",
     );
     expect(failed).toContain("Exit         3\nResult file  none\n");
   });
@@ -268,17 +268,17 @@ Measures
     const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "--data-dir", data]);
 
     expect(stdout).toEndWith(`
-                                                                                           isPrimeTemplateTest   isPrimeTsExists   tsIgnoreCount
-     baseImage | codeState | promptSet | harnessModel | initialPrompt               runs   sum   mean            rate              mean   max
+                                                                                           isPrimeTests   isPrimeTsExists   tsIgnoreCount
+     baseImage | codeState | promptSet | harnessModel | initialPrompt               runs   sum   mean     rate              mean   max
  1   no container runs
- 2   node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large | plain   1/1    —     —               0/1               —      —
+ 2   node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large | plain   1/1    —     —        0/1               —      —
 
 ! Agents that didn't end cleanly:
   2-1  exited 3, no result file
 
 * Left out of the aggregate:
-  2-1  isPrimeTemplateTest  skipped  (no file matches **/isPrime.ts)
-  2-1  tsIgnoreCount        skipped  (no file matches **/*.ts)
+  2-1  isPrimeTests   skipped  (no file matches **/isPrime.ts)
+  2-1  tsIgnoreCount  skipped  (no file matches **/*.ts)
 `);
     expect(exitCode).toBe(0);
   });
@@ -309,7 +309,7 @@ export default declareMeasurement({
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["show", BASELINE]);
 
     expect(stdout).toContain(`
-                                                                        isPrimeTemplateTest                                      isPrimeTsExists   tsIgnoreCount
+                                                                        isPrimeTests                                             isPrimeTsExists   tsIgnoreCount
      promptSet | harnessModel | initialPrompt                    runs   sum                        mean                          rate              rate
  1   snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5/5    {passed: 16, failed: 9}    {passed: 3.2, failed: 1.8}    5/5               ?
 `);

@@ -268,7 +268,7 @@ describe("0402 broken declarations", () => {
       "a measurement naming an unknown instrument",
       "unknown-instrument",
       [
-        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest, replyMatches, shell`,
+        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell`,
       ],
     ],
     [
@@ -284,10 +284,10 @@ describe("0402 broken declarations", () => {
       ],
     ],
     [
-      "a templateTest measurement whose template is missing",
-      "missing-template",
+      "a bunTestFile measurement whose test is missing",
+      "missing-test",
       [
-        `${measurement("missing-template/measurements/isPrimeTemplateTest.ts")}: config.template: "./isPrime.tset.template.ts" has no matching ${measurement("missing-template/measurements/isPrime.tset.template.ts")}`,
+        `${measurement("missing-test/measurements/isPrimeTests.ts")}: config.test: "./isPrime.tset.ts" has no matching ${measurement("missing-test/measurements/isPrime.tset.ts")}`,
       ],
     ],
     [
