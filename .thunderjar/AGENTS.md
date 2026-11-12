@@ -49,3 +49,17 @@ THUNDERJAR_REMOTE=1 bun src/cli/index.ts run gauntlet-wrong-failing-test --itera
 ```
 
 It needs `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, and what the remote config in `thunderjar.config.ts` needs: `FLYIO_TOKEN`, `THUNDERJAR_DB_URL`, a `docker login ghcr.io` that can push, and the `fly` CLI.
+
+### Getting a fresh cloud container ready
+
+`scripts/gauntlet/bootstrap.sh` installs `fly` and `ssh`, starts a local Docker daemon if none runs, runs `docker login ghcr.io` when `GHCR_USER` and `GHCR_TOKEN` are set, then prints which tools and variables are present or missing (names only). It exits non-zero if any are missing. Re-running it is safe.
+
+```sh
+scripts/gauntlet/bootstrap.sh
+source scripts/gauntlet/env.sh    # maps THUNDERJAR_DB_CONNECTION, OPENROUTER_TOKEN, FLYIO_TOKEN to the names read here; sets THUNDERJAR_REMOTE=1
+bun src/cli/index.ts run gauntlet-wrong-failing-test
+# or, without sourcing:
+scripts/gauntlet/bootstrap.sh run run gauntlet-wrong-failing-test
+```
+
+Daemon log and tool-install logs go to `/tmp/gauntlet/`. Never run these with `set -x`.
