@@ -218,6 +218,7 @@ Recorded in <DATA>/runs.sqlite
         `docker run --name ${container(n)} --pull never ${n === 1 ? "-e FAKE_HARNESS_KEY " : ""}--entrypoint sh ${prerun(n)} -c <script>`,
         `docker cp ${container(n)}:/thunderjar/run.json <destination>`,
         `docker cp ${container(n)}:/thunderjar/result.json <destination>`,
+        `docker cp ${container(n)}:/thunderjar/stderr.log <destination>`,
         `docker image inspect --format {{json .Config.Entrypoint}}\t{{json .Config.Cmd}} ${prerun(n)}`,
         `docker commit --change ENTRYPOINT [""] --change CMD ["sh"] ${container(n)} thunderjar-postrun:${id}-${n}-1`,
         `docker rm --force ${container(n)}`,
