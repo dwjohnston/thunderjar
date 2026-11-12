@@ -11,9 +11,9 @@ const measurement = (name: string, declaration: MeasurementDeclaration): Measure
   contentHash: `hash-of-${name}`,
 });
 
-const EXISTS = measurement("exists", { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] });
-const IGNORES = measurement("ignores", { instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, aggregate: ["max"] });
-const SAYS_ELI = measurement("saysEli", { instrument: "replyMatches", config: { pattern: "Eli" }, aggregate: ["rate"] });
+const EXISTS = measurement("exists", { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, metrics: { exists: { stat: "rate" } } });
+const IGNORES = measurement("ignores", { instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, metrics: { count: { stat: "max" } } });
+const SAYS_ELI = measurement("saysEli", { instrument: "replyMatches", config: { pattern: "Eli" }, metrics: { matches: { stat: "rate" } } });
 
 /** An opener of contexts over `files`, each recording what was done with it in `log`. */
 function opener(files: Record<string, string>, log: string[]) {
@@ -85,7 +85,7 @@ describe("measureContainerRun", () => {
     const bunTestFile = measurement("tests", {
       instrument: "bunTestFile",
       config: { subject: "isPrime.ts", test: "./isPrime.test.ts" },
-      aggregate: ["sum"],
+      metrics: { passRate: { stat: "mean" } },
     });
     const test = `${import.meta.dir}/measure.test.ts`;
 

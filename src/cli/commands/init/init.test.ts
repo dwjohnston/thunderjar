@@ -38,6 +38,7 @@ const SCAFFOLD = [
   `${P}/tasks/is-prime/measurements/isPrimeTests.ts`,
   `${P}/tasks/is-prime/measurements/isPrime.test.ts`,
   `${P}/tasks/is-prime/measurements/isPrime.reference.ts`,
+  `${P}/tasks/is-prime/measurements/isPrimeShape.ts`,
   `${P}/tasks/is-prime/measurements/tsIgnoreCount.ts`,
 ];
 

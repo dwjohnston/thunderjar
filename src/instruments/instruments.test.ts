@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
 import type { MeasurementContext, Reply } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { aggregateMethods, fileCreated, grep, instruments, isInstrumentName, replyMatches, shell, bunTestFile } from "./instruments.ts";
+import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, replyMatches, shell, STDOUT_LIMIT } from "./instruments.ts";
 
 const ROOT = `${TMP_DIR}/instruments-${crypto.randomUUID()}`;
 
@@ -82,21 +82,40 @@ describe("replyMatches", () => {
 });
 
 describe("shell", () => {
-  test("is whether the command exits 0", async () => {
+  const ran = (exitCode: number, stdout = "") => ({ outcome: "measured" as const, data: { exitCode, stdout, stdoutTruncated: false } });
+
+  test("is the command's exit code and stdout, as they are, and a non-zero exit is still measured", async () => {
     const ctx = await contextWith({ "isPrime.ts": "export const isPrime = (n: number) => n > 1;\n" });
-    expect(await shell.evaluate({ command: "test -f isPrime.ts" }, ctx)).toEqual({ outcome: "measured", data: true });
-    expect(await shell.evaluate({ command: "test -f isEven.ts" }, ctx)).toEqual({ outcome: "measured", data: false });
-    expect(await shell.evaluate({ command: "exit 3" }, ctx)).toEqual({ outcome: "measured", data: false });
+    expect(await shell.evaluate({ command: "test -f isPrime.ts" }, ctx)).toEqual(ran(0));
+    expect(await shell.evaluate({ command: "test -f isEven.ts" }, ctx)).toEqual(ran(1));
+    expect(await shell.evaluate({ command: "echo 'not JSON' && exit 3" }, ctx)).toEqual(ran(3, "not JSON\n"));
   });
 
   test("runs any shell command, with pipes and quotes, in the workdir", async () => {
     const ctx = await contextWith({ "src/isPrime.ts": "line 1\nline 2\nline 3\n" });
-    expect(await shell.evaluate({ command: `test "$(wc -l < src/isPrime.ts)" -lt 5` }, ctx)).toEqual({ outcome: "measured", data: true });
-    expect(await shell.evaluate({ command: "cat src/isPrime.ts | grep -q 'line 4'" }, ctx)).toEqual({ outcome: "measured", data: false });
+    expect(await shell.evaluate({ command: `test "$(wc -l < src/isPrime.ts)" -lt 5` }, ctx)).toEqual(ran(0));
+    expect(await shell.evaluate({ command: "cat src/isPrime.ts | grep 'line 2'" }, ctx)).toEqual(ran(0, "line 2\n"));
   });
 
-  test("a command that isn't found is a fail, not an error", async () => {
-    expect(await shell.evaluate({ command: "no-such-command" }, await contextWith([]))).toEqual({ outcome: "measured", data: false });
+  test("a command that isn't found is a non-zero exit, not an error", async () => {
+    expect(await shell.evaluate({ command: "no-such-command" }, await contextWith([]))).toEqual(ran(127));
+  });
+
+  test("keeps the first 64 KiB of stdout, without splitting a character, and says it was cut", async () => {
+    const ctx = await contextWith([]);
+    // 65,535 bytes of "a", then "é", two bytes, across the limit.
+    const result = await shell.evaluate({ command: `printf 'a%.0s' $(seq ${STDOUT_LIMIT - 1}); printf 'é and more'` }, ctx);
+    expect(result).toEqual({ outcome: "measured", data: { exitCode: 0, stdout: "a".repeat(STDOUT_LIMIT - 1), stdoutTruncated: true } });
+    expect(await shell.evaluate({ command: `printf 'a%.0s' $(seq ${STDOUT_LIMIT})` }, ctx)).toEqual({
+      outcome: "measured",
+      data: { exitCode: 0, stdout: "a".repeat(STDOUT_LIMIT), stdoutTruncated: false },
+    });
+  });
+
+  test("its default score is whether the command exited 0", () => {
+    expect(shell.defaultScore).toMatchObject({ kind: "boolean" });
+    expect(shell.defaultScore!.score({ exitCode: 0, stdout: "", stdoutTruncated: false })).toBe(true);
+    expect(shell.defaultScore!.score({ exitCode: 2, stdout: "", stdoutTruncated: false })).toBe(false);
   });
 
   test("checks its config is a command", () => {
@@ -219,19 +238,19 @@ ${CASES}`;
     const test = await testFile();
     expect(await bunTestFile.evaluate({ subject: "**/isPrime.ts", test }, await contextWith({ "isPrime.ts": CORRECT }))).toEqual({
       outcome: "measured",
-      data: { passed: 5, failed: 0 },
+      data: { passed: 5, total: 5 },
     });
     expect(await bunTestFile.evaluate({ subject: "**/isPrime.ts", test }, await contextWith({ "src/lib/isPrime.ts": BUGGY }))).toEqual({
       outcome: "measured",
-      data: { passed: 4, failed: 1 },
+      data: { passed: 4, total: 5 },
     });
   }, 20_000);
 
-  test("counts a skipped test, or a todo, as neither passing nor failing", async () => {
+  test("counts a skipped test, or a todo, in the total, but not as passing", async () => {
     const test = await testFile(`${TEST}test.skip("3 is prime", () => {});\ntest.todo("4 is not prime");\n`);
     expect(await bunTestFile.evaluate({ subject: "isPrime.ts", test }, await contextWith({ "isPrime.ts": BUGGY }))).toEqual({
       outcome: "measured",
-      data: { passed: 4, failed: 1 },
+      data: { passed: 4, total: 7 },
     });
   }, 20_000);
 
@@ -243,14 +262,14 @@ const isPrime = subject.isPrime ?? subject.default;
 
 ${CASES}`);
     const ctx = await contextWith({ "isPrime.ts": CORRECT.replace("export function", "export default function") });
-    expect(await bunTestFile.evaluate({ subject: "isPrime.ts", test }, ctx)).toEqual({ outcome: "measured", data: { passed: 5, failed: 0 } });
+    expect(await bunTestFile.evaluate({ subject: "isPrime.ts", test }, ctx)).toEqual({ outcome: "measured", data: { passed: 5, total: 5 } });
   }, 20_000);
 
   test("takes a subject with several exports", async () => {
     const ctx = await contextWith({ "isPrime.ts": `${CORRECT}export const isComposite = (n: number) => n > 1 && !isPrime(n);\n` });
     expect(await bunTestFile.evaluate({ subject: "isPrime.ts", test: await testFile() }, ctx)).toEqual({
       outcome: "measured",
-      data: { passed: 5, failed: 0 },
+      data: { passed: 5, total: 5 },
     });
   }, 20_000);
 
@@ -258,7 +277,7 @@ ${CASES}`);
     const ctx = await contextWith({ "a/isPrime.ts": CORRECT, "b/isPrime.ts": BUGGY });
     expect(await bunTestFile.evaluate({ subject: "**/isPrime.ts", test: await testFile() }, ctx)).toEqual({
       outcome: "measured",
-      data: { passed: 9, failed: 1 },
+      data: { passed: 9, total: 10 },
     });
   }, 20_000);
 
@@ -276,11 +295,17 @@ ${CASES}`);
     );
   }, 20_000);
 
-  test("is erroredWhileMeasuring when the test runs no tests", async () => {
+  test("measures a test of no tests as a total of 0", async () => {
     const ctx = await contextWith({ "isPrime.ts": CORRECT });
-    const test = await testFile(`import { test } from "bun:test";\n\ntest.skip("2 is prime", () => {});\n`);
-    expect(await erroredWith(bunTestFile.evaluate({ subject: "isPrime.ts", test }, ctx))).toBe("isPrime.test.ts ran no tests against isPrime.ts");
+    const test = await testFile(`import "bun:test";\n`);
+    expect(await bunTestFile.evaluate({ subject: "isPrime.ts", test }, ctx)).toEqual({ outcome: "measured", data: { passed: 0, total: 0 } });
   }, 20_000);
+
+  test("its default score is the pass rate, which doesn't apply to a run of no tests", () => {
+    expect(bunTestFile.defaultScore).toMatchObject({ kind: "number" });
+    expect(bunTestFile.defaultScore!.score({ passed: 3, total: 5 })).toBe(0.6);
+    expect(bunTestFile.defaultScore!.score({ passed: 0, total: 0 })).toBeUndefined();
+  });
 
   test("is erroredWhileMeasuring, saying why, when there is no bun to run the test with", async () => {
     const ctx = await contextWith({ "isPrime.ts": CORRECT });
@@ -302,8 +327,13 @@ ${CASES}`);
   });
 });
 
-test("every instrument has the ways its values combine", () => {
-  expect(Object.keys(aggregateMethods)).toEqual(Object.keys(instruments));
+test("every instrument versions its value, and every built-in one has a default score", () => {
+  for (const instrument of Object.values(instruments)) {
+    expect(instrument.version).toBeGreaterThanOrEqual(1);
+    expect(instrument.defaultScore).toBeDefined();
+  }
+  // Version 1's value was whether the command exited 0.
+  expect(shell.version).toBe(2);
   expect(isInstrumentName("grep")).toBe(true);
   expect(isInstrumentName("fileCraeted")).toBe(false);
   expect(isInstrumentName("toString")).toBe(false);

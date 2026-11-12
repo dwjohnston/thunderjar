@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { copyScenarioProject } from "../testing/cli.ts";
 import { scenario } from "../testing/scenario.ts";
 import { ConfigError } from "./loader.ts";
+import { instruments } from "../instruments/instruments.ts";
 import { loadMeasurements } from "./measurements.ts";
 
 const MEASUREMENTS = "parameters/tasks/is-prime/measurements";
@@ -12,17 +13,17 @@ describe("loadMeasurements", () => {
   test("loads each measurement of the task, named by its file, sorted, leaving out the files that come with them", async () => {
     const measurements = await loadMeasurements(root, "is-prime");
 
-    expect(measurements.map(({ name }) => name)).toEqual(["isPrimeTests", "isPrimeTsExists", "saysArr", "tsIgnoreCount"]);
-    expect(measurements[1]).toEqual({
+    expect(measurements.map(({ name }) => name)).toEqual(["isPrimeShape", "isPrimeTests", "isPrimeTsExists", "saysArr", "tsIgnoreCount"]);
+    expect(measurements[2]).toEqual({
       name: "isPrimeTsExists",
-      declaration: { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] },
+      declaration: { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, metrics: { exists: { stat: "rate" } } },
       config: { glob: "**/isPrime.ts" },
       contentHash: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
   });
 
   test("gives a test as an absolute path", async () => {
-    const [isPrimeTests] = await loadMeasurements(root, "is-prime");
+    const isPrimeTests = (await loadMeasurements(root, "is-prime")).find(({ name }) => name === "isPrimeTests");
 
     expect(isPrimeTests?.config).toEqual({ subject: "**/isPrime.ts", test: `${root}/${MEASUREMENTS}/isPrime.test.ts` });
   });
@@ -66,14 +67,55 @@ describe("loadMeasurements", () => {
     const dir = `${copy.dir}/.thunderjar/${MEASUREMENTS}`;
     await Bun.write(
       `${dir}/broken.ts`,
-      'import { declareMeasurement } from "thunderjar";\n\nexport default declareMeasurement({ instrument: "grep", config: { glob: "*.ts" }, aggregate: ["rate"] } as never);\n',
+      'import { declareMeasurement } from "thunderjar";\n\nexport default declareMeasurement({ instrument: "grep", config: { glob: "*.ts" }, metrics: { count: { stat: "rate" } } } as never);\n',
     );
 
     await expect(loadMeasurements(`${copy.dir}/.thunderjar`, "is-prime")).rejects.toThrow(
       new ConfigError(
         `.thunderjar/${MEASUREMENTS}/broken.ts: config.pattern: must be a JavaScript regular expression, got undefined`,
-        `.thunderjar/${MEASUREMENTS}/broken.ts: aggregate: "rate" is not a way grep's values combine. Use one of: mean, median, min, max, sum`,
+        `.thunderjar/${MEASUREMENTS}/broken.ts: metrics.count.stat: "rate" doesn't combine grep's default score, a number. Use one of: mean, median, min, max, sum, or give the metric a score`,
       ),
     );
+  });
+
+  test("fails, naming every problem, for metrics that are wrong", async () => {
+    const problems = async (metrics: string, rest = "") => {
+      await using copy = await copyScenarioProject("0202");
+      const file = `${copy.dir}/.thunderjar/${MEASUREMENTS}/broken.ts`;
+      await Bun.write(
+        file,
+        `import { declareMeasurement } from "thunderjar";\n\nexport default declareMeasurement({ instrument: "fileCreated", config: { glob: "*.ts" }${metrics}${rest} } as never);\n`,
+      );
+      try {
+        await loadMeasurements(`${copy.dir}/.thunderjar`, "is-prime");
+        return [];
+      } catch (error) {
+        return (error as ConfigError).message.split("\n").map((line) => line.replace(`.thunderjar/${MEASUREMENTS}/broken.ts: `, ""));
+      }
+    };
+
+    expect(await problems("")).toEqual(["metrics: must be an object of metrics by name, got undefined"]);
+    expect(await problems(", metrics: {}")).toEqual(["metrics: must have at least one metric"]);
+    expect(await problems("", ', aggregate: ["rate"]')).toEqual(['aggregate: is no longer supported: use metrics, e.g. metrics: { passes: { stat: "rate" } }']);
+    expect(await problems(', metrics: { "is-there": { stat: "rate" } }')).toEqual(['metrics.is-there: "is-there" is not a metric name: use an identifier, e.g. passRate']);
+    expect(await problems(', metrics: { exists: { stat: "average" } }')).toEqual([
+      'metrics.exists.stat: "average" is not a statistic. Use one of: rate, count, mean, median, min, max, sum',
+    ]);
+    expect(await problems(', metrics: { exists: { stat: "rate", better: "more" } }')).toEqual(['metrics.exists.better: must be "higher" or "lower", got "more"']);
+    expect(await problems(', metrics: { exists: { stat: "rate", score: true } }')).toEqual(["metrics.exists.score: must be a function of fileCreated's value, got true"]);
+    // A score of its own decides what it scores, so its stat isn't checked until it's read.
+    expect(await problems(", metrics: { files: { stat: \"mean\", score: (v) => (v ? 1 : 0) } }")).toEqual([]);
+  });
+
+  test("includes the instrument's version in the content hash", async () => {
+    const hashOf = async () => (await loadMeasurements(root, "is-prime")).find(({ name }) => name === "isPrimeTests")?.contentHash;
+    const before = await hashOf();
+    const { version } = instruments.bunTestFile;
+    instruments.bunTestFile.version = version + 1;
+    try {
+      expect(await hashOf()).not.toBe(before as string);
+    } finally {
+      instruments.bunTestFile.version = version;
+    }
   });
 });

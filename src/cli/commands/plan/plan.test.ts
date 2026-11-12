@@ -277,11 +277,21 @@ describe("0402 broken declarations", () => {
       [`${measurement("misfit-config/measurements/isPrimeTsExists.ts")}: config.glob: must be a glob pattern, got undefined`],
     ],
     [
-      "a measurement combining its values in a way its instrument's can't be",
-      "unfit-aggregate",
+      "a metric whose stat doesn't combine its instrument's default score",
+      "unfit-stat",
       [
-        `${measurement("unfit-aggregate/measurements/isPrimeTsExists.ts")}: aggregate: "mean" is not a way fileCreated's values combine. Use one of: rate, count`,
+        `${measurement("unfit-stat/measurements/isPrimeTsExists.ts")}: metrics.exists.stat: "mean" doesn't combine fileCreated's default score, a boolean. Use one of: rate, count, or give the metric a score`,
       ],
+    ],
+    [
+      "a measurement without metrics",
+      "missing-metrics",
+      [`${measurement("missing-metrics/measurements/isPrimeTsExists.ts")}: metrics: must be an object of metrics by name, got undefined`],
+    ],
+    [
+      "a measurement still declaring aggregate",
+      "leftover-aggregate",
+      [`${measurement("leftover-aggregate/measurements/isPrimeTsExists.ts")}: aggregate: is no longer supported: use metrics, e.g. metrics: { passes: { stat: "rate" } }`],
     ],
     [
       "a bunTestFile measurement whose test is missing",

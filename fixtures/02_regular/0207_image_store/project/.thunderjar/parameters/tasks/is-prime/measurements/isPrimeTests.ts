@@ -3,5 +3,5 @@ import { declareMeasurement } from "thunderjar";
 export default declareMeasurement({
   instrument: "bunTestFile",
   config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
-  aggregate: ["sum", "mean"],
+  metrics: { passRate: { stat: "mean" } },
 });

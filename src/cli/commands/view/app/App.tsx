@@ -2,9 +2,9 @@
 // `#/` or `#/executions/<ID>`, so the server only ever serves one page.
 import { useEffect, useState } from "react";
 import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure } from "../../../../store/runDataStore.ts";
-import { agentEnd, dollars, duration, knownCost, minute, plural, type RunTotals, runTotals, showAggregate, thousands, totalTokens } from "../../../format.ts";
+import { agentEnd, dollars, duration, knownCost, minute, plural, type RunTotals, runTotals, showStat, thousands, totalTokens } from "../../../format.ts";
 import type { Axis } from "../../../../config/permutations.ts";
-import type { AggregatedMeasure, AggregateMethod } from "../../../../execution/aggregate.ts";
+import type { AggregatedMetric } from "../../../../execution/aggregate.ts";
 import type { ExecutionSummary, PermutationSummary, Spread } from "../../../../execution/executionSummary.ts";
 import type { ExecutionPage, ExecutionSummary as ExecutionListItem } from "../view.ts";
 
@@ -208,24 +208,22 @@ function SpreadCell({ spread, iterations, show, missing }: { spread: Spread | un
 const agentText = ({ agent, iterations }: PermutationSummary) =>
   agent.length === 1 ? `${agent[0]!.runs}/${iterations} ${agent[0]!.end}` : agent.map(({ end, runs }) => `${runs} ${end}`).join(" · ");
 
-/** One measure's aggregate by one method, starred if it leaves an iteration out; `?` if its values don't combine. */
-function AggregateCell({ measure, method, iterations }: { measure: AggregatedMeasure | undefined; method: AggregateMethod; iterations: number }) {
-  if (measure?.incompatible !== undefined) return <Cell className="measure" text="?" title={`Can't aggregate as declared today: ${measure.incompatible}`} />;
-  const value = measure?.values[method];
-  if (measure === undefined || value === undefined) return <Cell text={<Missing why="No iteration measured it" />} />;
-  const partial = measure.measured < iterations;
+/** One metric's statistic, starred if it leaves an iteration out. */
+function MetricCell({ metric, iterations }: { metric: AggregatedMetric | undefined; iterations: number }) {
+  if (metric === undefined || metric.value === undefined) return <Cell text={<Missing why="No iteration has a score for it" />} />;
+  const partial = metric.applicable < iterations;
   return (
     <Cell
       className="measure"
-      text={`${showAggregate(method, value, measure.measured)}${partial ? "*" : ""}`}
-      title={partial ? `Of the ${measure.measured} of ${iterations} iterations that measured it` : undefined}
+      text={`${showStat(metric.stat, metric.value, metric.applicable)}${partial ? "*" : ""}`}
+      title={partial ? `Of the ${metric.applicable} of ${iterations} iterations with a score for it` : undefined}
     />
   );
 }
 
 type Columns = { axes: Axis[]; measurements: ExecutionSummary["measurements"] };
 
-/** One container run's row: a measure's recorded value spans its measurement's methods. */
+/** One container run's row: a measure's recorded value spans its measurement's metrics. */
 function RunRow({ run, columns, nested }: { run: ContainerRunRecord; columns: Columns; nested?: boolean }) {
   return (
     <tr className={nested ? "iteration" : undefined}>
@@ -239,8 +237,8 @@ function RunRow({ run, columns, nested }: { run: ContainerRunRecord; columns: Co
       <td>{agentEnd(run.execution, run.harnessResult)}</td>
       <TokensCell run={run} />
       <CostCell run={run} />
-      {columns.measurements.map(({ name, aggregate }) => (
-        <MeasureCell key={name} measure={run.result[name]} span={aggregate.length} />
+      {columns.measurements.map(({ name, metrics }) => (
+        <MeasureCell key={name} measure={run.result[name]} span={metrics.length} />
       ))}
     </tr>
   );
@@ -282,8 +280,8 @@ function PermutationRows({
         <Cell text={agentText(summary)} />
         <SpreadCell spread={summary.tokens} iterations={iterations} show={thousands} missing="Not reported" />
         <SpreadCell spread={summary.costUsd} iterations={iterations} show={dollars} missing="Not reported" />
-        {columns.measurements.flatMap(({ name, aggregate }) =>
-          aggregate.map((method) => <AggregateCell key={`${name}-${method}`} measure={measures[name]} method={method} iterations={iterations} />),
+        {columns.measurements.flatMap(({ name, metrics }) =>
+          metrics.map((metric) => <MetricCell key={`${name}-${metric.name}`} metric={measures[name]?.metrics[metric.name]} iterations={iterations} />),
         )}
       </tr>
       {open && runs.map((run) => <RunRow key={run.iteration} run={run} columns={columns} nested />)}
@@ -342,17 +340,18 @@ function Permutations({ summary, containerRuns }: ExecutionPage) {
                 {heading}
               </th>
             ))}
-            {measurements.map(({ name, aggregate }) => (
-              <th key={name} colSpan={aggregate.length} className="measurement">
+            {measurements.map(({ name, metrics }) => (
+              <th key={name} colSpan={metrics.length} className="measurement">
                 {name}
               </th>
             ))}
           </tr>
           <tr>
-            {measurements.flatMap(({ name, aggregate }) =>
-              aggregate.map((method) => (
-                <th key={`${name}-${method}`} className="method">
-                  {method}
+            {measurements.flatMap(({ name, metrics }) =>
+              metrics.map((metric) => (
+                <th key={`${name}-${metric.name}`} className="method" title={`${name}.${metric.name}, by ${metric.stat}`}>
+                  {metric.name}
+                  {metric.better === "higher" ? " ↑" : metric.better === "lower" ? " ↓" : ""}
                 </th>
               )),
             )}

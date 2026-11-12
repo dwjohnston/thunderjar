@@ -5,7 +5,7 @@ export default declareTestCase({
   codeState: ["baseline"],
   promptSet: ["snerk"],
   harnessModel: ["fake-harness-alpha/fake-model-small-001"],
-  task: "unfit-aggregate",
+  task: "leftover-aggregate",
   initialPrompt: ["plain"],
   iterations: 1,
 });

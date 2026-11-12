@@ -104,18 +104,18 @@ const measurement = declaration(
   `{
   instrument: "fileCreated",
   config: { glob: "**/isPrime.ts" },
-  aggregate: ["rate"],
+  metrics: { exists: { stat: "rate" } },
 }`,
 );
 
 // Runs isPrime.test.ts against the agent's isPrime.ts with `bun test`, and records how many tests
-// pass and fail.
+// pass, of how many: its metric is the pass rate.
 const bunTestFileMeasurement = declaration(
   "declareMeasurement",
   `{
   instrument: "bunTestFile",
   config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
-  aggregate: ["sum", "mean"],
+  metrics: { passRate: { stat: "mean" } },
 }`,
 );
 
@@ -139,13 +139,13 @@ const isPrimeReference = `export function isPrime(n: number): boolean {
 }
 `;
 
-// How many \`@ts-ignore\`s the agent left. A count of 0 means none; \`max\` shows whether any run had one.
+// How many \`@ts-ignore\`s the agent left. A count of 0 means none.
 const tsIgnoreCountMeasurement = declaration(
   "declareMeasurement",
   `{
   instrument: "grep",
   config: { glob: "**/*.ts", pattern: "@ts-ignore" },
-  aggregate: ["mean", "max"],
+  metrics: { count: { stat: "mean" } },
 }`,
 );
 
@@ -216,6 +216,34 @@ const houseStyleAgentsMd = `# House style
 - Add a test beside each new module.
 `;
 
+// One shell command whose stdout several metrics read.
+const isPrimeShapeMeasurement = `import { declareMeasurement } from "thunderjar";
+
+// What isPrime.ts looks like: one shell command, run once, prints JSON, and each metric reads
+// it from the stored stdout.
+const shape = (v: { exitCode: number; stdout: string }) =>
+  v.exitCode === 0 ? (JSON.parse(v.stdout) as { lines: number; comments: number; exports: number }) : undefined;
+
+export default declareMeasurement({
+  instrument: "shell",
+  config: {
+    // Prints e.g. {"lines":3,"comments":2,"exports":1}. Exits non-zero when isPrime.ts is missing.
+    command: String.raw\`node -e '
+      const src = require("fs").readFileSync("isPrime.ts", "utf8").trimEnd();
+      console.log(JSON.stringify({
+        lines: src.split("\\n").length,
+        comments: (src.match(/^\\s*\\/\\//gm) ?? []).length,
+        exports: (src.match(/^export /gm) ?? []).length,
+      }));'\`,
+  },
+  metrics: {
+    lines: { score: (v) => shape(v)?.lines, stat: "median", better: "lower" },
+    comments: { score: (v) => shape(v)?.comments, stat: "mean" },
+    singleExport: { score: (v) => (shape(v) ? shape(v)!.exports === 1 : undefined), stat: "rate", better: "higher" },
+  },
+});
+`;
+
 const P = "parameters";
 
 /**
@@ -244,6 +272,7 @@ export function scaffold({ nestedPackage, repository }: { nestedPackage: boolean
     [`${P}/tasks/is-prime/measurements/isPrimeTests.ts`]: bunTestFileMeasurement,
     [`${P}/tasks/is-prime/measurements/isPrime.test.ts`]: isPrimeTest,
     [`${P}/tasks/is-prime/measurements/isPrime.reference.ts`]: isPrimeReference,
+    [`${P}/tasks/is-prime/measurements/isPrimeShape.ts`]: isPrimeShapeMeasurement,
     [`${P}/tasks/is-prime/measurements/tsIgnoreCount.ts`]: tsIgnoreCountMeasurement,
   };
 }

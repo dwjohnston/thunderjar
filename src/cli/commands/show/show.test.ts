@@ -39,7 +39,7 @@ afterEach(async () => {
 });
 
 describe("0203 recorded executions", () => {
-  test("<execution>: a row per permutation by its varying parameters, each measure aggregated by its methods, and what's left out", async () => {
+  test("<execution>: a row per permutation by its varying parameters, a column per metric, and why each iteration left out was", async () => {
     expect(await thunderjar(scenario("0203"), ["show", BASELINE])).toEqual({
       stdout: `Execution  <ULID>
 Test case  is-prime-baseline
@@ -48,36 +48,55 @@ Started    2026-10-01 10:12
 Status     complete
 Matrix     8 permutations × 5 iterations
 
-                                                                        isPrimeTests                                             isPrimeTsExists   tsIgnoreCount
-     promptSet | harnessModel | initialPrompt                    runs   sum                        mean                          rate              mean   max
- 1   snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5/5    {passed: 16, failed: 9}    {passed: 3.2, failed: 1.8}    5/5               1.0    1
- 2   snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   5/5    {passed: 12, failed: 8}*   {passed: 3.0, failed: 2.0}*   5/5               1.2    2
- 3   snerk | fake-harness-beta@1.0.0/fake-model-large | plain    5/5    {passed: 25, failed: 0}    {passed: 5.0, failed: 0.0}    5/5               0.0    0
- 4   snerk | fake-harness-beta@1.0.0/fake-model-large | terse    5/5    {passed: 24, failed: 1}    {passed: 4.8, failed: 0.2}    5/5               0.0    0
- 5   glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   5/5    {passed: 15, failed: 10}   {passed: 3.0, failed: 2.0}    5/5               0.8    1
- 6   glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   5/5    {passed: 12, failed: 8}*   {passed: 3.0, failed: 2.0}*   4/5               1.0*   1*
- 7   glurk | fake-harness-beta@1.0.0/fake-model-large | plain    5/5    {passed: 25, failed: 0}    {passed: 5.0, failed: 0.0}    5/5               0.2    1
- 8   glurk | fake-harness-beta@1.0.0/fake-model-large | terse    5/5    {passed: 25, failed: 0}    {passed: 5.0, failed: 0.0}    5/5               0.0    0
+     promptSet | harnessModel | initialPrompt                    runs   isPrimeShape.lines ↓   isPrimeShape.comments   isPrimeShape.singleExport ↑   isPrimeTests.passRate ↑   isPrimeTests.passed ↑   isPrimeTsExists.exists   tsIgnoreCount.count
+ 1   snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5/5    3.0*                   2.0*                    4/4*                          0.6                       3.2                     5/5                      1.0
+ 2   snerk | fake-harness-alpha@1.0.0/fake-model-small | terse   5/5    3.0                    2.0                     5/5                           0.6*                      3.0*                    5/5                      1.2
+ 3   snerk | fake-harness-beta@1.0.0/fake-model-large | plain    5/5    2.0                    1.0                     5/5                           1.0                       5.0                     5/5                      0.0
+ 4   snerk | fake-harness-beta@1.0.0/fake-model-large | terse    5/5    2.0                    1.0                     5/5                           1.0                       4.8                     5/5                      0.0
+ 5   glurk | fake-harness-alpha@1.0.0/fake-model-small | plain   5/5    3.0                    2.0                     5/5                           0.6                       3.0                     5/5                      0.8
+ 6   glurk | fake-harness-alpha@1.0.0/fake-model-small | terse   5/5    3.0*                   2.0*                    4/4*                          0.6*                      3.0*                    4/5                      1.0*
+ 7   glurk | fake-harness-beta@1.0.0/fake-model-large | plain    5/5    2.0                    1.0                     5/5                           1.0                       5.0                     5/5                      0.2
+ 8   glurk | fake-harness-beta@1.0.0/fake-model-large | terse    5/5    2.0                    1.0                     5/5                           1.0                       5.0                     5/5                      0.0
 
-* Left out of the aggregate:
-  2-4  isPrimeTests   errored while measuring  (isPrime.test.ts didn't run against isPrime.ts: error: Unexpected end of file)
-  6-3  isPrimeTests   skipped  (no file matches **/isPrime.ts)
-  6-3  tsIgnoreCount  skipped  (no file matches **/*.ts)
+* Left out:
+  1-3  isPrimeShape.lines         score failed  (score threw: JSON Parse error: Unexpected identifier "warning")
+  1-3  isPrimeShape.comments      score failed  (score threw: JSON Parse error: Unexpected identifier "warning")
+  1-3  isPrimeShape.singleExport  score failed  (score threw: JSON Parse error: Unexpected identifier "warning")
+  2-4  isPrimeTests               errored while measuring  (isPrime.test.ts didn't run against isPrime.ts: error: Unexpected end of file)
+  6-3  isPrimeShape.lines         not applicable
+  6-3  isPrimeShape.comments      not applicable
+  6-3  isPrimeShape.singleExport  not applicable
+  6-3  isPrimeTests               skipped  (no file matches **/isPrime.ts)
+  6-3  tsIgnoreCount              skipped  (no file matches **/*.ts)
 `,
       stderr: "",
       exitCode: 0,
     });
   });
 
-  test("<execution> --json: the summary the table is drawn from, a permutation each, its measures aggregated by their methods", async () => {
+  test("<execution> --json: the summary the table is drawn from, a permutation each, its metrics aggregated", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0203"), ["show", BASELINE, "--json"]);
     expect({ stderr, exitCode }).toEqual({ stderr: "", exitCode: 0 });
     const summary = JSON.parse(stdout);
 
     expect(summary.measurements).toEqual([
-      { name: "isPrimeTests", aggregate: ["sum", "mean"] },
-      { name: "isPrimeTsExists", aggregate: ["rate"] },
-      { name: "tsIgnoreCount", aggregate: ["mean", "max"] },
+      {
+        name: "isPrimeShape",
+        metrics: [
+          { name: "lines", stat: "median", kind: "number", better: "lower" },
+          { name: "comments", stat: "mean", kind: "number" },
+          { name: "singleExport", stat: "rate", kind: "boolean", better: "higher" },
+        ],
+      },
+      {
+        name: "isPrimeTests",
+        metrics: [
+          { name: "passRate", stat: "mean", kind: "number", better: "higher" },
+          { name: "passed", stat: "mean", kind: "number", better: "higher" },
+        ],
+      },
+      { name: "isPrimeTsExists", metrics: [{ name: "exists", stat: "rate", kind: "boolean" }] },
+      { name: "tsIgnoreCount", metrics: [{ name: "count", stat: "mean", kind: "number" }] },
     ]);
     expect(summary.varyingAxes).toEqual(["promptSet", "harnessModel", "initialPrompt"]);
     expect(summary.commonParameters).toEqual([
@@ -89,15 +108,36 @@ Matrix     8 permutations × 5 iterations
     expect(second.parameters).toMatchObject({ promptSet: "snerk", initialPrompt: "terse" });
     expect(second.iterations).toBe(5);
     expect(second.agent).toEqual([{ end: "done", runs: 5 }]);
-    expect(second.measures.isPrimeTests).toEqual({ measured: 4, values: { sum: { passed: 12, failed: 8 }, mean: { passed: 3, failed: 2 } } });
-    expect(second.measures.isPrimeTsExists).toEqual({ measured: 5, values: { rate: 1 } });
+    expect(second.measures.isPrimeTests).toEqual({
+      measured: 4,
+      metrics: {
+        passRate: { kind: "number", stat: "mean", better: "higher", value: 0.6, applicable: 4, notApplicable: 0, failed: [] },
+        passed: { kind: "number", stat: "mean", better: "higher", value: 3, applicable: 4, notApplicable: 0, failed: [] },
+      },
+    });
+    expect(second.measures.isPrimeTsExists).toEqual({
+      measured: 5,
+      metrics: { exists: { kind: "boolean", stat: "rate", value: 1, applicable: 5, notApplicable: 0, failed: [] } },
+    });
     expect(second.leftOut).toEqual([
       {
         run: "2-4",
-        measure: "isPrimeTests",
-        outcome: { outcome: "erroredWhileMeasuring", error: { message: "isPrime.test.ts didn't run against isPrime.ts: error: Unexpected end of file" } },
+        measurement: "isPrimeTests",
+        why: "erroredWhileMeasuring",
+        reason: "isPrime.test.ts didn't run against isPrime.ts: error: Unexpected end of file",
       },
     ]);
+    // 1-3's isPrimeShape printed a warning before its JSON: each of its metrics' scores failed, with why.
+    const [first] = summary.permutations;
+    expect(first.measures.isPrimeShape.metrics.lines).toEqual({
+      kind: "number",
+      stat: "median",
+      better: "lower",
+      value: 3,
+      applicable: 4,
+      notApplicable: 0,
+      failed: [{ iteration: 3, reason: 'score threw: JSON Parse error: Unexpected identifier "warning"' }],
+    });
     expect(second.durationMs).toMatchObject({ of: 5 });
   });
 
@@ -107,7 +147,7 @@ Matrix     8 permutations × 5 iterations
     expect(JSON.parse(stdout)).toMatchObject({ permutation: 6, iteration: 3, parameters: { promptSet: { name: "glurk" } } });
   });
 
-  test("<execution> that failed: a measure no iteration measured shows —, and a rate counts only the iterations measured", async () => {
+  test("<execution> that failed: a metric no iteration has a score for shows –, and a rate counts only the iterations it applies to", async () => {
     expect(await thunderjar(scenario("0203"), ["show", TWO_HARNESSES])).toEqual({
       stdout: `Execution  <ULID>
 Test case  two-harnesses
@@ -116,17 +156,19 @@ Started    2026-10-02 14:40
 Status     failed
 Matrix     2 permutations × 1 iteration
 
-                                                        isPrimeTests                                          isPrimeTsExists   tsIgnoreCount
-     harnessModel                                runs   sum                      mean                         rate              mean   max
- 1   fake-harness-alpha@1.0.0/fake-model-small   1/1    {passed: 3, failed: 2}   {passed: 3.0, failed: 2.0}   1/1               1.0    1
- 2   fake-harness-beta@1.0.0/fake-model-large    1/1    —                        —                            0/1               —      —
+     harnessModel                                runs   isPrimeShape.lines ↓   isPrimeShape.comments   isPrimeShape.singleExport ↑   isPrimeTests.passRate ↑   isPrimeTests.passed ↑   isPrimeTsExists.exists   tsIgnoreCount.count
+ 1   fake-harness-alpha@1.0.0/fake-model-small   1/1    3.0                    2.0                     1/1                           0.6                       3.0                     1/1                      1.0
+ 2   fake-harness-beta@1.0.0/fake-model-large    1/1    –*                     –*                      –*                            –*                        –*                      0/1                      –*
 
 ! Agents that didn't end cleanly:
   2-1  exited 3, no result file
 
-* Left out of the aggregate:
-  2-1  isPrimeTests   skipped  (no file matches **/isPrime.ts)
-  2-1  tsIgnoreCount  skipped  (no file matches **/*.ts)
+* Left out:
+  2-1  isPrimeShape.lines         not applicable
+  2-1  isPrimeShape.comments      not applicable
+  2-1  isPrimeShape.singleExport  not applicable
+  2-1  isPrimeTests               skipped  (no file matches **/isPrime.ts)
+  2-1  tsIgnoreCount              skipped  (no file matches **/*.ts)
 `,
       stderr: "",
       exitCode: 0,
@@ -149,7 +191,7 @@ No container runs recorded.
     });
   });
 
-  test("<execution> <container run>: its parameters, how the agent ran, and each measure, with why it has no value", async () => {
+  test("<execution> <container run>: its parameters, how the agent ran, each measure as stored, and each metric's score, or why it has none", async () => {
     expect(await thunderjar(scenario("0203"), ["show", BASELINE, "6-3"])).toEqual({
       stdout: `Container run  6-3
 Execution      <ULID>  (is-prime-baseline)
@@ -171,9 +213,19 @@ Exit         0
 Result file  33 bytes
 
 Measures
+  isPrimeShape     {exitCode: 1, stdout: "", stdoutTruncated: false}
   isPrimeTests     skipped  (no file matches **/isPrime.ts)
   isPrimeTsExists  false
   tsIgnoreCount    skipped  (no file matches **/*.ts)
+
+Metrics
+  isPrimeShape.lines ↓         not applicable
+  isPrimeShape.comments        not applicable
+  isPrimeShape.singleExport ↑  not applicable
+  isPrimeTests.passRate ↑      no measure
+  isPrimeTests.passed ↑        no measure
+  isPrimeTsExists.exists       false
+  tsIgnoreCount.count          no measure
 `,
       stderr: "",
       exitCode: 0,
@@ -195,14 +247,14 @@ Measures
 
     expect(exitCode).toBe(0);
     expect(stdout).toEndWith(`
-     harnessModel                                runs   sum                      mean                         rate              mean   max      tokens (mean)   cost (mean)
- 1   fake-harness-alpha@1.0.0/fake-model-small   1/1    {passed: 3, failed: 2}   {passed: 3.0, failed: 2.0}   1/1               1.0    1        not reported    —
- 2   fake-harness-beta@1.0.0/fake-model-large    1/1    {passed: 5, failed: 0}   {passed: 5.0, failed: 0.0}   1/1               0.0    0        9,300           $0.045
+     harnessModel                                runs   isPrimeShape.lines ↓   isPrimeShape.comments   isPrimeShape.singleExport ↑   isPrimeTests.passRate ↑   isPrimeTests.passed ↑   isPrimeTsExists.exists   tsIgnoreCount.count   tokens (mean)   cost (mean)
+ 1   fake-harness-alpha@1.0.0/fake-model-small   1/1    3.0                    2.0                     1/1                           0.6                       3.0                     1/1                      1.0                   not reported    —
+ 2   fake-harness-beta@1.0.0/fake-model-large    1/1    2.0                    1.0                     1/1                           1.0                       5.0                     1/1                      0.0                   9,300           $0.045
 
 ! Agents that didn't end cleanly:
   1-1  timed out after <duration>
 
-* Left out of the aggregate:
+* Left out:
   1-1  tokens  not reported  (absent)
 `);
   });
@@ -268,17 +320,19 @@ Measures
     const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "--data-dir", data]);
 
     expect(stdout).toEndWith(`
-                                                                                           isPrimeTests   isPrimeTsExists   tsIgnoreCount
-     baseImage | codeState | promptSet | harnessModel | initialPrompt               runs   sum   mean     rate              mean   max
+     baseImage | codeState | promptSet | harnessModel | initialPrompt               runs   isPrimeShape.lines ↓   isPrimeShape.comments   isPrimeShape.singleExport ↑   isPrimeTests.passRate ↑   isPrimeTests.passed ↑   isPrimeTsExists.exists   tsIgnoreCount.count
  1   no container runs
- 2   node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large | plain   1/1    —     —        0/1               —      —
+ 2   node20 | baseline | snerk | fake-harness-beta@1.0.0/fake-model-large | plain   1/1    –*                     –*                      –*                            –*                        –*                      0/1                      –*
 
 ! Agents that didn't end cleanly:
   2-1  exited 3, no result file
 
-* Left out of the aggregate:
-  2-1  isPrimeTests   skipped  (no file matches **/isPrime.ts)
-  2-1  tsIgnoreCount  skipped  (no file matches **/*.ts)
+* Left out:
+  2-1  isPrimeShape.lines         not applicable
+  2-1  isPrimeShape.comments      not applicable
+  2-1  isPrimeShape.singleExport  not applicable
+  2-1  isPrimeTests               skipped  (no file matches **/isPrime.ts)
+  2-1  tsIgnoreCount              skipped  (no file matches **/*.ts)
 `);
     expect(exitCode).toBe(0);
   });
@@ -292,33 +346,32 @@ Measures
     expect(exitCode).toBe(0);
   });
 
-  test("a measure whose recorded values its declaration no longer combines shows ?, and why, and the rest still shows", async () => {
+  test("a measure taken before its measurement changed is stale: left out, saying why, and the rest still shows", async () => {
     await using copy = await copyScenarioProject("0203");
-    await Bun.write(
-      `${copy.dir}/.thunderjar/parameters/tasks/is-prime/measurements/tsIgnoreCount.ts`,
-      `import { declareMeasurement } from "thunderjar";
-
-export default declareMeasurement({
-  instrument: "fileCreated",
-  config: { glob: "**/*.ts" },
-  aggregate: ["rate"],
-});
-`,
-    );
+    const file = `${copy.dir}/.thunderjar/parameters/tasks/is-prime/measurements/tsIgnoreCount.ts`;
+    await Bun.write(file, (await Bun.file(file).text()).replace('"@ts-ignore"', '"@ts-expect-error"'));
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["show", BASELINE]);
 
     expect(stdout).toContain(`
-                                                                        isPrimeTests                                             isPrimeTsExists   tsIgnoreCount
-     promptSet | harnessModel | initialPrompt                    runs   sum                        mean                          rate              rate
- 1   snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5/5    {passed: 16, failed: 9}    {passed: 3.2, failed: 1.8}    5/5               ?
+     promptSet | harnessModel | initialPrompt                    runs   isPrimeShape.lines ↓   isPrimeShape.comments   isPrimeShape.singleExport ↑   isPrimeTests.passRate ↑   isPrimeTests.passed ↑   isPrimeTsExists.exists   tsIgnoreCount.count
+ 1   snerk | fake-harness-alpha@1.0.0/fake-model-small | plain   5/5    3.0*                   2.0*                    4/4*                          0.6                       3.2                     5/5                      –*
 `);
-    expect(stdout).toEndWith(`
-? Can't aggregate as declared today:
-  tsIgnoreCount:  recorded values are numbers; "rate" doesn't combine them (remeasure)
-`);
+    expect(stdout).toContain("\n  1-1  tsIgnoreCount              stale  (measured before the measurement or its instrument changed)\n");
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
+  });
+
+  test("a metric added since the runs were measured is read from their stored measures, with no remeasuring", async () => {
+    await using copy = await copyScenarioProject("0203");
+    const file = `${copy.dir}/.thunderjar/parameters/tasks/is-prime/measurements/isPrimeTests.ts`;
+    await Bun.write(file, (await Bun.file(file).text()).replace("  },\n});", '    allPassed: { score: (v) => v.passed === v.total, stat: "count" },\n  },\n});'));
+
+    const { stdout, exitCode } = await thunderjar(copy.dir, ["show", TIMED_OUT, "--json"]);
+
+    expect(exitCode).toBe(0);
+    const { permutations } = JSON.parse(stdout) as { permutations: { measures: Record<string, { metrics: Record<string, { value?: number }> }> }[] };
+    expect(permutations.map(({ measures }) => measures.isPrimeTests?.metrics.allPassed?.value)).toEqual([0, 1]);
   });
 
   test("a record that isn't JSON is an error naming the store and the record", async () => {

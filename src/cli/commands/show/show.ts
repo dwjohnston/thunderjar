@@ -1,17 +1,18 @@
 // `thunderjar show <execution> [container run]`: the recorded results of an execution, one row per
-// permutation with its measures aggregated across its iterations, or one container run's record.
-// The aggregates are computed when shown, by the methods the task's measurements declare today.
+// permutation with each metric aggregated across its iterations, or one container run's record.
+// The metrics are read from the stored measures when shown, as the task's measurements declare them today.
 import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadMeasurements, type Measurement } from "../../../config/measurements.ts";
 import { AXES, abbreviateHash } from "../../../config/permutations.ts";
 import type { ModelTokenCosts, Reply, TokenCosts } from "../../../api/declarations.ts";
+import { scoreOf } from "../../../execution/aggregate.ts";
 import { type ExecutionSummary, type PermutationSummary, runName, summariseExecution } from "../../../execution/executionSummary.ts";
 import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, padEnd, painter, plain, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { dollars, duration, minute, paintStatus, plural, showAggregate, showResolved, showValue, thousands } from "../../format.ts";
+import { dollars, duration, minute, paintStatus, plural, showResolved, showStat, showValue, thousands } from "../../format.ts";
 import { print, printError, printJson } from "../../output.ts";
 
 const GAP = "   ";
@@ -75,23 +76,44 @@ function tokenCostLines(costs: TokenCosts, paint: Paint): string[] {
   ]);
 }
 
+/** Why an iteration was left out of a measurement's metrics, or of one metric. */
+function showLeftOut({ why, reason }: PermutationSummary["leftOut"][number], paint: Paint): string {
+  const because = reason === undefined ? "" : `  (${reason})`;
+  switch (why) {
+    case "skipped":
+      return paint.yellow(`skipped${because}`);
+    case "erroredWhileMeasuring":
+      return paint.red(`errored while measuring${because}`);
+    case "notMeasured":
+      return paint.dim("not measured");
+    case "stale":
+      return paint.yellow(`stale${because}`);
+    case "notApplicable":
+      return paint.dim("not applicable");
+    case "scoreFailed":
+      return paint.red(`score failed${because}`);
+  }
+}
+
+/** A metric's column header: its identity, `<measurement>.<metric>`, and `↑` or `↓` if higher or lower is better. */
+export const metricHeader = (measurement: string, { name, better }: { name: string; better?: string }) =>
+  `${measurement}.${name}${better === "higher" ? " ↑" : better === "lower" ? " ↓" : ""}`;
+
 /**
- * The execution's table: a header naming each measurement above its methods, then a row per
- * permutation, `<n>  <its varying parameters>`, with its container runs and each aggregate. The
- * container runs whose agent exited non-zero, timed out or left no result file are listed below.
- * An aggregate that leaves an iteration out is starred, and the iterations left out listed below.
- * A measure whose recorded values its methods can't combine shows `?`, and why below.
+ * The execution's table: a row per permutation, `<n>  <its varying parameters>`, with its
+ * container runs, and a column per metric, headed by its identity. The container runs whose agent
+ * exited non-zero, timed out or left no result file are listed below. A metric that leaves an
+ * iteration out is starred, and why each was left out is listed below.
  */
 function permutationTable(summary: ExecutionSummary, paint: Paint): string[] {
   const { execution, measurements, recordsTokenCosts, permutations } = summary;
   // With none varying, every parameter shows.
   const axes = summary.varyingAxes.length > 0 ? summary.varyingAxes : [...AXES];
-  const methodColumns = measurements.flatMap(({ name, aggregate }) => aggregate.map((method, i) => ({ name, method, first: i === 0 })));
+  const metricColumns = measurements.flatMap(({ name, metrics }) => metrics.map((metric) => ({ measurement: name, metric })));
   const numberWidth = String(execution.matrix.permutations).length;
 
   const rows: string[][] = [];
   const leftOut: string[][] = [];
-  const incompatible = new Map<string, Set<string>>();
   for (const permutation of permutations) {
     const number = String(permutation.permutation).padStart(numberWidth);
     const { parameters, measures, iterations } = permutation;
@@ -99,10 +121,9 @@ function permutationTable(summary: ExecutionSummary, paint: Paint): string[] {
       rows.push([paint.bold(number), paint.dim("no container runs")]);
       continue;
     }
-    for (const [name, measure] of Object.entries(measures)) {
-      if (measure.incompatible !== undefined) incompatible.set(name, (incompatible.get(name) ?? new Set()).add(measure.incompatible));
+    for (const left of permutation.leftOut) {
+      leftOut.push([paint.bold(left.run), paint.blue(left.metric === undefined ? left.measurement : `${left.measurement}.${left.metric}`), showLeftOut(left, paint)]);
     }
-    for (const { run, measure, outcome } of permutation.leftOut) leftOut.push([paint.bold(run), paint.blue(measure), showOutcome(outcome, paint)]);
     if (recordsTokenCosts) {
       for (const { run, tokenCosts } of permutation.withoutTokenCosts) leftOut.push([paint.bold(run), paint.blue("tokens"), notCollected(tokenCosts, paint)]);
     }
@@ -110,40 +131,31 @@ function permutationTable(summary: ExecutionSummary, paint: Paint): string[] {
       paint.bold(number),
       paint.magenta(axes.map((axis) => parameters[axis]).join(" | ")),
       (iterations < execution.matrix.iterations ? paint.yellow : paint.dim)(`${iterations}/${execution.matrix.iterations}`),
-      ...methodColumns.map(({ name, method }) => {
-        const { measured, values, incompatible } = measures[name]!;
-        if (incompatible !== undefined) return paint.yellow("?");
-        const value = values[method];
-        if (value === undefined) return paint.dim("—");
-        return `${showAggregate(method, value, measured)}${measured < iterations ? paint.yellow("*") : ""}`;
+      ...metricColumns.map(({ measurement, metric }) => {
+        const { stat, value, applicable } = measures[measurement]!.metrics[metric.name]!;
+        const shown = showStat(stat, value, applicable);
+        return `${value === undefined ? paint.dim(shown) : shown}${applicable < iterations ? paint.yellow("*") : ""}`;
       }),
       ...(recordsTokenCosts ? costColumns(permutation, paint) : []),
     ]);
   }
 
-  const header = ["", axes.join(" | "), "runs", ...methodColumns.map(({ method }) => method), ...(recordsTokenCosts ? ["tokens (mean)", "cost (mean)"] : [])];
+  const header = [
+    "",
+    axes.join(" | "),
+    "runs",
+    ...metricColumns.map(({ measurement, metric }) => metricHeader(measurement, metric)),
+    ...(recordsTokenCosts ? ["tokens (mean)", "cost (mean)"] : []),
+  ];
   const widths = header.map((cell, i) => Math.max(cell.length, ...rows.map((row) => visibleLength(row[i] ?? ""))));
-  // Widen a measurement's last column until its name fits above its methods.
-  for (const { name, aggregate } of measurements) {
-    const start = 3 + methodColumns.findIndex((column) => column.name === name);
-    const end = start + aggregate.length - 1;
-    const span = widths.slice(start, end + 1).reduce((a, b) => a + b, 0) + GAP.length * (end - start);
-    if (span < name.length) widths[end]! += name.length - span;
-  }
   const line = (cells: string[]) => ` ${cells.map((cell, i) => padEnd(cell, widths[i]!)).join(GAP)}`.trimEnd();
-  const column = (i: number) => 1 + widths.slice(0, i).reduce((a, b) => a + b + GAP.length, 0);
-  const names = methodColumns.reduce((text, { name, first }, i) => (first ? `${padEnd(text, column(3 + i))}${paint.blue(name)}` : text), "");
 
-  const lines = [...(measurements.length > 0 ? [names] : []), paint.dim(line(header)), ...rows.map(line)];
+  const lines = [paint.dim(line(header)), ...rows.map(line)];
   const unclean = permutations.flatMap((permutation) => permutation.unclean);
   if (unclean.length > 0) {
     lines.push("", paint.red("! Agents that didn't end cleanly:"), ...columns(unclean.map(({ run, end }) => [paint.bold(run), paint.red(end)])));
   }
-  if (leftOut.length > 0) lines.push("", paint.yellow("* Left out of the aggregate:"), ...columns(leftOut));
-  if (incompatible.size > 0) {
-    const reasons = [...incompatible].flatMap(([name, why]) => [...why].map((reason) => [paint.blue(`${name}:`), `${reason} ${paint.dim("(remeasure)")}`]));
-    lines.push("", paint.yellow("? Can't aggregate as declared today:"), ...columns(reasons));
-  }
+  if (leftOut.length > 0) lines.push("", paint.yellow("* Left out:"), ...columns(leftOut));
   return lines;
 }
 
@@ -175,8 +187,38 @@ const showReply = (reply: Reply, paint: Paint, label = "") => {
 const showReplies = ({ reply, turns }: ContainerRunRecord, paint: Paint) =>
   turns ? turns.flatMap((turn, i) => showReply(turn.reply, paint, `Turn ${i + 1}:  `)) : showReply(reply as Reply, paint);
 
-/** One container run: where it sits, its parameters, how the agent ran, its reply if it was recorded with one, and its measures. */
-export function renderContainerRun(record: ContainerRunRecord, paint: Paint = plain): string {
+/**
+ * Each metric of `measurements`, the task's as declared today, read from `record`'s measures: its
+ * score, or why it has none.
+ */
+function metricLines(record: ContainerRunRecord, measurements: Measurement[], paint: Paint): string[] {
+  const rows = measurements.flatMap(({ name, declaration, contentHash }) => {
+    const measure = record.result[name];
+    const outcome = measure?.outcome;
+    const noValue =
+      outcome === undefined || outcome.outcome !== "measured"
+        ? paint.dim(`no measure`)
+        : measure!.contentHash !== contentHash
+          ? paint.yellow("stale  (measured before the measurement or its instrument changed)")
+          : undefined;
+    return Object.entries(declaration.metrics).map(([metric, declared]) => {
+      const label = paint.blue(metricHeader(name, { name: metric, better: declared.better }));
+      if (noValue !== undefined) return [label, noValue];
+      const scored = scoreOf(declaration.instrument, declared, (outcome as { data: unknown }).data);
+      if ("score" in scored) return [label, showValue(scored.score, undefined, paint)];
+      if ("notApplicable" in scored) return [label, paint.dim("not applicable")];
+      return [label, paint.red(`score failed  (${scored.failed})`)];
+    });
+  });
+  return rows.length === 0 ? [paint.dim("  none")] : columns(rows);
+}
+
+/**
+ * One container run: where it sits, its parameters, how the agent ran, its reply if it was
+ * recorded with one, each measure's stored value, and, given the task's measurements, each
+ * metric's score.
+ */
+export function renderContainerRun(record: ContainerRunRecord, paint: Paint = plain, measurements?: Measurement[]): string {
   const { executionId, testCase, permutation, permutationHash, iteration, postrunImage, ranAt, parameters, harnessModel, execution, harnessResult, reply, result } =
     record;
   const turnsRan = execution.turns === undefined ? [] : [["Turns", `${execution.turns.length} of ${record.turns?.length ?? "?"} ran`] as [string, string]];
@@ -223,6 +265,7 @@ export function renderContainerRun(record: ContainerRunRecord, paint: Paint = pl
     ...(record.tokenCosts === undefined ? [] : [paint.bold("Token costs"), ...tokenCostLines(record.tokenCosts, paint), ""]),
     paint.bold("Measures"),
     ...(names.length === 0 ? [paint.dim("  none")] : columns(names.map((name) => [paint.blue(name), showOutcome(result[name]!.outcome, paint)]))),
+    ...(measurements === undefined ? [] : ["", paint.bold("Metrics"), ...metricLines(record, measurements, paint)]),
   ].join("\n");
 }
 
@@ -260,18 +303,18 @@ async function show(cwd: string, executionId: string, containerRun?: string, dat
   const record = runs.find((run) => runName(run) === containerRun || run.postrunImage === containerRun);
   if (!record) return fail(`Execution ${executionId} has no container run ${containerRun}.`);
   if (json) printJson(record);
-  else print(renderContainerRun(record, painter()));
+  else print(renderContainerRun(record, painter(), root === undefined ? undefined : await loadMeasurements(root, record.task)));
 }
 
 export function createShowCommand(): Command {
   return new Command("show")
     .description(
-      "Show an execution's recorded results: a row per permutation, with each measure aggregated across its iterations by its measurement's methods. Given a container run, show that one iteration instead: its parameters, how the agent ran, and each measure.",
+      "Show an execution's recorded results: a row per permutation, with each metric aggregated across its iterations by its statistic. Given a container run, show that one iteration instead: its parameters, how the agent ran, each measure's stored value, and each metric's score.",
     )
     .argument("<execution>", "the execution's ID, as listed by `thunderjar executions`")
     .argument("[container run]", "one of its container runs, as `<permutation>-<iteration>`, e.g. `1-1`, or its postrun image")
     .addOption(dataDirOption())
-    .option("--json", "print it as JSON: an execution's summary, with each permutation's aggregates, or a container run's record")
+    .option("--json", "print it as JSON: an execution's summary, with each permutation's metrics, or a container run's record")
     .action(
       reportingConfigErrors(async (executionId: string, containerRun: string | undefined, options: { dataDir?: string; json?: boolean }) => {
         await show(process.cwd(), executionId, containerRun, options.dataDir, options.json);
