@@ -79,10 +79,10 @@ case "${1:-}" in
     fi
     ;;
   down)
-    # This execution's containers still there were left by a run that failed part way: remove them,
-    # rather than leave them running, or killed by the stop and left as exit 255.
+    # This execution's containers still there, running or not, were left by a run that failed part
+    # way: remove them, rather than leave them running, or killed by the stop and left as exit 255.
     if [ -n "$EXECUTION" ]; then
-      mine=$(running | grep -F -- "-$EXECUTION-" || true)
+      mine=$( ([ "$STATE" = started ] && "$DOCKER" ps -a --format '{{.Names}}' 2>/dev/null) | grep -F -- "-$EXECUTION-" || true)
       [ -z "$mine" ] || "$DOCKER" rm --force $mine >/dev/null 2>&1 || true
     fi
     busy=$(others)
