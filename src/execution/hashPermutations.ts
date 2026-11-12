@@ -3,21 +3,20 @@
 // nothing, and a parameter's hash changes only when what it builds or runs does.
 //
 //   base image, code state, prompt set   fragment, `files/`, and the base image's runOptions
-//   harness                               fragment (with its version), `cli` rendered with fixed
-//                                         sample values, `requiredEnv`, and `files/`
-//   initial prompt                        fragment, its prompt or turns, and `timeoutSeconds`
+//   harness                               fragment (with its version), rendered with a sample
+//                                         model ID, `requiredEnv`, and `files/`
+//   initial prompt                        fragment, and `timeoutSeconds`
 //
 // A parameter's `resolve` runs first, once per execution, and its result reaches the hash only
 // through the text it ends up in.
 //
 // The permutation hash, which identifies runs, is of every parameter hash and the model ID. The
-// prerun image hash is of what the image is built from alone: its Dockerfile and each folder
-// parameter's `files/`, so two models of one harness share an image.
+// prerun image hash is of what the image is built from alone: its Dockerfile, with the harness's
+// fragment rendered with the pair's model ID, and each folder parameter's `files/`.
 import { $, CryptoHasher, Glob } from "bun";
 import type {
   BaseImageDeclaration,
   CodeStateDeclaration,
-  HarnessCliCtx,
   HarnessDeclaration,
   InitialPromptDeclaration,
   PromptSetDeclaration,
@@ -28,6 +27,7 @@ import type {
 import { FILES, PARAMETERS } from "../config/folders.ts";
 import { ConfigError, existsIn, loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
 import { AXES, type Axis, expandPermutations, type HashedPermutation, parsePair } from "../config/permutations.ts";
+import { RUN_SCRIPT_PATH } from "./runScript.ts";
 import { type Ctxs, type FolderRole, joinFragments, PARAMETER_DIRS, renderFragment, type Role } from "./prerunDockerfile.ts";
 
 const sha256 = (data: string | ArrayBuffer) => new CryptoHasher("sha256").update(data).digest("hex");
@@ -87,16 +87,10 @@ const FOLDERS = {
 type FolderAxis = keyof typeof FOLDERS;
 
 /**
- * The fixed values a harness's `cli` is rendered with to hash it: it is hashed by what it does with
- * them, for turn 0 and a later turn, not by the values a container run gets.
+ * The model ID a harness's fragment is rendered with to hash it: it is hashed by what it does with
+ * the model, not by the model, which is in the permutation hash on its own.
  */
-const SAMPLE_CLI: Omit<HarnessCliCtx, "version" | "turn"> = {
-  modelId: "<modelId>",
-  initialPrompt: "<initialPrompt>",
-  promptPath: "<promptPath>",
-  resultPath: "<resultPath>",
-  sessionId: "<sessionId>",
-};
+const SAMPLE_MODEL_ID = "<modelId>";
 
 /** Runs a command on the host, as `ctx.exec` does: see ResolveCtx. */
 export type Exec = ResolveCtx["exec"];
@@ -233,13 +227,14 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
 
   // Rendering: each parameter's fragment, once, with what it resolved to, and its hash.
   const rendered = new Map<string, Promise<Rendered | undefined>>();
-  const render = (parameter: Parameter<object> & { version?: string }, role: Role, hashed: (fragment: string) => Promise<Rendered | undefined>) => {
+  const render = (parameter: Parameter<object> & { version?: string; modelId?: string }, role: Role, hashed: (fragment: string) => Promise<Rendered | undefined>) => {
     const done = rendered.get(parameter.key);
     if (done) return done;
     const resolvedValue = resolved.get(parameter.key);
     const ctx = {
       ...(parameter.dir !== undefined && { dir: PARAMETER_DIRS[role as FolderRole] }),
       ...(parameter.version !== undefined && { version: parameter.version }),
+      ...(parameter.modelId !== undefined && { modelId: parameter.modelId }),
       resolved: resolvedValue,
     } as Ctxs[Role] & { resolved: unknown };
     const fragment = renderFragment(role, parameter, ctx, problems);
@@ -255,24 +250,22 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
       return { fragment, files, hash: sha256(JSON.stringify({ fragment, files, ...runOptions })) };
     });
 
-  const harness = (parameter: Parameter<HarnessDeclaration> & { version: string }) =>
-    render(parameter, "harness", async (fragment) => {
-      let cli: string[];
-      try {
-        const resolvedValue = resolved.get(parameter.key);
-        cli = [0, 1].map((turn) => String(parameter.declaration.cli({ ...SAMPLE_CLI, version: parameter.version, turn, resolved: resolvedValue })));
-      } catch (error) {
-        problems.push({ file: parameter.file, field: "cli", message: `threw: ${error instanceof Error ? error.message : String(error)}` });
-        return undefined;
-      }
+  // A harness is hashed once, with SAMPLE_MODEL_ID, and its fragment rendered once per model.
+  const harness = (parameter: Parameter<HarnessDeclaration> & { version: string; modelId: string }) =>
+    render({ ...parameter, modelId: SAMPLE_MODEL_ID }, "harness", async (fragment) => {
       const files = await filesOf(root, parameter.dir as string);
-      return { fragment, files, hash: sha256(JSON.stringify({ fragment, cli, requiredEnv: parameter.declaration.requiredEnv ?? [], files })) };
+      return { fragment, files, hash: sha256(JSON.stringify({ fragment, requiredEnv: parameter.declaration.requiredEnv ?? [], files })) };
     });
+  // Rendered for the model only once it rendered for the sample, so a broken fragment is one problem.
+  const harnessForModel = (parameter: Parameter<HarnessDeclaration> & { version: string; modelId: string }): string | undefined => {
+    const ctx = { dir: PARAMETER_DIRS.harness, version: parameter.version, modelId: parameter.modelId, resolved: resolved.get(parameter.key) };
+    return renderFragment("harness", parameter, ctx, problems);
+  };
 
   const initialPrompt = (parameter: Parameter<InitialPromptDeclaration>) =>
     render(parameter, "initialPrompt", async (fragment) => {
-      const { prompt, turns, timeoutSeconds } = parameter.declaration;
-      return { fragment, files: [], hash: sha256(JSON.stringify({ fragment, prompt, turns, timeoutSeconds })) };
+      const { timeoutSeconds } = parameter.declaration;
+      return { fragment, files: [], hash: sha256(JSON.stringify({ fragment, timeoutSeconds })) };
     });
 
   // One after another, so problems are listed in plan's order.
@@ -284,8 +277,9 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
     const codeState = await folder("codeState", parameters.codeState as Parameter<CodeStateDeclaration>);
     const promptSet = await folder("promptSet", parameters.promptSet as Parameter<PromptSetDeclaration>);
     const harnessRendered = await harness(harnessModel);
+    const harnessFragment = harnessRendered && harnessForModel(harnessModel);
     const prompt = await initialPrompt(parameters.initialPrompt as Parameter<InitialPromptDeclaration>);
-    if (!baseImage || !codeState || !promptSet || !harnessRendered || !prompt) continue;
+    if (!baseImage || !codeState || !promptSet || !harnessRendered || harnessFragment === undefined || !prompt) continue;
     const parameterHashes = {
       baseImage: baseImage.hash,
       codeState: codeState.hash,
@@ -297,9 +291,19 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
       baseImage: baseImage.fragment,
       codeState: codeState.fragment,
       promptSet: promptSet.fragment,
-      harness: harnessRendered.fragment,
+      harness: harnessFragment,
       initialPrompt: prompt.fragment,
     });
+    if (!dockerfile.includes(RUN_SCRIPT_PATH)) {
+      if (!problems.some((problem) => problem.file === harnessModel.file && problem.field === "applyParameter")) {
+        problems.push({
+          file: harnessModel.file,
+          field: "applyParameter",
+          message: `must write the script that runs the agent, ${RUN_SCRIPT_PATH}, e.g. with writeRunScript(command).`,
+        });
+      }
+      continue;
+    }
     const files = { baseImage: baseImage.files, codeState: codeState.files, promptSet: promptSet.files, harness: harnessRendered.files };
     const resolvedValues: Partial<Record<Axis, Resolved>> = {};
     for (const axis of AXES) {

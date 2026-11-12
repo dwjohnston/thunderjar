@@ -64,8 +64,8 @@ describe.skipIf(!Bun.env.THUNDERJAR_AGENT_TESTS || TEST_CASES.length === 0)("run
       expect(record.tokenCosts).toMatchObject({ outcome: "collected" });
       expect(record.tokenCosts?.outcome === "collected" && record.tokenCosts.models[0]!.outputTokens).toBeGreaterThan(0);
       expect(record.result.isPrimeTsExists?.outcome).toEqual({ outcome: "measured", data: true });
-      // The template test ran with the base image's bun, and the grep found the agent's files.
-      expect(record.result.isPrimeTemplateTest?.outcome).toMatchObject({ outcome: "measured" });
+      // The Bun test ran with the base image's bun, and the grep found the agent's files.
+      expect(record.result.isPrimeTests?.outcome).toMatchObject({ outcome: "measured" });
       expect(record.result.tsIgnoreCount?.outcome).toMatchObject({ outcome: "measured" });
     }
     const [record] = records as [ContainerRunRecord];

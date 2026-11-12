@@ -1,4 +1,4 @@
-import { declareHarness, type ModelTokenCosts, type TokenCosts } from "thunderjar-published";
+import { declareHarness, type ModelTokenCosts, type TokenCosts, writeModel, writeRunScript } from "thunderjar-published";
 
 // GitHub Copilot CLI, in BYOK mode on OpenRouter: setting COPILOT_PROVIDER_BASE_URL makes it skip
 // GitHub auth and Copilot's model routing. It needs OPENROUTER_API_KEY.
@@ -7,7 +7,7 @@ import { declareHarness, type ModelTokenCosts, type TokenCosts } from "thunderja
 // model-specific settings (tool support, token limits). Run `copilot help providers` for the details.
 // Models come and go: check https://openrouter.ai/models for the current IDs.
 
-// Copilot's JSONL output (`--output-format json`) leaves out its token events, so `cli` also has it
+// Copilot's JSONL output (`--output-format json`) leaves out its token events, so the run script also has it
 // write its usage statistics to a file, and appends them to the result file as one more line:
 // {"type":"thunderjar.usage","data":<the usage file>}.
 const USAGE_TYPE = "thunderjar.usage";
@@ -38,7 +38,7 @@ function copilotReply(raw: string): string {
 }
 
 /**
- * Tokens per model, from the usage line `cli` appended. Copilot's `inputTokens` include cached
+ * Tokens per model, from the usage line the run script appended. Copilot's `inputTokens` include cached
  * reads and writes, so they're subtracted to fit Thunderjar's separate buckets. Its `cost` is a
  * premium-request multiplier, not dollars, so no cost is reported.
  */
@@ -66,30 +66,33 @@ function copilotTokenCosts(raw: string): TokenCosts {
 
 export default declareHarness({
   version: "1.0.105",
-  // As `node`, Copilot is run once, so it unpacks itself into ~/.cache/copilot in the image.
-  // Otherwise every run does: 500 MB in each postrun image, to commit and push.
-  applyParameter: (_config, ctx) => `RUN npm install -g @github/copilot@${ctx.version}
-RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
-USER node
-RUN copilot --version`,
-  // The prompt is read from its file, so quotes and newlines reach the agent intact. Any turn after
-  // the first continues the session. Copilot's exit code is kept as the command's, after the usage
-  // line is appended.
-  // Multi-turn caveat: if Copilot's usage file counts the whole resumed session rather than just
-  // this turn, summing turns would count earlier turns twice. Check that before comparing runs
-  // with more than one turn.
-  cli: (ctx) =>
-    `rm -f ${USAGE_FILE}; ` +
-    `COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY"` +
-    ` COPILOT_PROVIDER_MODEL_ID=${ctx.modelId.split("/").pop()}` +
-    // OpenAI's GPT models take Copilot's tools only over the responses API: over chat completions,
-    // the default, every call fails with 400 "Missing required parameter: 'tools[4].name'".
-    `${ctx.modelId.startsWith("openai/") ? " COPILOT_PROVIDER_WIRE_API=responses" : ""}` +
-    ` copilot -p "$(cat ${ctx.promptPath})" --model ${ctx.modelId} --allow-all-tools --no-color` +
-    ` --output-format json --usage-output-file ${USAGE_FILE}` +
-    `${ctx.turn === 0 ? "" : " --continue"} > ${ctx.resultPath}; code=$?; ` +
-    `[ -f ${USAGE_FILE} ] && printf '{"type":"${USAGE_TYPE}","data":%s}\\n' "$(tr -d '\\n' < ${USAGE_FILE})" >> ${ctx.resultPath}; ` +
-    `exit $code`,
+  applyParameter: (_config, ctx) =>
+    [
+      `RUN npm install -g @github/copilot@${ctx.version}`,
+      "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+      // As `node`, Copilot is run once, so it unpacks itself into ~/.cache/copilot in the image.
+      // Otherwise every run does: 500 MB in each postrun image, to commit and push. Before the
+      // model is written, so every model's image shares the layer.
+      "USER node",
+      "RUN copilot --version",
+      "USER root",
+      writeModel(ctx.modelId),
+      // The prompt and model are read from their files, so quotes and newlines reach the agent intact.
+      // Copilot's exit code is kept as the script's, after the usage line is appended.
+      writeRunScript(
+        `rm -f ${USAGE_FILE}; ` +
+          `COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY"` +
+          ` COPILOT_PROVIDER_MODEL_ID=${ctx.modelId.split("/").pop()}` +
+          // OpenAI's GPT models take Copilot's tools only over the responses API: over chat completions,
+          // the default, every call fails with 400 "Missing required parameter: 'tools[4].name'".
+          `${ctx.modelId.startsWith("openai/") ? " COPILOT_PROVIDER_WIRE_API=responses" : ""}` +
+          ` copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color` +
+          ` --output-format json --usage-output-file ${USAGE_FILE} > /thunderjar/result.json; code=$?; ` +
+          `[ -f ${USAGE_FILE} ] && printf '{"type":"${USAGE_TYPE}","data":%s}\\n' "$(tr -d '\\n' < ${USAGE_FILE})" >> /thunderjar/result.json; ` +
+          `exit $code`,
+      ),
+      "USER node",
+    ].join("\n"),
   collectReply: copilotReply,
   collectTokenCosts: copilotTokenCosts,
   requiredEnv: ["OPENROUTER_API_KEY"],

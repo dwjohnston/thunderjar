@@ -76,8 +76,8 @@ Each experiment parameter has its own **parameter hash**, of what it outputs rat
 source:
 
 1. **The text it renders**: its Dockerfile fragment, once `resolve` and `applyParameter` have
-   run, and for a harness its `cli` rendered with sample values and its `requiredEnv`, for an
-   initial prompt its prompt and timeout.
+   run, for a harness rendered with a sample model ID, with its `requiredEnv`, and for an
+   initial prompt with its timeout.
 2. **Its `files/` folder**, by content: what its fragment can copy into the image.
 3. **Nothing else.** Comments, helpers and names aren't hashed. A task's measurements aren't
    in any parameter hash, because changing them doesn't change what runs.
@@ -203,6 +203,10 @@ Preservation precedes measurement deliberately — see
 ### Iteration
 
 An **iteration** is one repeat of a container run for the same permutation, used to gather pass-rate statistics. Each iteration gets its own container and a separate ID within the permutation.
+
+### Measure and metric
+
+A **measure** is what a measurement's instrument returned for one container run, stored as it is: a boolean, a number, or a record of any shape, such as `{ passed, total }`. A **metric** reads a score from a measure, a number or a boolean, or `undefined` where it doesn't apply, and has one statistic across a permutation's iterations, such as `mean` or `rate`, and optionally a direction, `better: "higher" | "lower"`. A measurement declares one or more metrics; each is named `<measurement>.<metric>`, e.g. `isPrimeTests.passRate`. Metrics are computed when results are read, so they can change without re-measuring. See [085-experiment-results.md](085-experiment-results.md#measures-and-metrics).
 
 ### Aggregation result
 

@@ -18,7 +18,7 @@ initialPrompt: plain
 
 Matrix shape: 1/1/1/1/1 (1 permutation)
 
- 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   b7b0c69c  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   0af800ad  missing
 `;
 
 describe("0201 minimal existing setup", () => {
@@ -69,41 +69,48 @@ initialPrompt: plain, terse
 
 Matrix shape: 1/1/2/2/2 (8 permutations)
 
- 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  missing
- 2  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | terse   fe8d47cc  missing
- 3  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | plain   9ca648c2  missing
- 4  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | terse   81e5b063  missing
- 5  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   6bcdf9f3  missing
- 6  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | terse   15846748  missing
- 7  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | plain   d1e2fa39  missing
- 8  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | terse   65f3bfb0  missing
+ 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   bef6be59  missing
+ 2  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | terse   8b3522e9  missing
+ 3  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | plain   6200c233  missing
+ 4  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | terse   3f62a5bf  missing
+ 5  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   189377e4  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | terse   31afc3d2  missing
+ 7  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | plain   03d6390a  missing
+ 8  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | terse   93bd21bc  missing
 `);
   });
 
-  // Each pair of permutations differing only in their initial prompt, which has no fragment, shares a prerun image.
+  // The initial prompt is baked into the prerun image, so each permutation has its own.
   test("says which prerun images are built, asking Docker once", async () => {
     await using docker = await fakeDocker({
-      images: ["thunderjar-prerun:b9cd78e6", "thunderjar-prerun:44230271", "other-prerun:e01991db", "thunderjar-postrun:65f3bfb0"],
+      images: [
+        "thunderjar-prerun:32a1d048",
+        "thunderjar-prerun:6aeed656",
+        "thunderjar-prerun:577ed2bd",
+        "thunderjar-prerun:6eec2774",
+        "other-prerun:341adb24",
+        "thunderjar-postrun:93bd21bc",
+      ],
     });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"], { env: { ...docker.env, ...KEY } });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  built
- 2  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | terse   fe8d47cc  built
- 3  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | plain   9ca648c2  built
- 4  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | terse   81e5b063  built
- 5  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   6bcdf9f3  missing
- 6  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | terse   15846748  missing
- 7  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | plain   d1e2fa39  missing
- 8  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | terse   65f3bfb0  missing
+    expect(stdout).toEndWith(` 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   bef6be59  built
+ 2  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | terse   8b3522e9  built
+ 3  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | plain   6200c233  built
+ 4  node20 | baseline | snerk | fake-harness-beta/fake-model-large-001  | terse   3f62a5bf  built
+ 5  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   189377e4  missing
+ 6  node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | terse   31afc3d2  missing
+ 7  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | plain   03d6390a  missing
+ 8  node20 | baseline | glurk | fake-harness-beta/fake-model-large-001  | terse   93bd21bc  missing
 `);
     expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun"]);
   });
 
   test("--image-prefix looks for the images under that prefix", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:b9cd78e6", "other-prerun:e01991db"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:32a1d048", "other-prerun:341adb24", "other-prerun:43876a6a"] });
 
     const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline", "--image-prefix", "other"], {
       env: { ...docker.env, ...KEY },
@@ -125,7 +132,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
   });
 
   test("when Docker can't be reached, it still plans, with each image's status unknown, and says why", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:b9cd78e6"], unreachable: true });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:32a1d048"], unreachable: true });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example"], { env: { ...docker.env, ...KEY } });
 
@@ -133,7 +140,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
       "Warning: Docker can't be reached, so whether each prerun image is built is unknown: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  unknown\n");
+    expect(stdout).toEndWith(" 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   bef6be59  unknown\n");
   });
 
   test("without a docker command, it still plans, with each image's status unknown", async () => {
@@ -145,14 +152,14 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
       "Warning: Docker can't be reached, so whether each prerun image is built is unknown: bun: command not found: no-such-docker\n",
     );
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith("plain   6274bd13  unknown\n");
+    expect(stdout).toEndWith("plain   bef6be59  unknown\n");
   });
 
   test("a permutation has the same hash in every test case naming it", async () => {
     const { stdout } = await thunderjar(scenario("0202"), ["plan", "example"], { env: KEY });
 
     expect(stdout).toEndWith(
-      " 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   6274bd13  missing\n",
+      " 1  node20 | baseline | snerk | fake-harness-alpha/fake-model-small-001 | plain   bef6be59  missing\n",
     );
   });
 });
@@ -268,7 +275,7 @@ describe("0402 broken declarations", () => {
       "a measurement naming an unknown instrument",
       "unknown-instrument",
       [
-        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest, replyMatches, shell`,
+        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell`,
       ],
     ],
     [
@@ -277,17 +284,27 @@ describe("0402 broken declarations", () => {
       [`${measurement("misfit-config/measurements/isPrimeTsExists.ts")}: config.glob: must be a glob pattern, got undefined`],
     ],
     [
-      "a measurement combining its values in a way its instrument's can't be",
-      "unfit-aggregate",
+      "a metric whose stat doesn't combine its instrument's default score",
+      "unfit-stat",
       [
-        `${measurement("unfit-aggregate/measurements/isPrimeTsExists.ts")}: aggregate: "mean" is not a way fileCreated's values combine. Use one of: rate, count`,
+        `${measurement("unfit-stat/measurements/isPrimeTsExists.ts")}: metrics.exists.stat: "mean" doesn't combine fileCreated's default score, a boolean. Use one of: rate, count, or give the metric a score`,
       ],
     ],
     [
-      "a templateTest measurement whose template is missing",
-      "missing-template",
+      "a measurement without metrics",
+      "missing-metrics",
+      [`${measurement("missing-metrics/measurements/isPrimeTsExists.ts")}: metrics: must be an object of metrics by name, got undefined`],
+    ],
+    [
+      "a measurement still declaring aggregate",
+      "leftover-aggregate",
+      [`${measurement("leftover-aggregate/measurements/isPrimeTsExists.ts")}: aggregate: is no longer supported: use metrics, e.g. metrics: { passes: { stat: "rate" } }`],
+    ],
+    [
+      "a bunTestFile measurement whose test is missing",
+      "missing-test",
       [
-        `${measurement("missing-template/measurements/isPrimeTemplateTest.ts")}: config.template: "./isPrime.tset.template.ts" has no matching ${measurement("missing-template/measurements/isPrime.tset.template.ts")}`,
+        `${measurement("missing-test/measurements/isPrimeTests.ts")}: config.test: "./isPrime.tset.ts" has no matching ${measurement("missing-test/measurements/isPrime.tset.ts")}`,
       ],
     ],
     [
@@ -301,9 +318,9 @@ describe("0402 broken declarations", () => {
       [`${parameter("baseImages/reserved-options/index.ts")}: runOptions: "--rm", "--entrypoint=bash" can't be given: Thunderjar sets them itself`],
     ],
     [
-      "an initial prompt with both a prompt and turns",
-      "muddled-prompt",
-      [`${parameter("tasks/is-prime/initial-prompts/muddled.ts")}: turns: can't be given beside prompt. Give a single prompt, or a list of turns.`],
+      "an initial prompt that gives its prompt the old way, as a field",
+      "legacy-prompt",
+      [`${parameter("tasks/is-prime/initial-prompts/legacy.ts")}: prompt: is no longer read. Write the prompt with the initial prompt's fragment: applyParameter: () => writePrompt(\`…\`).`],
     ],
     [
       "an initial prompt with no time to run in",

@@ -23,5 +23,5 @@ for (const [x, want] of [[1.4, 1], [1.6, 2], [2.5, 3], [4.5, 5], [6.5, 7], [7.5,
 export default declareMeasurement({
   instrument: "shell",
   config: { command: `cd src/gauntlet/wrong-failing-test && node --input-type=module <<'EOF'\n${script}\nEOF` },
-  aggregate: ["rate"],
+  metrics: { passes: { stat: "rate", better: "higher" } },
 });

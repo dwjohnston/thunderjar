@@ -20,7 +20,7 @@ import { Glob } from "bun";
 import { copyScenarioProject, thunderjar } from "../testing/cli.ts";
 import { fakeDocker } from "../testing/fakeDocker.ts";
 import { scenario } from "../testing/scenario.ts";
-import { dataDir, removeDataDirs } from "./commands/run/runTestSupport.ts";
+import { dataDir, KEY, removeDataDirs } from "./commands/run/runTestSupport.ts";
 
 afterEach(removeDataDirs);
 
@@ -34,7 +34,7 @@ const messages = (log: string) =>
 async function run(args: string[], env: Record<string, string> = {}) {
   await using docker = await fakeDocker();
   // Awaited here, so the fake Docker outlives the run.
-  return await thunderjar(scenario("0205"), [...args, "run", "remember", "--data-dir", dataDir()], { env: { ...docker.env, ...env }, log: true });
+  return await thunderjar(scenario("0202"), [...args, "run", "example", "--data-dir", dataDir()], { env: { ...docker.env, ...KEY, ...env }, log: true });
 }
 
 describe("the diagnostic log", () => {
@@ -84,9 +84,9 @@ describe("the diagnostic log", () => {
   });
 
   test("without --log-file: a new file in .thunderjar/logs/, named for when and the command", async () => {
-    await using copy = await copyScenarioProject("0205");
+    await using copy = await copyScenarioProject("0202");
 
-    const { exitCode } = await thunderjar(copy.dir, ["plan", "remember"], { env: { THUNDERJAR_LOG_FILE: "" } });
+    const { exitCode } = await thunderjar(copy.dir, ["plan", "example"], { env: { ...KEY, THUNDERJAR_LOG_FILE: "" } });
 
     expect(exitCode).toBe(0);
     const files = [...new Glob("*").scanSync(`${copy.dir}/.thunderjar/logs`)];
@@ -95,7 +95,7 @@ describe("the diagnostic log", () => {
   });
 
   test("--log-level rejects a level pino doesn't have", async () => {
-    const { stderr, exitCode } = await thunderjar(scenario("0205"), ["--log-level", "loud", "plan", "remember"]);
+    const { stderr, exitCode } = await thunderjar(scenario("0202"), ["--log-level", "loud", "plan", "example"]);
 
     expect(stderr).toContain("argument 'loud' is invalid");
     expect(exitCode).toBe(1);

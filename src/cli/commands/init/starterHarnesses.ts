@@ -11,14 +11,23 @@ export const STARTER_FOLDERS = {
   opencode: "opencode-1.19.5",
 } as const;
 
-/** Installs `install` as root, then runs the agent as the image's non-root `node` user. */
-const installAsRoot = (install: string) => `\`RUN ${install}
-RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
-USER node\``;
+/**
+ * A harness's `applyParameter`, as source: installs the agent with `install` as root, writes the
+ * model ID and a run script that runs `command`, then switches to the image's non-root `node` user.
+ */
+const applyParameter = (install: string, command: string) => `  applyParameter: (_config, ctx) =>
+    [
+      \`RUN ${install}\`,
+      "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+      writeModel(ctx.modelId),
+      // The prompt and model are read from their files, so quotes and newlines reach the agent intact.
+      writeRunScript(\`${command}\`),
+      "USER node",
+    ].join("\\n"),`;
 
 /** Comments on `collectReply` and `collectTokenCosts`, for an agent the library has no reader for yet. */
 const stubReaders = `  // Thunderjar has no reader for this agent's output yet. To measure its reply, and its token
-  // costs, read them from what \`cli\` wrote to its result path:
+  // costs, read them from what the run script wrote to /thunderjar/result.json:
   // collectReply: (raw) => …,
   // collectTokenCosts: (raw, ctx) => ({ outcome: "collected", models: [{ model: ctx.modelId, … }] }),`;
 
@@ -27,15 +36,18 @@ const modelIds = (folder: string, where: string, examples: string[]) =>
   `// A test case names a model by the ID the agent takes, e.g. ${examples.map((id) => `"${folder}/${id}"`).join(", ")}.
 // Models come and go: check ${where} for the current IDs.`;
 
+const IMPORTS = `import { declareHarness, writeModel, writeRunScript } from "thunderjar";`;
+
 const claudeCode = `import { claudeCode } from "thunderjar";
 
-// Claude Code, installed as root, then run as the image's non-root \`node\` user: it won't skip its
-// permission prompts as root, and nobody is there to answer them. It needs ANTHROPIC_API_KEY.
+// Claude Code. Its fragment installs Claude Code as root, writes the model ID and the run script,
+// /thunderjar/thunderjar-run.sh, then switches to the image's non-root \`node\` user: Claude Code
+// won't skip its permission prompts as root, and nobody is there to answer them. It needs ANTHROPIC_API_KEY.
 ${modelIds(STARTER_FOLDERS.claudeCode, "https://docs.claude.com/en/docs/about-claude/models", ["claude-haiku-5-5", "claude-sonnet-5-5"])}
 export default claudeCode({ version: "2.1.311" });
 `;
 
-const copilot = `import { declareHarness } from "thunderjar";
+const copilot = `${IMPORTS}
 
 // GitHub Copilot CLI. COPILOT_GITHUB_TOKEN is a GitHub token with Copilot access: a fine-grained
 // personal access token with the "Copilot Requests" permission.
@@ -43,46 +55,31 @@ ${modelIds(STARTER_FOLDERS.copilot, "`copilot --help`, or GitHub's supported mod
 // Which you can use depends on your Copilot plan and your organization's policy.
 export default declareHarness({
   version: "1.0.105",
-  applyParameter: (_config, ctx) => ${installAsRoot("npm install -g @github/copilot@${ctx.version}")},
-  // The prompt is read from its file, so quotes and newlines reach the agent intact. Any turn after
-  // the first continues the session.
-  cli: (ctx) =>
-    \`copilot -p "$(cat \${ctx.promptPath})" --model \${ctx.modelId} --allow-all-tools --no-color\` +
-    \`\${ctx.turn === 0 ? "" : " --continue"} > \${ctx.resultPath}\`,
+${applyParameter("npm install -g @github/copilot@${ctx.version}", 'copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color > /thunderjar/result.json')}
 ${stubReaders}
   requiredEnv: ["COPILOT_GITHUB_TOKEN"],
 });
 `;
 
-const codex = `import { declareHarness } from "thunderjar";
+const codex = `${IMPORTS}
 
 // OpenAI's Codex CLI, without its sandbox or approvals: the container is the sandbox.
 ${modelIds(STARTER_FOLDERS.codex, "https://developers.openai.com/codex/models", ["gpt-6.1-sol", "gpt-5.5"])}
 export default declareHarness({
   version: "0.166.0",
-  applyParameter: (_config, ctx) => ${installAsRoot("npm install -g @openai/codex@${ctx.version}")},
-  // The prompt is read from its file, so quotes and newlines reach the agent intact. Any turn after
-  // the first resumes the session.
-  cli: (ctx) =>
-    \`codex exec\${ctx.turn === 0 ? "" : " resume --last"} --model \${ctx.modelId} --json --dangerously-bypass-approvals-and-sandbox\` +
-    \` "$(cat \${ctx.promptPath})" > \${ctx.resultPath}\`,
+${applyParameter("npm install -g @openai/codex@${ctx.version}", 'codex exec --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json')}
 ${stubReaders}
   requiredEnv: ["OPENAI_API_KEY"],
 });
 `;
 
-const opencode = `import { declareHarness } from "thunderjar";
+const opencode = `${IMPORTS}
 
 // OpenCode, on OpenCode Zen. OPENCODE_API_KEY is an OpenCode Zen key.
 ${modelIds(STARTER_FOLDERS.opencode, "https://opencode.ai/zen/v1/models", ["opencode/claude-haiku-5-5", "opencode/gpt-5.5"])}
 export default declareHarness({
   version: "1.19.5",
-  applyParameter: (_config, ctx) => ${installAsRoot("npm install -g opencode-ai@${ctx.version}")},
-  // The prompt is read from its file, so quotes and newlines reach the agent intact. Any turn after
-  // the first continues the session.
-  cli: (ctx) =>
-    \`opencode run --model \${ctx.modelId} --format json\${ctx.turn === 0 ? "" : " --continue"}\` +
-    \` "$(cat \${ctx.promptPath})" > \${ctx.resultPath}\`,
+${applyParameter("npm install -g opencode-ai@${ctx.version}", 'opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json')}
 ${stubReaders}
   requiredEnv: ["OPENCODE_API_KEY"],
 });

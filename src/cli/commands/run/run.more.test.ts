@@ -2,13 +2,12 @@
 // `bun test --parallel` runs the two in separate workers.
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
-import type { Reply } from "../../../api/declarations.ts";
 import type { ContainerRunRecord, ExecutionRecord } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, thunderjar, TMP_DIR } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
-import { ALPHA_0201, KEY, PLAIN, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
+import { KEY, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
 
@@ -122,101 +121,7 @@ Recorded in <DATA>/runs.sqlite
   }, 30_000);
 });
 
-describe("0205 multi-turn", () => {
-  const RUN_TURN_1 = (session: string) =>
-    `mkdir -p "$HOME/.fake-rememberer" && cp /thunderjar/turns/1/prompt.txt "$HOME/.fake-rememberer/${session}" && printf '{"reply":"I will remember that: %s"}' "$(cat /thunderjar/turns/1/prompt.txt)" > /thunderjar/turns/1/result.json`;
-  const RUN_TURN_2 = (session: string) =>
-    `printf '{"reply":"You told me: %s"}' "$(cat "$HOME/.fake-rememberer/${session}")" > /thunderjar/turns/2/result.json`;
-
-  test("--dry-run: the iteration's session, then each turn's prompt and command", async () => {
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0205"), ["run", "remember", "--dry-run"]);
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    expect(stdout).toBe(`Execution <ULID>
-
-Permutation 1: prerun image thunderjar-prerun:b3d358e4
-  Iteration 1: postrun image thunderjar-postrun:<ULID>-1-1
-    session:  <UUID>
-    prompt 1: My rubber ducky is called Eli.
-    turn 1:   ${RUN_TURN_1("<UUID>")}
-    prompt 2: What is my rubber ducky called?
-    turn 2:   ${RUN_TURN_2("<UUID>")}
-`);
-  });
-
-  test("each turn runs in the same container and session, and each reply is recorded and measured", async () => {
-    await using docker = await fakeDocker();
-    const data = dataDir();
-
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0205"), ["run", "remember", "--data-dir", data], {
-      env: docker.env,
-      paths: { "<DATA>": data },
-    });
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(`
- 1/1  iteration 1/1  fake-rememberer | tell-then-ask  ... done (<duration>)
-      promisedToRemember: true   remembersName: true
-Recorded in <DATA>/runs.sqlite
-`);
-    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
-    expect(record.execution.turns?.map((turn) => turn.exitCode)).toEqual([0, 0]);
-    expect(record.turns?.map((turn) => turn.reply)).toEqual([
-      { outcome: "collected", text: "I will remember that: My rubber ducky is called Eli." },
-      { outcome: "collected", text: "You told me: My rubber ducky is called Eli." },
-    ]);
-    // The record's reply and result file are the last turn's.
-    expect(record.reply).toEqual(record.turns?.[1]?.reply as Reply);
-    expect(record.harnessResult).toBe(record.turns?.[1]?.harnessResult as string);
-    // Both turns used the session ID the record names. (The fake Docker's HOME is the container's root.)
-    expect(await docker.fileIn(record.postrunImage, `/.fake-rememberer/${record.sessionId}`)).toBe("My rubber ducky is called Eli.");
-
-    // show gives each turn's reply.
-    const shown = await thunderjar(scenario("0205"), ["show", record.executionId, "1-1", "--data-dir", data]);
-    expect(shown.stdout).toContain(`
-Exit         0
-Turns        2 of 2 ran
-Result file  55 bytes
-Stderr       0 bytes
-
-Reply
-  Turn 1:  I will remember that: My rubber ducky is called Eli.
-  Turn 2:  You told me: My rubber ducky is called Eli.
-`);
-  });
-
-  test("a turn that exits non-zero stops the turns after it", async () => {
-    await using copy = await copyScenarioProject("0205");
-    await Bun.write(
-      `${copy.dir}/.thunderjar/parameters/harnessModels/fake-rememberer/index.ts`,
-      `import { declareHarness } from "thunderjar";
-
-export default declareHarness({
-  version: "1.0.0",
-  cli: (ctx) => (ctx.turn === 0 ? "exit 2" : \`echo '{"reply":"Eli"}' > \${ctx.resultPath}\`),
-  collectReply: (raw) => (JSON.parse(raw) as { reply: string }).reply,
-});
-`,
-    );
-    await using docker = await fakeDocker();
-    const data = dataDir();
-
-    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "remember", "--data-dir", data], { env: docker.env });
-
-    expect(exitCode).toBe(1);
-    expect(stdout).toContain(" ... exited 2, no result file (<duration>)\n");
-    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
-    expect(record.execution.exitCode).toBe(2);
-    expect(record.execution.turns?.map((turn) => turn.exitCode)).toEqual([2]);
-    expect(record.turns?.map((turn) => turn.harnessResult)).toEqual([null, null]);
-    expect(record.result.remembersName?.outcome).toEqual({ outcome: "skipped", reason: "no reply: the agent left no result file" });
-  });
-});
-
 describe("0206 run options", () => {
-  const SANDBOXER = `if unshare --user --map-root-user --mount --pid --fork true; then reply=sandboxed; else reply="no sandbox"; fi && echo "{\\"reply\\":\\"$reply\\"}" > /thunderjar/result.json`;
   const OPTIONS = "--security-opt seccomp=unconfined --security-opt apparmor=unconfined";
 
   test("--dry-run: a base image's run options are printed with each container run they're given to", async () => {
@@ -226,13 +131,12 @@ describe("0206 run options", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "b3d358e4", 1, "Sandbox yourself.", SANDBOXER)}
+${permutation(1, "0d345b7c", 1)}
 
-Permutation 2: prerun image thunderjar-prerun:b3d358e4
+Permutation 2: prerun image thunderjar-prerun:0d345b7c
   Iteration 1: postrun image thunderjar-postrun:<ULID>-2-1
     docker:   ${OPTIONS}
-    prompt:   Sandbox yourself.
-    command:  ${SANDBOXER}
+    command:  sh /thunderjar/thunderjar-run.sh
 `);
   });
 
@@ -244,7 +148,7 @@ Permutation 2: prerun image thunderjar-prerun:b3d358e4
     expect(exitCode).toBe(0);
     const runs = (await docker.commands()).filter((command) => command.startsWith("docker run --name"));
     expect(runs.map((command) => command.includes(OPTIONS))).toEqual([false, true]);
-    expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:b3d358e4 -c `);
+    expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:0d345b7c -c `);
   });
 });
 
@@ -256,7 +160,7 @@ describe("0201 minimal existing setup", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "ae60c784", 1, PLAIN, ALPHA_0201(PLAIN))}
+${permutation(1, "77e9dd16", 1)}
 `);
   });
 });
@@ -272,7 +176,7 @@ describe("0402 broken declarations", () => {
 
     expect(stdout).toBe("");
     expect(stderr).toBe(
-      'Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest, replyMatches, shell\n',
+      'Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell\n',
     );
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual([]);
@@ -329,7 +233,7 @@ describe("0210 build secrets", () => {
 
 describe("0207 image store", () => {
   const REPOSITORY = "ghcr.io/acme/thunderjar-images";
-  const PRERUN = `${REPOSITORY}:prerun-hae60c784`;
+  const PRERUN = `${REPOSITORY}:prerun-h77e9dd16`;
 
   test("without a docker login for the registry, stops before anything is built, run or written", async () => {
     await using docker = await fakeDocker();
@@ -355,13 +259,13 @@ describe("0207 image store", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
-    const postrun = `${REPOSITORY}:postrun-e${executionId}-hb7b0c69c-i00`;
+    const postrun = `${REPOSITORY}:postrun-e${executionId}-h0af800ad-i00`;
     expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
-Building thunderjar-prerun:ae60c784 ... done
+Building thunderjar-prerun:77e9dd16 ... done
 Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
-      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
+      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1
 Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     expect(await docker.pushed()).toEqual([PRERUN, postrun]);
@@ -372,7 +276,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
   });
 
   test("a prerun push the registry refuses is an error, and nothing is run or written", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:ae60c784"], failing: [PRERUN] });
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"], failing: [PRERUN] });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["run", "example", "--data-dir", data], { env: docker.env });
@@ -402,7 +306,7 @@ describe("0201 minimal existing setup, with imageStore: null", () => {
 
 describe("0211 remote runtime", () => {
   const REPOSITORY = "ghcr.io/acme/thunderjar-images";
-  const PRERUN = `${REPOSITORY}:prerun-hae60c784`;
+  const PRERUN = `${REPOSITORY}:prerun-h77e9dd16`;
   const REMOTE = "docker --context cloud";
 
   test("builds and pushes locally, pulls into the runtime, then runs, commits, pushes and measures there", async () => {
@@ -414,15 +318,15 @@ describe("0211 remote runtime", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
-    const postrun = `${REPOSITORY}:postrun-e${executionId}-hb7b0c69c-i00`;
+    const postrun = `${REPOSITORY}:postrun-e${executionId}-h0af800ad-i00`;
     expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
 Running containers with \`<REPO>/src/testing/fakeDocker.ts --context cloud\`
-Building thunderjar-prerun:ae60c784 ... done
+Building thunderjar-prerun:77e9dd16 ... done
 Pushing ${PRERUN} ... done
 Pulling ${PRERUN} into the runtime ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
-      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
+      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1
 Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     const commands = await docker.commands();
@@ -430,8 +334,8 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(local).toEqual([
       "docker login ghcr.io",
       "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
-      expect.stringMatching(/^docker build -t thunderjar-prerun:ae60c784 /),
-      `docker tag thunderjar-prerun:ae60c784 ${PRERUN}`,
+      expect.stringMatching(/^docker build -t thunderjar-prerun:77e9dd16 /),
+      `docker tag thunderjar-prerun:77e9dd16 ${PRERUN}`,
       `docker push --quiet ${PRERUN}`,
     ]);
     expect(commands).toContain(`${REMOTE} pull --quiet ${PRERUN}`);
@@ -444,7 +348,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(commands.filter((command) => command.includes(" image rm "))).toEqual([`${REMOTE} image rm thunderjar-postrun:${executionId}-1-1 ${postrun}`]);
     // Its disk usage is logged before and after.
     expect(commands.filter((command) => command.startsWith(`${REMOTE} system df`))).toHaveLength(2);
-    expect(await docker.images()).toEqual(["thunderjar-prerun:ae60c784", PRERUN]);
+    expect(await docker.images()).toEqual(["thunderjar-prerun:77e9dd16", PRERUN]);
   });
 
   test("with keepPostrunImages, each postrun image stays on the runtime", async () => {
@@ -473,7 +377,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("isPrimeTemplateTest: {passed: 3, failed: 2}");
+    expect(stdout).toContain("isPrimeTests: {passed: 3, total: 5}");
     expect((await readStore(data)).execution.status).toBe("complete");
     expect(log).toContain("WARN: execution: couldn't remove the postrun image from the runtime");
   });
@@ -547,14 +451,14 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
       expect(mine.slice(0, 2)).toEqual([` 1/1  iteration ${n}/3  fake-harness-alpha | plain  started`, expect.stringMatching(/  done \(.*\)$/)]);
       // Its postrun image is pushed while it's measured, so these two come in either order.
       expect(mine.slice(2).toSorted()).toEqual([
-        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1`,
+        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1`,
         expect.stringMatching(/  pushed ghcr\.io\/acme\/thunderjar-images:postrun-/),
       ]);
     }
     const { execution, containerRuns } = await readStore(data);
     expect(execution.status).toBe("complete");
     expect(containerRuns.map((run) => run.iteration).sort()).toEqual([1, 2, 3]);
-    expect(containerRuns.every((run) => run.result !== undefined && Object.keys(run.result).length === 3)).toBe(true);
+    expect(containerRuns.every((run) => run.result !== undefined && Object.keys(run.result).length === 4)).toBe(true);
   }, 30_000);
 
   test("--concurrency 1 overrides the runtime's, running them one after another as before", async () => {
@@ -659,7 +563,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     const { execution, containerRuns } = await readStore(data);
     expect(execution.status).toBe("failed");
     expect(containerRuns.map((run) => run.permutation)).toEqual([1]);
-    expect(Object.keys(containerRuns[0]?.result ?? {})).toHaveLength(3);
+    expect(Object.keys(containerRuns[0]?.result ?? {})).toHaveLength(4);
   }, 30_000);
 
   test("when the first prerun image fails to build, before any iteration starts, nothing is recorded", async () => {
@@ -725,9 +629,13 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
   test("interrupted, it removes its containers from the runtime, killing their agents, runs afterRun, and exits 143", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithHooks(`${LOGS.replace("$0", "before")}`, `${LOGS.replace("$0", "after")}`);
-    // An agent that would run for a minute, and says so if it gets that far.
+    // An agent that says it started, with its process ID, then would run for a minute.
     const harness = `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`;
-    await Bun.write(harness, (await Bun.file(harness).text()).replace("`printf", `\`sleep 60 && touch ${copy.dir}/agent-finished && printf`));
+    // Outside the project: the fake Docker maps any path with /thunderjar or /workspace in it into the container.
+    const marks = `/tmp/tj-interrupt-${crypto.randomUUID()}`;
+    await $`mkdir -p ${marks}`.quiet();
+    await using _marks = { [Symbol.asyncDispose]: async () => void (await $`rm -rf ${marks}`.quiet()) };
+    await Bun.write(harness, (await Bun.file(harness).text()).replace("`printf", () => `\`echo $$ > ${marks}/started-$$ && sleep 60 && printf`));
     const data = dataDir();
     const cli = Bun.spawn(["bun", `${REPO_ROOT}/src/cli/index.ts`, "run", "example", "--data-dir", data, "--log-level", "silent"], {
       cwd: copy.dir,
@@ -736,7 +644,9 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
       stderr: "pipe",
     });
     // Both iterations' containers are running their agents.
-    while ((await $`pgrep -f ${`touch ${copy.dir}/agent-finished`}`.quiet().nothrow().text()).split("\n").filter(Boolean).length < 2) await Bun.sleep(50);
+    const started = () => [...new Bun.Glob("started-*").scanSync({ cwd: marks })];
+    while (started().length < 2) await Bun.sleep(50);
+    const agents = await Promise.all(started().map(async (file) => (await Bun.file(`${marks}/${file}`).text()).trim()));
 
     cli.kill("SIGTERM");
     const [exitCode, stderr] = await Promise.all([cli.exited, new Response(cli.stderr).text()]);
@@ -744,10 +654,13 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(exitCode).toBe(143);
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
     expect(stderr).toBe(`Error: Interrupted (SIGTERM): stopping execution ${executionId}'s containers on the runtime.\n`);
-    expect(await docker.commands()).toContain(`${REMOTE} rm --force thunderjar-run-${executionId}-1-1 thunderjar-run-${executionId}-1-2`);
+    // One command removes both, in the order Docker listed them.
+    const removal = (await docker.commands()).find((command) => command.startsWith(`${REMOTE} rm --force `) && command.split(" ").length === 7);
+    expect(removal?.split(" ").slice(5).toSorted()).toEqual([`thunderjar-run-${executionId}-1-1`, `thunderjar-run-${executionId}-1-2`]);
     expect(await Bun.file(copy.log).text()).toBe(`before ${executionId} 2 2\nafter ${executionId} 2 2\n`);
     // Its agents were killed, not left running.
-    expect((await $`pgrep -f ${`touch ${copy.dir}/agent-finished`}`.quiet().nothrow()).exitCode).not.toBe(0);
+    // Gone, or a zombie nobody has reaped yet: `ps` prints its state, or nothing.
+    for (const pid of agents) expect((await $`ps -o stat= -p ${pid}`.quiet().nothrow().text()).trim()).toMatch(/^(Z.*)?$/);
     expect((await readStore(data)).execution.status).toBe("failed");
   }, 30_000);
 
@@ -787,7 +700,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
   });
 
   test("afterRun runs after a run that failed, and an afterRun that fails is an error", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:ae60c784"], pullDenied: true });
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"], pullDenied: true });
     await using copy = await copyWithHooks(LOGS.replace("$0", "before"), `${LOGS.replace("$0", "after")}; exit 1`);
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", dataDir()], { env: docker.env });
@@ -811,7 +724,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
   }, 30_000);
 
   test("a pull the runtime can't make is an error saying what to check, and nothing is run or written", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:ae60c784"], pullDenied: true });
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"], pullDenied: true });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", data], { env: docker.env });

@@ -1,3 +1,0 @@
-{
-  "extends": "./project/.thunderjar/tsconfig.json"
-}

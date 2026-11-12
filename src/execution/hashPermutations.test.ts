@@ -5,6 +5,7 @@ import { expandPermutations, type HashedPermutation } from "../config/permutatio
 import { loadTestCase } from "../config/testCase.ts";
 import { copyScenarioProject } from "../testing/cli.ts";
 import { scenario } from "../testing/scenario.ts";
+import { writeModel, writePrompt, writeRunScript } from "../api/files.ts";
 import { hashPermutations, hostExec } from "./hashPermutations.ts";
 
 const ONE: TestCaseDeclaration = {
@@ -26,6 +27,10 @@ const TWO_PAIRS: TestCaseDeclaration = {
 
 /** Beta on both its models. */
 const TWO_MODELS: TestCaseDeclaration = { ...ONE, harnessModel: ["fake-harness-beta/fake-model-small-001", "fake-harness-beta/fake-model-large-001"] };
+
+/** What 0202's fake-harness-alpha writes: shaped like Claude Code's result. */
+const ALPHA_JSON =
+  '{"type":"result","result":"Arr, isPrime.ts be written.","modelUsage":{"fake-model-small-001":{"inputTokens":12000,"outputTokens":400,"cacheReadInputTokens":80,"cacheCreationInputTokens":0,"costUSD":0.061,"costBasis":"list"}}}';
 
 const AXES = ["baseImage", "codeState", "promptSet", "harnessModel", "initialPrompt"] as const;
 
@@ -75,7 +80,7 @@ describe("hashPermutations", () => {
     );
   });
 
-  test("each permutation's Dockerfile is its parameters' fragments", async () => {
+  test("each permutation's Dockerfile is its parameters' fragments: the harness's writes its model and run script, the initial prompt's its prompt", async () => {
     const testCase = await loadTestCase(root, "is-prime-baseline");
     const dockerfiles = (await hashPermutations(root, testCase)).map((permutation) => permutation.dockerfile);
 
@@ -86,10 +91,15 @@ describe("hashPermutations", () => {
         "WORKDIR /workspace",
         'RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md',
         'RUN echo "install fake-harness-alpha@1.0.0"',
+        writeModel("fake-model-small-001"),
+        writeRunScript(
+          `printf '%s\\n' "// $(cat /thunderjar/prompt.txt)" '// @ts-ignore' 'export const isPrime = (n: number) => n > 1 && n % 2 !== 0;' > isPrime.ts && echo '${ALPHA_JSON}' > /thunderjar/result.json && echo "\${FAKE_HARNESS_KEY+set}" > /thunderjar/fake-harness-key`,
+        ),
+        writePrompt("Create a file isPrime.ts exporting a function that tests for primality."),
         "",
       ].join("\n"),
     );
-    expect(new Set(dockerfiles).size).toBe(4);
+    expect(new Set(dockerfiles).size).toBe(8);
   });
 
   test("permutations sharing a parameter share its parameter hash", async () => {
@@ -120,18 +130,21 @@ describe("hashPermutations", () => {
     expect(new Set(all).size).toBe(all.length);
   });
 
-  test("two models of one harness share a prerun image, but not a hash", async () => {
+  test("two models of one harness share every parameter hash, but each bakes its own prerun image", async () => {
     const [small, large] = await hashPermutations(root, TWO_MODELS);
 
-    expect(small?.imageHash).toBe(large?.imageHash as string);
+    expect(small?.imageHash).not.toBe(large?.imageHash as string);
+    expect(small?.dockerfile).toContain(writeModel("fake-model-small-001"));
+    expect(large?.dockerfile).toContain(writeModel("fake-model-large-001"));
     expect(small?.parameterHashes).toEqual(large?.parameterHashes as HashedPermutation["parameterHashes"]);
     expect(small?.hash).not.toBe(large?.hash as string);
   });
 
-  test("two initial prompts share a prerun image when neither has a fragment", async () => {
+  test("two initial prompts each write their own prompt, so build their own prerun image", async () => {
     const [plain, terse] = await hashPermutations(root, { ...ONE, initialPrompt: ["plain", "terse"] });
 
-    expect(plain?.imageHash).toBe(terse?.imageHash as string);
+    expect(plain?.imageHash).not.toBe(terse?.imageHash as string);
+    expect(plain?.dockerfile).toContain("COPY <<'THUNDERJAR_EOF' /thunderjar/prompt.txt\n");
     expect(plain?.hash).not.toBe(terse?.hash as string);
   });
 
@@ -156,12 +169,12 @@ describe("hashPermutations", () => {
     ).toEqual(await hashes(root, ONE));
   });
 
-  test("a pair's model ID is in the permutation hash alone, not the harness's or the image's", async () => {
+  test("a pair's model ID is in the permutation hash and the image, baked in, but not the harness's hash", async () => {
     const [small, large] = await hashPermutations(root, TWO_MODELS);
 
     expect(small?.modelId).toBe("fake-model-small-001");
     expect(large?.modelId).toBe("fake-model-large-001");
-    expect(changes([small as HashedPermutation], [large as HashedPermutation])).toEqual([{ parameters: [], hash: true, image: false }]);
+    expect(changes([small as HashedPermutation], [large as HashedPermutation])).toEqual([{ parameters: [], hash: true, image: true }]);
   });
 
   test("changing a harness's version changes its parameter hash and its image", async () => {
@@ -196,7 +209,8 @@ describe("hashPermutations", () => {
     ["baseImage", "baseImages/node20/index.ts", "bun@1.3.14", "bun@1.3.15", true],
     ["promptSet", "promptSets/snerk/index.ts", "Write small functions", "Write tiny functions", true],
     ["harnessModel", "harnessModels/fake-harness-alpha/index.ts", "install fake-harness-alpha", "set up fake-harness-alpha", true],
-    ["harnessModel", "harnessModels/fake-harness-alpha/index.ts", "'// @ts-ignore'", "'// @ts-expect-error'", false],
+    // Its `cli`: baked into the image's run script.
+    ["harnessModel", "harnessModels/fake-harness-alpha/index.ts", "'// @ts-ignore'", "'// @ts-expect-error'", true],
     ["harnessModel", "harnessModels/fake-harness-alpha/index.ts", 'requiredEnv: ["FAKE_HARNESS_KEY"]', 'requiredEnv: ["FAKE_HARNESS_TOKEN"]', false],
     ["initialPrompt", "tasks/is-prime/initial-prompts/plain.ts", "timeoutSeconds: 600", "timeoutSeconds: 601", false],
   ] as const)("changing what a %s outputs changes only its parameter hash (%s: %s)", async (axis, file, from, to, image) => {
@@ -337,16 +351,18 @@ export default declareCodeState({
     expect(await hashes(copied, TWO_PAIRS)).toEqual(await hashes(root, TWO_PAIRS));
   });
 
-  test("a fragment or cli that throws is a config error naming its file, once however many permutations use it", async () => {
+  test("a fragment that throws is a config error naming its file, once however many permutations use it", async () => {
     const { copy, root: copied, parameters } = await copy0202();
     await using _ = copy;
     await edit(`${parameters}/promptSets/snerk/index.ts`, (text) => text.replace("applyParameter: () =>", 'applyParameter: () => { throw new Error("no"); },\n  _was: () =>'));
-    await edit(`${parameters}/harnessModels/fake-harness-beta/index.ts`, (text) => text.replace("cli: (ctx) =>", 'cli: () => { throw new Error("no cli"); },\n  _was: (ctx: { initialPrompt: string; modelId: string; resultPath: string }) =>'));
+    await edit(`${parameters}/harnessModels/fake-harness-beta/index.ts`, (text) =>
+      text.replace("applyParameter: (_config, ctx) =>", 'applyParameter: () => { throw new Error("no harness"); },\n  _was: (_config: unknown, ctx: { version: string; modelId: string }) =>'),
+    );
 
     await expect(hashPermutations(copied, TWO_PAIRS)).rejects.toThrow(
       [
         ".thunderjar/parameters/promptSets/snerk/index.ts: applyParameter: threw: no",
-        ".thunderjar/parameters/harnessModels/fake-harness-beta/index.ts: cli: threw: no cli",
+        ".thunderjar/parameters/harnessModels/fake-harness-beta/index.ts: applyParameter: threw: no harness",
       ].join("\n"),
     );
   });

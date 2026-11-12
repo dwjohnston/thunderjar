@@ -346,19 +346,20 @@ export async function startContainer(image: string, name: string, runtime: Docke
 export type ExecResult = { stdout: string; stderr: string; exitCode: number };
 
 /**
- * Runs `command` (a program and its arguments) in the running container `name`, in `workdir`,
+ * Runs `command` (a program and its arguments) in the running container `name`, in `workdir`, or
+ * its image's working directory if undefined,
  * with `stdin` as its input if given, and returns how it went, however it exited. Throws a
  * DockerContainerError if Docker itself fails, e.g. there's no such container.
  */
 export async function execInContainer(
   name: string,
-  workdir: string,
+  workdir: string | undefined,
   command: string[],
   stdin?: string,
   runtime: DockerRuntime = localRuntime(),
 ): Promise<ExecResult> {
   const binary = runtime.command;
-  const args = ["exec", ...(stdin === undefined ? [] : ["--interactive"]), "--workdir", workdir, name, ...command];
+  const args = ["exec", ...(stdin === undefined ? [] : ["--interactive"]), ...(workdir === undefined ? [] : ["--workdir", workdir]), name, ...command];
   const result =
     stdin === undefined
       ? await $`${binary} ${args}`.quiet().nothrow()

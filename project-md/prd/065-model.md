@@ -42,7 +42,8 @@ pairs a model with a harness that doesn't list it is a type error — see
 
 ## When it applies
 
-Run time only. The harness's `cli` receives the resolved ID as `ctx.modelId`.
+Build time. The harness's fragment receives the ID as `ctx.modelId`, and writes it into the
+prerun image, e.g. with `writeModel(ctx.modelId)`, for its run script to read.
 
 ## Sub-agent models
 

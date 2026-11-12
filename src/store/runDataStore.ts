@@ -44,7 +44,7 @@ export type ExecutionRecord = {
   };
 };
 
-/** How the agent ran, from the execution wrapper's /thunderjar/run.json. */
+/** How the agent ran, from the run script's /thunderjar/run.json. */
 export type Execution = {
   /** Epoch ms, harness start. */
   startedAt: number;
@@ -108,8 +108,8 @@ export type ContainerRunRecord = {
   /** The text of the result file the harness's `cli` left, or null if it left none. */
   harnessResult: string | null;
   /**
-   * The tail of the stderr of the harness's `cli`, or null if it left none: it never ran. Its
-   * last turn's, with several. Absent from runs recorded before stderr was.
+   * The tail of the run script's stderr, or null if it left none: it never ran. Absent from runs
+   * recorded before stderr was.
    */
   harnessStderr?: string | null;
   /** The agent's final reply, read from the result file by its harness's `collectReply`, or why there's none. Absent from runs recorded before replies were. */

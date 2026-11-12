@@ -103,7 +103,7 @@ export async function removeExecutionContainers(executionId: string, imagePrefix
   return removed;
 }
 
-/** One turn of a container run, as recorded: its result file, the end of its stderr, and its reply. */
+/** What a container run left, as recorded: its result file, the end of its stderr, and its reply. */
 type RecordedTurn = { harnessResult: string | null; harnessStderr: string | null; reply: Reply };
 
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
@@ -112,10 +112,9 @@ function containerRunRecord(
   { number: permutationNumber, permutation, version }: PlannedPermutation,
   iteration: PlannedIteration,
   execution: Execution,
-  turns: RecordedTurn[],
+  last: RecordedTurn,
   tokenCosts: TokenCosts,
 ): ContainerRunRecord {
-  const last = turns.at(-1) as RecordedTurn;
   const { harness } = parsePair(permutation.harnessModel);
   return {
     executionId: plan.executionId,
@@ -142,8 +141,6 @@ function containerRunRecord(
     harnessStderr: last.harnessStderr,
     reply: last.reply,
     tokenCosts,
-    sessionId: iteration.sessionId,
-    ...(turns.length > 1 && { turns }),
     result: {},
   };
 }
@@ -257,12 +254,11 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   const runAndMeasure = async (permutation: PlannedPermutation, iteration: PlannedIteration) => {
     hooks.onRunning?.(permutation, iteration);
     const at = { executionId, permutation: permutation.number, iteration: iteration.number };
-    log.info({ ...at, permutationHash: permutation.permutation.hash, turns: iteration.turns.length }, "container run starting");
+    log.info({ ...at, permutationHash: permutation.permutation.hash }, "container run starting");
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-    const { execution, harnessResults, stderrs } = await runInContainer({
+    const { execution, harnessResult: resultFile, stderr } = await runInContainer({
       prerunImage: prerunImageOf(permutation),
       postrunImage: iteration.postrunImage,
-      turns: iteration.turns,
       env: permutation.env,
       runOptions: permutation.runOptions,
       timeoutSeconds: permutation.timeoutSeconds,
@@ -270,28 +266,24 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       runtime,
       time: timer.time,
     });
-    const turns = harnessResults.map((harnessResult, i) => ({
-      harnessResult,
-      harnessStderr: storedStderr(stderrs[i] ?? null),
-      reply: collectReply(permutation.harness.collectReply, harnessResult),
-    }));
-    const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, harnessResults, {
+    const ran = { harnessResult: resultFile, harnessStderr: storedStderr(stderr), reply: collectReply(permutation.harness.collectReply, resultFile) };
+    const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, [resultFile], {
       version: permutation.version,
       modelId: permutation.modelId,
     });
-    const record = containerRunRecord(run, permutation, iteration, execution, turns, tokenCosts);
+    const record = containerRunRecord(run, permutation, iteration, execution, ran, tokenCosts);
     const { harnessResult, reply } = record;
     await store.recordContainerRun(record);
     // Timed out, its exit code is null.
     if (execution.exitCode !== 0) status = "failed";
     log.info({ ...at, exitCode: execution.exitCode, timedOut: execution.timedOut, tokenCosts }, "container run finished");
     // What the agent said, so the log says why it failed: its stderr is otherwise lost (#140).
-    const output = agentOutput(harnessResults, stderrs);
+    const output = agentOutput([resultFile], [stderr]);
     if (execution.timedOut) log.warn({ ...at, timeoutSeconds: execution.timeoutSeconds, output }, "agent timed out");
     else if (execution.exitCode !== 0) log.warn({ ...at, exitCode: execution.exitCode, output }, "agent exited non-zero");
     else if (output.some((turn) => turn.stderr !== undefined)) log.debug({ ...at, output }, "agent output");
     if (tokenCosts.outcome === "unavailable" && tokenCosts.reason === "unparseable") {
-      log.debug({ ...at, results: harnessResults.map((result) => result && head(result, 500)) }, "token costs unparseable from result files");
+      log.debug({ ...at, result: resultFile && head(resultFile, 500) }, "token costs unparseable from the result file");
     }
     hooks.onRan?.(permutation, iteration, record);
     // Committed in the runtime, so pushed from there.
@@ -304,7 +296,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       if (measurements.length === 0) return;
       hooks.onMeasuring?.(permutation, iteration);
       let opened = 0;
-      const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: turns.map((turn) => turn.reply) };
+      const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: [reply as Reply] };
       const open = async (usesContainer: boolean) =>
         usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime) : recordedContext(recorded);
       log.debug({ ...at, measurements: measurements.length }, "measuring");

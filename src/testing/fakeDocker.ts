@@ -28,7 +28,9 @@
 // variables passed with `-e NAME`, from the fake's own, beside PATH and HOME, as a container sees
 // only what it's given. While it runs, `kill` stops it, and everything it started, as if the
 // container had been killed. A built image's container
-// starts empty: nothing of the image is in it. A committed image's starts with the files of the
+// starts with only the files its Dockerfile writes with `COPY <<'EOF' <path>` heredocs, as
+// writeFile does, under /workspace or /thunderjar: no RUN is run. A script that runs /thunderjar/thunderjar-run.sh runs a
+// copy of it with its paths mapped too. A committed image's starts with the files of the
 // container it was committed from. So a fake harness's `cli` really runs, its result file is
 // really read, and what it left is in its postrun image. `run --detach` starts a container
 // without running its script, and `exec` runs a command in it the way `run` runs a script,
@@ -161,7 +163,7 @@ if (import.meta.main) {
    * container's root/, in root/workspace.
    */
   const inContainer = (container: string, program: string[], stdin?: string, env?: Record<string, string>) => {
-    const mapped = program.map((arg) => arg.replace(/\/(workspace|thunderjar)\b/g, (_, folder: string) => `${container}/root/${folder}`));
+    const mapped = program.map((arg) => arg.replace(/\/(workspace|thunderjar)(?![\w.-])/g, (_, folder: string) => `${container}/root/${folder}`));
     const shell = $`${mapped} < ${new Response(stdin ?? "")}`.cwd(`${container}/root/workspace`).quiet().nothrow();
     return env ? shell.env(env) : shell;
   };
@@ -210,6 +212,15 @@ if (import.meta.main) {
     }
     if (dir) {
       await $`mkdir -p ${dir}/contexts/${image} && cp -R ${context}/. ${dir}/contexts/${image}`.quiet();
+      // COPY [--chmod=…] <<'DELIM' <path>, then its lines, up to DELIM.
+      const dockerfile = (await Bun.file(`${context}/Dockerfile`).text()).split("\n");
+      for (let i = 0; i < dockerfile.length; i++) {
+        const copy = /^COPY (?:--\S+ )*<<'?(\w+)'? (\/(?:workspace|thunderjar)\/\S+)$/.exec(dockerfile[i] as string);
+        if (!copy) continue;
+        const end = dockerfile.indexOf(copy[1] as string, i + 1);
+        await Bun.write(`${filesystemOf(image)}${copy[2]}`, `${dockerfile.slice(i + 1, end).join("\n")}\n`);
+        i = end;
+      }
       await append("images", image);
     }
   } else if (command === "run" && parseRun(args.slice(1))) {
@@ -226,7 +237,13 @@ if (import.meta.main) {
       console.log(crypto.randomUUID().replaceAll("-", ""));
     } else {
       const passed = Object.fromEntries(env.flatMap((variable) => (Bun.env[variable] === undefined ? [] : [[variable, Bun.env[variable] as string]])));
-      const mapped = script.replace(/\/(workspace|thunderjar)\b/g, (_, folder: string) => `${container}/root/${folder}`);
+      const map = (text: string) => text.replace(/\/(workspace|thunderjar)(?![\w.-])/g, (_, folder: string) => `${container}/root/${folder}`);
+      let mapped = map(script);
+      const runScript = `${container}/root/thunderjar/thunderjar-run.sh`;
+      if (mapped.includes(runScript) && (await Bun.file(runScript).exists())) {
+        await Bun.write(`${container}/thunderjar-run.sh`, map(await Bun.file(runScript).text()));
+        mapped = mapped.replaceAll(runScript, `${container}/thunderjar-run.sh`);
+      }
       const child = Bun.spawn(["sh", "-c", mapped], {
         cwd: `${container}/root/workspace`,
         env: { PATH: Bun.env.PATH ?? "/usr/bin:/bin", HOME: `${container}/root`, ...passed },
@@ -241,10 +258,16 @@ if (import.meta.main) {
       process.exit(child.signalCode ? 137 : exitCode);
     }
   } else if (command === "exec") {
-    // docker exec [--interactive] --workdir <dir> <name> <command…>
+    // docker exec [--interactive] [--workdir <dir>] <name> <command…>, always in root/workspace; `sh -c pwd` prints /workspace
     const interactive = subcommand === "--interactive";
-    const [flag, , name, ...program] = args.slice(interactive ? 2 : 1) as [string, string, string, ...string[]];
-    if (flag !== "--workdir" || program.length === 0) fail(`fake docker: unsupported command: docker ${args.join(" ")}`);
+    const afterFlags = args.slice(interactive ? 2 : 1);
+    const [name, ...program] = (afterFlags[0] === "--workdir" ? afterFlags.slice(2) : afterFlags) as [string, ...string[]];
+    if (afterFlags[0]?.startsWith("-") && afterFlags[0] !== "--workdir") fail(`fake docker: unsupported command: docker ${args.join(" ")}`);
+    if (program.length === 0) fail(`fake docker: unsupported command: docker ${args.join(" ")}`);
+    if (program.join(" ") === "sh -c pwd") {
+      console.log("/workspace");
+      process.exit(0);
+    }
     if (!dir || !(await state(`containers/${name}/image`).exists())) fail(`Error response from daemon: No such container: ${name}`);
     const result = await inContainer(`${dir}/containers/${name}`, program, interactive ? await Bun.stdin.text() : undefined);
     process.stdout.write(result.stdout);
@@ -285,6 +308,8 @@ if (import.meta.main) {
     const images = await list("images");
     if (!images.includes(subcommand as string)) fail(`Error response from daemon: No such image: ${subcommand}`);
     if (dir && !images.includes(rest[0] as string)) await append("images", rest[0] as string);
+    // The tag names the same image, so it has the same files, e.g. the run script a build wrote.
+    if (dir) await $`if [ -d ${filesystemOf(subcommand as string)} ]; then mkdir -p ${filesystemOf(rest[0] as string)} && cp -R ${filesystemOf(subcommand as string)}/. ${filesystemOf(rest[0] as string)}; fi`.quiet();
   } else if (command === "push" && subcommand === "--quiet" && rest.length === 1) {
     // docker push --quiet <reference>
     const reference = rest[0] as string;

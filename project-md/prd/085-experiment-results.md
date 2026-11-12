@@ -65,11 +65,11 @@ type RecordedMeasure = {
     outcome: { outcome: "measured", data: 0 },
   },
   // added three months later against the same postrun image
-  isPrimeTemplateTest: {
-    instrument: "templateTest",
+  isPrimeTests: {
+    instrument: "bunTestFile",
     contentHash: "d91f6a07…",
     measuredAt: "2026-12-14T09:02:44Z",
-    outcome: { outcome: "measured", data: { passed: 4, failed: 1 } },
+    outcome: { outcome: "measured", data: { passed: 4, total: 5 } },
   },
 }
 ```
@@ -78,10 +78,14 @@ type RecordedMeasure = {
 
 - **The name identifies the measurement.** Results are keyed by it, and it's what a
   report shows.
-- **The content hash identifies the version.** It covers `instrument`, `config`, and any
-  bundled files, such as a `templateTest` template. It does **not** cover `aggregate`:
-  changing how values combine only means recomputing aggregation results, never
-  re-measuring.
+- **The content hash identifies the version.** It covers `instrument`, the version of
+  that instrument's value shape, `config`, and any bundled files, such as a `bunTestFile`
+  test. It does **not** cover `metrics`: adding, changing or removing a metric only means
+  reading the stored measures again, never re-measuring.
+- **An instrument's value shape is versioned.** Every instrument has a `version`, in the
+  hash. When an instrument's value changes shape, as `shell`'s did from a boolean to
+  `{ exitCode, stdout, stdoutTruncated }` (version 2), every measure stored before is
+  stale, rather than read by a `score` written for the new shape.
 - **A stale measure is a hash mismatch.** A stored measure whose `contentHash` differs
   from the measurement's current hash is stale. Backfilling re-measures it and replaces
   the old value. No history of earlier versions is kept.
@@ -93,7 +97,7 @@ type RecordedMeasure = {
 
 ```
 measurement set hash = hash(
-  "isPrimeTemplateTest:d91f6a07…\n" +
+  "isPrimeTests:d91f6a07…\n" +
   "isPrimeTsExists:7b21ac90…\n" +
   "tsIgnoreCount:0c4fe218…"
 )
@@ -166,7 +170,7 @@ e.g. the commit `main` was at, so a report can say which, not only that the hash
 ## Execution
 
 How long the agent ran, and how its process exited — read from `/thunderjar/run.json`,
-which Thunderjar's [execution wrapper](080-docker-execution.md#the-execution-wrapper)
+which Thunderjar's [run script](080-docker-execution.md#the-run-script)
 writes inside the container before commit.
 
 ```ts
@@ -205,108 +209,130 @@ comparing means comparing aggregation results. The only requirement is that they
 the same shape, and backfilling measurements is what makes that achievable. Which ones
 to fetch and set side by side is the presentation layer's problem, not the store's.
 
-**Stored, and recomputed on change.** Per-iteration Results remain the source of truth.
-Aggregation results are stored alongside them, so the presentation layer only ever
-fetches aggregation results. Whenever a measure is added or backfilled against any
-iteration, its permutation's aggregation result is recomputed, so a stored aggregate is
-never stale relative to the Results it was built from.
+**Computed when read.** Per-iteration Results are the source of truth. Aggregation results
+are computed from them, by the task's measurements as declared today, whenever results
+are read, so they're never stale relative to the measures they're built from, and a
+changed metric shows at once.
 
 Token costs and execution duration are aggregated alongside the measures, since they are
 per-iteration values too.
 
-### How a measure's values combine
+### Measures and metrics
 
-Decided: **measurement-chosen**. Each measurement states how its values combine across
-iterations. The example below uses task `is-prime` with three measurements, run for five
-iterations.
+Decided: **an instrument returns data of any shape, and a measurement reads metrics from
+it**.
 
-```ts
-// per-iteration measures, i00–i04
-isPrimeTsExists:     true,  true,  true,  false,   true
-tsIgnoreCount:       0,     2,     0,     0,       1
-isPrimeTemplateTest: {4,1}, {5,0}, {5,0}, skipped, {3,2}  // i03: no isPrime.ts to test
-```
+- **The measure is what the instrument returned**, stored as it is: a boolean, a number,
+  or a record such as `bunTestFile`'s `{ passed, total }` or `shell`'s
+  `{ exitCode, stdout, stdoutTruncated }`. Measuring happens once per run.
+- **A metric reads a score from the measure.** Its score for one run is a number or a
+  boolean, or `undefined` when the metric doesn't apply to that run. Metrics are
+  computed from the stored measures whenever results are read. They aren't stored or
+  hashed.
+- **A metric has one statistic**, its headline across a permutation's iterations, which
+  is always a number, and optionally which way is better.
 
-Each measurement picks one or more combinations from a fixed menu, as an array. The
-menu is typed by the instrument's value type, so an incompatible choice is a type error
-in the measurement file. It is always an array, even for one choice, so there is one way
-to write it.
-
-```ts
-// the menu, keyed by value type
-type AggregateFor<T> =
-  T extends boolean ? "rate" | "count"
-  : T extends number ? "mean" | "median" | "min" | "max" | "sum"
-  : T extends Record<string, number> ? "sum" | "mean"
-  : never;
-```
+| Term | What it is | Identity |
+| --- | --- | --- |
+| Measure | one run's stored instrument value | measurement name + content hash |
+| Metric | a score read from a measure, plus its statistic and direction | `<measurement>.<metric>` |
 
 ```ts
-// tasks/is-prime/measurements/isPrimeTsExists.ts
+// tasks/is-prime/measurements/isPrimeTests.ts
 export default declareMeasurement({
-  instrument: "fileCreated",
-  config: { glob: "**/isPrime.ts" },
-  aggregate: ["rate"],
-});
-
-// tasks/is-prime/measurements/tsIgnoreCount.ts
-export default declareMeasurement({
-  instrument: "grep",
-  config: { glob: "**/*.ts", pattern: "@ts-ignore" },
-  aggregate: ["mean", "max"], // typical and worst iteration
-});
-
-// tasks/is-prime/measurements/isPrimeTemplateTest.ts
-export default declareMeasurement({
-  instrument: "templateTest",
-  config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
-  aggregate: ["sum"],
+  instrument: "bunTestFile",
+  config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
+  metrics: {
+    // bunTestFile's default score is the pass rate: passed / total, or undefined when total is 0.
+    passRate: { stat: "mean", better: "higher" },
+    // Anything else reads the stored { passed, total } with a score.
+    passed: { score: (v) => v.passed, stat: "mean", better: "higher" },
+  },
 });
 ```
 
-How it shows up in the aggregation result. Each chosen method becomes a key, so the
-record says which methods were used without a separate field. `measured` is the number
-of iterations whose value was combined:
+One run, several metrics: a `shell` command prints JSON once, and each metric reads the
+same stored stdout.
 
 ```ts
-measures: {
-  isPrimeTsExists:     { measured: 5, rate: 0.8 },
-  tsIgnoreCount:       { measured: 5, mean: 0.6, max: 2 },
-  isPrimeTemplateTest: { measured: 4, sum: { passed: 17, failed: 3 } },   // i03 skipped
-}
+const shape = (v: { exitCode: number; stdout: string }) =>
+  v.exitCode === 0 ? (JSON.parse(v.stdout) as { lines: number; comments: number; exports: number }) : undefined;
+
+export default declareMeasurement({
+  instrument: "shell",
+  config: { command: "node ./shape.js isPrime.ts" },
+  metrics: {
+    lines: { score: (v) => shape(v)?.lines, stat: "median", better: "lower" },
+    comments: { score: (v) => shape(v)?.comments, stat: "mean" },
+    singleExport: { score: (v) => (shape(v) ? shape(v)!.exports === 1 : undefined), stat: "rate", better: "higher" },
+  },
+});
 ```
 
-The measurement author chooses what matters for this task. For `@ts-ignore`, the worst
-iteration matters as much as the average, and the array means neither has to be given
-up. The cost: every measurement file has to state it, and the menu has to anticipate
-every value shape. A new instrument with an unusual value type gets `never` until the
-menu grows.
+#### Scores
 
-#### Future: instrument-owned
+- **`score?: (value) => number | boolean | undefined`** reads one run's value.
+- **It's optional where the instrument has a default score.** An instrument whose value
+  is a number or a boolean has the value as its score. `shell`'s default is whether it
+  exited 0, and `bunTestFile`'s is the pass rate. An instrument with neither needs a
+  `score` on every metric.
+- **`undefined` means not applicable.** Never 0 or `false`: a run with no tests has no
+  pass rate, rather than a pass rate of 0.
 
-Each measuring instrument could declare a default `aggregate` next to its value type, so
-a measurement file only states one when it wants something different. Not in v1 — see
-[020-goals-non-goals.md](020-goals-non-goals.md#non-goals-v1).
+#### Statistics
+
+A metric's `stat` is typed by its score: a stat that doesn't fit is a type error in the
+measurement file, and an error at `plan` and `run` where the score type is known without
+running anything.
+
+| Score | Stats that fit |
+| --- | --- |
+| `boolean` | `rate`, `count` |
+| `number` | `mean`, `median`, `min`, `max`, `sum` |
+
+Booleans count as 1 and 0, so `rate` is a mean and `count` a sum.
+
+`better?: "higher" | "lower"` is left out where neither is better. `show` displays it, and
+`compare` will rank on it.
+
+### What's left out, and why
+
+Nothing is zero-filled, at any level. For each measurement in a permutation:
+
+- **`measured`** counts the iterations with a `measured` outcome, by the measurement as it
+  is today. Skipped, errored, never-measured and stale iterations are left out.
+- For each metric:
+  - **`applicable`**: measured iterations whose score is a number or a boolean.
+  - **`notApplicable`**: measured iterations whose score is `undefined`.
+  - **`failed`**: measured iterations whose score threw, or returned something other than
+    a score of the kind its statistic combines, each with the iteration and why.
+  - **`value`**: the statistic over the applicable scores, or `undefined` if there are
+    none.
+
+```ts
+type AggregatedMetric = {
+  kind: "boolean" | "number";
+  stat: Stat;
+  better?: "higher" | "lower";
+  value: number | undefined;
+  applicable: number;
+  notApplicable: number;
+  failed: { iteration: number; reason: string }[];
+};
+type AggregatedMeasurement = { measured: number; metrics: Record<string, AggregatedMetric> };
+```
+
+Every iteration left out is listed with why, so a statistic over fewer iterations than
+ran is never mistaken for one over all of them.
 
 #### Ruled out
 
-- **Type-inferred: inferring it from the value type.** For example, booleans become a rate and numbers
-  a standard summary.
-- **Inferred-with-override: inferred by default, overridable by the instrument.** This depends on the inference
-  above for its defaults, so it goes with it.
-
-Changing a measurement's `aggregate` only recomputes its aggregation results. Because
-`aggregate` is left out of the measurement's content hash, editing it never triggers a
-re-measure.
-
-Still undecided:
-
-- **Iterations that didn't produce a value.** A `skipped` or `erroredWhileMeasuring`
-  iteration has no value to combine. Excluding it silently makes the aggregate look
-  better than it is, and counting it as a zero is wrong for the same reason as with
-  token costs — see
-  [087-collecting-token-costs.md](087-collecting-token-costs.md). The likely answer is to
-  exclude them and report how many were excluded, but that isn't settled either.
+- **Measurement-chosen combinations of the value itself (`aggregate`).** Each measurement
+  picked methods from a menu typed by its instrument's value. Every value shape needed a
+  menu, a record of numbers was combined key by key, and getting anything else out of a
+  value meant a new instrument. Released in 0.2.0, and replaced by metrics.
+- **Type-inferred: inferring it from the value type.** For example, booleans become a rate
+  and numbers a standard summary.
 
 ## Backfilling measurements
 
