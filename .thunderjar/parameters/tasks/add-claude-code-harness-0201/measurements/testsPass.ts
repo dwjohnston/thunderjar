@@ -4,5 +4,5 @@ import { declareMeasurement } from "thunderjar-published";
 export default declareMeasurement({
   instrument: "shell",
   config: { command: "bun test" },
-  aggregate: ["rate"],
+  metrics: { passes: { stat: "rate" } },
 });

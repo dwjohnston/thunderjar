@@ -44,8 +44,9 @@ my-app/
     │           │   └── terse.ts
     │           └── measurements/          # NOT in any parameter hash
     │               ├── isPrimeTsExists.ts
-    │               ├── isPrimeTemplateTest.ts
-    │               └── isPrime.test.template.ts
+    │               ├── isPrimeTests.ts
+    │               ├── isPrime.test.ts
+    │               └── isPrime.reference.ts
     └── _generated/
         └── parameterNames.d.ts            # generated from the folders above; git-ignored
 ```
@@ -69,7 +70,7 @@ my-app/
   parameter hash**: measurements don't affect the prerun or postrun image, so changing
   them must not change the permutation hash.
 - **One file per measurement, named by its file.** `isPrimeTsExists.ts` is the
-  measurement `isPrimeTsExists`. Supporting files, like a `templateTest` template, sit
+  measurement `isPrimeTsExists`. Supporting files, like a `bunTestFile` test, sit
   alongside.
 - **Test cases live outside `parameters/`.** A test case isn't a parameter;
   it's a matrix over them.

@@ -16,8 +16,9 @@ experiment-parameters/tasks/is-prime/
 └── measurements/                  # NOT hashed
     ├── isPrimeTsExists.ts
     ├── isPrimeTestExists.ts
-    ├── isPrimeTemplateTest.ts
-    └── isPrime.test.template.ts
+    ├── isPrimeTests.ts
+    ├── isPrime.test.ts
+    └── isPrime.reference.ts
 ```
 
 The folder name is the task. There is no `index.ts`.
@@ -28,17 +29,23 @@ Each file in `initial-prompts/` is one initial prompt, named by its file: `plain
 the initial prompt `plain`.
 
 ```ts
-// experiment-parameters/tasks/is-prime/initial-prompts/plain.ts
+// parameters/tasks/is-prime/initial-prompts/plain.ts
+import { declareInitialPrompt, writePrompt } from "thunderjar";
+
 export default declareInitialPrompt({
-  prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
-  applyParameter: () => ``,
+  applyParameter: () => writePrompt("Create a file isPrime.ts exporting a function that tests for primality."),
+  timeoutSeconds: 600,
 });
 ```
 
 | Field | What it is |
 |---|---|
-| `prompt` | The initial prompt. Reaches the harness's `cli` as `ctx.initialPrompt`. |
-| `applyParameter` | Returns an empty string. An initial prompt adds nothing to the image. |
+| `applyParameter` | Returns the Dockerfile fragment that writes the prompt to `/thunderjar/prompt.txt`, for the harness's run script to read. `writePrompt(text)` is that fragment. It may also set `WORKDIR`, to run the agent in a subfolder, e.g. one package of a monorepo. |
+| `timeoutSeconds` | How long the run script may run before it's killed. |
+
+The prompt is written into the prerun image, so each initial prompt has its own image. It is
+the image's last layer, so two initial prompts share every layer below it. An agent gets a
+single prompt: several turns, in one session, are not supported yet.
 
 An initial prompt is distinct from a [prompt set](063-prompt-set.md), which shapes the
 environment the agent runs in. An initial prompt is what the agent is asked to do.
@@ -55,7 +62,7 @@ _(Referenced by: [055-declaring-experiments.md](055-declaring-experiments.md), [
 
 ## When it applies
 
-Run time only.
+Build time: the prompt is written into the prerun image. Its `timeoutSeconds` applies at run time.
 
 ## Task measurements
 
@@ -65,16 +72,17 @@ Every initial prompt of the task is judged by the same ones, so two wordings com
 measurement by measurement.
 
 One file per measurement, named by its file: `isPrimeTsExists.ts` is the measurement
-`isPrimeTsExists`. Supporting files, like a `templateTest` template, sit alongside.
+`isPrimeTsExists`. Supporting files, like a `bunTestFile` test, sit alongside.
 
 ```ts
-// experiment-parameters/tasks/is-prime/measurements/isPrimeTemplateTest.ts
+// experiment-parameters/tasks/is-prime/measurements/isPrimeTests.ts
 export default declareMeasurement({
-  instrument: "templateTest",
+  instrument: "bunTestFile",
   config: {
     subject: "**/isPrime.ts",
-    template: "./isPrime.test.template.ts",
+    test: "./isPrime.test.ts",
   },
+  metrics: { passRate: { stat: "mean", better: "higher" } },
 });
 ```
 

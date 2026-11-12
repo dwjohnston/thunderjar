@@ -5,7 +5,8 @@
 //
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
-import { declareHarness, type HarnessCliCtx, type HarnessDeclaration, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
+import { MODEL_PATH, PROMPT_PATH, RESULT_PATH, writeModel, writeRunScript } from "./files.ts";
 
 type ModelUsage = {
   inputTokens?: unknown;
@@ -78,37 +79,40 @@ export function claudeCodeTokenCosts(raw: string): TokenCosts {
 export type ClaudeCodeOptions = {
   /** The version of `@anthropic-ai/claude-code` to install, e.g. `"2.1.311"`. */
   version: string;
-  /** Replaces the command that runs Claude Code for each turn: `claudeCodeCli` is the default. */
-  cli?: HarnessDeclaration<undefined, undefined>["cli"];
+  /** Replaces the command its run script runs: `CLAUDE_CODE_COMMAND` is the default. */
+  command?: string;
 };
 
 /**
- * The command that runs Claude Code for one turn: the prompt read from its file, so quotes and
- * newlines reach the agent intact, its result as JSON, without permission prompts, starting the
- * session on turn 0 and resuming it after.
+ * The command that runs Claude Code: the prompt and model read from their files, so quotes and
+ * newlines reach the agent intact, its result as JSON, without permission prompts.
  */
-export const claudeCodeCli = (ctx: HarnessCliCtx): string =>
-  `claude -p "$(cat ${ctx.promptPath})" --model ${ctx.modelId} --output-format json --dangerously-skip-permissions` +
-  ` ${ctx.turn === 0 ? "--session-id" : "--resume"} ${ctx.sessionId} > ${ctx.resultPath}`;
+export const CLAUDE_CODE_COMMAND =
+  `claude -p "$(cat ${PROMPT_PATH})" --model "$(cat ${MODEL_PATH})" --output-format json --dangerously-skip-permissions > ${RESULT_PATH}`;
 
 /**
- * A complete harness declaration for Claude Code `version`. It installs Claude Code as root, then
- * runs it as the image's non-root `node` user, which a `node` base image has: Claude Code won't
- * skip its permission prompts as root, and nobody is there to answer them. Its reply and token
- * costs are read from its JSON result, and it needs `ANTHROPIC_API_KEY`.
+ * A complete harness declaration for Claude Code `version`. Its fragment installs Claude Code as
+ * root, writes the model ID and the run script, then switches to the image's non-root `node`
+ * user, which a `node` base image has: Claude Code won't skip its permission prompts as root, and
+ * nobody is there to answer them. Its reply and token costs are read from its JSON result, and it
+ * needs `ANTHROPIC_API_KEY`.
  *
  * ```ts
  * // harnessModels/claude-code-2.1.311/index.ts
  * export default claudeCode({ version: "2.1.311" });
  * ```
  */
-export function claudeCode({ version, cli = claudeCodeCli }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
+export function claudeCode({ version, command = CLAUDE_CODE_COMMAND }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
-    applyParameter: (_config, ctx) => `RUN npm install -g @anthropic-ai/claude-code@${ctx.version}
-RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
-USER node`,
-    cli,
+    applyParameter: (_config, ctx) =>
+      [
+        `RUN npm install -g @anthropic-ai/claude-code@${ctx.version}`,
+        "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+        writeModel(ctx.modelId),
+        writeRunScript(command),
+        "USER node",
+      ].join("\n"),
     collectReply: claudeCodeReply,
     collectTokenCosts: claudeCodeTokenCosts,
     requiredEnv: ["ANTHROPIC_API_KEY"],

@@ -76,7 +76,7 @@ export type Resolved = string | number | boolean | null | Resolved[] | { [key: s
  *
  * `resolve` is for a floating parameter, such as a branch's latest commit. Thunderjar calls it on
  * the host, once per execution (`plan`, `run`, `build`), before anything is hashed, and passes its
- * result to `applyParameter` as `ctx.resolved`, and to a harness's `cli`. It must only read: a `git
+ * result to `applyParameter` as `ctx.resolved`. It must only read: a `git
  * fetch` is fine, building or writing anything isn't. It isn't hashed itself: only the text it ends
  * up in is, so a value no fragment uses changes nothing. Each run records it beside the parameter.
  * Declare it before `applyParameter`, so `ctx.resolved`'s type is inferred from it.
@@ -206,39 +206,13 @@ export function declarePromptSet<C = undefined, R extends ResolvedOf = undefined
   return declared("declarePromptSet", declaration);
 }
 
-/** `dir` is where the harness's `files/` folder is; `version` is the harness's own `version`. */
+/**
+ * What a harness's fragment gets: `dir`, where its `files/` folder is, its own `version`, and the
+ * model ID the test case's pair names, `<harness>/<model ID>`, as the agent is given it.
+ */
 export type HarnessApplyCtx = ApplyParameterCtx & {
   version: string;
-};
-
-/**
- * What a harness's `cli` gets, to build the command that runs the agent. An initial prompt of
- * several turns runs `cli` once per turn, in the same container, one after another.
- */
-export type HarnessCliCtx = {
-  /** The harness's own `version`. */
-  version: string;
-  /** The model ID the test case's pair names, `<harness>/<model ID>`, as the agent is given it. */
   modelId: string;
-  /**
-   * The turn's prompt text. Pasted into a shell command it breaks on the first quote, `$` or
-   * backtick, so read `promptPath` instead.
-   */
-  initialPrompt: string;
-  /**
-   * A file in the container holding the turn's prompt, exactly, with no newline added: pass it to
-   * the agent as `"$(cat ${ctx.promptPath})"`, or as a file if it takes one.
-   */
-  promptPath: string;
-  /** Where the agent's own report of the turn goes. Each turn has its own. */
-  resultPath: string;
-  /** Which turn this is, counting from 0. A single prompt is turn 0. */
-  turn: number;
-  /**
-   * A fresh UUID for each container run, the same for each of its turns: start the agent's
-   * session with it on turn 0, and resume it on later turns, e.g. `--session-id`, then `--resume`.
-   */
-  sessionId: string;
 };
 
 /**
@@ -256,31 +230,30 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * @type {string}
    * @description
    * **Required.** The version of the agent this harness installs, e.g. `"2.1.311"`: `ctx.version` for its
-   * fragment and `cli`. One harness folder pins one version, so name the folder after it, e.g.
+   * fragment. One harness folder pins one version, so name the folder after it, e.g.
    * `claude-code-2.1.311/`, and copy the folder to try another.
    */
   version: string;
   /**
    * @docs
-   * @name cli
-   * @type {(ctx: HarnessCliCtx) => string}
+   * @name applyParameter
+   * @type {(config, ctx: HarnessApplyCtx) => string}
    * @description
-   * **Required.** The command that runs the agent for one turn. `ctx` has `version`, `modelId`,
-   * `initialPrompt`, `promptPath`, `resultPath`, `turn`, `sessionId`, and `resolved`, what
-   * `resolve` returned.
-   *
-   * ```ts
-   * cli: (ctx) => `claude -p "$(cat ${ctx.promptPath})" --model ${ctx.modelId} > ${ctx.resultPath}`,
-   * ```
+   * **Required.** Installs the agent, and writes `/thunderjar/thunderjar-run.sh`, the script that
+   * runs it, e.g. with `writeRunScript`. The script runs in the image's working directory, reads the
+   * prompt from `/thunderjar/prompt.txt`, and must leave the agent's result at
+   * `/thunderjar/result.json`. `writeModel(ctx.modelId)` puts the model ID at
+   * `/thunderjar/model.txt`, for it to read. `ctx` has `dir`, `version`, `modelId`, and `resolved`,
+   * what `resolve` returned.
    */
-  cli(ctx: HarnessCliCtx & { resolved: R }): string;
+  applyParameter(config: C, ctx: HarnessApplyCtx & { resolved: R }): string;
   /**
    * @docs
    * @name collectReply
    * @type {(raw: string) => string}
    * @description
-   * The agent's final reply, read from the text of the result file its `cli` left, for
-   * instruments such as `replyMatches` to measure. Without it, a run has no reply.
+   * The agent's final reply, read from the text of its result file, for instruments such as
+   * `replyMatches` to measure. Without it, a run has no reply.
    */
   collectReply?: (raw: string) => string;
   /**
@@ -288,8 +261,8 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * @name collectTokenCosts
    * @type {(raw: string, ctx: { version: string; modelId: string }) => TokenCosts}
    * @description
-   * The run's token costs, read from the text of each turn's result file, once per turn, and
-   * summed. A throw is `unparseable`. Without it, every run's are `notReported`.
+   * The run's token costs, read from the text of its result file. A throw is `unparseable`.
+   * Without it, every run's are `notReported`.
    */
   collectTokenCosts?: TokenCostCollector;
   /**
@@ -330,23 +303,24 @@ export type TokenCosts =
   | { outcome: "unavailable"; reason: "absent" | "unparseable" | "notReported" };
 
 /**
- * Reads the token costs from what the harness's `cli` wrote to its result path. Thunderjar calls
- * it only for a result file that exists, once per turn, and sums them. A throw is `unparseable`.
+ * Reads the token costs from what the run script wrote to `/thunderjar/result.json`. Thunderjar
+ * calls it only for a result file that exists. A throw is `unparseable`.
  */
 export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: string }) => TokenCosts;
 
 /**
- * @docs
+  * @docs
  * @kind heading
  * @name declareInitialPrompt
  * @file parameters/tasks/<task>/initial-prompts/<name>.ts
  * @description
- * What the agent is asked. Give either `prompt` or `turns`. Takes the shared options too, but
- * `applyParameter` gets no `ctx.dir`.
+ * What the agent is asked. Its fragment writes the prompt to `/thunderjar/prompt.txt`, for the
+ * harness's run script to read. Takes the shared options too, but `applyParameter` gets no
+ * `ctx.dir`.
  *
  * ```ts
  * export default declareInitialPrompt({
- *   prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
+ *   applyParameter: () => writePrompt("Create a file isPrime.ts exporting a function that tests for primality."),
  *   timeoutSeconds: 600,
  * });
  * ```
@@ -354,40 +328,21 @@ export type TokenCostCollector = (raw: string, ctx: { version: string; modelId: 
 
 /**
  * @docs
- * @name prompt
- * @type {string}
- * @description
- * A single prompt.
- */
-
-/**
- * @docs
- * @name turns
- * @type {string[]}
- * @description
- * Several prompts, each run by the harness's `cli` in turn, in the same container and agent
- * session, so a later turn can ask about an earlier one.
- */
-
-/**
- * @docs
  * @name timeoutSeconds
  * @type {number}
  * @description
- * **Required.** How long the agent may take, across every turn together.
+ * **Required.** How long the harness's run script may run before it's killed.
  */
 
 /**
- * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. It is used when
- * the harness runs, so its fragment is usually left out.
- *
- * It's a single `prompt`, or a list of `turns`, each run by the harness's `cli` in turn, in the
- * same container and agent session, so a later turn can ask about an earlier one. Its
- * `timeoutSeconds` covers every turn together.
+ * An initial prompt is one file, not a folder, so its fragment has no `ctx.dir`. Its fragment
+ * writes the prompt to `/thunderjar/prompt.txt`, for the harness's run script to read, e.g. with
+ * `writePrompt`. It may also set WORKDIR, to run the agent in a subfolder. `timeoutSeconds` is how
+ * long the run script may run before it's killed.
  */
 export type InitialPromptDeclaration<C = unknown, R = unknown> = Applies<C, FragmentCtx, R> & {
   timeoutSeconds: number;
-} & ({ prompt: string; turns?: never } | { turns: string[]; prompt?: never });
+};
 
 export function declareInitialPrompt<C = undefined, R extends ResolvedOf = undefined>(
   declaration: InitialPromptDeclaration<C, R>,
@@ -416,7 +371,7 @@ export type MeasurementContext = {
   writeFile(path: string, contents: string): Promise<void>;
   /** The files matching `pattern`, relative to `workdir`, sorted. */
   glob(pattern: string): Promise<string[]>;
-  /** The text of the result file the harness's `cli` left, or "" if it left none. */
+  /** The text of the result file the run script left, or "" if it left none. */
   harnessResult: string;
   /** The agent's final reply, from its harness's `collectReply`, or why there's none. */
   reply: Reply;
@@ -434,13 +389,20 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * @name declareMeasurement
  * @file parameters/tasks/<task>/measurements/<name>.ts
  * @description
- * What is measured after each run.
+ * What is measured after each run. Its instrument runs once per run, and what it returns, the
+ * measure, is stored as it is. Each of its `metrics` reads a score from the measure whenever
+ * results are read, so a metric can be added, changed or removed without measuring again.
  *
  * ```ts
  * export default declareMeasurement({
- *   instrument: "fileCreated",
- *   config: { glob: "**\/isPrime.ts" },
- *   aggregate: ["rate"],
+ *   instrument: "bunTestFile",
+ *   config: { subject: "**\/isPrime.ts", test: "./isPrime.test.ts" },
+ *   metrics: {
+ *     // bunTestFile's default score is the pass rate: passed / total, or undefined when total is 0.
+ *     passRate: { stat: "mean", better: "higher" },
+ *     // Anything else reads the stored { passed, total } with a score.
+ *     passed: { score: (v) => v.passed, stat: "mean", better: "higher" },
+ *   },
  * });
  * ```
  */
@@ -448,74 +410,139 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "templateTest" | "replyMatches" | "shell"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell"}
  * @description
- * What to measure. Each instrument takes its own `config`:
+ * What to measure. Each instrument takes its own `config`, and returns its own value, the measure:
  *
- * | Instrument | `config` | Value |
- * | --- | --- | --- |
- * | `fileCreated` | `{ glob }` | Whether the agent left a matching file |
- * | `grep` | `{ glob, pattern }` | Lines across the matching files that match `pattern` |
- * | `templateTest` | `{ subject, template }` | Tests passed and failed |
- * | `replyMatches` | `{ pattern, turn? }` | Whether the agent's reply matches `pattern` |
- * | `shell` | `{ command }` | Whether `command` exits 0 |
+ * | Instrument | `config` | Value | Default score |
+ * | --- | --- | --- | --- |
+ * | `fileCreated` | `{ glob }` | `boolean`: whether the agent left a matching file | the value |
+ * | `grep` | `{ glob, pattern }` | `number`: lines across the matching files that match `pattern` | the value |
+ * | `bunTestFile` | `{ subject, test }` | `{ passed, total }`: tests passed, of all the tests | the pass rate, `passed / total` |
+ * | `replyMatches` | `{ pattern, turn? }` | `boolean`: whether the agent's reply matches `pattern` | the value |
+ * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
+ *
+ * `shell` stores `command`'s stdout as it is, up to 64 KiB, in the run data store. A command that
+ * prints secrets or other sensitive data will persist them: nothing transforms its output before
+ * it's stored.
  */
 
 /**
  * @docs
- * @name aggregate
- * @type {string[]}
+ * @name metrics
+ * @type {Record<string, { score?: (value) => number | boolean | undefined; stat: Stat; better?: "higher" | "lower" }>}
  * @description
- * How values combine across iterations. Booleans: `rate`, `count`. Numbers: `mean`, `median`,
- * `min`, `max`, `sum`.
+ * **Required**, with at least one entry. What to read from each run's value, keyed by the
+ * metric's name, which must be an identifier. Each metric has:
+ *
+ * - `score`: reads one run's value as a number or a boolean, or `undefined` when the metric
+ *   doesn't apply to that run. Never return 0 or `false` to mean that. Leave it out to use the
+ *   instrument's default score.
+ * - `stat`: the one statistic across a permutation's iterations. Booleans: `rate`, `count`.
+ *   Numbers: `mean`, `median`, `min`, `max`, `sum`.
+ * - `better`: `"higher"` or `"lower"`, if either is better. Left out, neither is.
  */
 
-/** Each built-in instrument's config and value, by name. */
+/**
+ * Each built-in instrument's config, value and default score, by name. An instrument whose
+ * value is a number or a boolean has the value as its score by default; one with neither needs
+ * a `defaultScore`, or a metric of it a `score` of its own.
+ */
 export type InstrumentTypes = {
   /** Did the agent leave a file matching `glob`? */
   fileCreated: { config: { glob: string }; value: boolean };
   /** How many lines, across the files matching `glob`, match `pattern`, a JavaScript regular expression? */
   grep: { config: { glob: string; pattern: string }; value: number };
   /**
-   * How many tests pass and fail when `template`, a path relative to the measurement's file, is
-   * rendered against each file matching `subject` and run with `bun test`?
+   * How many tests pass, of all of them, when `test`, a Bun test file at a path relative to the
+   * measurement's file, is run with `bun test` against each file matching `subject`? The test
+   * finds the subject's absolute path in `Bun.env.THUNDERJAR_SUBJECT`. `total` counts skipped
+   * and failed tests too. By default, a metric's score is the pass rate, `passed / total`, and a
+   * run of no tests doesn't apply.
    */
-  templateTest: { config: { subject: string; template: string }; value: { passed: number; failed: number } };
+  bunTestFile: { config: { subject: string; test: string }; value: { passed: number; total: number }; defaultScore: number };
   /**
    * Does the agent's reply match `pattern`, a JavaScript regular expression? Its reply to `turn`,
    * counting from 1, of an initial prompt of several turns, or by default its last.
    */
   replyMatches: { config: { pattern: string; turn?: number }; value: boolean };
   /**
-   * Does `command`, any shell command, exit 0? It runs with `sh -c` in the measurement
-   * container, in `workdir`, so it can use whatever the image has installed.
+   * What `command`, any shell command, did: its exit code, and its stdout, as it is, up to 64 KiB.
+   * It runs with `sh -c` in the measurement container, in `workdir`, so it can use whatever the
+   * image has installed. By default, a metric's score is whether it exited 0.
    */
-  shell: { config: { command: string }; value: boolean };
+  shell: { config: { command: string }; value: { exitCode: number; stdout: string; stdoutTruncated: boolean }; defaultScore: boolean };
 };
 
 export type InstrumentName = keyof InstrumentTypes;
 
-/** The ways values of type `T` can combine across iterations. */
-export type AggregateFor<T> = [T] extends [boolean]
-  ? "rate" | "count"
-  : [T] extends [number]
-    ? "mean" | "median" | "min" | "max" | "sum"
-    : [T] extends [Record<string, number>]
-      ? "sum" | "mean"
+/** What an instrument returns for one run: the measure. */
+export type ValueOf<I extends InstrumentName> = InstrumentTypes[I]["value"];
+
+/** What a metric's score is: a number or a boolean. */
+export type Score = number | boolean;
+
+/** Every statistic a metric can have. */
+export type Stat = "rate" | "count" | "mean" | "median" | "min" | "max" | "sum";
+
+/** The statistics that combine scores of type `S`: booleans by `rate` or `count`, numbers by the rest. */
+export type StatFor<S> = [S] extends [boolean] ? "rate" | "count" : [S] extends [number] ? "mean" | "median" | "min" | "max" | "sum" : never;
+
+/** Whether a higher or a lower score is better. */
+export type Better = "higher" | "lower";
+
+/**
+ * The score a metric of instrument `I` has without a `score`: the instrument's default score, or
+ * its value, if that's a number or a boolean. `never` if it has neither, so `score` is required.
+ */
+export type DefaultScoreOf<I extends InstrumentName> = InstrumentTypes[I] extends { defaultScore: infer D }
+  ? D
+  : [ValueOf<I>] extends [boolean]
+    ? boolean
+    : [ValueOf<I>] extends [number]
+      ? number
       : never;
 
-/** An instrument and its config: a `config` that doesn't fit the instrument is a type error. */
+/** The scores statistic `T` combines: booleans for `rate` and `count`, numbers for the rest. */
+export type ScoreFor<T extends Stat> = T extends "rate" | "count" ? boolean : number;
+
+/**
+ * One metric of instrument `I`, whose statistic is `T`. Its `score` must return what `T`
+ * combines, or undefined. Leaving it out reads the instrument's default score, so it's required
+ * where `T` doesn't combine that, or the instrument has none.
+ *
+ * The statistic decides the score's type, rather than the score the statistic's: TypeScript
+ * infers `stat` first, so a `score`'s return type can't be checked against it the other way round.
+ */
+export type MetricOf<I extends InstrumentName, T extends Stat = Stat> = { stat: T; better?: Better } & ([DefaultScoreOf<I>] extends [never]
+  ? { score: (value: ValueOf<I>) => ScoreFor<T> | undefined }
+  : T extends StatFor<DefaultScoreOf<I>>
+    ? { score?: (value: ValueOf<I>) => ScoreFor<T> | undefined }
+    : { score: (value: ValueOf<I>) => ScoreFor<T> | undefined });
+
+/** A metric as loaded at runtime, whatever its instrument. */
+export type Metric = { score?: (value: never) => unknown; stat: Stat; better?: Better };
+
+/** A measurement as loaded at runtime: an instrument, its config, and its metrics, by name. */
 export type MeasurementDeclaration = {
   [I in InstrumentName]: {
     instrument: I;
     config: InstrumentTypes[I]["config"];
-    /** How its values combine across iterations, e.g. `rate`. */
-    aggregate: AggregateFor<InstrumentTypes[I]["value"]>[];
+    metrics: Record<string, Metric>;
   };
 }[InstrumentName];
 
-export function declareMeasurement(declaration: MeasurementDeclaration): MeasurementDeclaration {
-  return declared("declareMeasurement", declaration);
+/**
+ * An instrument, its config, and its metrics. A `config` that doesn't fit the instrument is a
+ * type error, and so is a metric's `stat` that doesn't fit its score: its `score`'s, or else the
+ * instrument's default score's.
+ */
+export function declareMeasurement<I extends InstrumentName, T extends Record<string, Stat>>(declaration: {
+  instrument: I;
+  config: InstrumentTypes[I]["config"];
+  metrics: { [K in keyof T]: MetricOf<I, T[K]> };
+}): MeasurementDeclaration {
+  return declared("declareMeasurement", declaration) as unknown as MeasurementDeclaration;
 }
 
 /**

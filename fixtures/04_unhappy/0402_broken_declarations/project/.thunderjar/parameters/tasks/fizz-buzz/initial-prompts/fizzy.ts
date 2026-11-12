@@ -1,6 +1,6 @@
-import { declareInitialPrompt } from "thunderjar";
+import { declareInitialPrompt, writePrompt } from "thunderjar";
 
 export default declareInitialPrompt({
-  prompt: "Create a file fizzBuzz.ts exporting a fizz buzz function.",
+  applyParameter: () => writePrompt("Create a file fizzBuzz.ts exporting a fizz buzz function."),
   timeoutSeconds: 600,
 });
