@@ -23,11 +23,15 @@ export FLY_API_TOKEN="${FLY_API_TOKEN:-${FLYIO_TOKEN:-}}"
 die() { echo "fly-runtime: $*" >&2; exit 1; }
 [ -n "$FLY_API_TOKEN" ] || die "FLYIO_TOKEN is not set"
 
-# Runs fly quietly, failing with the last line it wrote to stderr.
+# Runs fly quietly, failing with the last line it wrote to stderr. Fly's API sometimes fails a
+# request ("stream error ... INTERNAL_ERROR"), so it tries three times, 5 seconds apart.
 fly_() {
-  local out
-  out=$(fly "$@" 2>&1) || die "$(printf '%s\n' "$out" | awk 'NF { last = $0 } END { print last }')"
-  printf '%s\n' "$out"
+  local out attempt
+  for attempt in 1 2 3; do
+    out=$(fly "$@" 2>&1) && { printf '%s\n' "$out"; return; }
+    [ "$attempt" = 3 ] || sleep 5
+  done
+  die "$(printf '%s\n' "$out" | awk 'NF { last = $0 } END { print last }')"
 }
 
 # Closes fly-docker.sh's shared SSH connection, if it's open: the machine is about to restart or stop.
