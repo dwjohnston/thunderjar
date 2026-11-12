@@ -17,6 +17,9 @@ import { SQL } from "bun";
 import { Database } from "bun:sqlite";
 import type { Reply, Resolved, TokenCosts } from "../api/declarations.ts";
 import type { Axis } from "../config/permutations.ts";
+import { moduleLogger } from "../log/logger.ts";
+
+const log = moduleLogger("store");
 
 /** `running` until its last container run finishes, or if it was interrupted. */
 export type ExecutionStatus = "running" | "complete" | "failed";
@@ -137,6 +140,12 @@ export interface RunDataStore {
   listExecutions(): Promise<ExecutionRecord[]>;
   /** The container runs recorded for `executionId`, by permutation then iteration. Empty if none. */
   containerRunsOf(executionId: string): Promise<ContainerRunRecord[]>;
+  /**
+   * Checks the store can be used, so a run finds out before it builds or runs anything, not as
+   * its first container run is recorded. Throws a RunDataStoreError if a database can't be
+   * reached, or an existing file isn't a store. A missing file is fine: the first write creates it.
+   */
+  check(): Promise<void>;
 }
 
 /** The file of the store in `dataDir`, a `--data-dir`. */
@@ -228,6 +237,9 @@ export function sqliteStore(path: string): RunDataStore {
         )
         .run({ id: record.executionId, permutation: record.permutation, iteration: record.iteration, record: JSON.stringify(record) });
     },
+    async check() {
+      await read("SELECT 1 FROM executions LIMIT 1");
+    },
     async listExecutions() {
       // ULIDs sort by time.
       const rows = await read<{ execution_id: string; record: string }>("SELECT execution_id, record FROM executions ORDER BY execution_id DESC");
@@ -257,28 +269,43 @@ const POSTGRES_SCHEMA = [
 /**
  * The Postgres store at `url`, named `label` in errors, e.g. `Postgres at $THUNDERJAR_DB_URL`, so
  * the URL and its password are never printed. Its tables, prefixed `thunderjar_` to share a
- * database, are created on first use. Throws a RunDataStoreError if the database can't be reached.
+ * database, are created on first use. Throws a RunDataStoreError if the database can't be reached,
+ * after trying again once for each of `retryDelaysMs`.
  */
-export function postgresStore(url: string, label: string): RunDataStore {
+export function postgresStore(url: string, label: string, retryDelaysMs: readonly number[] = [500, 2000]): RunDataStore {
   // A short idle timeout, so a command's process can exit once its queries are done.
   const sql = new SQL(url, { max: 4, idleTimeout: 1 });
   let ready: Promise<void> | undefined;
 
-  /** Runs `query` once the tables exist. */
+  /**
+   * Runs `query` once the tables exist. A query that fails is tried again, after each of
+   * `retryDelaysMs`, since a pooled connection to a shared database drops now and then, and every
+   * query here can be repeated: the writes are upserts. One lost write would otherwise fail a
+   * whole execution, after its agents had run.
+   */
   const run = async <T>(query: () => Promise<T>): Promise<T> => {
-    try {
-      ready ??= (async () => {
-        for (const statement of POSTGRES_SCHEMA) await sql.unsafe(statement);
-      })();
-      await ready;
-      return await query();
-    } catch (error) {
-      ready = undefined;
-      throw new RunDataStoreError(label, error instanceof Error ? error.message : String(error));
+    for (let attempt = 0; ; attempt++) {
+      try {
+        ready ??= (async () => {
+          for (const statement of POSTGRES_SCHEMA) await sql.unsafe(statement);
+        })();
+        await ready;
+        return await query();
+      } catch (error) {
+        ready = undefined;
+        const message = error instanceof Error ? error.message : String(error);
+        const delay = retryDelaysMs[attempt];
+        if (delay === undefined) throw new RunDataStoreError(label, message);
+        log.warn({ store: label, attempt: attempt + 1, retryInMs: delay, error: message }, "run data store query failed, retrying");
+        await Bun.sleep(delay);
+      }
     }
   };
 
   return {
+    async check() {
+      await run(async () => {});
+    },
     async recordExecution(record) {
       await run(
         () => sql`INSERT INTO thunderjar_executions (execution_id, record) VALUES (${record.executionId}, ${record})

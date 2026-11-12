@@ -12,6 +12,7 @@ import {
 } from "../docker/docker.ts";
 import type { Execution } from "../store/runDataStore.ts";
 import type { PlannedTurn } from "./planExecution.ts";
+import { type Timer, untimed } from "./timings.ts";
 
 /** Where, inside the container, the execution wrapper records how the agent ran. */
 export const RUN_PATH = "/thunderjar/run.json";
@@ -93,6 +94,8 @@ export type ContainerRun = {
   container: string;
   /** Where it runs: the local Docker daemon by default. */
   runtime?: DockerRuntime;
+  /** Times its phases: the agent, collecting what it left, and the commit. */
+  time?: Timer;
 };
 
 export type ContainerRunOutcome = {
@@ -142,22 +145,28 @@ export function parseExecution(text: string | undefined, timeoutSeconds: number,
  */
 export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
   const runtime = run.runtime ?? localRuntime();
+  const time = run.time ?? untimed;
   try {
-    const stop = await runContainer(run.prerunImage, run.container, executionWrapper(run.turns), {
-      env: run.env,
-      runOptions: run.runOptions,
-      timeoutSeconds: run.timeoutSeconds,
-      runtime,
-    });
+    const stop = await time("agent", () =>
+      runContainer(run.prerunImage, run.container, executionWrapper(run.turns), {
+        env: run.env,
+        runOptions: run.runOptions,
+        timeoutSeconds: run.timeoutSeconds,
+        runtime,
+      }),
+    );
     const killedAt = stop.timedOut ? stop.killedAt : undefined;
-    const execution = parseExecution(await readContainerFile(run.container, RUN_PATH, runtime), run.timeoutSeconds, killedAt);
     const harnessResults: (string | null)[] = [];
     const stderrs: (string | null)[] = [];
-    for (const { resultPath } of run.turns) {
-      harnessResults.push((await readContainerFile(run.container, resultPath, runtime)) ?? null);
-      stderrs.push((await readContainerFile(run.container, stderrPathOf(resultPath), runtime)) ?? null);
-    }
-    await commitContainer(run.container, run.postrunImage, run.prerunImage, runtime);
+    const execution = await time("collect", async () => {
+      const parsed = parseExecution(await readContainerFile(run.container, RUN_PATH, runtime), run.timeoutSeconds, killedAt);
+      for (const { resultPath } of run.turns) {
+        harnessResults.push((await readContainerFile(run.container, resultPath, runtime)) ?? null);
+        stderrs.push((await readContainerFile(run.container, stderrPathOf(resultPath), runtime)) ?? null);
+      }
+      return parsed;
+    });
+    await time("commit", () => commitContainer(run.container, run.postrunImage, run.prerunImage, runtime));
     return { execution, harnessResults, stderrs };
   } finally {
     await removeContainer(run.container, runtime).catch(() => {});

@@ -11,7 +11,7 @@ import { type PlannedExecution, type PlannedIteration, type PlannedPermutation, 
 import { runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
 import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
 import { ulid } from "../../../execution/ulid.ts";
-import { type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
+import { type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
@@ -142,6 +142,10 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
   return [...varying.map((axis) => permutation[axis]), harness, permutation.initialPrompt].join(" | ");
 }
 
+/** What to say when the run data store can't be used, and what that meant for the run. */
+const storeFailure = (cwd: string, { path, message }: RunDataStoreError, consequence: string) =>
+  `Can't use the run data store, ${displayPath(cwd, path)}, ${consequence}: ${message}\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead.`;
+
 /**
  * Runs test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it: builds its
  * missing prerun images, then runs each iteration in a container, writing a line for each as it
@@ -198,6 +202,15 @@ async function run(
   }
   const plan = await planExecution(root, testCase, ulid(), imagePrefix);
   const { store, where } = await openStore(cwd, dataDir, root);
+  // Before anything is built or started: otherwise it's found out as the first container run is recorded.
+  try {
+    await store.check();
+  } catch (caught) {
+    if (!(caught instanceof RunDataStoreError)) throw caught;
+    error(storeFailure(cwd, caught, "so nothing was run"));
+    process.exitCode = 1;
+    return;
+  }
   const permutations = plan.permutations.length;
   // Where a postrun image's push line goes: under its iteration, lined up with it, like its measures.
   const underIteration = " ".repeat(ordinal(permutations, permutations).length + 3);
@@ -386,6 +399,9 @@ async function run(
       error(
         `The runtime couldn't pull ${caught.reference}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
       );
+    } else if (caught instanceof RunDataStoreError) {
+      fail();
+      error(storeFailure(cwd, caught, "so the execution stopped"));
     } else if (caught instanceof DockerContainerError && line !== undefined && !measuring) {
       fail();
       error(`Running a container failed: ${caught.message}`);

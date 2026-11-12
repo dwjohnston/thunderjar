@@ -355,6 +355,23 @@ export default declareTestCase({
     expect(await docker.commands()).toEqual([]);
   });
 
+  test("with a postgresStore that can't be reached, nothing is built or run, and the error says so", async () => {
+    await using copy = await copyScenarioProject("0202");
+    await usePostgres(copy.dir);
+    await using docker = await fakeDocker();
+    const env = { ...docker.env, ...KEY, THUNDERJAR_DB_URL: "postgres://user:secret@127.0.0.1:1/none" };
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses"], { env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toMatch(
+      /^Error: Can't use the run data store, Postgres at \$THUNDERJAR_DB_URL, so nothing was run: .+\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead\.\n$/,
+    );
+    expect(stderr).not.toContain("secret");
+    expect(exitCode).toBe(1);
+    expect((await docker.commands()).filter((command) => !command.startsWith("docker image ls"))).toEqual([]);
+  });
+
   // Only with THUNDERJAR_POSTGRES_URL set to a Postgres it may create a schema in.
   test.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("with a postgresStore, the run is recorded in Postgres, and executions and show read it there", async () => {
     await using copy = await copyScenarioProject("0202");

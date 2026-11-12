@@ -194,6 +194,24 @@ describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
   });
 });
 
+test("check passes for a SQLite store with no file yet, without creating it, and fails for a file that isn't a store", async () => {
+  const file = storeFileIn(dataDir());
+
+  await sqliteStore(file).check();
+  expect(await Bun.file(file).exists()).toBe(false);
+
+  await Bun.write(file, "not a database, just some text that is long enough to be a header and more");
+  expect(await sqliteStore(file).check().catch(errorOf)).toEqual({ path: file, message: expect.any(String) });
+});
+
+test("check fails for a Postgres that can't be reached, after trying again once per retry delay", async () => {
+  const store = postgresStore("postgres://user:secret@127.0.0.1:1/none", "Postgres at $THUNDERJAR_DB_URL", [30, 30]);
+  const startedAt = Date.now();
+
+  expect(await store.check().catch(errorOf)).toEqual({ path: "Postgres at $THUNDERJAR_DB_URL", message: expect.any(String) });
+  expect(Date.now() - startedAt).toBeGreaterThanOrEqual(60);
+});
+
 test("a Postgres that can't be reached is a RunDataStoreError named by its label, not its URL", async () => {
   const store = postgresStore("postgres://user:secret@127.0.0.1:1/none", "Postgres at $THUNDERJAR_DB_URL");
 
