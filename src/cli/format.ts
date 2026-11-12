@@ -1,47 +1,18 @@
-import type { ModelTokenCosts, Resolved, TokenCosts } from "../api/declarations.ts";
+import type { Resolved } from "../api/declarations.ts";
 import { registryHost } from "../config/projectConfig.ts";
-import type { ContainerRunRecord, Execution, ExecutionRecord } from "../store/runDataStore.ts";
-import type { Paint } from "./colour.ts";
+import type { ContainerRunRecord, ExecutionRecord } from "../store/runDataStore.ts";
+import { knownCost, totalTokens } from "../execution/runFacts.ts";
+import { type Paint, plain } from "./colour.ts";
+import type { AggregatedValue, AggregateMethod } from "../execution/aggregate.ts";
 
-/**
- * How a container run's agent ended, without how long it took: `done`, `exited 1`, `timed out
- * after 5s`, with `, no result file` if it finished but left none.
- */
-export function agentEnd(execution: Execution, harnessResult: string | null): string {
-  if (execution.timedOut) return `timed out after ${execution.timeoutSeconds}s`;
-  const ended = execution.exitCode === 0 ? "done" : `exited ${execution.exitCode}`;
-  return harnessResult === null ? `${ended}, no result file` : ended;
-}
+export { agentEnd, endedCleanly, knownCost, tokensOf, totalTokens } from "../execution/runFacts.ts";
 
 /** An execution's status, coloured: complete green, failed red, running yellow. */
 export const paintStatus = (status: ExecutionRecord["status"], paint: Paint) =>
   (status === "complete" ? paint.green : status === "failed" ? paint.red : paint.yellow)(status);
 
-/** Whether a container run's agent exited 0 in time, and left a result file. */
-export const endedCleanly = (execution: Execution, harnessResult: string | null) =>
-  !execution.timedOut && execution.exitCode === 0 && harnessResult !== null;
-
 /** A count with thousands separators, e.g. `12,480`. */
 export const thousands = (n: number) => Math.round(n).toLocaleString("en-US");
-
-/** A model's tokens, every bucket together. */
-export const tokensOf = ({ inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens }: ModelTokenCosts) =>
-  inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
-
-/** A run's tokens, every model together, or undefined if it has none recorded. */
-export const totalTokens = (costs: TokenCosts | undefined) =>
-  costs?.outcome === "collected" ? costs.models.reduce((sum, model) => sum + tokensOf(model), 0) : undefined;
-
-/**
- * A run's cost in dollars, every model together, if its harness reported one for each it can be
- * trusted for: not when its price table didn't know a model (`costBasis: "unknown"`), as Claude
- * Code's doesn't for a model on another provider, whose cost it prices as an Anthropic model's.
- */
-export function knownCost(costs: TokenCosts | undefined): number | undefined {
-  if (costs?.outcome !== "collected" || costs.models.length === 0) return undefined;
-  if (costs.models.some(({ costUsd, costBasis }) => costUsd === undefined || costBasis === "unknown")) return undefined;
-  return costs.models.reduce((sum, { costUsd }) => sum + (costUsd as number), 0);
-}
 
 export type RunTotals = { runs: number; tokens?: number; withTokens: number; costUsd?: number; withCost: number };
 
@@ -81,3 +52,24 @@ export function pushFailure(reference: string, error: Error): string {
 
 /** What a parameter's `resolve` returned, as shown: a string as it is, anything else as JSON. */
 export const showResolved = (value: Resolved) => (typeof value === "string" ? value : JSON.stringify(value));
+
+/** A number as it is, or to `places` decimal places. */
+export const decimal = (n: number, places?: number) => (places === undefined ? String(n) : n.toFixed(places));
+
+/** A value as recorded or combined; a record of numbers as `{passed: 3, failed: 2}`. */
+export function showValue(value: unknown, places?: number, paint: Paint = plain): string {
+  if (value === true) return paint.green("true");
+  if (value === false) return paint.red("false");
+  if (typeof value === "number") return decimal(value, places);
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const entries = Object.entries(value).map(([key, v]) => `${key}: ${typeof v === "number" ? decimal(v, places) : JSON.stringify(v)}`);
+    return `{${entries.join(", ")}}`;
+  }
+  return JSON.stringify(value) ?? String(value);
+}
+
+/** A combined value as shown: a rate as `<true>/<measured>`, a mean or median to one decimal place. */
+export function showAggregate(method: AggregateMethod, value: AggregatedValue, measured: number): string {
+  if (method === "rate" && typeof value === "number") return `${Math.round(value * measured)}/${measured}`;
+  return showValue(value, method === "mean" || method === "median" ? 1 : undefined);
+}

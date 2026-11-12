@@ -69,6 +69,44 @@ Matrix     8 permutations × 5 iterations
     });
   });
 
+  test("<execution> --json: the summary the table is drawn from, a permutation each, its measures aggregated by their methods", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0203"), ["show", BASELINE, "--json"]);
+    expect({ stderr, exitCode }).toEqual({ stderr: "", exitCode: 0 });
+    const summary = JSON.parse(stdout);
+
+    expect(summary.measurements).toEqual([
+      { name: "isPrimeTemplateTest", aggregate: ["sum", "mean"] },
+      { name: "isPrimeTsExists", aggregate: ["rate"] },
+      { name: "tsIgnoreCount", aggregate: ["mean", "max"] },
+    ]);
+    expect(summary.varyingAxes).toEqual(["promptSet", "harnessModel", "initialPrompt"]);
+    expect(summary.commonParameters).toEqual([
+      { axis: "baseImage", name: "node20" },
+      { axis: "codeState", name: "baseline" },
+    ]);
+    expect(summary.permutations).toHaveLength(8);
+    const [, second] = summary.permutations;
+    expect(second.parameters).toMatchObject({ promptSet: "snerk", initialPrompt: "terse" });
+    expect(second.iterations).toBe(5);
+    expect(second.agent).toEqual([{ end: "done", runs: 5 }]);
+    expect(second.measures.isPrimeTemplateTest).toEqual({ measured: 4, values: { sum: { passed: 12, failed: 8 }, mean: { passed: 3, failed: 2 } } });
+    expect(second.measures.isPrimeTsExists).toEqual({ measured: 5, values: { rate: 1 } });
+    expect(second.leftOut).toEqual([
+      {
+        run: "2-4",
+        measure: "isPrimeTemplateTest",
+        outcome: { outcome: "erroredWhileMeasuring", error: { message: "isPrime.ts has 2 exports (isPrime, isComposite); {{defaultExport}} binds to a single one" } },
+      },
+    ]);
+    expect(second.durationMs).toMatchObject({ of: 5 });
+  });
+
+  test("<execution> <container run> --json: its record", async () => {
+    const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", BASELINE, "6-3", "--json"]);
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toMatchObject({ permutation: 6, iteration: 3, parameters: { promptSet: { name: "glurk" } } });
+  });
+
   test("<execution> that failed: a measure no iteration measured shows —, and a rate counts only the iterations measured", async () => {
     expect(await thunderjar(scenario("0203"), ["show", TWO_HARNESSES])).toEqual({
       stdout: `Execution  <ULID>

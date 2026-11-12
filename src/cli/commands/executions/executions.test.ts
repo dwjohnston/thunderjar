@@ -126,3 +126,35 @@ describe("0101 empty project", () => {
     expect(exitCode).toBe(1);
   });
 });
+
+describe("--json", () => {
+  test("prints the executions as a JSON array of their records, newest first, and nothing else", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0203"), ["executions", "--json"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const executions = JSON.parse(stdout);
+    expect(executions.map(({ testCase }: { testCase: string }) => testCase)).toEqual(["two-harnesses", "example", "two-harnesses", "is-prime-baseline"]);
+    expect(executions[3]).toEqual({
+      executionId: "<ULID>",
+      testCase: "is-prime-baseline",
+      task: "is-prime",
+      startedAt: "2026-10-01T10:12:04.517Z",
+      finishedAt: "2026-10-01T10:42:01.717Z",
+      status: "complete",
+      matrix: { shape: [1, 1, 2, 2, 2], permutations: 8, iterations: 5 },
+    });
+  });
+
+  test("of one test case, only its executions", async () => {
+    const { stdout } = await thunderjar(scenario("0203"), ["executions", "example", "--json"]);
+
+    expect(JSON.parse(stdout).map(({ testCase }: { testCase: string }) => testCase)).toEqual(["example"]);
+  });
+
+  test("with none recorded, an empty array", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0203"), ["executions", "--json", "--data-dir", dataDir()]);
+
+    expect({ stdout, stderr, exitCode }).toEqual({ stdout: "[]\n", stderr: "", exitCode: 0 });
+  });
+});

@@ -13,6 +13,8 @@
  *
  */
 
+import { textOutput } from "./textOutput.ts";
+
 // Colour for what the CLI writes to a terminal. Anywhere else, e.g. a pipe or a file, text is left
 // plain, so output that's read by scripts and tests stays the same. `NO_COLOR` turns colour off,
 // and `FORCE_COLOR` turns it on, as most CLIs do.
@@ -32,7 +34,7 @@ const STYLES = {
 type Style = keyof typeof STYLES;
 
 /** Whether text written to `out` should be coloured. */
-export function colourFor(out: { isTTY?: boolean } = process.stdout): boolean {
+export function colourFor(out: { isTTY?: boolean } = textOutput()): boolean {
   const { NO_COLOR, FORCE_COLOR, TERM } = process.env;
   if (NO_COLOR !== undefined && NO_COLOR !== "") return false;
   if (FORCE_COLOR !== undefined && FORCE_COLOR !== "" && FORCE_COLOR !== "0") return true;
@@ -43,7 +45,7 @@ export function colourFor(out: { isTTY?: boolean } = process.stdout): boolean {
 export type Paint = ReturnType<typeof painter>;
 
 /** A set of styles for `out`, which colour text only if `out` should be coloured. */
-export function painter(out: { isTTY?: boolean } = process.stdout, enabled = colourFor(out)) {
+export function painter(out: { isTTY?: boolean } = textOutput(), enabled = colourFor(out)) {
   const style =
     (...styles: Style[]) =>
     (text: string): string =>
