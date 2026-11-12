@@ -9,8 +9,9 @@ mode is deferred (see [020-goals-non-goals.md](020-goals-non-goals.md#non-goals-
 All examples use one running scenario:
 
 - Task `is-prime`, with the three measurements from
-  [085-experiment-results.md](085-experiment-results.md#how-a-measures-values-combine):
-  `isPrimeTsExists` (`rate`), `tsIgnoreCount` (`mean`, `max`) and `isPrimeTemplateTest` (`sum`).
+  [085-experiment-results.md](085-experiment-results.md#measures-and-metrics), each with one
+  metric: `isPrimeTsExists.exists` (`rate`), `tsIgnoreCount.count` (`mean`, lower is better) and
+  `isPrimeTests.passRate` (`mean`, higher is better).
 - Experiment `is-prime-baseline`: a matrix of two models (`haiku`, `sonnet`) with every other
   parameter fixed, so two permutations, five iterations each, ten container runs.
 
@@ -107,11 +108,10 @@ Summary  01K4X9J2E8MQZ3V7R5T0WABCDE
   10 container runs, 0 failed to run
   total cost  $0.695   total time  8:30
 
-  measure              haiku           sonnet
-  isPrimeTsExists      rate 0.80       rate 1.00
-  tsIgnoreCount        mean 0.6 max 2  mean 0.0 max 0
-  isPrimeTemplateTest  sum 17 pass, 3   sum 24 pass, 1
-                       fail (n=4)      fail (n=5)
+  metric                   haiku   sonnet
+  isPrimeTsExists.exists   4/5     5/5
+  tsIgnoreCount.count ↓    0.6     0.0
+  isPrimeTests.passRate ↑  0.9*    1.0
 
 Inspect with: thunderjar show 01K4X9J2E8MQZ3V7R5T0WABCDE
 Exit 0
@@ -164,10 +164,10 @@ Permutation 4f9a21c8  (5 iterations)
   baseImage node20 | codeState baseline | promptSet snerk
   harness claude-code | model haiku | initialPrompt plain
 
-  MEASURE              MEASURED  AGGREGATE
-  isPrimeTsExists      5/5       rate 0.80
-  tsIgnoreCount        5/5       mean 0.6, max 2
-  isPrimeTemplateTest  4/5       sum {passed: 17, failed: 3}
+  METRIC                   STAT    VALUE
+  isPrimeTsExists.exists   rate    4/5
+  tsIgnoreCount.count ↓    mean    0.6
+  isPrimeTests.passRate ↑  mean    0.9*
 
   cost       $0.109 total   $0.022 / iteration
   tokens     in 412,300     out 38,950
@@ -177,10 +177,10 @@ Permutation 9be07d35  (5 iterations)
   baseImage node20 | codeState baseline | promptSet snerk
   harness claude-code | model sonnet | initialPrompt plain
 
-  MEASURE              MEASURED  AGGREGATE
-  isPrimeTsExists      5/5       rate 1.00
-  tsIgnoreCount        5/5       mean 0.0, max 0
-  isPrimeTemplateTest  5/5       sum {passed: 24, failed: 1}
+  METRIC                   STAT    VALUE
+  isPrimeTsExists.exists   rate    5/5
+  tsIgnoreCount.count ↓    mean    0.0
+  isPrimeTests.passRate ↑  mean    1.0
 
   cost       $0.586 total   $0.117 / iteration
   tokens     in 405,870     out 41,210
@@ -195,11 +195,20 @@ Execution   01K5A2B7C9D4F6G8H0JKMNPQRS  (latest of is-prime-baseline)
 ...
 ```
 
-Where a measure's stored value is stale (its content hash no longer matches the measurement),
-it is marked rather than hidden:
+Each metric is headed by its identity, `<measurement>.<metric>`, with `↑` or `↓` when
+`better` is set.
+
+- `rate` shows as `<true>/<applicable>`, `count` as the number true, any other statistic to one
+  decimal place, and a metric no iteration has a score for as `–`.
+- A value over fewer iterations than ran is starred. The footnote lists why each iteration was
+  left out: skipped, errored while measuring, not measured, or stale, for the whole measurement;
+  not applicable, or score failed with its reason, for one metric.
 
 ```
-  isPrimeTemplateTest  4/5       sum {passed: 17, failed: 3}  stale, run `remeasure`
+* Left out:
+  1-3  isPrimeTests.passRate     not applicable
+  2-4  isPrimeTests              errored while measuring  (isPrime.test.ts didn't run against isPrime.ts)
+  3-1  tsIgnoreCount             stale  (measured before the measurement or its instrument changed)
 ```
 
 ### A container run
@@ -222,7 +231,7 @@ Parameters
 Measures
   isPrimeTsExists      false
   tsIgnoreCount        0
-  isPrimeTemplateTest  skipped  (no isPrime.ts to test)
+  isPrimeTests  skipped  (no isPrime.ts to test)
 
 Cost       $0.027
 Tokens     in 98,410   out 9,120
@@ -249,18 +258,18 @@ B  01K5A2B7C9D4F6G8H0JKMNPQRS  2026-10-02  is-prime-baseline
 All 2 permutations match by hash. Measurement sets match.
 
 Permutation 4f9a21c8  model=haiku
-  MEASURE              A                 B                 CHANGE
-  isPrimeTsExists      rate 0.80         rate 0.40         -0.40  worse
-  tsIgnoreCount        mean 0.6, max 2   mean 1.4, max 3   +0.8   worse
-  isPrimeTemplateTest  sum 17/3          sum 15/5          -2     worse
+  METRIC                   A        B        CHANGE
+  isPrimeTsExists.exists   4/5      2/5      -0.40  worse
+  tsIgnoreCount.count ↓    0.6      1.4      +0.8   worse
+  isPrimeTests.passRate ↑  0.9      0.8      -0.1   worse
   cost / iteration     $0.022            $0.021            -$0.001
   duration (mean)      0:43              0:44              +0:01
 
 Permutation 9be07d35  model=sonnet
-  MEASURE              A                 B                 CHANGE
-  isPrimeTsExists      rate 1.00         rate 1.00         =
-  tsIgnoreCount        mean 0.0, max 0   mean 0.0, max 0   =
-  isPrimeTemplateTest  sum 24/1          sum 25/0          +1     better
+  METRIC                   A        B        CHANGE
+  isPrimeTsExists.exists   5/5      5/5      =
+  tsIgnoreCount.count ↓    0.0      0.0      =
+  isPrimeTests.passRate ↑  1.0      1.0      =
   cost / iteration     $0.117            $0.121            +$0.004
   duration (mean)      1:03              1:05              +0:02
 ```
@@ -289,12 +298,12 @@ Pairing permutations by the parameters that did not change:
   A 9be07d35  <->  B 02c8f7a1   model=sonnet
 
 Measurement sets differ. Comparing 2 of 3 measurements.
-  isPrimeTemplateTest   A: d91f6a07   B: 5e3c8b12   not comparable (version differs)
+  isPrimeTests   A: d91f6a07   B: 5e3c8b12   not comparable (version differs)
 
 Pair model=haiku
-  MEASURE          A                 B                 CHANGE
-  isPrimeTsExists  rate 0.80         rate 0.80         =
-  tsIgnoreCount    mean 0.6, max 2   mean 0.2, max 1   -0.4   better
+  METRIC                   A        B        CHANGE
+  isPrimeTsExists.exists   4/5      4/5      =
+  tsIgnoreCount.count ↓    0.6      0.2      -0.4   better
   cost / iteration $0.022            $0.019            -$0.003
 
 Pair model=sonnet
@@ -314,14 +323,14 @@ Execution 01K4X9J2E8MQZ3V7R5T0WABCDE  (10 container runs)
 Current measurements for task is-prime:
   isPrimeTsExists      up to date
   tsIgnoreCount        up to date
-  isPrimeTemplateTest  new / changed (d91f6a07)
+  isPrimeTests  new / changed (d91f6a07)
 
 Measuring in new measurement containers from each postrun image:
-  4f9a21c8 i00  isPrimeTemplateTest  {passed: 4, failed: 1}
-  4f9a21c8 i01  isPrimeTemplateTest  {passed: 5, failed: 0}
-  4f9a21c8 i02  isPrimeTemplateTest  {passed: 5, failed: 0}
-  4f9a21c8 i03  isPrimeTemplateTest  skipped
-  4f9a21c8 i04  isPrimeTemplateTest  {passed: 3, failed: 2}
+  4f9a21c8 i00  isPrimeTests  {passed: 4, total: 5}
+  4f9a21c8 i01  isPrimeTests  {passed: 5, total: 5}
+  4f9a21c8 i02  isPrimeTests  {passed: 5, total: 5}
+  4f9a21c8 i03  isPrimeTests  skipped
+  4f9a21c8 i04  isPrimeTests  {passed: 3, total: 5}
   ...
 
 Updated 10 container runs. Recomputed 2 aggregation results.
@@ -385,8 +394,9 @@ error: no postrun image found for postrun-e01KXXXXXXXXXXXXXXXXXXXXXX-h00000000-i
 
 - **Pairing permutations in `compare`** when hashes differ. The example above pairs by the
   parameters that did not change. That is one proposal, not a decision.
-- **Judging "better" and "worse".** Whether a measurement needs a declared direction (higher is
-  better, lower is better) for `compare` to say so. The examples assume it does.
+- **Judging "better" and "worse".** Decided: a metric declares `better: "higher" | "lower"`, or
+  leaves it out where neither is. `show` displays it; `compare` will rank on it, and say
+  nothing of a metric without one.
 - **Noise.** Whether `compare` shows any spread or significance across iterations, or only the
   aggregate values.
 - **Terminal width.** How the tables degrade in narrow terminals and when many permutations are

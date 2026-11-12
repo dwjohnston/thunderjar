@@ -3,7 +3,7 @@ import { registryHost } from "../config/projectConfig.ts";
 import type { ContainerRunRecord, ExecutionRecord } from "../store/runDataStore.ts";
 import { knownCost, totalTokens } from "../execution/runFacts.ts";
 import { type Paint, plain } from "./colour.ts";
-import type { AggregatedValue, AggregateMethod } from "../execution/aggregate.ts";
+import type { Stat } from "../api/declarations.ts";
 
 export { agentEnd, endedCleanly, failureHint, knownCost, tokensOf, totalTokens } from "../execution/runFacts.ts";
 
@@ -68,8 +68,13 @@ export function showValue(value: unknown, places?: number, paint: Paint = plain)
   return JSON.stringify(value) ?? String(value);
 }
 
-/** A combined value as shown: a rate as `<true>/<measured>`, a mean or median to one decimal place. */
-export function showAggregate(method: AggregateMethod, value: AggregatedValue, measured: number): string {
-  if (method === "rate" && typeof value === "number") return `${Math.round(value * measured)}/${measured}`;
-  return showValue(value, method === "mean" || method === "median" ? 1 : undefined);
+/**
+ * A metric's statistic as shown: a rate as `<true>/<applicable>`, a count as the number true, any
+ * other to one decimal place, and `–` if no score applied.
+ */
+export function showStat(stat: Stat, value: number | undefined, applicable: number): string {
+  if (value === undefined) return "–";
+  if (stat === "rate") return `${Math.round(value * applicable)}/${applicable}`;
+  if (stat === "count") return String(value);
+  return value.toFixed(1);
 }

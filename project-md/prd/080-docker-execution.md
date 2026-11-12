@@ -27,7 +27,7 @@ flowchart TD
 
     subgraph ITER["Per iteration"]
         K["Run a new container<br/>from the prerun image"]
-        K --> L["Execution: harness invoked headlessly<br/>with initial prompt + model, inside<br/>Thunderjar's execution wrapper"]
+        K --> L["Execution: harness invoked headlessly<br/>with initial prompt + model, inside<br/>Thunderjar's run script,<br/>/thunderjar/thunderjar-run.sh"]
         L --> M["docker commit the container<br/>into a postrun image"]
         M --> N["Tag as postrun image,<br/>push to image store"]
         N --> O["Measurement: start a short-lived measurement<br/>container from the postrun image, apply the<br/>task's measurements, then discard it"]
@@ -88,14 +88,17 @@ the container at `L`, before the commit at `M`, so those numbers are preserved *
 postrun image rather than only captured on stdout. A measurement container can therefore
 read them years later, exactly as the original run did.
 
-## The execution wrapper
+## The run script
 
-At `L`, Thunderjar doesn't run the harness's `cli` command directly. It wraps it, inside
-the container, to record when the agent started, when it finished, and how it exited:
+At `L`, Thunderjar runs `/thunderjar/thunderjar-run.sh`, which the harness's fragment wrote
+into the prerun image at build time, in the image's working directory. It reads the model ID
+and the prompt from the files the harness's and initial prompt's fragments wrote beside it,
+so the image holds everything the run needs, and the script can be run by hand. Thunderjar
+wraps it to record when the agent started, when it finished, and how it exited:
 
 ```sh
 start=$(date +%s%3N)
-<command returned by the harness's cli>
+sh /thunderjar/thunderjar-run.sh
 code=$?
 end=$(date +%s%3N)
 echo "{\"startedAt\":$start,\"finishedAt\":$end,\"exitCode\":$code}" > /thunderjar/run.json
@@ -107,7 +110,7 @@ echo "{\"startedAt\":$start,\"finishedAt\":$end,\"exitCode\":$code}" > /thunderj
 
 The file is written before `docker commit`, so like the harness's result file it is
 preserved in the postrun image, and a run's timing and exit code can be re-read from the
-image alone. Harness authors do nothing for this — the wrapper belongs to Thunderjar.
+image alone. Harness authors do nothing for this — the run script belongs to Thunderjar.
 Timestamps come from the host kernel's clock, which containers share.
 
 What this times is the agent's execution only: harness start to exit. Image pulls,

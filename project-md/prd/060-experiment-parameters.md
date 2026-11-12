@@ -21,8 +21,8 @@ have run, and of its `files/` folder:
 |---|---|
 | Base image | Rendered fragment, `files/` contents, `runOptions` |
 | Code state, prompt set | Rendered fragment, `files/` contents |
-| Harness | Rendered fragment (with its version), `cli` rendered with fixed sample values for the first turn and a later one, `requiredEnv`, `files/` contents |
-| Initial prompt | Rendered fragment, prompt text (or turns), `timeoutSeconds` |
+| Harness | Rendered fragment (with its version, and a sample model ID), `requiredEnv`, `files/` contents |
+| Initial prompt | Rendered fragment, which writes the prompt, `timeoutSeconds` |
 
 - **Nothing else of the declaration is hashed.** Comments, formatting, helper code and
   imports from anywhere change no hash, unless they change the text it renders. A harness's
@@ -47,17 +47,21 @@ have run, and of its `files/` folder:
 | Image hash | The prerun Dockerfile, and each folder parameter's `files/` | The prerun image, which is tagged with it |
 
 The image hash covers only what affects the image, so permutations that build the same
-image share it: two models of one harness, or two initial prompts without a fragment. The
-permutation hash covers every parameter, so their runs are still told apart.
+image share it. The harness's fragment writes the model ID into the image, and the initial
+prompt's writes the prompt, so two models of one harness, or two initial prompts, each have
+their own image. They still share every layer below the one they differ in, so building the
+second is cheap.
 
 | Change | Parameter hash | Permutation hash | Image |
 |---|---|---|---|
 | A comment, or a helper, without changing the rendered text | — | — | — |
 | A code state's commit | code state | changed | rebuilt |
 | A file in a parameter's `files/` | that parameter | changed | rebuilt |
-| A harness's `cli` or `requiredEnv` | harness | changed | shared |
-| A pair's model ID | — | changed | shared |
-| An initial prompt's text or timeout | initial prompt | changed | shared, unless it has a fragment |
+| A harness's run script | harness | changed | rebuilt |
+| A harness's `requiredEnv` | harness | changed | shared |
+| A pair's model ID | — | changed | rebuilt |
+| An initial prompt's text | initial prompt | changed | rebuilt |
+| An initial prompt's timeout | initial prompt | changed | shared |
 | A base image's `runOptions` | base image | changed | shared |
 
 ### Floating parameters: `resolve`
@@ -92,8 +96,7 @@ export default declareCodeState({
 - **When.** On the host, once per execution (`plan`, `run`, `build`), before anything is
   hashed. A parameter used by several permutations is resolved once.
 - **Read only.** It may fetch, but it must not build or write anything.
-- **Where it goes.** Its result is `ctx.resolved` in `applyParameter`, and in a harness's
-  `cli`. Its type is inferred from `resolve`'s return type, so declare `resolve` first.
+- **Where it goes.** Its result is `ctx.resolved` in `applyParameter`. Its type is inferred from `resolve`'s return type, so declare `resolve` first.
 - **Not hashed itself.** Only the text it ends up in is, so a resolved value that's never
   used changes nothing. When `main` moves, the commit in the code state's `RUN` changes, so
   its hash, the permutation hash and the image do, and the execution is recorded as a
@@ -126,10 +129,13 @@ applyParameter?(config: C, ctx: Ctx & { resolved: R }): string; // a Dockerfile 
 ```
 
 A folder parameter's `ctx.dir` is where its `files/` folder is in the build context. A
-harness's `ctx.version` is its own `version`.
+harness's `ctx.version` is its own `version`, and its `ctx.modelId` the pair's model ID.
 
 Building a permutation's prerun image is then a fold: each parameter's fragment, in the
-order below. Thunderjar adds only `WORKDIR /workspace`.
+order below. Thunderjar adds only `WORKDIR /workspace`. The harness's fragment writes the
+model ID and `/thunderjar/thunderjar-run.sh`, the script that runs the agent, and the initial
+prompt's writes the prompt, with the `writeModel`, `writeRunScript` and `writePrompt`
+helpers: see [064-harness.md](064-harness.md#applyparameter-installing-and-running-the-agent).
 
 ```dockerfile
 FROM node:20-bookworm                                    # base image
@@ -141,7 +147,24 @@ RUN git clone --quiet https://github.com/acme/widgets.git /workspace \
   && git -C /workspace remote remove origin             # code state
 COPY parameters/promptSet/ /workspace/                   # prompt set, from its files/
 RUN npm install -g @anthropic-ai/claude-code@2.1.311     # harness
+COPY <<'THUNDERJAR_EOF' /thunderjar/model.txt
+claude-haiku-5-5
+THUNDERJAR_EOF
+COPY --chmod=755 <<'THUNDERJAR_EOF' /thunderjar/thunderjar-run.sh
+#!/bin/sh
+claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json > /thunderjar/result.json
+THUNDERJAR_EOF
+COPY <<'THUNDERJAR_EOF' /thunderjar/prompt.txt          # initial prompt
+Create a file isPrime.ts exporting a function that tests for primality.
+THUNDERJAR_EOF
+WORKDIR /workspace/packages/maths                        # initial prompt, optional
 ```
+
+Running an iteration is then only `sh /thunderjar/thunderjar-run.sh`, in the image's
+working directory: the last `WORKDIR` a fragment set, or `/workspace`. A code state or an
+initial prompt sets one to run the agent in a subfolder, e.g. a package of a monorepo, and
+measurements run there too. A prerun image holds everything a run needs, so it can be run,
+or read, without the project's config.
 
 Fragments are Dockerfile source rather than bare shell commands, because the
 prerun build *is* a Dockerfile — so layer caching stays explicit and the base
@@ -151,16 +174,16 @@ The order matches the build sequence in
 
 ### Build-time and run-time parameters
 
-Only four of the five contribute to the image. The initial prompt is consumed when the
-harness is invoked, and its fragment is usually left out:
+All five contribute to the image. The initial prompt's fragment writes its prompt, and may
+set `WORKDIR`:
 
 | Parameter | Build time | Run time |
 |---|---|---|
 | Base image | seed of the build | `runOptions` |
-| Code state | clones the codebase, then dependencies / fixture generation | — |
+| Code state | clones the codebase, then dependencies / fixture generation; may set `WORKDIR` | — |
 | Prompt set | prompt files | — |
-| Harness model pair | installs the agent tool | invoked via `cli`, with `ctx.modelId` |
-| Initial prompt | — | `ctx.initialPrompt` |
+| Harness model pair | installs the agent tool; writes the model ID and the run script | `requiredEnv` |
+| Initial prompt | writes the prompt; may set `WORKDIR` | its `timeoutSeconds` |
 
 This split is the same one the flowchart in
 [080-docker-execution.md](080-docker-execution.md#process) draws as its
@@ -247,11 +270,13 @@ export default claudeCode({ version: "2.1.311" });
 export default declareHarness({
   version: "1.19.5",
 
-  // build: install the tool into the prerun image
-  applyParameter: (_config, ctx) => `RUN npm install -g opencode-ai@${ctx.version}`,
-
-  // run: execute the agent, and write the result file
-  cli: (ctx) => `opencode run --model ${ctx.modelId} --format json "$(cat ${ctx.promptPath})" > ${ctx.resultPath}`,
+  // build: install the tool, and write the model and the script that runs it, which writes the result file
+  applyParameter: (_config, ctx) =>
+    [
+      `RUN npm install -g opencode-ai@${ctx.version}`,
+      writeModel(ctx.modelId),
+      writeRunScript(`opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`),
+    ].join("\n"),
 
   // interpret: the reply, and normalised token costs, from that file
   collectReply: (raw) => { /* … */ },
@@ -270,7 +295,7 @@ initial prompts, in no parameter hash. Detail: [066-task.md](066-task.md).
 ```ts
 // parameters/tasks/is-prime/initial-prompts/plain.ts
 export default declareInitialPrompt({
-  prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
+  applyParameter: () => writePrompt("Create a file isPrime.ts exporting a function that tests for primality."),
   timeoutSeconds: 600,
 });
 ```
@@ -278,12 +303,20 @@ export default declareInitialPrompt({
 ## Measuring instruments & measurements
 
 - **Measuring instrument** — single-purpose, reusable evaluation logic (built-in
-  or user-defined), parameterized by a config type and a value type. Examples:
-  `grep`, `fileCreated`, `templateTest`, `shell`.
+  or user-defined), parameterized by a config type and a value type, whose
+  value can be of any shape. It has a `version` for that shape, and may have a
+  default score. Examples: `grep`, `fileCreated`, `bunTestFile`, `shell`.
 - **Measurement** — an instrument plus a specific config, declared on a task.
   Copied per task, never shared by reference, so changing one task's
   measurement config can't silently change another task's meaning or history.
-- **Measure** — the value one measurement produces for one iteration.
+- **Measure** — the value one measurement produces for one iteration, stored as
+  the instrument returned it.
+- **Metric** — a score read from a measure, a number or a boolean, or
+  `undefined` where it doesn't apply, with one statistic across iterations and
+  optionally which way is better. A measurement declares one or more in
+  `metrics`. Metrics are computed when results are read, so they can change
+  without re-measuring. See
+  [085-experiment-results.md](085-experiment-results.md#measures-and-metrics).
 - **Result** — the set of measures for an iteration. Can grow after the fact:
   new measurements can be backfilled against a preserved artifact (the
   committed container image) without re-running the agent.
@@ -307,7 +340,7 @@ interface MeasurementContext {
   readFile(path: string): Promise<string>;
   writeFile(path: string, contents: string): Promise<void>;
   glob(pattern: string): Promise<string[]>;
-  harnessResult: string; // raw contents of the file `cli` wrote
+  harnessResult: string; // raw contents of the file the run script wrote
   workdir: string;
 }
 
@@ -318,52 +351,95 @@ Keeping instrument logic host-side means it stays unit-testable against a fake
 context — layer 1 of [120-test-boundaries.md](120-test-boundaries.md) — without
 requiring Thunderjar's own runtime inside every base image.
 
-### `templateTest`
+### `declareMeasurement`
 
-The instrument that shows why `writeFile` is on the context. A test against
-agent output can't be written in advance, because the thing it tests doesn't
-exist yet and won't have a predictable name. So the file supplied is a
-*template*, populated at measure time from whatever the agent actually
-produced:
+A measurement names its instrument, the instrument's config, and its metrics.
+
+```ts
+export default declareMeasurement({
+  instrument: "bunTestFile",
+  config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
+  metrics: {
+    passRate: { stat: "mean", better: "higher" }, // the default score: passed / total
+    passed: { score: (v) => v.passed, stat: "mean", better: "higher" },
+  },
+});
+```
+
+`metrics` is required, with at least one entry, each named by an identifier. A metric's
+`score` reads the instrument's value, and is optional where the instrument has a default
+score. Its `stat` must fit what the score returns: `rate` or `count` for booleans, `mean`,
+`median`, `min`, `max` or `sum` for numbers. A misfit is a type error, and, where the score
+type is known without running anything, an error at `plan` and `run`.
+
+| Instrument | Value | Default score |
+| --- | --- | --- |
+| `fileCreated` | `boolean` | the value |
+| `grep` | `number` | the value |
+| `replyMatches` | `boolean` | the value |
+| `bunTestFile` | `{ passed: number; total: number }` | the pass rate, `passed / total`, or not applicable with no tests |
+| `shell` | `{ exitCode: number; stdout: string; stdoutTruncated: boolean }` | whether it exited 0 |
+
+### `bunTestFile`
+
+The instrument that shows why `writeFile` is on the context. It runs an ordinary
+Bun test file against each file matching `subject`. The test can't import the
+agent's file by name, because it doesn't exist yet and won't have a
+predictable name, so it reads its absolute path from
+`Bun.env.THUNDERJAR_SUBJECT`, falling back to a reference implementation
+beside it when run on the host.
 
 ```ts
 // declared on the task
 {
-  instrument: "templateTest",
+  instrument: "bunTestFile",
   config: {
-    subject: "output/**/*.ts",             // resolved in the measurement container
-    template: "./prime.test.template.ts",  // host-side, part of the measurement's content hash
+    subject: "**/isPrime.ts",    // resolved in the measurement container
+    test: "./isPrime.test.ts",  // host-side, part of the measurement's content hash
   },
+  metrics: { passRate: { stat: "mean" } },
 }
 ```
 
 ```ts
-// prime.test.template.ts — not runnable as-is
-import { {{defaultExport}} } from "{{subjectPath}}";
-test("17 is prime", () => expect({{defaultExport}}(17)).toBe(true));
+// isPrime.test.ts — runs on the host as it is
+import { expect, test } from "bun:test";
+const { isPrime }: typeof import("./isPrime.reference.ts") = await import(Bun.env.THUNDERJAR_SUBJECT ?? "./isPrime.reference.ts");
+test("17 is prime", () => expect(isPrime(17)).toBe(true));
 ```
 
-Rendered into the measurement container and run there, so it gets the real
-pinned runtime and installed dependencies. Its value type is a count rather
-than a boolean — a measurement, not a verdict. The glob matching nothing gives
-`skipped`; a template that can't bind gives `erroredWhileMeasuring`.
+Written into the measurement container and run there, so it gets the real
+pinned runtime and installed dependencies. Its value is `{ passed, total }`,
+read from Bun's JUnit report, summed over every subject the glob matches;
+`total` includes skipped and failed tests. The glob matching nothing gives
+`skipped`; a test that doesn't run against the subject gives
+`erroredWhileMeasuring`.
 
 ### `shell`
 
 The escape hatch: runs any shell command in the measurement container, with
-`sh -c` in `workdir`, and records whether it exited 0. Use it for whatever no
-other instrument measures, with whatever the image has installed.
+`sh -c` in `workdir`, and stores what happened, unparsed:
+`{ exitCode, stdout, stdoutTruncated }`. Use it for whatever no other
+instrument measures, with whatever the image has installed.
 
 ```ts
 {
   instrument: "shell",
   config: { command: "bunx tsc --noEmit" },
-  aggregate: ["rate"],
+  metrics: { typeChecks: { stat: "rate" } }, // the default score: exit 0
 }
 ```
 
-Its value is a boolean, so it aggregates as `rate` or `count`. A non-zero exit,
-including a command that isn't found, is `false`, not `erroredWhileMeasuring`.
+- A non-zero exit, including a command that isn't found, is still `measured`,
+  never `erroredWhileMeasuring`.
+- `stdout` is capped at 64 KiB, with `stdoutTruncated` set when it was cut.
+- To get any other value from a command, write a `score` that parses `stdout`,
+  e.g. a command that prints JSON, read by several metrics.
+- Version 2: version 1 stored whether it exited 0.
+
+> **Warning:** stdout is stored in the run data store as it is. A command that
+> prints secrets or other sensitive data will persist them. There is
+> deliberately no transform step before storing.
 
 ## Open questions
 

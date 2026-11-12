@@ -4,5 +4,5 @@ import { declareMeasurement } from "thunderjar";
 export default declareMeasurement({
   instrument: "replyMatches",
   config: { pattern: "^sandboxed$" },
-  aggregate: ["rate"],
+  metrics: { matches: { stat: "rate" } },
 });

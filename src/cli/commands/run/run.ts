@@ -1,5 +1,6 @@
 import { Command, InvalidArgumentError, Option } from "commander";
 import type { TestCaseDeclaration } from "../../../api/declarations.ts";
+import { RUN_SCRIPT_PATH } from "../../../api/files.ts";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { AXES, parsePair } from "../../../config/permutations.ts";
 import { checkBuildSecrets, isConcurrency, loadProjectConfig } from "../../../config/projectConfig.ts";
@@ -33,8 +34,8 @@ const field = (label: string, value: string, paint: Paint = plain) =>
 
 /**
  * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
- * the environment variables its container is given, by name, any more `docker run` options, the
- * prompt file's contents, and its harness command. With several turns, its session ID, and each turn's prompt and command.
+ * the environment variables its container is given, by name, any more `docker run` options, and
+ * the command it runs: its prerun image's run script. `build --dry-run` shows what the script is.
  */
 export function renderExecution({ executionId, permutations }: PlannedExecution, paint: Paint = plain): string {
   const f = (label: string, value: string) => field(label, value, paint);
@@ -45,12 +46,7 @@ export function renderExecution({ executionId, permutations }: PlannedExecution,
         `  ${paint.bold(`Iteration ${iteration.number}`)}: postrun image ${paint.cyan(iteration.postrunImage)}`,
         ...(permutation.env.length > 0 ? [f("env", permutation.env.join(", "))] : []),
         ...(permutation.runOptions.length > 0 ? [f("docker", permutation.runOptions.join(" "))] : []),
-        ...(iteration.turns.length === 1
-          ? [f("prompt", iteration.turns[0]!.prompt), f("command", iteration.turns[0]!.command)]
-          : [
-              f("session", iteration.sessionId),
-              ...iteration.turns.flatMap(({ prompt, command }, t) => [f(`prompt ${t + 1}`, prompt), f(`turn ${t + 1}`, command)]),
-            ]),
+        f("command", `sh ${RUN_SCRIPT_PATH}`),
       ]),
     ].join("\n"),
   );
@@ -71,12 +67,8 @@ export function executionPlanJson({ executionId, permutations }: PlannedExecutio
       env,
       runOptions,
       timeoutSeconds,
-      iterations: iterations.map(({ number, postrunImage, sessionId, turns }) => ({
-        number,
-        postrunImage,
-        sessionId,
-        turns: turns.map(({ prompt, command }) => ({ prompt, command })),
-      })),
+      // Each iteration runs its prerun image's run script. `build --dry-run` shows what the script is.
+      iterations: iterations.map(({ number, postrunImage }) => ({ number, postrunImage, command: `sh ${RUN_SCRIPT_PATH}` })),
     })),
   };
 }
@@ -413,7 +405,7 @@ export function createRunCommand(): Command {
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(
       "--dry-run",
-      "print the images, environment variables, prompts and harness commands the execution would use, without running anything",
+      "print the images, environment variables and commands the execution would use, without running anything",
     )
     .option("--local", "run containers on the local Docker daemon, even if thunderjar.config.ts gives a runtime")
     .addOption(

@@ -15,9 +15,10 @@ const parameters = (overrides: Partial<PrerunParameters> = {}): PrerunParameters
   promptSet: { file: "promptSets/snerk/index.ts", declaration: declarePromptSet({ applyParameter: () => "COPY CLAUDE.md /workspace/" }) },
   harness: {
     file: "harnessModels/claude-code/index.ts",
-    declaration: declareHarness({ version: "2.1.283", applyParameter: () => "RUN npm install -g claude", cli: () => "claude" }),
+    declaration: declareHarness({ version: "2.1.283", applyParameter: () => "RUN npm install -g claude" }),
   },
-  initialPrompt: { file: "tasks/is-prime/initial-prompts/plain.ts", declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60 }) },
+  initialPrompt: { file: "tasks/is-prime/initial-prompts/plain.ts", declaration: declareInitialPrompt({ timeoutSeconds: 60 }) },
+  modelId: "claude-haiku-5-5",
   ...overrides,
 });
 
@@ -35,7 +36,7 @@ describe("renderPrerun", () => {
   test("folds the fragments in build order: base image, WORKDIR, code state, prompt set, harness, initial prompt", () => {
     const initialPrompt = {
       file: "tasks/is-prime/initial-prompts/plain.ts",
-      declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: () => "RUN touch /workspace/PROMPT" }),
+      declaration: declareInitialPrompt({ timeoutSeconds: 60, applyParameter: () => "RUN touch /workspace/PROMPT" }),
     };
     expect(renderPrerun(parameters({ initialPrompt }))).toBe(
       [
@@ -86,12 +87,11 @@ describe("renderPrerun", () => {
             version: "2.1.283",
             config: { packageName: "@anthropic-ai/claude-code" },
             applyParameter: (config, ctx) => ((seen.harness = ctx), `RUN npm install -g ${config.packageName}@${ctx.version}`),
-            cli: () => "claude",
           }),
         },
         initialPrompt: {
           file: "tasks/is-prime/initial-prompts/plain.ts",
-          declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: (_config, ctx) => ((seen.initialPrompt = ctx), "") }),
+          declaration: declareInitialPrompt({ timeoutSeconds: 60, applyParameter: (_config, ctx) => ((seen.initialPrompt = ctx), "") }),
         },
       }),
     );
@@ -110,7 +110,7 @@ describe("renderPrerun", () => {
       baseImage: { dir: PARAMETER_DIRS.baseImage },
       codeState: { dir: "parameters/codeState" },
       promptSet: [undefined, { dir: "parameters/promptSet" }],
-      harness: { dir: "parameters/harness", version: "2.1.283" },
+      harness: { dir: "parameters/harness", version: "2.1.283", modelId: "claude-haiku-5-5" },
       initialPrompt: {},
     });
   });
@@ -159,7 +159,6 @@ describe("renderPrerun, the build context", () => {
       declaration: declareHarness({
         version: "2.1.283",
         applyParameter: (_config, ctx) => `COPY ${ctx.dir}/scripts/ /opt/parameters/promptSet/\nRUN ls parameters/harnessy`,
-        cli: () => "claude",
       }),
     };
 
@@ -173,7 +172,7 @@ describe("renderPrerun, the build context", () => {
     };
     const initialPrompt = {
       file: "parameters/tasks/is-prime/initial-prompts/plain.ts",
-      declaration: declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: () => "COPY parameters/harness/PROMPT.md /workspace/" }),
+      declaration: declareInitialPrompt({ timeoutSeconds: 60, applyParameter: () => "COPY parameters/harness/PROMPT.md /workspace/" }),
     };
 
     expect(problemsOf(() => renderPrerun(parameters({ codeState, initialPrompt })))).toEqual([

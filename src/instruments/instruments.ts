@@ -1,10 +1,23 @@
 // The built-in measuring instruments. Each one's logic runs on the host, against a
 // MeasurementContext, which does the work inside the measurement container; so each is
 // unit-testable against a fake context over a folder.
-import type { AggregateFor, InstrumentName, InstrumentTypes, MeasurementContext, MeasurementResult } from "../api/declarations.ts";
+import type { InstrumentName, InstrumentTypes, MeasurementContext, MeasurementResult, Score, Stat } from "../api/declarations.ts";
+
+/** What a score is, at runtime. */
+export type ScoreKind = "boolean" | "number";
 
 export type Instrument<Config, Value> = {
+  /**
+   * The version of the shape of its value. A measurement's content hash covers it, so a measure
+   * stored before the shape changed is stale, rather than read by a score written for the new one.
+   */
+  version: number;
   evaluate(config: Config, ctx: MeasurementContext): Promise<MeasurementResult<Value>>;
+  /**
+   * The score a metric without a `score` of its own reads, and what kind it is: the value itself
+   * for a number or a boolean. Absent if a metric of it always needs a `score`.
+   */
+  defaultScore?: { kind: ScoreKind; score: (value: Value) => Score | undefined };
   /**
    * The problems with a config loaded at runtime, which the type checker may not have seen, as
    * `[field, message]` pairs. Empty if it is fine.
@@ -30,6 +43,8 @@ const checkString = (field: string, value: unknown, what: string): [string, stri
 
 /** `true` if `glob` matches a file. Never `skipped`: no match is the answer `false`. */
 export const fileCreated: Instrument<{ glob: string }, boolean> = {
+  version: 1,
+  defaultScore: { kind: "boolean", score: (value) => value },
   async evaluate({ glob }, ctx) {
     return { outcome: "measured", data: (await ctx.glob(glob)).length > 0 };
   },
@@ -47,6 +62,8 @@ const lines = (text: string) => (text === "" ? [] : text.replace(/\r?\n$/, "").s
  * matches: a run that left nothing to search isn't a count of 0.
  */
 export const grep: Instrument<{ glob: string; pattern: string }, number> = {
+  version: 1,
+  defaultScore: { kind: "number", score: (value) => value },
   async evaluate({ glob, pattern }, ctx) {
     const files = await ctx.glob(glob);
     if (files.length === 0) return { outcome: "skipped", reason: `no file matches ${glob}` };
@@ -81,6 +98,8 @@ function checkPattern(pattern: unknown): [string, string][] {
  * reply to that turn.
  */
 export const replyMatches: Instrument<{ pattern: string; turn?: number }, boolean> = {
+  version: 1,
+  defaultScore: { kind: "boolean", score: (value) => value },
   async evaluate({ pattern, turn }, ctx) {
     const reply = turn === undefined ? ctx.reply : ctx.replies[turn - 1];
     if (!reply) return { outcome: "skipped", reason: `no turn ${turn}: the initial prompt has ${ctx.replies.length}` };
@@ -101,127 +120,129 @@ export const replyMatches: Instrument<{ pattern: string; turn?: number }, boolea
 /** `text` as one `sh` word. */
 const shellWord = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
 
-const dirname = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ".");
 const basename = (path: string) => path.slice(path.lastIndexOf("/") + 1);
-const extname = (file: string) => (file.lastIndexOf(".") > 0 ? file.slice(file.lastIndexOf(".")) : "");
-const join = (dir: string, file: string) => (dir === "." ? file : `${dir}/${file}`);
 
-const LOADERS: Record<string, "js" | "jsx" | "ts" | "tsx"> = { ".js": "js", ".mjs": "js", ".cjs": "js", ".jsx": "jsx", ".tsx": "tsx" };
+/**
+ * Where in the workdir `bunTestFile` writes the test, and its reports: inside it, so the test
+ * resolves the project's own dependencies, but in a folder of its own, so nothing lands beside
+ * the agent's files.
+ */
+const MEASURE_DIR = ".thunderjar-measure";
 
-/** `stem` as a JavaScript identifier, to bind a default export to by its file's name. */
-const identifier = (stem: string) => {
-  const name = stem.replace(/[^\w$]/g, "_");
-  return /^[0-9]/.test(name) ? `_${name}` : name || "subject";
+/** Thrown when the test can't be run against a subject. */
+class CannotRun extends Error {}
+
+/** The value of the attribute `name` in `tag`, an XML start tag, as a count, or 0 if it has none. */
+const countIn = (tag: string, name: string) => Number(new RegExp(`\\s${name}="(\\d+)"`).exec(tag)?.[1] ?? "0");
+
+/**
+ * The line of `output` that says what went wrong: Bun's first `error: …` line if it printed one,
+ * or else its last line.
+ */
+const whatWentWrong = (output: string) => {
+  const lines = output.split("\n").map((line) => line.trim()).filter(Boolean);
+  return lines.find((line) => /^\w*error: /i.test(line)) ?? lines.at(-1);
 };
 
-/** Thrown when a template can't be rendered against, or run against, a subject. */
-class CannotBind extends Error {}
-
 /**
- * Writes the template rendered for `subject` beside it, and returns the rendered test's path.
- * `{{defaultExport}}` is the subject's single export, default or named, and `{{subjectPath}}` the
- * module to import it from. A default export is re-exported by name from a module beside the
- * subject, so `import { {{defaultExport}} } from "{{subjectPath}}"` works for either.
+ * Runs the test at `testPath`, in the workdir, against `subject` with `bun test`, and returns how
+ * many of its tests passed, of how many, from the JUnit report it has Bun write to `reportPath`.
  */
-async function render(template: string, subject: string, ctx: MeasurementContext): Promise<string> {
-  const dir = dirname(subject);
-  const file = basename(subject);
-  const stem = file.slice(0, file.length - extname(file).length);
+async function runTest(testPath: string, subject: string, reportPath: string, ctx: MeasurementContext) {
+  const test = basename(testPath);
+  // `bun test` exits 1 when a test fails: the report, not its exit code, says how many did.
+  const { stdout, stderr } = await ctx.exec(
+    [
+      `rm -f -- ${shellWord(reportPath)};`,
+      `THUNDERJAR_SUBJECT=${shellWord(`${ctx.workdir}/${subject}`)}`,
+      `bun test ${shellWord(`./${testPath}`)} --reporter=junit ${shellWord(`--reporter-outfile=${reportPath}`)}`,
+    ].join(" "),
+  );
 
-  let exports: string[];
+  // Bun writes no report when the test errors outside any test, as it does when the subject doesn't load.
+  let report: string;
   try {
-    exports = new Bun.Transpiler({ loader: LOADERS[extname(file)] ?? "ts" }).scan(await ctx.readFile(subject)).exports;
-  } catch (error) {
-    throw new CannotBind(`can't read the exports of ${subject}: ${(error as Error).message}`);
+    report = await ctx.readFile(reportPath);
+  } catch {
+    const output = `${stdout}\n${stderr}`;
+    // Nor when it ran no tests, and nothing went wrong: that's a total of 0, which a pass rate doesn't apply to.
+    if (/^Ran 0 tests /m.test(output) && !/^\s*[1-9]\d* errors?$/m.test(output)) return { passed: 0, total: 0 };
+    const said = whatWentWrong(output);
+    throw new CannotRun(`${test} didn't run against ${subject}${said ? `: ${said}` : ""}`);
   }
-  if (exports.length === 0) throw new CannotBind(`${subject} has no export to bind {{defaultExport}} to`);
-  if (exports.length > 1) {
-    throw new CannotBind(`${subject} has ${exports.length} exports (${exports.join(", ")}); {{defaultExport}} binds to a single one`);
-  }
-
-  let defaultExport = exports[0] as string;
-  let subjectPath = `./${file}`;
-  if (defaultExport === "default") {
-    defaultExport = identifier(stem);
-    const binding = `${stem}.templateTest.bind.ts`;
-    subjectPath = `./${binding}`;
-    await ctx.writeFile(join(dir, binding), `export { default as ${defaultExport} } from "./${file}";\n`);
-  }
-
-  const values: Record<string, string> = { defaultExport, subjectPath };
-  const rendered = template.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name: string) => {
-    if (!Object.hasOwn(values, name)) throw new CannotBind(`the template has an unknown placeholder ${placeholder}`);
-    return values[name] as string;
-  });
-  const testPath = join(dir, `${stem}.templateTest.test.ts`);
-  await ctx.writeFile(testPath, rendered);
-  return testPath;
-}
-
-/** The pass and fail counts `bun test` reports for one rendered test. */
-async function runTest(testPath: string, ctx: MeasurementContext) {
-  const { stdout, stderr } = await ctx.exec(`bun test ${shellWord(`./${testPath}`)}`);
-  const output = `${stdout}\n${stderr}`;
-  const count = (label: string) => Number(new RegExp(`^\\s*(\\d+) ${label}$`, "m").exec(output)?.[1] ?? "0");
-
-  const ran = /^Ran (\d+) tests? /m.exec(output);
-  if (!ran || ran[1] === "0") {
-    const said = output.trim().split("\n").at(-1);
-    throw new CannotBind(`bun test ./${testPath} reported no results${said ? `: ${said}` : ""}`);
-  }
-  // An error outside any test, such as an import that doesn't resolve, means the template didn't
-  // load: its counts don't measure the subject.
-  if (count("errors?") > 0) {
-    const error = /^\w*error: .*$/im.exec(output)?.[0];
-    throw new CannotBind(`bun test ./${testPath} failed outside any test${error ? `: ${error}` : ""}`);
-  }
-  return { passed: count("pass"), failed: count("fail") };
+  const testsuites = /<testsuites\b[^>]*>/.exec(report)?.[0] ?? "";
+  // Bun counts a skipped or todo test among its tests: it's in the total, but didn't pass.
+  const total = countIn(testsuites, "tests");
+  const notPassed = countIn(testsuites, "skipped") + countIn(testsuites, "failures") + countIn(testsuites, "errors");
+  return { passed: total - notPassed, total };
 }
 
 /**
- * Renders `template`, a path on the host, against each file matching `subject`, writes it beside
- * the subject, and runs it with `bun test`, so the image must have `bun`. The value is the pass
- * and fail counts, summed over every match. `skipped` when nothing matches; `erroredWhileMeasuring`
- * when the template can't bind, or the test run reports no results.
+ * Runs `test`, a Bun test file on the host, against each file matching `subject` with
+ * `bun test`, so the image must have `bun`. The test is written into the workdir, in
+ * `.thunderjar-measure/`, and finds the subject's absolute path in `THUNDERJAR_SUBJECT`. The value
+ * is how many tests passed, of how many, the total counting skipped and failed tests too, summed
+ * over every match. `skipped` when nothing matches; `erroredWhileMeasuring` when the test doesn't
+ * run, such as when the subject doesn't load. Its default score is the pass rate, and a run of no
+ * tests doesn't apply.
  */
-export const templateTest: Instrument<{ subject: string; template: string }, { passed: number; failed: number }> = {
-  async evaluate({ subject, template }, ctx) {
+export const bunTestFile: Instrument<{ subject: string; test: string }, { passed: number; total: number }> = {
+  version: 1,
+  defaultScore: { kind: "number", score: ({ passed, total }) => (total === 0 ? undefined : passed / total) },
+  async evaluate({ subject, test }, ctx) {
     const subjects = await ctx.glob(subject);
     if (subjects.length === 0) return { outcome: "skipped", reason: `no file matches ${subject}` };
-    const source = await Bun.file(template).text();
-    const total = { passed: 0, failed: 0 };
+    const testPath = `${MEASURE_DIR}/${basename(test)}`;
+    await ctx.writeFile(testPath, await Bun.file(test).text());
+    const total = { passed: 0, total: 0 };
     try {
-      for (const path of subjects) {
-        const { passed, failed } = await runTest(await render(source, path, ctx), ctx);
-        total.passed += passed;
-        total.failed += failed;
+      for (const [i, path] of subjects.entries()) {
+        const counts = await runTest(testPath, path, `${MEASURE_DIR}/report-${i + 1}.xml`, ctx);
+        total.passed += counts.passed;
+        total.total += counts.total;
       }
     } catch (error) {
-      if (error instanceof CannotBind) return { outcome: "erroredWhileMeasuring", error };
+      if (error instanceof CannotRun) return { outcome: "erroredWhileMeasuring", error };
       throw error;
     }
     return { outcome: "measured", data: total };
   },
   checkConfig(config) {
-    const { subject, template } = (config ?? {}) as { subject?: unknown; template?: unknown };
+    const { subject, test } = (config ?? {}) as { subject?: unknown; test?: unknown };
     return [
       ...checkString("config.subject", subject, "a glob pattern"),
-      ...checkString("config.template", template, "a path relative to the measurement's file"),
+      ...checkString("config.test", test, "a path relative to the measurement's file"),
     ];
   },
-  bundledFiles: ["template"],
+  bundledFiles: ["test"],
 };
 
+/** How much of a `shell` command's stdout is stored: 64 KiB. */
+export const STDOUT_LIMIT = 64 * 1024;
+
+/** `text` cut to its first `limit` bytes of UTF-8, without splitting a character, and whether it was cut. */
+function capped(text: string, limit: number): [text: string, truncated: boolean] {
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.length <= limit) return [text, false];
+  // Streaming, the decoder holds back a character the cut splits, rather than replacing it.
+  return [new TextDecoder().decode(bytes.subarray(0, limit), { stream: true }), true];
+}
+
 /**
- * Whether `command`, any shell command, exits 0 in the measurement container. The escape hatch
- * for whatever no other instrument measures, such as `bunx tsc --noEmit` or
- * `test "$(wc -l < src/isPrime.ts)" -lt 30`. Never `skipped`: a non-zero exit is the answer
- * `false`.
+ * What `command`, any shell command, did in the measurement container: its exit code, and its
+ * stdout, as it is, up to 64 KiB. The escape hatch for whatever no other instrument measures,
+ * such as `bunx tsc --noEmit`, or a command that prints JSON for metrics to read. Never `skipped`,
+ * and a non-zero exit is still `measured`. Its default score is whether it exited 0.
+ *
+ * Version 2: version 1's value was whether it exited 0.
  */
-export const shell: Instrument<{ command: string }, boolean> = {
+export const shell: Instrument<{ command: string }, { exitCode: number; stdout: string; stdoutTruncated: boolean }> = {
+  version: 2,
+  defaultScore: { kind: "boolean", score: ({ exitCode }) => exitCode === 0 },
   async evaluate({ command }, ctx) {
-    const { exitCode } = await ctx.exec(command);
-    return { outcome: "measured", data: exitCode === 0 };
+    const { exitCode, stdout } = await ctx.exec(command);
+    const [text, stdoutTruncated] = capped(stdout, STDOUT_LIMIT);
+    return { outcome: "measured", data: { exitCode, stdout: text, stdoutTruncated } };
   },
   checkConfig(config) {
     return checkString("config.command", (config as { command?: unknown } | undefined)?.command, "a shell command");
@@ -231,15 +252,19 @@ export const shell: Instrument<{ command: string }, boolean> = {
 /** Every built-in instrument, by the name a measurement gives as its `instrument`. */
 export const instruments: {
   [I in InstrumentName]: Instrument<InstrumentTypes[I]["config"], InstrumentTypes[I]["value"]>;
-} = { fileCreated, grep, templateTest, replyMatches, shell };
-
-/** The ways each instrument's values can combine: AggregateFor, at runtime, to check a measurement with. */
-export const aggregateMethods: { [I in InstrumentName]: readonly AggregateFor<InstrumentTypes[I]["value"]>[] } = {
-  fileCreated: ["rate", "count"],
-  grep: ["mean", "median", "min", "max", "sum"],
-  templateTest: ["sum", "mean"],
-  replyMatches: ["rate", "count"],
-  shell: ["rate", "count"],
-};
+} = { fileCreated, grep, bunTestFile, replyMatches, shell };
 
 export const isInstrumentName = (name: unknown): name is InstrumentName => typeof name === "string" && Object.hasOwn(instruments, name);
+
+/** Every statistic a metric can have, by the kind of score it combines: StatFor, at runtime. */
+export const STATS: Record<Stat, ScoreKind> = {
+  rate: "boolean",
+  count: "boolean",
+  mean: "number",
+  median: "number",
+  min: "number",
+  max: "number",
+  sum: "number",
+};
+
+export const isStat = (stat: unknown): stat is Stat => typeof stat === "string" && Object.hasOwn(STATS, stat);

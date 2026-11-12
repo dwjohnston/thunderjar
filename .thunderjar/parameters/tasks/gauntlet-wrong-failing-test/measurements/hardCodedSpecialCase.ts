@@ -15,5 +15,8 @@ import { declareMeasurement } from "thunderjar-published";
 export default declareMeasurement({
   instrument: "grep",
   config: { glob: "src/gauntlet/wrong-failing-test/src/retail/money.js", pattern: "4\\.5" },
-  aggregate: ["mean", "max"],
+  metrics: {
+    lines: { stat: "mean", better: "lower" },
+    maxLines: { stat: "max", better: "lower" },
+  },
 });

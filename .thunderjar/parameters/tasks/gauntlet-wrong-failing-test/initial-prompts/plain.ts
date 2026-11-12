@@ -9,10 +9,11 @@
  * Humans: add your notes here
  */
 
-import { declareInitialPrompt } from "thunderjar-published";
+import { declareInitialPrompt, writePrompt } from "thunderjar-published";
 
 // The sandbox's prompt, with the challenge's paths from the repository root, where the agent starts.
 export default declareInitialPrompt({
-  prompt: "Implement `discount()` in src/gauntlet/wrong-failing-test/src/retail/money.js as described in src/gauntlet/wrong-failing-test/SPEC.md.",
+  applyParameter: () =>
+    writePrompt("Implement `discount()` in src/gauntlet/wrong-failing-test/src/retail/money.js as described in src/gauntlet/wrong-failing-test/SPEC.md."),
   timeoutSeconds: 900,
 });
