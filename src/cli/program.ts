@@ -12,6 +12,7 @@ import { createViewCommand } from "./commands/view/view.ts";
 import { ConfigError, findThunderjarRoot } from "../config/loader.ts";
 import { configureLog, DEFAULT_LOG_LEVEL, LOG_LEVELS, type LogLevel, moduleLogger } from "../log/logger.ts";
 import { resolvePath } from "./dataDir.ts";
+import { textToStderr } from "./textOutput.ts";
 
 const log = moduleLogger("cli");
 import { painter } from "./colour.ts";
@@ -70,6 +71,8 @@ export function createProgram(): Command {
     .addOption(new Option("--log-level <level>", "how much goes in the diagnostic log").choices(LOG_LEVELS).env("THUNDERJAR_LOG_LEVEL"))
     .addOption(new Option("-v, --verbose", "log at the debug level: --log-level debug").conflicts("logLevel"))
     .hook("preAction", async (program, command) => {
+      // With --json, stdout is the JSON alone, so everything else a command writes goes to stderr.
+      if (command.opts<{ json?: boolean }>().json) textToStderr();
       const options = program.opts<LogOptions>();
       const path = await logFile(options, command.name());
       if (path === undefined) return;

@@ -66,9 +66,10 @@ describe("0204 misbehaving agents", () => {
     await using docker = await fakeDocker();
     const data = dataDir();
 
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data], {
+    const { stdout, stderr, exitCode, log } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data], {
       env: docker.env,
       paths: { "<DATA>": data },
+      log: true,
     });
 
     expect(stderr).toBe("");
@@ -93,6 +94,24 @@ Recorded in <DATA>/runs.sqlite
     expect(crasher.harnessResult).toBe('{"error":"crashed"}\n');
     expect(silent.execution).toMatchObject({ exitCode: 0, timedOut: false });
     expect(silent.harnessResult).toBeNull();
+    // The log says why each failed: what the agent wrote to stderr, and its result file.
+    expect(log).toContain(`WARN: execution: agent exited non-zero
+    executionId: "<ULID>"
+    permutation: 2
+    iteration: 1
+    exitCode: 1
+    output: [
+      {
+        "turn": 1,
+        "stderr": "fake-crasher: no space left on device",
+        "result": "{\\"error\\":\\"crashed\\"}"
+      }
+    ]`);
+    expect(log).toContain("WARN: execution: agent timed out");
+    // Its stderr is kept in its postrun image, beside its result file.
+    expect(await docker.fileIn(`thunderjar-postrun:${store.execution.executionId}-2-1`, "/thunderjar/stderr.log")).toBe(
+      "fake-crasher: no space left on device\n",
+    );
     // Each was committed, and removed.
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
     expect(await docker.containers()).toEqual([]);

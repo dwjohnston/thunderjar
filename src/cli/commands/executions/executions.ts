@@ -5,7 +5,8 @@ import { type Paint, padEnd, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { minute, paintStatus, plural } from "../../format.ts";
-import { print, printError } from "../../output.ts";
+import { jsonOption } from "../../json.ts";
+import { print, printError, printJson } from "../../output.ts";
 
 /** One line per execution, in the order given: its ID, test case, when it started, its matrix and its status, in aligned columns. */
 export function renderExecutions(executions: ExecutionRecord[], paint: Paint = plain): string {
@@ -25,8 +26,9 @@ export function renderExecutions(executions: ExecutionRecord[], paint: Paint = p
 /**
  * Lists the executions in the run data store, of test case `testCase` only if given, newest
  * first. The store is in `dataDir`, or the one the config of the nearest `.thunderjar/` folder in `cwd` or above it names.
+ * With `json`, prints them as a JSON array of their records, `[]` if there are none.
  */
-async function executions(cwd: string, testCase?: string, dataDir?: string): Promise<void> {
+async function executions(cwd: string, testCase?: string, dataDir?: string, json = false): Promise<void> {
   const { store } = await openStore(cwd, dataDir);
   let listed: ExecutionRecord[];
   try {
@@ -39,7 +41,9 @@ async function executions(cwd: string, testCase?: string, dataDir?: string): Pro
   }
   const paint = painter();
   if (testCase !== undefined) listed = listed.filter((execution) => execution.testCase === testCase);
-  if (listed.length === 0) {
+  if (json) {
+    printJson(listed);
+  } else if (listed.length === 0) {
     print(paint.dim(testCase === undefined ? "No executions recorded." : `No executions of ${testCase} recorded.`));
   } else {
     print(renderExecutions(listed, paint));
@@ -53,9 +57,10 @@ export function createExecutionsCommand(): Command {
     )
     .argument("[test case]", `list only the executions of this test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .addOption(dataDirOption())
+    .addOption(jsonOption())
     .action(
-      reportingConfigErrors(async (testCase: string | undefined, options: { dataDir?: string }) => {
-        await executions(process.cwd(), testCase, options.dataDir);
+      reportingConfigErrors(async (testCase: string | undefined, options: { dataDir?: string; json?: boolean }) => {
+        await executions(process.cwd(), testCase, options.dataDir, options.json);
       }),
     );
 }

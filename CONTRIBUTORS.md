@@ -60,3 +60,15 @@ bun run dogfood:local
 ```
 
 It runs the `compare-models` test case with the installed `thunderjar-published`, on the local Docker daemon. The Dogfood workflow runs it on every pull request, with the `ANTHROPIC_API_KEY` repository secret, and keeps the run data as an artifact. See [.thunderjar/AGENTS.md](./.thunderjar/AGENTS.md).
+
+### Remote runs
+
+With `THUNDERJAR_REMOTE=1`, `.thunderjar/thunderjar.config.ts` runs containers on a Docker daemon on Fly.io, pushes images to ghcr, and records runs in Supabase Postgres:
+
+```sh
+bun run dogfood:remote
+```
+
+It needs `fly`, `docker login ghcr.io`, `FLYIO_TOKEN`, `THUNDERJAR_DB_URL` and `ANTHROPIC_API_KEY`.
+
+In CI, comment `/slow-tests` on a PR to run `compare-models` this way, or `/slow-tests <test case>` for another one. The outcome comes back as a PR comment. See [`.github/workflows/slow-tests.yml`](./.github/workflows/slow-tests.yml) for the secrets it needs.

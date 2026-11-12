@@ -11,9 +11,9 @@ import {
   runContainer,
 } from "../docker/docker.ts";
 import type { Execution } from "../store/runDataStore.ts";
-import { RESULT_PATH, RUN_PATH, timedRun } from "./runScript.ts";
+import { RESULT_PATH, RUN_PATH, STDERR_PATH, timedRun } from "./runScript.ts";
 
-export { NOW_MS_FUNCTION, RUN_PATH } from "./runScript.ts";
+export { NOW_MS_FUNCTION, RUN_PATH, STDERR_PATH } from "./runScript.ts";
 
 export type ContainerRun = {
   prerunImage: string;
@@ -34,6 +34,8 @@ export type ContainerRunOutcome = {
   execution: Execution;
   /** The text of its result file, or null if it left none. */
   harnessResult: string | null;
+  /** The run script's standard error, or null if it never ran. */
+  stderr: string | null;
 };
 
 /** Whether `value` is plausibly ms since the epoch: from 2001-09-09 (13 digits) up to 2286. */
@@ -85,8 +87,9 @@ export async function runInContainer(run: ContainerRun): Promise<ContainerRunOut
     const killedAt = stop.timedOut ? stop.killedAt : undefined;
     const execution = parseExecution(await readContainerFile(run.container, RUN_PATH, runtime), run.timeoutSeconds, killedAt);
     const harnessResult = (await readContainerFile(run.container, RESULT_PATH, runtime)) ?? null;
+    const stderr = (await readContainerFile(run.container, STDERR_PATH, runtime)) ?? null;
     await commitContainer(run.container, run.postrunImage, run.prerunImage, runtime);
-    return { execution, harnessResult };
+    return { execution, harnessResult, stderr };
   } finally {
     await removeContainer(run.container, runtime).catch(() => {});
   }

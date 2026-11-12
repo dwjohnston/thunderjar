@@ -1,0 +1,8 @@
+{
+  "name": "thunderjar",
+  "description": "Thunderjar for Claude Code: /tj-oneshot records a one-shot task (the prompt, and the code before and after) as git tags, to replay as an eval.",
+  "author": { "name": "dwjohnston" },
+  "homepage": "https://github.com/dwjohnston/thunderjar",
+  "repository": "https://github.com/dwjohnston/thunderjar",
+  "license": "MIT"
+}

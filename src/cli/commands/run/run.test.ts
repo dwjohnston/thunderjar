@@ -213,6 +213,7 @@ Recorded in <DATA>/runs.sqlite
         `docker run --name ${container(n)} --pull never ${n === 1 ? "-e FAKE_HARNESS_KEY " : ""}--entrypoint sh ${prerun(n)} -c <script>`,
         `docker cp ${container(n)}:/thunderjar/run.json <destination>`,
         `docker cp ${container(n)}:/thunderjar/result.json <destination>`,
+        `docker cp ${container(n)}:/thunderjar/stderr.log <destination>`,
         `docker image inspect --format {{json .Config.Entrypoint}}\t{{json .Config.Cmd}} ${prerun(n)}`,
         `docker commit --change ENTRYPOINT [""] --change CMD ["sh"] ${container(n)} thunderjar-postrun:${id}-${n}-1`,
         `docker rm --force ${container(n)}`,
@@ -261,7 +262,7 @@ Recorded in <DATA>/runs.sqlite
     expect(await docker.fileIn(record?.postrunImage as string, "/thunderjar/model.txt")).toBe(`${record?.harnessModel.modelId}\n`);
     expect(await docker.fileIn(record?.postrunImage as string, "/thunderjar/thunderjar-run.sh")).toStartWith("#!/bin/sh\n");
     expect((await docker.commands()).filter((command) => command.startsWith("docker run --name"))).toEqual([
-      expect.stringContaining("\\nsh /thunderjar/thunderjar-run.sh\\n"),
+      expect.stringContaining("\\nsh /thunderjar/thunderjar-run.sh 2> /thunderjar/stderr.log\\n"),
     ]);
   });
 
@@ -519,5 +520,62 @@ export default declareHarness({ version: "1.0.0", applyParameter: () => writeRun
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => command.startsWith("docker run"))).toEqual([]);
     expect(await Bun.file(data).exists()).toBe(false);
+  });
+});
+
+describe("run --json", () => {
+  test("0202 two-harnesses: prints the execution, where it's recorded and its container runs as JSON, with its progress on stderr", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--data-dir", data, "--json"], {
+      env: { ...docker.env, ...KEY },
+      paths: { "<DATA>": data },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toStartWith("Execution <ULID>\nBuilding thunderjar-prerun:32a1d048 ... done\n");
+    expect(stderr).toEndWith("Recorded in <DATA>/runs.sqlite\n");
+    const result = JSON.parse(stdout);
+    expect(result.execution).toEqual(expect.objectContaining({ executionId: "<ULID>", testCase: "two-harnesses", status: "complete" }));
+    expect(result.recordedIn).toBe("<DATA>/runs.sqlite");
+    expect(result.containerRuns.map(({ permutation, iteration }: ContainerRunRecord) => [permutation, iteration])).toEqual([
+      [1, 1],
+      [2, 1],
+    ]);
+    expect(result.containerRuns).toHaveLength((await readStore(data)).containerRuns.length);
+  });
+
+  test("a failed execution is still printed, with exit code 1", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data, "--json"], { env: { ...docker.env, ...KEY } });
+
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(stdout).execution.status).toBe("failed");
+  });
+
+  test("--dry-run: each permutation, its parameters and images, and each iteration's command, as JSON", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--dry-run", "--json"], { env: KEY });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const plan = JSON.parse(stdout);
+    expect(plan.executionId).toBe("<ULID>");
+    expect(plan.permutations).toEqual([
+      {
+        number: 1,
+        parameters: expect.objectContaining({ harnessModel: "fake-harness-alpha/fake-model-small-001" }),
+        modelId: "fake-model-small-001",
+        harnessVersion: expect.any(String),
+        hash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        prerunImage: "thunderjar-prerun:32a1d048",
+        env: ["FAKE_HARNESS_KEY"],
+        runOptions: [],
+        timeoutSeconds: expect.any(Number),
+        iterations: [{ number: 1, postrunImage: expect.stringContaining("thunderjar-postrun:"), command: "sh /thunderjar/thunderjar-run.sh" }],
+      },
+    ]);
   });
 });

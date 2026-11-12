@@ -21,6 +21,7 @@ import type {
   RecordedMeasure,
   RunDataStore,
 } from "../store/runDataStore.ts";
+import { agentOutput, head } from "./agentOutput.ts";
 import { runInContainer } from "./containerRun.ts";
 import { containerName, storedPostrunImage, storedPrerunImage } from "./images.ts";
 import { type PullHooks, pullIntoRuntime, type PushHooks, pushToStore } from "./imageStore.ts";
@@ -219,7 +220,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     const at = { executionId, permutation: permutation.number, iteration: iteration.number };
     log.info({ ...at, permutationHash: permutation.permutation.hash }, "container run starting");
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-    const { execution, harnessResult: resultFile } = await runInContainer({
+    const { execution, harnessResult: resultFile, stderr } = await runInContainer({
       prerunImage: prerunImageOf(permutation),
       postrunImage: iteration.postrunImage,
       env: permutation.env,
@@ -239,6 +240,14 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     // Timed out, its exit code is null.
     if (execution.exitCode !== 0) status = "failed";
     log.info({ ...at, exitCode: execution.exitCode, timedOut: execution.timedOut, tokenCosts }, "container run finished");
+    // What the agent said, so the log says why it failed: its stderr is otherwise lost (#140).
+    const output = agentOutput([resultFile], [stderr]);
+    if (execution.timedOut) log.warn({ ...at, timeoutSeconds: execution.timeoutSeconds, output }, "agent timed out");
+    else if (execution.exitCode !== 0) log.warn({ ...at, exitCode: execution.exitCode, output }, "agent exited non-zero");
+    else if (output.some((turn) => turn.stderr !== undefined)) log.debug({ ...at, output }, "agent output");
+    if (tokenCosts.outcome === "unavailable" && tokenCosts.reason === "unparseable") {
+      log.debug({ ...at, result: resultFile && head(resultFile, 500) }, "token costs unparseable from the result file");
+    }
     hooks.onRan?.(permutation, iteration, record);
     if (imageStore !== null) {
       const reference = storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);

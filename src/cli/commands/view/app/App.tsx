@@ -2,8 +2,11 @@
 // `#/` or `#/executions/<ID>`, so the server only ever serves one page.
 import { useEffect, useState } from "react";
 import type { ContainerRunRecord, ExecutionRecord, RecordedMeasure } from "../../../../store/runDataStore.ts";
-import { agentEnd, dollars, duration, knownCost, minute, plural, type RunTotals, runTotals, thousands, totalTokens } from "../../../format.ts";
-import type { ExecutionSummary } from "../view.ts";
+import { agentEnd, dollars, duration, knownCost, minute, plural, type RunTotals, runTotals, showAggregate, thousands, totalTokens } from "../../../format.ts";
+import type { Axis } from "../../../../config/permutations.ts";
+import type { AggregatedMeasure, AggregateMethod } from "../../../../execution/aggregate.ts";
+import type { ExecutionSummary, PermutationSummary, Spread } from "../../../../execution/executionSummary.ts";
+import type { ExecutionPage, ExecutionSummary as ExecutionListItem } from "../view.ts";
 
 type Loaded<T> = { state: "loading" } | { state: "loaded"; data: T } | { state: "error"; message: string };
 
@@ -98,7 +101,7 @@ function CostCell({ run }: { run: ContainerRunRecord }) {
 }
 
 function Executions() {
-  const loaded = useJson<ExecutionSummary[]>("/api/executions");
+  const loaded = useJson<ExecutionListItem[]>("/api/executions");
   return (
     <>
       <h1>Executions</h1>
@@ -163,22 +166,226 @@ function measureText({ outcome }: RecordedMeasure): string {
   return `errored: ${outcome.error.message}`;
 }
 
-function MeasureCell({ measure }: { measure: RecordedMeasure | undefined }) {
+function MeasureCell({ measure, span }: { measure: RecordedMeasure | undefined; span: number }) {
   const text = measure === undefined ? "" : measureText(measure);
-  return <td>{text}</td>;
+  return (
+    <td className="measure" colSpan={span}>
+      {text}
+    </td>
+  );
+}
+
+/** The parameter columns, in the order the table shows them. */
+const PARAMETER_COLUMNS: { axis: Axis; label: string }[] = [
+  { axis: "baseImage", label: "Base image" },
+  { axis: "codeState", label: "Code state" },
+  { axis: "promptSet", label: "Prompt set" },
+  { axis: "initialPrompt", label: "Initial prompt" },
+  { axis: "harnessModel", label: "Harness / model" },
+];
+
+const harnessModelText = ({ harness, model, modelId }: ContainerRunRecord["harnessModel"]) => `${harness} / ${model ?? modelId}`;
+
+/** A value, with a smaller line beneath it if there is one. */
+function Cell({ text, detail, title, className }: { text: React.ReactNode; detail?: string; title?: string; className?: string }) {
+  return (
+    <td className={className} title={title}>
+      {text}
+      {detail !== undefined && <span className="detail">{detail}</span>}
+    </td>
+  );
+}
+
+/** A spread's mean, with its range beneath if its values differ, and how many runs it covers if not all. */
+function SpreadCell({ spread, iterations, show, missing }: { spread: Spread | undefined; iterations: number; show: (n: number) => string; missing: string }) {
+  if (spread === undefined) return <Cell text={<Missing why={missing} />} />;
+  const range = spread.min === spread.max ? undefined : `${show(spread.min)}–${show(spread.max)}`;
+  const of = spread.of < iterations ? `of ${spread.of}/${iterations} runs` : undefined;
+  return <Cell text={show(spread.mean)} detail={[range, of].filter(Boolean).join(" · ") || undefined} />;
+}
+
+/** How a permutation's agents ended: `5/5 done`, or `4 done · 1 exited 1`. */
+const agentText = ({ agent, iterations }: PermutationSummary) =>
+  agent.length === 1 ? `${agent[0]!.runs}/${iterations} ${agent[0]!.end}` : agent.map(({ end, runs }) => `${runs} ${end}`).join(" · ");
+
+/** One measure's aggregate by one method, starred if it leaves an iteration out; `?` if its values don't combine. */
+function AggregateCell({ measure, method, iterations }: { measure: AggregatedMeasure | undefined; method: AggregateMethod; iterations: number }) {
+  if (measure?.incompatible !== undefined) return <Cell className="measure" text="?" title={`Can't aggregate as declared today: ${measure.incompatible}`} />;
+  const value = measure?.values[method];
+  if (measure === undefined || value === undefined) return <Cell text={<Missing why="No iteration measured it" />} />;
+  const partial = measure.measured < iterations;
+  return (
+    <Cell
+      className="measure"
+      text={`${showAggregate(method, value, measure.measured)}${partial ? "*" : ""}`}
+      title={partial ? `Of the ${measure.measured} of ${iterations} iterations that measured it` : undefined}
+    />
+  );
+}
+
+type Columns = { axes: Axis[]; measurements: ExecutionSummary["measurements"] };
+
+/** One container run's row: a measure's recorded value spans its measurement's methods. */
+function RunRow({ run, columns, nested }: { run: ContainerRunRecord; columns: Columns; nested?: boolean }) {
+  return (
+    <tr className={nested ? "iteration" : undefined}>
+      <td>
+        {run.permutation}-{run.iteration}
+      </td>
+      {columns.axes.map((axis) => (
+        <td key={axis}>{axis === "harnessModel" ? harnessModelText(run.harnessModel) : run.parameters[axis].name}</td>
+      ))}
+      <td>{duration(run.execution.finishedAt - run.execution.startedAt)}</td>
+      <td>{agentEnd(run.execution, run.harnessResult)}</td>
+      <TokensCell run={run} />
+      <CostCell run={run} />
+      {columns.measurements.map(({ name, aggregate }) => (
+        <MeasureCell key={name} measure={run.result[name]} span={aggregate.length} />
+      ))}
+    </tr>
+  );
+}
+
+/** A permutation as one row, its iterations aggregated, which expands to show each of them. */
+function PermutationRows({
+  summary,
+  runs,
+  columns,
+  open,
+  onToggle,
+}: {
+  summary: PermutationSummary;
+  runs: ContainerRunRecord[];
+  columns: Columns;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { permutation, parameters, harnessModel, iterations, measures } = summary;
+  if (parameters === undefined) {
+    return (
+      <tr>
+        <td>{permutation}</td>
+        <td colSpan={99} className="muted">
+          No container runs recorded.
+        </td>
+      </tr>
+    );
+  }
+  return (
+    <>
+      <tr className={`permutation${open ? " open" : ""}`} onClick={onToggle} aria-expanded={open}>
+        <Cell text={<><span className="chevron">▶</span> {permutation}</>} detail={plural(iterations, "iteration")} />
+        {columns.axes.map((axis) => (
+          <td key={axis}>{axis === "harnessModel" && harnessModel ? harnessModelText(harnessModel) : parameters[axis]}</td>
+        ))}
+        <SpreadCell spread={summary.durationMs} iterations={iterations} show={duration} missing="" />
+        <Cell text={agentText(summary)} />
+        <SpreadCell spread={summary.tokens} iterations={iterations} show={thousands} missing="Not reported" />
+        <SpreadCell spread={summary.costUsd} iterations={iterations} show={dollars} missing="Not reported" />
+        {columns.measurements.flatMap(({ name, aggregate }) =>
+          aggregate.map((method) => <AggregateCell key={`${name}-${method}`} measure={measures[name]} method={method} iterations={iterations} />),
+        )}
+      </tr>
+      {open && runs.map((run) => <RunRow key={run.iteration} run={run} columns={columns} nested />)}
+    </>
+  );
+}
+
+/** One execution's permutations, aggregated as `show` does, and the parameters they all share. */
+function Permutations({ summary, containerRuns }: ExecutionPage) {
+  const [hideCommon, setHideCommon] = useState(true);
+  const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
+  const { commonParameters, measurements, permutations } = summary;
+  const hidden = new Set(hideCommon ? commonParameters.map(({ axis }) => axis) : []);
+  const parameterColumns = PARAMETER_COLUMNS.filter(({ axis }) => !hidden.has(axis));
+  const columns: Columns = { axes: parameterColumns.map(({ axis }) => axis), measurements };
+  const all = permutations.filter(({ iterations }) => iterations > 0).map(({ permutation }) => permutation);
+  const toggle = (permutation: number) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (!next.delete(permutation)) next.add(permutation);
+      return next;
+    });
+  const label = (axis: Axis) => PARAMETER_COLUMNS.find((column) => column.axis === axis)!.label;
+
+  return (
+    <>
+      <p className="controls muted">
+        <label>
+          <input type="checkbox" checked={hideCommon} onChange={(e) => setHideCommon(e.target.checked)} /> Hide common parameters
+        </label>
+        {" · "}
+        <button type="button" className="link" onClick={() => setOpen(new Set(all))}>
+          Expand all
+        </button>
+        {" · "}
+        <button type="button" className="link" onClick={() => setOpen(new Set())}>
+          Collapse all
+        </button>
+      </p>
+      {hideCommon && commonParameters.length > 0 && (
+        <p className="muted">
+          Common to all runs:{" "}
+          {commonParameters.map(({ axis, name }, i) => (
+            <span key={axis}>
+              {i > 0 && " · "}
+              {label(axis)} <strong className="common-value">{name}</strong>
+            </span>
+          ))}
+        </p>
+      )}
+      <table>
+        <thead>
+          <tr>
+            {["Run", ...parameterColumns.map(({ label }) => label), "Duration", "Agent", "Tokens", "Cost"].map((heading) => (
+              <th key={heading} rowSpan={2}>
+                {heading}
+              </th>
+            ))}
+            {measurements.map(({ name, aggregate }) => (
+              <th key={name} colSpan={aggregate.length} className="measurement">
+                {name}
+              </th>
+            ))}
+          </tr>
+          <tr>
+            {measurements.flatMap(({ name, aggregate }) =>
+              aggregate.map((method) => (
+                <th key={`${name}-${method}`} className="method">
+                  {method}
+                </th>
+              )),
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {permutations.map((permutation) => (
+            <PermutationRows
+              key={permutation.permutation}
+              summary={permutation}
+              runs={containerRuns.filter((run) => run.permutation === permutation.permutation)}
+              columns={columns}
+              open={open.has(permutation.permutation)}
+              onToggle={() => toggle(permutation.permutation)}
+            />
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
 }
 
 function Execution({ id }: { id: string }) {
-  const loaded = useJson<{ execution: ExecutionRecord; containerRuns: ContainerRunRecord[] }>(`/api/executions/${encodeURIComponent(id)}`);
+  const loaded = useJson<ExecutionPage>(`/api/executions/${encodeURIComponent(id)}`);
   return (
     <>
       <p>
         <a href="#/">← Executions</a>
       </p>
       <Pending loaded={loaded}>
-        {({ execution, containerRuns }) => {
-          const measurements = [...new Set(containerRuns.flatMap((run) => Object.keys(run.result)))];
-          const totals = runTotals(containerRuns);
+        {(page) => {
+          const { execution } = page.summary;
+          const totals = runTotals(page.containerRuns);
           return (
             <>
               <h1>
@@ -191,48 +398,7 @@ function Execution({ id }: { id: string }) {
               <p>
                 Took {executionDuration(execution)} · <TokensTotal totals={totals} /> tokens · <CostTotal totals={totals} />
               </p>
-              {containerRuns.length === 0 ? (
-                <p className="muted">No container runs recorded.</p>
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Run</th>
-                      <th>Code state</th>
-                      <th>Prompt set</th>
-                      <th>Harness / model</th>
-                      <th>Duration</th>
-                      <th>Agent</th>
-                      <th>Tokens</th>
-                      <th>Cost</th>
-                      {measurements.map((name) => (
-                        <th key={name}>{name}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {containerRuns.map((run) => (
-                      <tr key={`${run.permutation}-${run.iteration}`}>
-                        <td>
-                          {run.permutation}-{run.iteration}
-                        </td>
-                        <td>{run.parameters.codeState?.name}</td>
-                        <td>{run.parameters.promptSet?.name}</td>
-                        <td>
-                          {run.harnessModel.harness} / {run.harnessModel.model ?? run.harnessModel.modelId}
-                        </td>
-                        <td>{duration(run.execution.finishedAt - run.execution.startedAt)}</td>
-                        <td>{agentEnd(run.execution, run.harnessResult)}</td>
-                        <TokensCell run={run} />
-                        <CostCell run={run} />
-                        {measurements.map((name) => (
-                          <MeasureCell key={name} measure={run.result[name]} />
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              {page.containerRuns.length === 0 ? <p className="muted">No container runs recorded.</p> : <Permutations {...page} />}
             </>
           );
         }}

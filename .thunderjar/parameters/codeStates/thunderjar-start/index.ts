@@ -1,8 +1,8 @@
 import { declareCodeState } from "thunderjar-published";
 
-// The project's repository, cloned into /workspace at a commit. The commit must be on a branch,
-// e.g. main, so a clone fetches it: one that was only on a rebased or deleted branch can't be
-// checked out. Pin a commit, never a branch: the same text must always build the same thing.
+// The project's repository, cloned into /workspace at a commit. The commit must be pushed, so the
+// build can fetch it, and on a branch, so a plain clone has it: not one from a squash-merged branch.
+// Pin a commit, never a branch: the same text must always build the same thing.
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",

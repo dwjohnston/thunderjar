@@ -23,6 +23,13 @@ export { MODEL_PATH, PROMPT_PATH, RESULT_PATH, RUN_SCRIPT_PATH } from "../api/fi
 export const RUN_PATH = "/thunderjar/run.json";
 
 /**
+ * Where, inside the container, Thunderjar sends the run script's standard error, beside its result
+ * file. Otherwise it would be lost: the container's own output is discarded, and the timed run
+ * itself always exits 0.
+ */
+export const STDERR_PATH = "/thunderjar/stderr.log";
+
+/**
  * A shell function, `now_ms`, printing the ms since the epoch. GNU date gives them with
  * `date +%s%3N`; busybox date (Alpine) prints seconds or a literal `%3N`, so anything that isn't
  * 13 digits falls back to whole seconds times 1000.
@@ -41,7 +48,7 @@ export const NOW_MS_FUNCTION = [
  * What a container runs: `sh /thunderjar/thunderjar-run.sh`, writing when it started and finished
  * (ms since the epoch) and how it exited to RUN_PATH. When it starts, RUN_PATH holds only its
  * start, so a run killed for taking too long still says when it started. It removes any result
- * file first, so a result is always this run's.
+ * file first, so a result is always this run's. The script's standard error goes to STDERR_PATH.
  */
 export const timedRun = (): string =>
   [
@@ -49,7 +56,7 @@ export const timedRun = (): string =>
     "start=$(now_ms)",
     `echo "{\\"startedAt\\":$start}" > ${RUN_PATH}`,
     `rm -f ${RESULT_PATH}`,
-    `sh ${RUN_SCRIPT_PATH}`,
+    `sh ${RUN_SCRIPT_PATH} 2> ${STDERR_PATH}`,
     "code=$?",
     "end=$(now_ms)",
     `echo "{\\"startedAt\\":$start,\\"finishedAt\\":$end,\\"exitCode\\":$code}" > ${RUN_PATH}`,
