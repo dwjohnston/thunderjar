@@ -10,35 +10,24 @@
 
 import { $ } from "bun";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { findOneshotPrompt, git, readTag, tagExists, tagName, type TranscriptEntry } from "./lib.ts";
-import { main as start } from "./start.ts";
+import { git, harnessFromEnv, parseOneshotPrompt, readTag, tagExists, tagName, type TranscriptEntry } from "./lib.ts";
+import { main as start, type PromptInput } from "./start.ts";
 import { main as stop, type StopInput } from "./stop.ts";
 
 const SESSION = "11111111-2222-3333-4444-555555555555";
-const PROMPT = 'fix the "quoted" thing & <b>tags</b>\nsecond line';
+const TASK = 'fix the "quoted" thing & <b>tags</b>\nsecond line';
+const ENV = { AI_AGENT: "claude-code_2-1-322_harness", CLAUDE_CODE_ENTRYPOINT: "sdk-cli", CLAUDE_EFFORT: "high" };
 
 let dir: string;
 let repo: string;
 let transcript: string;
 
-function userCommand(args: string, name = "/tj-oneshot"): TranscriptEntry {
-  return {
-    type: "user",
-    version: "2.1.322",
-    entrypoint: "sdk-cli",
-    permissionMode: "auto",
-    message: {
-      content: `<command-message>tj-oneshot</command-message>\n<command-name>${name}</command-name>\n<command-args>${args}</command-args>`,
-    },
-  };
-}
-
 function assistant(model: string): TranscriptEntry {
-  return { type: "assistant", version: "2.1.322", message: { model, content: [{ type: "text", text: "ok" }] } };
+  return { type: "assistant", version: "2.1.322", message: { model } };
 }
 
-async function writeTranscript(entries: TranscriptEntry[]) {
-  await Bun.write(transcript, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+function promptInput(prompt = `/tj-oneshot ${TASK}`): PromptInput {
+  return { session_id: SESSION, transcript_path: transcript, cwd: repo, permission_mode: "auto", prompt };
 }
 
 function stopInput(): StopInput {
@@ -60,35 +49,50 @@ beforeEach(async () => {
   await $`git init -q -b main && git config user.email test@example.com && git config user.name Test && git commit -q --allow-empty -m init`
     .cwd(repo)
     .quiet();
-  await writeTranscript([userCommand(PROMPT), assistant("claude-opus-5-5")]);
+  await Bun.write(transcript, JSON.stringify(assistant("claude-opus-5-5")) + "\n");
 });
 
 afterEach(async () => {
   await $`rm -rf ${dir}`.quiet();
 });
 
-describe("findOneshotPrompt", () => {
-  test("returns the arguments verbatim", () => {
-    expect(findOneshotPrompt([userCommand(PROMPT)])).toBe(PROMPT);
+describe("parseOneshotPrompt", () => {
+  test("returns the task verbatim", () => {
+    expect(parseOneshotPrompt(`/tj-oneshot ${TASK}`)).toBe(TASK);
   });
 
-  test("finds a plugin-namespaced command", () => {
-    expect(findOneshotPrompt([userCommand("x", "/thunderjar:tj-oneshot")])).toBe("x");
+  test("accepts the plugin's namespace", () => {
+    expect(parseOneshotPrompt("/thunderjar:tj-oneshot x")).toBe("x");
   });
 
-  test("returns the latest invocation", () => {
-    expect(findOneshotPrompt([userCommand("first"), userCommand("second")])).toBe("second");
+  test("ignores other prompts", () => {
+    expect(parseOneshotPrompt("/tj-oneshotter x")).toBeNull();
+    expect(parseOneshotPrompt("please run /tj-oneshot x")).toBeNull();
+  });
+});
+
+describe("harnessFromEnv", () => {
+  test("reads the version, surface and effort", () => {
+    expect(harnessFromEnv(ENV)).toEqual({ harnessVersion: "2.1.322", harnessSurface: "sdk-cli", effort: "high" });
   });
 
-  test("ignores other commands", () => {
-    expect(findOneshotPrompt([userCommand("x", "/tj-quick-capture")])).toBeNull();
+  test("is null for what's missing", () => {
+    expect(harnessFromEnv({})).toEqual({ harnessVersion: null, harnessSurface: null, effort: null });
   });
 });
 
 describe("start", () => {
+  test("does nothing for other prompts", async () => {
+    const head = git(repo, ["rev-parse", "HEAD"]);
+    expect(await start(promptInput("just a normal prompt"), ENV)).toEqual({ started: false });
+    expect(git(repo, ["rev-parse", "HEAD"])).toBe(head);
+  });
+
   test("makes an empty commit on a clean tree, and tags it with the record", async () => {
     const headBefore = git(repo, ["rev-parse", "HEAD"]);
-    const { tag, commit } = await start({ cwd: repo, sessionId: SESSION, effort: "high", transcriptPath: transcript });
+    const result = await start(promptInput(), ENV);
+    if (!result.started) throw new Error("not started");
+    const { tag, commit } = result;
 
     expect(tag).toBe(tagName(SESSION, "start"));
     expect(git(repo, ["rev-parse", `${tag}^{commit}`])).toBe(commit);
@@ -97,7 +101,7 @@ describe("start", () => {
 
     expect(readTag(repo, tag)).toMatchObject({
       kind: "start",
-      prompt: { text: PROMPT, verbatim: true },
+      prompt: { text: TASK, typed: `/tj-oneshot ${TASK}`, verbatim: true },
       agent: {
         harness: "Claude Code",
         harnessVersion: "2.1.322",
@@ -113,43 +117,41 @@ describe("start", () => {
 
   test("commits uncommitted and untracked files, so the agent starts on a clean tree", async () => {
     await Bun.write(`${repo}/new.txt`, "new");
-    await start({ cwd: repo, sessionId: SESSION, effort: null, transcriptPath: transcript });
+    await start(promptInput(), ENV);
 
     expect(git(repo, ["show", "--name-only", "--format=", "HEAD"])).toBe("new.txt");
     expect(git(repo, ["status", "--porcelain"])).toBe("");
   });
 
-  test("fails when the prompt isn't in the transcript", async () => {
-    await writeTranscript([assistant("claude-opus-5-5")]);
-    await expect(start({ cwd: repo, sessionId: SESSION, effort: null, transcriptPath: transcript, waitMs: 0 })).rejects.toThrow(
-      "Could not find the /tj-oneshot prompt",
-    );
+  test("fails without a task", async () => {
+    await expect(start(promptInput("/tj-oneshot   "), ENV)).rejects.toThrow("Give the task");
   });
 
-  test("fails when the start is already recorded", async () => {
-    await start({ cwd: repo, sessionId: SESSION, effort: null, transcriptPath: transcript });
-    await expect(start({ cwd: repo, sessionId: SESSION, effort: null, transcriptPath: transcript })).rejects.toThrow(
-      "already recorded",
-    );
+  test("fails outside a git repository", async () => {
+    await expect(start({ ...promptInput(), cwd: dir }, ENV)).rejects.toThrow("isn't in a git repository");
+  });
+
+  test("fails when the session already has a one-shot", async () => {
+    await start(promptInput(), ENV);
+    await expect(start(promptInput(), ENV)).rejects.toThrow("already has a one-shot");
   });
 });
 
 describe("stop", () => {
   test("does nothing without a start tag", async () => {
     const head = git(repo, ["rev-parse", "HEAD"]);
-    const result = await stop(stopInput(), { push: false });
-
-    expect(result.recorded).toBe(false);
+    expect(await stop(stopInput(), ENV, { push: false })).toEqual({ recorded: false });
     expect(git(repo, ["rev-parse", "HEAD"])).toBe(head);
   });
 
   test("commits what the agent left behind, and records its own commits", async () => {
-    const { commit: startCommit } = await start({ cwd: repo, sessionId: SESSION, effort: null, transcriptPath: transcript });
+    const started = await start(promptInput(), ENV);
+    if (!started.started) throw new Error("not started");
     await Bun.write(`${repo}/committed.txt`, "a");
     await $`git add -A && git commit -q -m "Agent commit"`.cwd(repo).quiet();
     await Bun.write(`${repo}/left.txt`, "b");
 
-    await stop(stopInput(), { push: false });
+    await stop(stopInput(), ENV, { push: false });
 
     const endTag = tagName(SESSION, "end");
     expect(git(repo, ["log", "-1", "--format=%s"])).toBe(`🏁 tj-oneshot end: ${SESSION}`);
@@ -162,8 +164,8 @@ describe("stop", () => {
     const record = readTag(repo, endTag) as { repository: { agentCommits: string[] } };
     expect(record).toMatchObject({
       kind: "end",
-      agent: { models: ["claude-opus-5-5"], effort: "high", permissionMode: "auto", sessionId: SESSION },
-      repository: { startCommit, leftUncommitted: ["left.txt"] },
+      agent: { models: ["claude-opus-5-5"], effort: "high", permissionMode: "auto", harnessVersion: "2.1.322" },
+      repository: { startCommit: started.commit, leftUncommitted: ["left.txt"] },
       lastAssistantMessage: "Done.",
     });
     expect(record.repository.agentCommits).toHaveLength(1);
@@ -171,41 +173,46 @@ describe("stop", () => {
   });
 
   test("makes an empty end commit when the agent committed everything", async () => {
-    await start({ cwd: repo, sessionId: SESSION, effort: null, transcriptPath: transcript });
-    await stop(stopInput(), { push: false });
+    await start(promptInput(), ENV);
+    await stop(stopInput(), ENV, { push: false });
 
     expect(readTag(repo, tagName(SESSION, "end"))).toMatchObject({ repository: { leftUncommitted: [] } });
   });
 
-  test("records the end only once", async () => {
-    await start({ cwd: repo, sessionId: SESSION, effort: null, transcriptPath: transcript });
-    await stop(stopInput(), { push: false });
+  test("records only the first stop", async () => {
+    await start(promptInput(), ENV);
+    await stop(stopInput(), ENV, { push: false });
     const head = git(repo, ["rev-parse", "HEAD"]);
 
     await Bun.write(`${repo}/later.txt`, "later");
-    await stop(stopInput(), { push: false });
+    expect(await stop(stopInput(), ENV, { push: false })).toEqual({ recorded: false });
 
     expect(git(repo, ["rev-parse", "HEAD"])).toBe(head);
     expect(git(repo, ["status", "--porcelain"])).toBe("?? later.txt");
   });
 
   test("pushes both tags to origin, without the branch", async () => {
-    await $`git init -q --bare ${dir}/origin.git && git remote add origin ${dir}/origin.git`.cwd(repo).quiet();
-    await start({ cwd: repo, sessionId: SESSION, effort: null, transcriptPath: transcript });
-
-    const result = await stop(stopInput(), { push: true });
-
-    expect(result.pushed).toBe(true);
     const remote = `${dir}/origin.git`;
+    await $`git init -q --bare ${remote} && git remote add origin ${remote}`.cwd(repo).quiet();
+    await start(promptInput(), ENV);
+
+    expect(await stop(stopInput(), ENV, { push: true })).toEqual({ recorded: true, pushed: true });
+
     expect(tagExists(remote, tagName(SESSION, "start"))).toBe(true);
     expect(tagExists(remote, tagName(SESSION, "end"))).toBe(true);
     expect(git(remote, ["branch", "--list"])).toBe("");
   });
 
-  test("skips the push when there's no origin", async () => {
-    await start({ cwd: repo, sessionId: SESSION, effort: null, transcriptPath: transcript });
-    const result = await stop(stopInput(), { push: true });
+  test("says how to push the tags when the push fails", async () => {
+    await $`git remote add origin ${dir}/missing.git`.cwd(repo).quiet();
+    await start(promptInput(), ENV);
 
-    expect(result).toMatchObject({ recorded: true, pushed: false });
+    await expect(stop(stopInput(), ENV, { push: true })).rejects.toThrow("Push them with:");
+    expect(tagExists(repo, tagName(SESSION, "end"))).toBe(true);
+  });
+
+  test("skips the push when there's no origin", async () => {
+    await start(promptInput(), ENV);
+    expect(await stop(stopInput(), ENV, { push: true })).toMatchObject({ recorded: true, pushed: false });
   });
 });
