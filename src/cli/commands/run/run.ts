@@ -17,8 +17,10 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
-import { print, printError as error } from "../../output.ts";
+import { jsonOption } from "../../json.ts";
+import { print, printError as error, printJson } from "../../output.ts";
 import { type LiveRow, liveRows } from "../../liveRows.ts";
+import { textOutput } from "../../textOutput.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
@@ -55,17 +57,46 @@ export function renderExecution({ executionId, permutations }: PlannedExecution,
   return [`${paint.dim("Execution")} ${paint.bold(executionId)}`, ...blocks].join("\n\n");
 }
 
+/** A dry run as `run --dry-run --json` prints it: what `renderExecution` shows, and each permutation's parameters. */
+export function executionPlanJson({ executionId, permutations }: PlannedExecution) {
+  return {
+    executionId,
+    permutations: permutations.map(({ number, permutation, prerunImage, env, runOptions, timeoutSeconds, version, iterations }) => ({
+      number,
+      parameters: Object.fromEntries(AXES.map((axis) => [axis, permutation[axis]])) as Record<(typeof AXES)[number], string>,
+      modelId: permutation.modelId,
+      harnessVersion: version,
+      hash: permutation.hash,
+      prerunImage,
+      env,
+      runOptions,
+      timeoutSeconds,
+      iterations: iterations.map(({ number, postrunImage, sessionId, turns }) => ({
+        number,
+        postrunImage,
+        sessionId,
+        turns: turns.map(({ prompt, command }) => ({ prompt, command })),
+      })),
+    })),
+  };
+}
+
 /** `testCase`, with `iterations` in place of its own, if given. */
 const withIterations = (testCase: TestCaseDeclaration, iterations?: number): TestCaseDeclaration =>
   iterations === undefined ? testCase : { ...testCase, iterations };
 
 /** What an execution of test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it, would do. */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string, iterations?: number, paint: Paint = plain): Promise<string> {
+export async function planDryRun(cwd: string, name: string, imagePrefix?: string, iterations?: number): Promise<PlannedExecution> {
   const root = await findThunderjarRoot(cwd);
   const executionId = ulid();
   const testCase = withIterations(await loadTestCase(root, name), iterations);
   await checkRequiredEnv(root, testCase);
-  return renderExecution(await planExecution(root, testCase, executionId, imagePrefix), paint);
+  return planExecution(root, testCase, executionId, imagePrefix);
+}
+
+/** What an execution of test case `name` would do, as text. See `planDryRun`. */
+export async function dryRun(cwd: string, name: string, imagePrefix?: string, iterations?: number, paint: Paint = plain): Promise<string> {
+  return renderExecution(await planDryRun(cwd, name, imagePrefix, iterations), paint);
 }
 
 /** `n/total`, `n` padded to the width of `total`, so the lines line up. */
@@ -128,6 +159,10 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
  * step has taken counting up.
  *
  * Runs `iterations` of each permutation, if given, instead of the test case's.
+ *
+ * With `json`, once the execution is recorded, prints it as JSON, with where it's recorded and each
+ * of its container runs' records, whether it's complete or failed. If it stops on an error, prints
+ * nothing on stdout.
  */
 async function run(
   cwd: string,
@@ -137,6 +172,7 @@ async function run(
   local = false,
   concurrencyOption?: number,
   iterations?: number,
+  json = false,
 ): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const config = await loadProjectConfig(root);
@@ -178,7 +214,7 @@ async function run(
   // With several at once: what starts each iteration's lines, and its postrun image's.
   const heads = new Map<string, string>();
   // With several at once, on a terminal: each iteration's line, and how its agent ended, by its postrun image.
-  const live = concurrent && process.stdout.isTTY ? liveRows() : undefined;
+  const live = concurrent && textOutput().isTTY ? liveRows() : undefined;
   const rows = new Map<string, LiveRow>();
   const outcomes = new Map<string, string>();
   /** Shows `step` after the iteration's outcome on its line, counting how long it takes if `counting`. */
@@ -326,6 +362,7 @@ async function run(
     });
     live?.stop();
     print(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
+    if (json) printJson({ execution: record, recordedIn: where, containerRuns: await store.containerRunsOf(record.executionId) });
     if (record.status === "failed") process.exitCode = 1;
   } catch (caught) {
     // The prerun image whose build, push or pull failed, marked so on its line.
@@ -394,14 +431,16 @@ export function createRunCommand(): Command {
     )
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())
+    .addOption(jsonOption())
     .action(
       reportingConfigErrors(
         async (
           name: string,
-          options: { dryRun?: boolean; local?: boolean; concurrency?: number; iterations?: number; imagePrefix: string; dataDir?: string },
+          options: { dryRun?: boolean; local?: boolean; concurrency?: number; iterations?: number; imagePrefix: string; dataDir?: string; json?: boolean },
         ) => {
-          if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, options.iterations, painter()));
-          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, options.iterations);
+          if (options.dryRun && options.json) printJson(executionPlanJson(await planDryRun(process.cwd(), name, options.imagePrefix, options.iterations)));
+          else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, options.iterations, painter()));
+          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, options.iterations, options.json);
         },
       ),
     );
