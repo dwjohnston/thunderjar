@@ -52,6 +52,7 @@ describe("the diagnostic log", () => {
       "INFO: execution: container run starting",
       "INFO: docker: running container",
       "INFO: docker: container finished",
+      "INFO: docker: committed container",
       "INFO: execution: container run finished",
       "INFO: execution: measured",
       "INFO: execution: execution finished",
