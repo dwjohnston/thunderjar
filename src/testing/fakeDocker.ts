@@ -282,7 +282,8 @@ if (import.meta.main) {
     await $`mkdir -p ${filesystemOf(image)} && cp -R ${dir}/containers/${name}/root/. ${filesystemOf(image)}`.quiet();
     await append("images", image);
   } else if (command === "kill" && rest.length === 0) {
-    // docker kill <name>
+    // docker kill <name>; a container named in `failing` can't be killed, as if the daemon couldn't be reached.
+    if ((await list("failing")).includes(subcommand as string)) fail("error during connect: the runtime can't be reached");
     const pidFile = state(`containers/${subcommand}/pid`);
     if (!dir || !(await pidFile.exists())) fail(`Error response from daemon: cannot kill container: ${subcommand}: container is not running`);
     // The script's process, and every process under it.

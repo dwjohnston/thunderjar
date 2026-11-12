@@ -213,15 +213,14 @@ export async function runContainer(
     timeoutSeconds === undefined
       ? undefined
       : setTimeout(() => {
-          const killedAt = Date.now();
           log.warn({ container: name, timeoutSeconds }, "container timed out, killing it");
-          // If it finished just as the time ran out, there's nothing to kill: it didn't time out.
-          killing = mustRun(["kill", name], runtime).then(
-            () => killedAt,
-            () => undefined,
-          );
+          killing = killTimedOut(name, child, runtime);
         }, timeoutSeconds * 1000);
-  const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  const reading = new Response(child.stderr).text();
+  const exitCode = await child.exited;
+  // Once it has exited, its stderr is read for at most a few seconds more: when it was killed, a
+  // process it started, such as the ssh that reaches a remote runtime, may still hold it open.
+  const stderr = await Promise.race([reading, Bun.sleep(5000).then(() => "")]);
   clearTimeout(timer);
   const killedAt = await killing;
   const ms = Date.now() - startedAt;
@@ -235,6 +234,36 @@ export async function runContainer(
   }
   log.info({ container: name, ms }, "container finished");
   return { timedOut: false };
+}
+
+/** How many times, and how far apart, `docker kill` is tried on a container that timed out. */
+export const KILL_ATTEMPTS = 3;
+const KILL_RETRY_MS = 2000;
+
+/**
+ * Kills the container `name`, which timed out, run by the `docker run` process `child`, and returns
+ * when, or undefined if it had already finished: then it didn't time out. `docker kill` is tried
+ * KILL_ATTEMPTS times: if it never succeeds, e.g. the runtime can't be reached, `child` is killed
+ * instead, so the run doesn't wait on it forever, and the container is left to be removed.
+ */
+async function killTimedOut(name: string, child: { exited: Promise<number>; kill(signal?: number | NodeJS.Signals): void }, runtime: DockerRuntime): Promise<number | undefined> {
+  const killedAt = Date.now();
+  let finished = false;
+  void child.exited.then(() => (finished = true));
+  for (let attempt = 1; attempt <= KILL_ATTEMPTS; attempt++) {
+    try {
+      await mustRun(["kill", name], runtime);
+      return killedAt;
+    } catch (error) {
+      // It finished just as the time ran out: there's nothing to kill.
+      if (finished || (error instanceof Error && /is not running/.test(error.message))) return undefined;
+      log.warn({ container: name, attempt, err: error }, "couldn't kill the timed-out container");
+      if (attempt < KILL_ATTEMPTS) await Bun.sleep(KILL_RETRY_MS);
+    }
+  }
+  log.error({ container: name }, "gave up killing the timed-out container: stopped waiting for it");
+  child.kill("SIGKILL");
+  return killedAt;
 }
 
 /**
