@@ -34,13 +34,15 @@ Use the user's task word for word as the initial prompt.
 e.g.
 
 ```ts
-import { declareInitialPrompt } from "thunderjar";
+import { declareInitialPrompt, writePrompt } from "thunderjar";
 
 export default declareInitialPrompt({
-  prompt: "add a --json flag to the list command",
+  applyParameter: () => writePrompt("add a --json flag to the list command"),
   timeoutSeconds: 900,
 });
 ```
+
+`writePrompt` writes the prompt into the image, at `/thunderjar/prompt.txt`, where the harness's run script reads it. To run the agent in a subfolder, e.g. one package of a monorepo, add a `WORKDIR` after it: `[writePrompt("…"), "WORKDIR /workspace/packages/cli"].join("\n")`.
 
 ✅ **Do** keep the user's wording, typos and vagueness included.
 

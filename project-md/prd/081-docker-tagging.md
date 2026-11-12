@@ -20,8 +20,9 @@ postrun-e01k4x9j2e8mqz3-h4f9a21c8-i00
 ```
 
 - `h<image hash>`, on a prerun tag — an 8-character abbreviated image hash: of the
-  Dockerfile and each folder parameter's `files/`, and nothing else. Permutations that build
-  the same image, such as two models of one harness, share one prerun image. See
+  Dockerfile, which includes the model ID, the prompt and the run script, and each folder
+  parameter's `files/`, and nothing else. Permutations that build the same image
+  share one prerun image. See
   [060](060-experiment-parameters.md#permutation-hash-and-image-hash).
 - `h<permutation hash>`, on a postrun tag — an 8-character abbreviated permutation hash
   (git-style; the full hash lives in the run data store, and any real comparability check

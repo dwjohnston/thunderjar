@@ -4,7 +4,7 @@ import { DockerContainerError } from "../docker/docker.ts";
 import { TMP_DIR } from "../testing/cli.ts";
 import { NOW_MS_FUNCTION, parseExecution } from "./containerRun.ts";
 
-describe("the execution wrapper's now_ms", () => {
+describe("the timed run's now_ms", () => {
   const binDir = `${TMP_DIR}/now-ms-${crypto.randomUUID()}`;
 
   /** Runs now_ms with a `date` that prints `ms` for `+%s%3N` and `seconds` for `+%s`. */

@@ -1,0 +1,12 @@
+{
+  "name": "thunderjar",
+  "description": "Thunderjar's Claude Code plugins",
+  "owner": { "name": "dwjohnston" },
+  "plugins": [
+    {
+      "name": "thunderjar",
+      "source": "./plugins/thunderjar",
+      "description": "/tj-oneshot records a one-shot task as git tags, to replay as a Thunderjar eval."
+    }
+  ]
+}

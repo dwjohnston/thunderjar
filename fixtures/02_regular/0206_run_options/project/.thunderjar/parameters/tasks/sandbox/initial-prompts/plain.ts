@@ -1,6 +1,6 @@
-import { declareInitialPrompt } from "thunderjar";
+import { declareInitialPrompt, writePrompt } from "thunderjar";
 
 export default declareInitialPrompt({
-  prompt: "Sandbox yourself.",
+  applyParameter: () => writePrompt("Sandbox yourself."),
   timeoutSeconds: 60,
 });

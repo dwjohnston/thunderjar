@@ -170,7 +170,7 @@ e.g. the commit `main` was at, so a report can say which, not only that the hash
 ## Execution
 
 How long the agent ran, and how its process exited — read from `/thunderjar/run.json`,
-which Thunderjar's [execution wrapper](080-docker-execution.md#the-execution-wrapper)
+which Thunderjar's [run script](080-docker-execution.md#the-run-script)
 writes inside the container before commit.
 
 ```ts

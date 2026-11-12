@@ -30,20 +30,17 @@ Cost reporting needs no OTel collector — it parses a file.
 ## The result file
 
 The harness's [declaration](030-terminology.md#declaration) is responsible for both
-halves: its `cli` must run the agent **and** leave a file at the path Thunderjar supplies
-as `ctx.resultPath`.
+halves: its run script must run the agent **and** leave a file at the path Thunderjar reads.
 
 ```
 /thunderjar/result.json
 ```
 
 ```ts
-cli: (ctx) =>
-  `claude -p "${ctx.initialPrompt}" --model ${ctx.modelId} ` +
-  `--output-format json > ${ctx.resultPath}`,
+writeRunScript(`claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json > /thunderjar/result.json`)
 ```
 
-Thunderjar supplies the path; the harness chooses the method. A redirect is the common
+Thunderjar fixes the path; the harness chooses the method. A redirect is the common
 case, but a harness with a native output-file flag would use that instead. The contract
 is only that the file exists when the command exits.
 
@@ -175,7 +172,7 @@ Five distinct failures, which collapse to three recorded reasons:
 
 | What happened | `reason` |
 |---|---|
-| No file at `resultPath` — `cli` missing its redirect, or the agent died first | `absent` |
+| No file at `/thunderjar/result.json` — the run script missing its redirect, or the agent died first | `absent` |
 | File exists but is empty, truncated, or isn't the expected shape | `unparseable` |
 | Harness printed an error to stdout instead of a result | `unparseable` |
 | Harness ran but genuinely reported no usage | `notReported` |
@@ -203,7 +200,7 @@ Three consequences worth stating outright:
 - **`unparseable` is recoverable; `absent` is not.** The raw file is preserved in the
   postrun image, so a corrected collector can be re-run against historical images. If the
   file was never written, the numbers are gone for good — which is the argument for
-  keeping the `cli` contract simple enough that people don't get it wrong.
+  keeping the run script contract simple enough that people don't get it wrong.
 
 ## Backfilling token costs
 

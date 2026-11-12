@@ -9,6 +9,7 @@ import {
   declareMeasurement,
   declarePromptSet,
 } from "./declarations.ts";
+import { writeModel, writeRunScript } from "./files.ts";
 
 function assertType<T>(_value: T) {}
 
@@ -28,8 +29,7 @@ test("config is typed from the declaration's own config", () => {
   declareHarness({
     version: "2.1.283",
     config: { packageName: "@anthropic-ai/claude-code" },
-    applyParameter: (config, ctx) => `RUN npm install -g ${config.packageName}@${ctx.version}`,
-    cli: (ctx) => `claude -p "${ctx.initialPrompt}"`,
+    applyParameter: (config, ctx) => `RUN npm install -g ${config.packageName}@${ctx.version}\n${writeRunScript(`claude --model ${ctx.modelId}`)}`,
   });
 });
 
@@ -42,13 +42,17 @@ test("config is undefined when the declaration has none", () => {
   });
 });
 
-test("ctx carries dir for folder parameters, and version for harnesses", () => {
+test("ctx carries dir for folder parameters, and version and modelId for harnesses", () => {
   declareCodeState({ applyParameter: (_config, ctx) => `COPY ${ctx.dir}/ /workspace/` });
-  declareHarness({ version: "2.1.283", applyParameter: (_config, ctx) => `COPY ${ctx.dir}/install.sh /tmp/\nRUN /tmp/install.sh ${ctx.version}`, cli: () => "" });
+  declareHarness({ version: "2.1.283", applyParameter: (_config, ctx) => `COPY ${ctx.dir}/install.sh /tmp/\nRUN /tmp/install.sh ${ctx.version}\n${writeModel(ctx.modelId)}` });
   // @ts-expect-error - only a harness gets a version
   declarePromptSet({ applyParameter: (_config, ctx) => ctx.version });
   // @ts-expect-error - an initial prompt is a file, not a folder: it has no dir
-  declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, applyParameter: (_config, ctx) => ctx.dir });
+  declareInitialPrompt({ timeoutSeconds: 60, applyParameter: (_config, ctx) => ctx.dir });
+  // @ts-expect-error - a harness must have a fragment: it writes the run script
+  declareHarness({ version: "2.1.283" });
+  // @ts-expect-error - an initial prompt writes its prompt with its fragment, not a field
+  declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60 });
 });
 
 test("ctx.resolved is typed from what resolve returns, awaited", () => {
@@ -75,10 +79,9 @@ test("ctx.resolved is typed from what resolve returns, awaited", () => {
   declareHarness({
     version: "2.1.283",
     resolve: async () => "2.1.311",
-    applyParameter: (_config, ctx) => `RUN npm install -g @anthropic-ai/claude-code@${ctx.resolved}`,
-    cli: (ctx) => {
+    applyParameter: (_config, ctx) => {
       assertType<string>(ctx.resolved);
-      return `claude --model ${ctx.modelId}`;
+      return `RUN npm install -g @anthropic-ai/claude-code@${ctx.resolved}\n${writeRunScript(`claude --model ${ctx.modelId}`)}`;
     },
   });
 });
@@ -93,7 +96,7 @@ test("ctx.resolved is undefined without a resolve, and resolve must return what 
   // @ts-expect-error - a function isn't something JSON can hold
   declareCodeState({ resolve: () => () => "main" });
   // @ts-expect-error - nor is a Date
-  declareInitialPrompt({ prompt: "Go.", timeoutSeconds: 60, resolve: () => new Date() });
+  declareInitialPrompt({ timeoutSeconds: 60, resolve: () => new Date() });
 });
 
 test("a base image must say how it is applied: it carries the FROM", () => {

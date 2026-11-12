@@ -14,8 +14,8 @@ assertion (`as`), or a type annotation (`const harness: Harness = …`).
 // experiment-parameters/harnesses/claude-code/index.ts
 export default declareHarness({
   version: "2.1.283",
-  applyParameter: () => `RUN npm install -g @anthropic-ai/claude-code@2.1.283`,
-  cli: (ctx) => `claude -p "${ctx.initialPrompt}" > ${ctx.resultPath}`,
+  applyParameter: (_config, ctx) =>
+    [`RUN npm install -g @anthropic-ai/claude-code@2.1.283`, writeRunScript(`claude -p "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`)].join("\n"),
   collectTokenCosts: (raw) => { /* … */ },
 });
 ```
