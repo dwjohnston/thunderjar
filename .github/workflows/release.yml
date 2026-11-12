@@ -413,7 +413,7 @@ jobs:
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Published preview \`thunderjar@$VERSION\` from $SHA.
 
           \`\`\`sh
-          npm install thunderjar@$VERSION
+          bun install thunderjar@$VERSION
           \`\`\`"
           if [ -n "$COMMENT_ID" ]; then
             gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=rocket > /dev/null
