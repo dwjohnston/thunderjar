@@ -283,6 +283,31 @@ Measures
     expect(exitCode).toBe(0);
   });
 
+  test("a run that exited non-zero shows why: the last line of its stderr below the table, and its stderr's tail on its own", async () => {
+    const data = await copyOfStore();
+    const stderr = [...Array.from({ length: 24 }, (_, i) => `retrying ${i + 1}`), "Error: unknown model fake-model-large", ""].join("\n");
+    changeStore(data, "UPDATE container_runs SET record = json_set(record, '$.harnessStderr', $stderr) WHERE execution_id = $id AND permutation = 2", {
+      id: TWO_HARNESSES,
+      stderr,
+    });
+
+    const table = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "--data-dir", data]);
+    const run = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "2-1", "--data-dir", data]);
+
+    expect(table.stdout).toContain("! Agents that didn't end cleanly:\n  2-1  exited 3, no result file  Error: unknown model fake-model-large\n");
+    expect(run.stdout).toContain(`
+Exit         3
+Result file  none
+Stderr       ${new TextEncoder().encode(stderr).length} bytes
+
+Stderr
+  … 5 lines before
+${Array.from({ length: 19 }, (_, i) => `  retrying ${i + 6}`).join("\n")}
+  Error: unknown model fake-model-large
+
+`);
+  });
+
   test("--data-dir reads a container run outside any project", async () => {
     const store = `${scenario("0203")}/.thunderjar/.data`;
 

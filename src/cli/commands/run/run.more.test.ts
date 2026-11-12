@@ -176,6 +176,7 @@ Recorded in <DATA>/runs.sqlite
 Exit         0
 Turns        2 of 2 ran
 Result file  55 bytes
+Stderr       0 bytes
 
 Reply
   Turn 1:  I will remember that: My rubber ducky is called Eli.

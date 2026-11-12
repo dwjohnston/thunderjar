@@ -21,7 +21,7 @@ import type {
   RecordedMeasure,
   RunDataStore,
 } from "../store/runDataStore.ts";
-import { agentOutput, head } from "./agentOutput.ts";
+import { agentOutput, head, storedStderr } from "./agentOutput.ts";
 import { runInContainer } from "./containerRun.ts";
 import { containerName, storedPostrunImage, storedPrerunImage } from "./images.ts";
 import { type PullHooks, pullIntoRuntime, type PushHooks, pushToStore } from "./imageStore.ts";
@@ -82,16 +82,19 @@ export type ExecutionToRun = {
  */
 export const runsConcurrently = (concurrency = 1, build: BuildOptions = {}): boolean => concurrency > 1 || (build.concurrency ?? 1) > 1;
 
+/** One turn of a container run, as recorded: its result file, the end of its stderr, and its reply. */
+type RecordedTurn = { harnessResult: string | null; harnessStderr: string | null; reply: Reply };
+
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
 function containerRunRecord(
   { plan, name, testCase }: ExecutionToRun,
   { number: permutationNumber, permutation, version }: PlannedPermutation,
   iteration: PlannedIteration,
   execution: Execution,
-  turns: { harnessResult: string | null; reply: Reply }[],
+  turns: RecordedTurn[],
   tokenCosts: TokenCosts,
 ): ContainerRunRecord {
-  const last = turns.at(-1) as { harnessResult: string | null; reply: Reply };
+  const last = turns.at(-1) as RecordedTurn;
   const { harness } = parsePair(permutation.harnessModel);
   return {
     executionId: plan.executionId,
@@ -115,6 +118,7 @@ function containerRunRecord(
     harnessModel: { harness, version, modelId: permutation.modelId },
     execution,
     harnessResult: last.harnessResult,
+    harnessStderr: last.harnessStderr,
     reply: last.reply,
     tokenCosts,
     sessionId: iteration.sessionId,
@@ -233,7 +237,11 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       container,
       runtime,
     });
-    const turns = harnessResults.map((harnessResult) => ({ harnessResult, reply: collectReply(permutation.harness.collectReply, harnessResult) }));
+    const turns = harnessResults.map((harnessResult, i) => ({
+      harnessResult,
+      harnessStderr: storedStderr(stderrs[i] ?? null),
+      reply: collectReply(permutation.harness.collectReply, harnessResult),
+    }));
     const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, harnessResults, {
       version: permutation.version,
       modelId: permutation.modelId,

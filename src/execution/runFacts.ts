@@ -17,6 +17,26 @@ export function agentEnd(execution: Execution, harnessResult: string | null): st
 export const endedCleanly = (execution: Execution, harnessResult: string | null) =>
   !execution.timedOut && execution.exitCode === 0 && harnessResult !== null;
 
+/** The last line of `text` with anything on it, trimmed, or undefined if there's none. */
+const lastLine = (text: string | null | undefined) =>
+  text
+    ?.split("\n")
+    .map((line) => line.trim())
+    .findLast((line) => line !== "");
+
+/** How long a hint of why an agent didn't end cleanly may be, in characters. */
+const HINT_LENGTH = 160;
+
+/**
+ * A hint of why a container run's agent didn't end cleanly: the last line of its stderr, or, with
+ * nothing there, of its result file, cut to HINT_LENGTH. Undefined if both are empty or absent.
+ */
+export function failureHint({ harnessStderr, harnessResult }: { harnessStderr?: string | null; harnessResult: string | null }): string | undefined {
+  const line = lastLine(harnessStderr) ?? lastLine(harnessResult);
+  if (line === undefined) return undefined;
+  return line.length <= HINT_LENGTH ? line : `${line.slice(0, HINT_LENGTH - 1)}…`;
+}
+
 /** A model's tokens, every bucket together. */
 export const tokensOf = ({ inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens }: ModelTokenCosts) =>
   inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
