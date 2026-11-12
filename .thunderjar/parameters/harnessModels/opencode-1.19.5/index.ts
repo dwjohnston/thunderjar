@@ -42,14 +42,17 @@ function opencodeReply(raw: string): string {
  * own estimate in dollars, from the models.dev price table, not what OpenRouter charged.
  */
 function opencodeTokenCosts(raw: string, ctx: { modelId: string }): TokenCosts {
-  const steps = events(raw).filter((e) => e.type === "step_finish");
-  if (steps.length === 0) return { outcome: "unavailable", reason: "unparseable" };
+  const all = events(raw);
+  const steps = all.filter((e) => e.type === "step_finish");
+  // OpenCode's events, but no step finished, e.g. its first model call failed (OpenRouter's 402,
+  // out of credits): it reported no tokens. Only output with no events at all is unparseable.
+  if (steps.length === 0) return { outcome: "unavailable", reason: all.length > 0 ? "notReported" : "unparseable" };
   let inputTokens = 0, outputTokens = 0, cacheReadTokens = 0, cacheCreationTokens = 0, costUsd = 0;
   for (const { part } of steps) {
     const t = part?.tokens;
     const values = [t?.input, t?.output, t?.reasoning, t?.cache?.read, t?.cache?.write].map(count);
     if (values.some((n) => n === undefined)) return { outcome: "unavailable", reason: "unparseable" };
-    const [input, output, reasoning, read, write] = values as number[];
+    const [input, output, reasoning, read, write] = values as [number, number, number, number, number];
     inputTokens += input;
     outputTokens += output + reasoning;
     cacheReadTokens += read;
