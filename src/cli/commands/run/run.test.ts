@@ -517,3 +517,60 @@ export default declareHarness({ version: "1.0.0", cli: () => "rm -rf /thunderjar
     expect(await Bun.file(data).exists()).toBe(false);
   });
 });
+
+describe("run --json", () => {
+  test("0202 two-harnesses: prints the execution, where it's recorded and its container runs as JSON, with its progress on stderr", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--data-dir", data, "--json"], {
+      env: { ...docker.env, ...KEY },
+      paths: { "<DATA>": data },
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toStartWith("Execution <ULID>\nBuilding thunderjar-prerun:b9cd78e6 ... done\n");
+    expect(stderr).toEndWith("Recorded in <DATA>/runs.sqlite\n");
+    const result = JSON.parse(stdout);
+    expect(result.execution).toEqual(expect.objectContaining({ executionId: "<ULID>", testCase: "two-harnesses", status: "complete" }));
+    expect(result.recordedIn).toBe("<DATA>/runs.sqlite");
+    expect(result.containerRuns.map(({ permutation, iteration }: ContainerRunRecord) => [permutation, iteration])).toEqual([
+      [1, 1],
+      [2, 1],
+    ]);
+    expect(result.containerRuns).toHaveLength((await readStore(data)).containerRuns.length);
+  });
+
+  test("a failed execution is still printed, with exit code 1", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data, "--json"], { env: { ...docker.env, ...KEY } });
+
+    expect(exitCode).toBe(1);
+    expect(JSON.parse(stdout).execution.status).toBe("failed");
+  });
+
+  test("--dry-run: each permutation, its parameters and images, and each iteration's turns, as JSON", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--dry-run", "--json"], { env: KEY });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const plan = JSON.parse(stdout);
+    expect(plan.executionId).toBe("<ULID>");
+    expect(plan.permutations).toEqual([
+      {
+        number: 1,
+        parameters: expect.objectContaining({ harnessModel: "fake-harness-alpha/fake-model-small-001" }),
+        modelId: "fake-model-small-001",
+        harnessVersion: expect.any(String),
+        hash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        prerunImage: "thunderjar-prerun:b9cd78e6",
+        env: ["FAKE_HARNESS_KEY"],
+        runOptions: [],
+        timeoutSeconds: expect.any(Number),
+        iterations: [{ number: 1, postrunImage: expect.stringContaining("thunderjar-postrun:"), sessionId: expect.any(String), turns: [expect.objectContaining({ prompt: expect.any(String), command: expect.any(String) })] }],
+      },
+    ]);
+  });
+});

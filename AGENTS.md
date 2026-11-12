@@ -103,6 +103,7 @@ execSync("git status --short");
 Never use `console` in `src/`. The `no-console` lint rule bans it.
 
 - A command's output, what the user reads, goes through `src/cli/output.ts`: `print` for stdout, `printError` and `printWarning` for stderr. Tests assert on it.
+- A command that reports results takes `--json` (`jsonOption()` in `src/cli/json.ts`), and prints them with `printJson`. With `--json`, `print`, waiting lines and live rows go to stderr, so stdout is the JSON alone. Errors stay on stderr, with a non-zero exit code.
 - Diagnostics go through the pino logger in `src/log/logger.ts`. Take one per module with `moduleLogger("<module>")`.
   - It writes readable lines to a file, never the terminal: a new file in `.thunderjar/logs/` (git-ignored) per command, or `--log-file`.
   - It logs at `info`, unless `-v` (debug), `--log-level` or `THUNDERJAR_LOG_LEVEL` says otherwise.

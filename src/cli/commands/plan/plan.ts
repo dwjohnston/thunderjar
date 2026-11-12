@@ -17,7 +17,8 @@ import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { showResolved } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
-import { print, printWarning } from "../../output.ts";
+import { jsonOption } from "../../json.ts";
+import { print, printJson, printWarning } from "../../output.ts";
 
 /** Whether a permutation's prerun image exists: `unknown` when Docker can't be asked. */
 export type ImageStatus = "built" | "missing" | "unknown";
@@ -94,11 +95,37 @@ async function imageStatuses(
   }
 }
 
+/** A plan as `--json` prints it. */
+export type PlanJson = {
+  testCase: string;
+  /** The parameters the test case names, by axis, and its task. */
+  parameters: Pick<TestCaseDeclaration, (typeof AXES)[number] | "task">;
+  /** The size of each axis, in the order of `AXES`. */
+  matrixShape: number[];
+  permutations: {
+    /** Numbered from 1, as the text shows them. */
+    number: number;
+    parameters: Record<(typeof AXES)[number], string>;
+    modelId: string;
+    /** The permutation hash, in full. */
+    hash: string;
+    prerunImage: string;
+    prerunImageStatus: ImageStatus;
+    /** What each of its parameters with a `resolve` resolved to. */
+    resolved: HashedPermutation["resolved"];
+  }[];
+};
+
 /**
- * The plan of test case `name`, of the nearest `.thunderjar/` folder, in `cwd` or above it, and a
- * warning if Docker couldn't say which prerun images exist.
+ * The plan of test case `name`, of the nearest `.thunderjar/` folder, in `cwd` or above it, as text
+ * and as JSON, and a warning if Docker couldn't say which prerun images exist.
  */
-export async function plan(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain): Promise<{ output: string; warning?: string }> {
+export async function plan(
+  cwd: string,
+  name: string,
+  imagePrefix?: string,
+  paint: Paint = plain,
+): Promise<{ output: string; json: PlanJson; warning?: string }> {
   const root = await findThunderjarRoot(cwd);
   const { build } = await loadProjectConfig(root);
   const testCase = await loadTestCase(root, name);
@@ -106,7 +133,29 @@ export async function plan(cwd: string, name: string, imagePrefix?: string, pain
   checkBuildSecrets(build);
   const permutations = await hashPermutations(root, testCase);
   const { statuses, unavailable } = await imageStatuses(permutations, imagePrefix);
+  const json: PlanJson = {
+    testCase: name,
+    parameters: {
+      baseImage: testCase.baseImage,
+      codeState: testCase.codeState,
+      promptSet: testCase.promptSet,
+      harnessModel: testCase.harnessModel,
+      task: testCase.task,
+      initialPrompt: testCase.initialPrompt,
+    },
+    matrixShape: matrixShape(testCase),
+    permutations: permutations.map((permutation, i) => ({
+      number: i + 1,
+      parameters: Object.fromEntries(AXES.map((axis) => [axis, permutation[axis]])) as Record<(typeof AXES)[number], string>,
+      modelId: permutation.modelId,
+      hash: permutation.hash,
+      prerunImage: prerunImage(permutation.imageHash, imagePrefix),
+      prerunImageStatus: statuses[i]!,
+      resolved: permutation.resolved,
+    })),
+  };
   return {
+    json,
     output: [renderSummary(testCase, paint), renderMatrix(testCase, permutations, statuses, paint), renderResolved(permutations, paint).join("\n")]
       .filter(Boolean)
       .join("\n\n"),
@@ -121,10 +170,12 @@ export function createPlanCommand(): Command {
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .addOption(imagePrefixOption())
+    .addOption(jsonOption())
     .action(
-      reportingConfigErrors(async (name: string, options: { imagePrefix: string }) => {
-        const { output, warning } = await plan(process.cwd(), name, options.imagePrefix, painter());
-        print(output);
+      reportingConfigErrors(async (name: string, options: { imagePrefix: string; json?: boolean }) => {
+        const { output, json, warning } = await plan(process.cwd(), name, options.imagePrefix, painter());
+        if (options.json) printJson(json);
+        else print(output);
         if (warning) printWarning(warning);
       }),
     );

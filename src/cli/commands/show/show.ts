@@ -12,7 +12,7 @@ import { type Paint, padEnd, painter, plain, visibleLength } from "../../colour.
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { dollars, duration, minute, paintStatus, plural, showAggregate, showResolved, showValue, thousands } from "../../format.ts";
-import { print, printError } from "../../output.ts";
+import { print, printError, printJson } from "../../output.ts";
 
 const GAP = "   ";
 
@@ -226,9 +226,6 @@ export function renderContainerRun(record: ContainerRunRecord, paint: Paint = pl
   ].join("\n");
 }
 
-/** `value` as indented JSON. */
-const asJson = (value: unknown) => JSON.stringify(value, null, 2);
-
 /** Prints `message` as an error, with exit code 1. */
 function fail(message: string): void {
   printError(message);
@@ -256,12 +253,14 @@ async function show(cwd: string, executionId: string, containerRun?: string, dat
 
   if (containerRun === undefined) {
     const measurements = await loadMeasurements(root!, execution.task);
-    print(json ? asJson(summariseExecution(execution, runs, measurements)) : renderExecution(execution, runs, measurements, painter()));
+    if (json) printJson(summariseExecution(execution, runs, measurements));
+    else print(renderExecution(execution, runs, measurements, painter()));
     return;
   }
   const record = runs.find((run) => runName(run) === containerRun || run.postrunImage === containerRun);
   if (!record) return fail(`Execution ${executionId} has no container run ${containerRun}.`);
-  print(json ? asJson(record) : renderContainerRun(record, painter()));
+  if (json) printJson(record);
+  else print(renderContainerRun(record, painter()));
 }
 
 export function createShowCommand(): Command {
