@@ -7,7 +7,7 @@ import type { Measurement } from "../config/measurements.ts";
 import type { TokenCosts } from "../api/declarations.ts";
 import type { ContainerRunRecord, ExecutionRecord, RecordedOutcome } from "../store/runDataStore.ts";
 import { type AggregatedMeasure, type AggregateMethod, aggregatePermutation } from "./aggregate.ts";
-import { agentEnd, endedCleanly, knownCost, totalTokens } from "./runFacts.ts";
+import { agentEnd, endedCleanly, failureHint, knownCost, totalTokens } from "./runFacts.ts";
 
 /** Values across a permutation's iterations: their mean, least and greatest, and how many iterations had one. */
 export type Spread = { mean: number; min: number; max: number; of: number };
@@ -30,8 +30,11 @@ export type PermutationSummary = {
   costUsd?: Spread;
   /** How its agents ended, e.g. `done` or `exited 1`, and how many runs ended each way, most first. */
   agent: { end: string; runs: number }[];
-  /** Its runs whose agent exited non-zero, timed out, or left no result file. */
-  unclean: { run: string; end: string }[];
+  /**
+   * Its runs whose agent exited non-zero, timed out, or left no result file, with a hint of why:
+   * the last line of its stderr, or else of its result file, if it has one.
+   */
+  unclean: { run: string; end: string; why?: string }[];
   /** Each measurement's values, combined by its methods, keyed by name. */
   measures: Record<string, AggregatedMeasure>;
   /** The measures its iterations gave no value, left out of the aggregate. */
@@ -83,7 +86,10 @@ function summarisePermutation(permutation: number, runs: ContainerRunRecord[], m
     agent: tally(runs.map(({ execution, harnessResult }) => agentEnd(execution, harnessResult))),
     unclean: runs
       .filter(({ execution, harnessResult }) => !endedCleanly(execution, harnessResult))
-      .map((run) => ({ run: runName(run), end: agentEnd(run.execution, run.harnessResult) })),
+      .map((run) => {
+        const why = failureHint(run);
+        return { run: runName(run), end: agentEnd(run.execution, run.harnessResult), ...(why !== undefined && { why }) };
+      }),
     measures: runs.length === 0 ? {} : aggregatePermutation(runs, measurements),
     leftOut: measurements.flatMap(({ name }) =>
       runs.flatMap((run) => {

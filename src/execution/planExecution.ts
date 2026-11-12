@@ -18,6 +18,9 @@ import { DEFAULT_IMAGE_PREFIX, postrunImage, prerunImage } from "./images.ts";
 /** Where, inside the container, the harness's `cli` must leave the agent's result file. */
 export const RESULT_PATH = "/thunderjar/result.json";
 
+/** Where, inside the container, the execution wrapper sends the stderr of the harness's `cli`. */
+export const STDERR_PATH = "/thunderjar/stderr.log";
+
 /** Where, inside the container, the execution wrapper writes the initial prompt, for the harness's `cli` to read. */
 export const PROMPT_PATH = "/thunderjar/prompt.txt";
 
@@ -31,6 +34,14 @@ export function turnPaths(turn: number, count: number): { promptPath: string; re
   return { promptPath: `/thunderjar/turns/${turn + 1}/prompt.txt`, resultPath: `/thunderjar/turns/${turn + 1}/result.json` };
 }
 
+/**
+ * Where, inside the container, the execution wrapper sends the stderr of turn `turn` (counting
+ * from 0) of an initial prompt of `count` turns: beside its result file.
+ */
+export function stderrPath(turn: number, count: number): string {
+  return count === 1 ? STDERR_PATH : `/thunderjar/turns/${turn + 1}/stderr.log`;
+}
+
 /** The prompts of an initial prompt, one per turn. */
 export const promptsOf = (initialPrompt: InitialPromptDeclaration): string[] => initialPrompt.turns ?? [initialPrompt.prompt];
 
@@ -39,6 +50,8 @@ export type PlannedTurn = {
   prompt: string;
   promptPath: string;
   resultPath: string;
+  /** Where the wrapper sends the command's stderr. */
+  stderrPath: string;
   /** The harness's `cli` command for the turn. */
   command: string;
 };
@@ -111,7 +124,7 @@ function planTurns({ harness, version, modelId, initialPrompt }: Loaded, session
   return prompts.map((prompt, turn) => {
     const paths = turnPaths(turn, prompts.length);
     const command = harness.cli({ version, modelId, initialPrompt: prompt, ...paths, turn, sessionId, resolved });
-    return { prompt, ...paths, command };
+    return { prompt, ...paths, stderrPath: stderrPath(turn, prompts.length), command };
   });
 }
 

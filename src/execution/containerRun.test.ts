@@ -2,7 +2,7 @@ import { $ } from "bun";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { DockerContainerError } from "../docker/docker.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { NOW_MS_FUNCTION, parseExecution } from "./containerRun.ts";
+import { NOW_MS_FUNCTION, parseExecution, tail } from "./containerRun.ts";
 
 describe("the execution wrapper's now_ms", () => {
   const binDir = `${TMP_DIR}/now-ms-${crypto.randomUUID()}`;
@@ -79,5 +79,18 @@ describe("parseExecution", () => {
   test("rejects a missing run.json", () => {
     expect(() => parseExecution(undefined, 600)).toThrow(DockerContainerError);
     expect(() => parseExecution(undefined, 600, 1793499269200)).toThrow(DockerContainerError);
+  });
+});
+
+describe("tail", () => {
+  test("keeps text that fits whole", () => {
+    expect(tail("short", 16)).toBe("short");
+  });
+
+  test("keeps the last bytes, never part of a character", () => {
+    expect(tail("abcdef", 3)).toBe("def");
+    // "é" is two bytes: the last 3 of "aébc" cut it in half, so it's dropped.
+    expect(tail("aéébc", 5)).toBe("ébc");
+    expect(tail("aébc", 3)).toBe("bc");
   });
 });

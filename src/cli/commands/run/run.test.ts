@@ -167,6 +167,7 @@ Recorded in <DATA>/runs.sqlite
       harnessModel: { harness: "fake-harness-alpha", version: "1.0.0", modelId: "fake-model-small-001" },
       execution: { startedAt: expect.any(Number), finishedAt: expect.any(Number), exitCode: 0, timedOut: false, timeoutSeconds: 600 },
       harnessResult: `${ALPHA_JSON}\n`,
+      harnessStderr: "",
       reply: { outcome: "collected", text: "Arr, isPrime.ts be written." },
       tokenCosts: {
         outcome: "collected",
@@ -218,6 +219,7 @@ Recorded in <DATA>/runs.sqlite
         `docker run --name ${container(n)} --pull never ${n === 1 ? "-e FAKE_HARNESS_KEY " : ""}--entrypoint sh ${prerun(n)} -c <script>`,
         `docker cp ${container(n)}:/thunderjar/run.json <destination>`,
         `docker cp ${container(n)}:/thunderjar/result.json <destination>`,
+        `docker cp ${container(n)}:/thunderjar/stderr.log <destination>`,
         `docker image inspect --format {{json .Config.Entrypoint}}\t{{json .Config.Cmd}} ${prerun(n)}`,
         `docker commit --change ENTRYPOINT [""] --change CMD ["sh"] ${container(n)} thunderjar-postrun:${id}-${n}-1`,
         `docker rm --force ${container(n)}`,
@@ -381,15 +383,16 @@ export default declareTestCase({
       `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness } from "thunderjar";
 
-export default declareHarness({ version: "1.0.0", cli: () => "echo partial > isPrime.ts && exit 3" });
+export default declareHarness({ version: "1.0.0", cli: () => "echo partial > isPrime.ts && echo 'Error: unknown model' >&2 && exit 3" });
 `,
     );
     await using docker = await fakeDocker();
     const data = dataDir();
 
-    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], {
+    const { stdout, stderr, exitCode, log } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], {
       env: { ...docker.env, ...KEY },
       paths: { "<DATA>": data },
+      log: true,
     });
 
     expect(stderr).toBe("");
@@ -412,6 +415,9 @@ Recorded in <DATA>/runs.sqlite
       [3, null],
       [0, '{"model":"fake-model-large-001","reply":"I wrote isPrime.ts, and tested it up to 100."}\n'],
     ]);
+    // Why it exited non-zero is kept, and logged.
+    expect(store.containerRuns.map(({ harnessStderr }) => harnessStderr)).toEqual(["Error: unknown model\n", ""]);
+    expect(log).toMatch(/WARN.*agent didn't exit 0[\s\S]*stderr: "Error: unknown model\\n"/);
     // A failed run is committed too, so what the agent left can be looked at.
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
     expect(await docker.containers()).toEqual([]);

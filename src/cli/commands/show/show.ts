@@ -11,7 +11,7 @@ import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, Ru
 import { type Paint, padEnd, painter, plain, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { dollars, duration, minute, paintStatus, plural, showAggregate, showResolved, showValue, thousands } from "../../format.ts";
+import { dollars, duration, endedCleanly, minute, paintStatus, plural, showAggregate, showResolved, showValue, thousands } from "../../format.ts";
 import { print, printError, printJson } from "../../output.ts";
 
 const GAP = "   ";
@@ -137,7 +137,7 @@ function permutationTable(summary: ExecutionSummary, paint: Paint): string[] {
   const lines = [...(measurements.length > 0 ? [names] : []), paint.dim(line(header)), ...rows.map(line)];
   const unclean = permutations.flatMap((permutation) => permutation.unclean);
   if (unclean.length > 0) {
-    lines.push("", paint.red("! Agents that didn't end cleanly:"), ...columns(unclean.map(({ run, end }) => [paint.bold(run), paint.red(end)])));
+    lines.push("", paint.red("! Agents that didn't end cleanly:"), ...columns(unclean.map(({ run, end, why }) => [paint.bold(run), paint.red(end), ...(why === undefined ? [] : [paint.dim(why)])])));
   }
   if (leftOut.length > 0) lines.push("", paint.yellow("* Left out of the aggregate:"), ...columns(leftOut));
   if (incompatible.size > 0) {
@@ -175,9 +175,24 @@ const showReply = (reply: Reply, paint: Paint, label = "") => {
 const showReplies = ({ reply, turns }: ContainerRunRecord, paint: Paint) =>
   turns ? turns.flatMap((turn, i) => showReply(turn.reply, paint, `Turn ${i + 1}:  `)) : showReply(reply as Reply, paint);
 
+/** How many of the last lines of an agent's stderr and result file a container run shows, if it didn't end cleanly. */
+const TAIL_LINES = 20;
+
+/** `label`, then the last TAIL_LINES lines of `text`, indented, if it has anything in it. */
+function tailSection(label: string, text: string | null | undefined, paint: Paint): string[] {
+  const lines = (text ?? "").trimEnd().split("\n");
+  if (lines.join("").trim() === "") return [];
+  const shown = lines.slice(-TAIL_LINES);
+  const cut = lines.length - shown.length;
+  return [paint.bold(label), ...(cut > 0 ? [paint.dim(`  … ${plural(cut, "line")} before`)] : []), ...shown.map((line) => `  ${line}`.trimEnd()), ""];
+}
+
+/** A file's size, or that there's none. */
+const size = (text: string | null, paint: Paint) => (text === null ? paint.red("none") : plural(new TextEncoder().encode(text).length, "byte"));
+
 /** One container run: where it sits, its parameters, how the agent ran, its reply if it was recorded with one, and its measures. */
 export function renderContainerRun(record: ContainerRunRecord, paint: Paint = plain): string {
-  const { executionId, testCase, permutation, permutationHash, iteration, postrunImage, ranAt, parameters, harnessModel, execution, harnessResult, reply, result } =
+  const { executionId, testCase, permutation, permutationHash, iteration, postrunImage, ranAt, parameters, harnessModel, execution, harnessResult, harnessStderr, reply, result } =
     record;
   const turnsRan = execution.turns === undefined ? [] : [["Turns", `${execution.turns.length} of ${record.turns?.length ?? "?"} ran`] as [string, string]];
   const names = Object.keys(result).toSorted();
@@ -214,11 +229,15 @@ export function renderContainerRun(record: ContainerRunRecord, paint: Paint = pl
         ["Duration", duration(execution.finishedAt - execution.startedAt)],
         ["Exit", exit],
         ...turnsRan,
-        ["Result file", harnessResult === null ? paint.red("none") : plural(new TextEncoder().encode(harnessResult).length, "byte")],
+        ["Result file", size(harnessResult, paint)],
+        ...(harnessStderr === undefined ? [] : [["Stderr", size(harnessStderr, paint)] as [string, string]]),
       ],
       paint,
     ),
     "",
+    ...(endedCleanly(execution, harnessResult)
+      ? []
+      : [...tailSection("Stderr", harnessStderr, paint), ...tailSection("Result file", harnessResult, paint)]),
     ...(reply === undefined ? [] : [paint.bold("Reply"), ...showReplies(record, paint), ""]),
     ...(record.tokenCosts === undefined ? [] : [paint.bold("Token costs"), ...tokenCostLines(record.tokenCosts, paint), ""]),
     paint.bold("Measures"),

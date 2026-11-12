@@ -34,6 +34,11 @@ import { buildPrerunImage, type PrerunBuildHooks, type PrerunImage, prerunImages
 
 const log = moduleLogger("execution");
 
+/** How much of an agent's stderr and result file is logged when it exits non-zero: their ends. */
+const LOGGED_TAIL_CHARS = 2000;
+/** How much of a result file is logged when its token costs can't be parsed: its start. */
+const LOGGED_HEAD_CHARS = 500;
+
 export type RunHooks = PrerunBuildHooks &
   PushHooks &
   PullHooks & {
@@ -87,10 +92,10 @@ function containerRunRecord(
   { number: permutationNumber, permutation, version }: PlannedPermutation,
   iteration: PlannedIteration,
   execution: Execution,
-  turns: { harnessResult: string | null; reply: Reply }[],
+  turns: { harnessResult: string | null; harnessStderr: string | null; reply: Reply }[],
   tokenCosts: TokenCosts,
 ): ContainerRunRecord {
-  const last = turns.at(-1) as { harnessResult: string | null; reply: Reply };
+  const last = turns.at(-1) as { harnessResult: string | null; harnessStderr: string | null; reply: Reply };
   const { harness } = parsePair(permutation.harnessModel);
   return {
     executionId: plan.executionId,
@@ -114,6 +119,7 @@ function containerRunRecord(
     harnessModel: { harness, version, modelId: permutation.modelId },
     execution,
     harnessResult: last.harnessResult,
+    harnessStderr: last.harnessStderr,
     reply: last.reply,
     tokenCosts,
     sessionId: iteration.sessionId,
@@ -222,7 +228,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     const at = { executionId, permutation: permutation.number, iteration: iteration.number };
     log.info({ ...at, permutationHash: permutation.permutation.hash, turns: iteration.turns.length }, "container run starting");
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-    const { execution, harnessResults } = await runInContainer({
+    const { execution, harnessResults, harnessStderrs } = await runInContainer({
       prerunImage: prerunImageOf(permutation),
       postrunImage: iteration.postrunImage,
       turns: iteration.turns,
@@ -232,17 +238,40 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       container,
       runtime,
     });
-    const turns = harnessResults.map((harnessResult) => ({ harnessResult, reply: collectReply(permutation.harness.collectReply, harnessResult) }));
+    const turns = harnessResults.map((harnessResult, i) => ({
+      harnessResult,
+      harnessStderr: harnessStderrs[i] ?? null,
+      reply: collectReply(permutation.harness.collectReply, harnessResult),
+    }));
     const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, harnessResults, {
       version: permutation.version,
       modelId: permutation.modelId,
     });
+    if (tokenCosts.outcome === "unavailable" && tokenCosts.reason === "unparseable") {
+      log.debug({ ...at, resultFiles: harnessResults.map((raw) => raw?.slice(0, LOGGED_HEAD_CHARS) ?? null) }, "token costs unparseable");
+    }
     const record = containerRunRecord(run, permutation, iteration, execution, turns, tokenCosts);
     const { harnessResult, reply } = record;
     await store.recordContainerRun(record);
     // Timed out, its exit code is null.
     if (execution.exitCode !== 0) status = "failed";
     log.info({ ...at, exitCode: execution.exitCode, timedOut: execution.timedOut, tokenCosts }, "container run finished");
+    if (execution.exitCode !== 0) {
+      // Of the last turn that ran: the one that exited non-zero, or was killed.
+      const turn = turns.findLastIndex((t) => t.harnessStderr !== null || t.harnessResult !== null);
+      const { harnessStderr = null, harnessResult = null } = turns[turn] ?? {};
+      log.warn(
+        {
+          ...at,
+          ...(turns.length > 1 && { turn: turn + 1 }),
+          exitCode: execution.exitCode,
+          timedOut: execution.timedOut,
+          stderr: harnessStderr === null ? null : harnessStderr.slice(-LOGGED_TAIL_CHARS),
+          resultFile: harnessResult === null ? null : harnessResult.slice(-LOGGED_TAIL_CHARS),
+        },
+        "agent didn't exit 0",
+      );
+    }
     hooks.onRan?.(permutation, iteration, record);
     if (imageStore !== null) {
       const reference = storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);
