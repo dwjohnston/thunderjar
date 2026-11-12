@@ -2,4 +2,6 @@
 "thunderjar": patch
 ---
 
-`view` shows each permutation's iterations as one row, with their results summarised, which expands to show each iteration. It adds Base image and Initial prompt columns, and a "Hide common parameters" toggle that lists the parameters every run shares above the table instead of in a column.
+`view` shows each permutation as one row, with its measures aggregated by their measurements' methods, as `show` does, and expands to show each iteration. It adds Base image and Initial prompt columns, and a "Hide common parameters" toggle. Like `show`, it now needs the project's `.thunderjar/` folder, for the measurements.
+
+`show --json` prints an execution's summary, the same one `view` renders, or a container run's record.
