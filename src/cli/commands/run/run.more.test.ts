@@ -5,7 +5,7 @@ import { $ } from "bun";
 import type { ContainerRunRecord, ExecutionRecord } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, thunderjar, TMP_DIR } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
-import { fakeDocker } from "../../../testing/fakeDocker.ts";
+import { FAKE_DOCKER, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
 import { KEY, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
 
@@ -334,6 +334,8 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(local).toEqual([
       "docker login ghcr.io",
       "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
+      // Not in the image store yet, so it's built.
+      `docker manifest inspect ${PRERUN}`,
       expect.stringMatching(/^docker build -t thunderjar-prerun:77e9dd16 /),
       `docker tag thunderjar-prerun:77e9dd16 ${PRERUN}`,
       `docker push --quiet ${PRERUN}`,
@@ -402,6 +404,26 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
       "measuring  1×  total <duration>  longest <duration>",
       "removing images from the runtime  1×  total <duration>  longest <duration>",
     ]);
+  });
+
+  test("a prerun image already in the image store is neither built nor pushed again, only pulled into the runtime", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });
+    // As on a fresh machine: the image store has it, the local daemon doesn't.
+    await $`${FAKE_DOCKER} image rm thunderjar-prerun:77e9dd16`.env({ ...Bun.env, ...docker.env }).quiet();
+    const before = (await docker.commands()).length;
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toContain("Building");
+    expect(stdout).toContain(`Pulling ${PRERUN} into the runtime ... done`);
+    const commands = (await docker.commands()).slice(before);
+    expect(commands).toContain(`docker manifest inspect ${PRERUN}`);
+    expect(commands.some((command) => command.startsWith("docker build"))).toBe(false);
+    expect(commands).not.toContain(`docker push --quiet ${PRERUN}`);
+    expect(commands).toContain(`${REMOTE} pull --quiet ${PRERUN}`);
   });
 
   test("--local runs on the local Docker daemon, ignoring the runtime", async () => {

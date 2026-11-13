@@ -6,15 +6,13 @@
 #                         THUNDERJAR_CONTAINERS, and start it
 #   fly-runtime.sh down   stop it
 #
+# Neither restarts nor stops the machine while another execution's containers run on it: `up` keeps
+# a big enough machine as it is, or waits up to FLY_RUNTIME_WAIT_SECONDS (default 1800) for it to be
+# free before resizing, and `down` leaves it running. `down` also removes this execution's own
+# leftover containers.
+#
 # Each container gets half a CPU and 1 GB: performance-<n>x, with n = half the containers that
 # run at once, rounded up to a size Fly has (2 GB per CPU). Needs FLYIO_TOKEN.
-#
-# The machine is shared: CI, a teammate or another session may be running on it. So each run
-# holds a lease, a file on the machine named for its execution, from `up` to `down`:
-#   - `up` doesn't resize while another run holds a lease or has containers running: resizing
-#     restarts the machine, which would kill them. It leaves the size as it is, and says so.
-#   - `down` stops the machine only once no other run holds a lease and no container is running.
-# A lease older than LEASE_HOURS is ignored: its run died without running `down`.
 #
 # Thunderjar shows the last line written to stderr when a hook fails, so errors are one line.
 set -euo pipefail
@@ -25,54 +23,37 @@ export FLY_API_TOKEN="${FLY_API_TOKEN:-${FLYIO_TOKEN:-}}"
 die() { echo "fly-runtime: $*" >&2; exit 1; }
 [ -n "$FLY_API_TOKEN" ] || die "FLYIO_TOKEN is not set"
 
-# Runs fly quietly, failing with the last line it wrote to stderr.
+# Runs fly quietly, failing with the last line it wrote to stderr. Fly's API sometimes fails a
+# request ("stream error ... INTERNAL_ERROR"), so it tries three times, 5 seconds apart.
 fly_() {
-  local out
-  out=$(fly "$@" 2>&1) || die "$(printf '%s\n' "$out" | awk 'NF { last = $0 } END { print last }')"
-  printf '%s\n' "$out"
+  local out attempt
+  for attempt in 1 2 3; do
+    out=$(fly "$@" 2>&1) && { printf '%s\n' "$out"; return; }
+    [ "$attempt" = 3 ] || sleep 5
+  done
+  die "$(printf '%s\n' "$out" | awk 'NF { last = $0 } END { print last }')"
 }
 
 # Closes fly-docker.sh's shared SSH connection, if it's open: the machine is about to restart or stop.
 disconnect() { ssh -F "/tmp/tjfly-$APP/ssh_config" -O exit tjfly >/dev/null 2>&1 || true; }
 
 # The machine's ID, state, CPU kind and CPUs, tab-separated.
-read -r ID STATE KIND CPUS < <(fly_ machine list -a "$APP" --json |
-  jq -r '.[0] | [.id, .state, .config.guest.cpu_kind, .config.guest.cpus] | @tsv')
-[ -n "${ID:-}" ] && [ "$ID" != null ] || die "Fly app $APP has no machine"
-
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LEASES=/var/lib/docker/.thunderjar-leases
-LEASE_HOURS=6
-LEASE="${THUNDERJAR_EXECUTION_ID:-manual-$$}"
-
-# Runs a shell command on the machine, over fly-docker.sh's shared SSH connection.
-on_machine() { ssh -F "/tmp/tjfly-$APP/ssh_config" -o ConnectTimeout=20 tjfly "sh -c '$1'" 2>/dev/null; }
-
-# Waits until the machine's Docker daemon answers, twice in a row: after a start or a resize it
-# can answer once and then go away as the machine restarts.
-wait_ready() {
-  local ok=0
-  for _ in $(seq 1 40); do
-    if "$HERE/fly-docker.sh" version --format '{{.Server.Version}}' >/dev/null 2>&1; then
-      ok=$((ok + 1))
-      [ "$ok" -ge 2 ] && return 0
-    else
-      ok=0
-    fi
-    sleep 3
-  done
-  die "the Docker daemon on the Fly machine in app $APP didn't answer after it started"
+machine() {
+  read -r ID STATE KIND CPUS < <(fly_ machine list -a "$APP" --json |
+    jq -r '.[0] | [.id, .state, .config.guest.cpu_kind, .config.guest.cpus] | @tsv')
+  [ -n "${ID:-}" ] && [ "$ID" != null ] || die "Fly app $APP has no machine"
 }
+machine
 
-# How many other runs are using the machine: leases other than this run's, newer than
-# LEASE_HOURS, or else whether any container is running (1 or 0). 0 if the machine can't be asked.
-others() {
-  local leases running
-  leases=$(on_machine "mkdir -p $LEASES && find $LEASES -type f -mmin -$((LEASE_HOURS * 60)) ! -name $LEASE | wc -l" || echo 0)
-  running=$(on_machine "docker ps -q | wc -l" || echo 0)
-  leases=${leases//[^0-9]/} running=${running//[^0-9]/}
-  if [ "${leases:-0}" -gt 0 ]; then echo "$leases"; elif [ "${running:-0}" -gt 0 ]; then echo 1; else echo 0; fi
-}
+# Another execution may share the machine: resizing restarts it and stopping stops it, killing its
+# containers, so neither is done while it has some running. Containers are told apart by the
+# execution ID in their names, which THUNDERJAR_EXECUTION_ID gives.
+DOCKER="$(dirname "$0")/fly-docker.sh"
+EXECUTION="${THUNDERJAR_EXECUTION_ID:-}"
+# The names of the running containers, one per line. Only asked of a started machine, so it never starts one.
+running() { [ "$STATE" = started ] && "$DOCKER" ps --format '{{.Names}}' 2>/dev/null || true; }
+others() { running | { if [ -n "$EXECUTION" ]; then grep -v -F -- "-$EXECUTION-" || true; else cat; fi; } | grep -c . || true; }
+WAIT_SECONDS="${FLY_RUNTIME_WAIT_SECONDS:-1800}"
 
 case "${1:-}" in
   up)
@@ -82,37 +63,39 @@ case "${1:-}" in
     for size in "${SIZES[@]}"; do
       if [ "$size" -ge "$wanted" ]; then cpus=$size; break; fi
     done
-    in_use=0
-    # Only a started machine can be in use.
-    if [ "$STATE" = started ]; then "$HERE/fly-docker.sh" version >/dev/null 2>&1 && in_use=$(others); fi
-    if [ "$KIND" = performance ] && [ "$CPUS" = "$cpus" ]; then
+    busy=$(others)
+    if [ "$busy" -gt 0 ] && [ "$KIND" = performance ] && [ "$CPUS" -ge "$cpus" ]; then
+      echo "$ID is performance-${CPUS}x, shared with $busy running containers of other executions: not resized"
+    elif [ "$KIND" = performance ] && [ "$CPUS" = "$cpus" ]; then
       [ "$STATE" = started ] || fly_ machine start -a "$APP" "$ID" >/dev/null
       echo "$ID is already performance-${cpus}x"
-    elif [ "$in_use" -gt 0 ]; then
-      echo "$ID is in use by another run: left at $KIND-${CPUS}x, not resized to performance-${cpus}x" >&2
     else
+      # Too small, and in use: wait for the other executions' containers to finish before resizing.
+      waited=0
+      while [ "$(others)" -gt 0 ]; do
+        [ "$waited" -lt "$WAIT_SECONDS" ] || die "$ID is performance-${CPUS}x and still busy with other executions after ${WAIT_SECONDS}s: not resized to performance-${cpus}x"
+        sleep 20; waited=$((waited + 20)); machine
+      done
       # Restarts the machine, or starts it if it was stopped.
       disconnect
       fly_ machine update "$ID" -a "$APP" --vm-size "performance-${cpus}x" --vm-memory $((cpus * 2048)) --yes >/dev/null
       echo "$ID resized to performance-${cpus}x for $at_once containers at once"
     fi
-    wait_ready
-    on_machine "mkdir -p $LEASES && touch $LEASES/$LEASE" || die "couldn't write this run's lease on the Fly machine in app $APP"
     ;;
   down)
-    if [ "$STATE" != started ]; then
-      disconnect
-      echo "$ID already stopped"
-      exit 0
+    # This execution's containers still there, running or not, were left by a run that failed part
+    # way: remove them, rather than leave them running, or killed by the stop and left as exit 255.
+    if [ -n "$EXECUTION" ]; then
+      mine=$( ([ "$STATE" = started ] && "$DOCKER" ps -a --format '{{.Names}}' 2>/dev/null) | grep -F -- "-$EXECUTION-" || true)
+      [ -z "$mine" ] || "$DOCKER" rm --force $mine >/dev/null 2>&1 || true
     fi
-    on_machine "rm -f $LEASES/$LEASE" || true
-    in_use=$(others)
-    if [ "$in_use" -gt 0 ]; then
-      echo "$ID left running: in use by another run" >&2
+    busy=$(others)
+    if [ "$busy" -gt 0 ]; then
+      echo "$ID left running: $busy running containers of other executions"
       exit 0
     fi
     disconnect
-    fly_ machine stop -a "$APP" "$ID" >/dev/null
+    [ "$STATE" != started ] || fly_ machine stop -a "$APP" "$ID" >/dev/null
     echo "$ID stopped"
     ;;
   *) die "expected up or down, got '${1:-}'" ;;

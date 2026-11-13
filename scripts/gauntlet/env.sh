@@ -8,13 +8,7 @@
 #   OPENROUTER_TOKEN         -> OPENROUTER_API_KEY  (harnesses)
 #   AAK                      -> ANTHROPIC_API_KEY   (Claude Code harness; cloud sessions filter the real name)
 #   GHCR_TOKEN / GHCR_USER   -> used by bootstrap.sh for `docker login ghcr.io`
-#
-# Builds: in a cloud container whose egress proxy re-terminates TLS (/root/.ccr/ca-bundle.crt
-# exists), a local `docker build` fails at its first download: the build's RUN steps don't trust
-# the proxy's CA (npm: SELF_SIGNED_CERT_IN_CHAIN). So there THUNDERJAR_DOCKER is pointed at
-# runtime-build-docker.sh, and prerun images are built on, and pushed from, the Fly machine.
-# Set GAUNTLET_BUILD_ON_RUNTIME=0 to build on the local daemon anyway, or =1 to force it.
-# Also sets THUNDERJAR_REMOTE=1 and, if a local dockerd was started by bootstrap.sh, nothing else:
+# Also sets THUNDERJAR_REMOTE=1, THUNDERJAR_RUN_DATA and THUNDERJAR_GAUNTLET_PAIRS (below) and, if a local dockerd was started by bootstrap.sh, nothing else:
 # DOCKER_HOST is left alone (the default socket /var/run/docker.sock is used).
 
 [ -z "${THUNDERJAR_DB_URL:-}" ] && [ -n "${THUNDERJAR_DB_CONNECTION:-}" ] && export THUNDERJAR_DB_URL="$THUNDERJAR_DB_CONNECTION"
@@ -22,13 +16,16 @@
 [ -z "${FLY_API_TOKEN:-}" ] && [ -n "${FLYIO_TOKEN:-}" ] && export FLY_API_TOKEN="$FLYIO_TOKEN"
 [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -n "${AAK:-}" ] && export ANTHROPIC_API_KEY="$AAK"
 export THUNDERJAR_REMOTE=1
-_gauntlet_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-if [ -z "${THUNDERJAR_DOCKER:-}" ]; then
-  case "${GAUNTLET_BUILD_ON_RUNTIME:-auto}" in
-    1) export THUNDERJAR_DOCKER="$_gauntlet_root/scripts/gauntlet/runtime-build-docker.sh" ;;
-    auto) [ -f /root/.ccr/ca-bundle.crt ] && export THUNDERJAR_DOCKER="$_gauntlet_root/scripts/gauntlet/runtime-build-docker.sh" ;;
-  esac
-fi
-unset _gauntlet_root
+# This sandbox's egress proxy only carries HTTPS, so Supabase's Postgres (raw TCP) is unreachable:
+# record run data in the local SQLite file instead. Set THUNDERJAR_RUN_DATA=postgres to use Supabase.
+[ -z "${THUNDERJAR_RUN_DATA:-}" ] && export THUNDERJAR_RUN_DATA=sqlite
+# Build prerun images on the Fly machine's daemon, not the local one: this sandbox's egress proxy
+# re-signs TLS, and build steps (npm, git) don't trust its CA. It also leaves the prerun images
+# where the containers run. Docker's client still uses this machine's `docker login`.
+# THUNDERJAR_DOCKER is every `docker` Thunderjar runs locally, not only builds: with it set,
+# `run --local` runs its containers on the Fly machine too. Unset it to use the local daemon.
+[ -z "${THUNDERJAR_DOCKER:-}" ] && export THUNDERJAR_DOCKER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.thunderjar/fly-docker.sh"
+# Without ANTHROPIC_API_KEY, gauntlet test cases run only their OpenRouter pairs (Copilot, OpenCode).
+[ -z "${THUNDERJAR_GAUNTLET_PAIRS:-}" ] && [ -z "${ANTHROPIC_API_KEY:-}" ] && export THUNDERJAR_GAUNTLET_PAIRS=openrouter
 case ":$PATH:" in *":$HOME/.fly/bin:"*) ;; *) export PATH="$HOME/.fly/bin:$PATH" ;; esac
 true

@@ -113,6 +113,20 @@ test("runContainer throws a DockerContainerError with the reason when its script
   expect((error as Error).message).toBe("nope");
 });
 
+test("runContainer stops waiting for a timed-out container it can't kill, and says it timed out", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"], failing: ["tj-run-1"] });
+  Object.assign(Bun.env, docker.env);
+  const startedAt = Date.now();
+
+  const stop = await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "sleep 60", { timeoutSeconds: 1 });
+
+  expect(stop.timedOut).toBe(true);
+  // Three tries at `docker kill`, two seconds apart, not the script's minute.
+  expect(Date.now() - startedAt).toBeLessThan(20_000);
+  expect((await docker.commands()).filter((command) => command === "docker kill tj-run-1")).toHaveLength(3);
+  await removeContainer("tj-run-1");
+}, 30_000);
+
 test("readContainerFile throws a DockerContainerError when there's no such container", async () => {
   await using docker = await fakeDocker();
   Object.assign(Bun.env, docker.env);

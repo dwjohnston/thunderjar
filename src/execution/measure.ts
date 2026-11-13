@@ -14,12 +14,13 @@ const recordable = (result: MeasurementResult<unknown>): RecordedOutcome =>
   result.outcome === "erroredWhileMeasuring" ? { outcome: "erroredWhileMeasuring", error: { message: message(result.error) } } : result;
 
 /**
- * Takes each measurement, up to `concurrency` at once, each against a context of its own from
- * `open`, closed once it's taken, so nothing one measurement writes is seen by another, whether
- * they're taken in turn or together. `open` is told whether the instrument needs a measurement
- * container, or only what was recorded of the run. An instrument that throws gives its measure
- * `erroredWhileMeasuring`, and the rest are still taken. Each measure is dated when it's taken,
- * and they're returned in the order declared. Throws if a context can't be opened or closed.
+ * Takes each measurement, up to `concurrency` at once (one at a time by default), each against a
+ * context of its own from `open`, closed once it's taken, so nothing one measurement writes is seen
+ * by another. `open` is told whether the instrument needs a measurement container, or only what
+ * was recorded of the run. An instrument that throws gives its measure `erroredWhileMeasuring`,
+ * and the rest are still taken. Each measure is dated when it's taken, and the result lists them
+ * in the order of `measurements`. Throws if a context can't be opened or closed, once those
+ * already being taken are.
  */
 export async function measureContainerRun(
   measurements: Measurement[],
@@ -27,23 +28,28 @@ export async function measureContainerRun(
   now: () => Date = () => new Date(),
   concurrency = 1,
 ): Promise<Record<string, RecordedMeasure>> {
-  const measures = new Map<string, RecordedMeasure>();
+  const taken = new Map<string, RecordedMeasure>();
+  const take = async ({ name, declaration, config, contentHash }: Measurement) => {
+    const instrument = instruments[declaration.instrument] as Instrument<Record<string, string>, unknown>;
+    const ctx = await open(instrument.usesContainer !== false);
+    let outcome: RecordedOutcome;
+    try {
+      outcome = recordable(await instrument.evaluate(config, ctx));
+    } catch (error) {
+      outcome = { outcome: "erroredWhileMeasuring", error: { message: message(error) } };
+    } finally {
+      await ctx.close();
+    }
+    taken.set(name, { instrument: declaration.instrument, contentHash, measuredAt: now().toISOString(), outcome });
+  };
   await inParallel(
-    measurements.map(({ name, declaration, config, contentHash }) => async () => {
-      const instrument = instruments[declaration.instrument] as Instrument<Record<string, string>, unknown>;
-      const ctx = await open(instrument.usesContainer !== false);
-      let outcome: RecordedOutcome;
-      try {
-        outcome = recordable(await instrument.evaluate(config, ctx));
-      } catch (error) {
-        outcome = { outcome: "erroredWhileMeasuring", error: { message: message(error) } };
-      } finally {
-        await ctx.close();
-      }
-      measures.set(name, { instrument: declaration.instrument, contentHash, measuredAt: now().toISOString(), outcome });
-    }),
+    measurements.map((measurement) => () => take(measurement)),
     concurrency,
   );
-  // In the order declared, whatever order they finished in.
-  return Object.fromEntries(measurements.flatMap(({ name }) => (measures.has(name) ? [[name, measures.get(name) as RecordedMeasure]] : [])));
+  const result: Record<string, RecordedMeasure> = {};
+  for (const { name } of measurements) {
+    const measure = taken.get(name);
+    if (measure !== undefined) result[name] = measure;
+  }
+  return result;
 }
