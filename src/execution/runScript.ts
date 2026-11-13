@@ -45,10 +45,17 @@ export const NOW_MS_FUNCTION = [
 ].join("\n");
 
 /**
+ * The line the timed run prints to its standard output once it has written its start to RUN_PATH,
+ * just before the run script starts: the agent's timeout runs from when it arrives.
+ */
+export const START_MARKER = "thunderjar: run script started";
+
+/**
  * What a container runs: `sh /thunderjar/thunderjar-run.sh`, writing when it started and finished
  * (ms since the epoch) and how it exited to RUN_PATH. When it starts, RUN_PATH holds only its
- * start, so a run killed for taking too long still says when it started. It removes any result
- * file first, so a result is always this run's. The script's standard error goes to STDERR_PATH.
+ * start, so a run killed for taking too long still says when it started, and it prints
+ * START_MARKER. It removes any result file first, so a result is always this run's. The script's
+ * standard error goes to STDERR_PATH.
  */
 export const timedRun = (): string =>
   [
@@ -56,6 +63,7 @@ export const timedRun = (): string =>
     "start=$(now_ms)",
     `echo "{\\"startedAt\\":$start}" > ${RUN_PATH}`,
     `rm -f ${RESULT_PATH}`,
+    `echo '${START_MARKER}'`,
     `sh ${RUN_SCRIPT_PATH} 2> ${STDERR_PATH}`,
     "code=$?",
     "end=$(now_ms)",

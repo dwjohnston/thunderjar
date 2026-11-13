@@ -246,7 +246,9 @@ export function renderContainerRun(record: ContainerRunRecord, paint: Paint = pl
     record;
   const turnsRan = execution.turns === undefined ? [] : [["Turns", `${execution.turns.length} of ${record.turns?.length ?? "?"} ran`] as [string, string]];
   const names = Object.keys(result).toSorted();
-  const exit = execution.timedOut ? paint.red(`timed out after ${execution.timeoutSeconds}s`) : (execution.exitCode === 0 ? paint.green : paint.red)(String(execution.exitCode));
+  const exit = execution.failedToStart !== undefined
+    ? paint.red(`failed to start: ${execution.failedToStart}`)
+    : execution.timedOut ? paint.red(`timed out after ${execution.timeoutSeconds}s`) : (execution.exitCode === 0 ? paint.green : paint.red)(String(execution.exitCode));
   return [
     ...labelled(
       [

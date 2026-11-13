@@ -60,7 +60,8 @@ export type ExecutionRecord = {
   phase?: ExecutionPhase;
   /**
    * Why it stopped, if it stopped on an error or was interrupted: what it was doing, and the
-   * error `run` printed. Absent if it ran to the end, even with agents that failed.
+   * error `run` printed. Absent if it ran to the end, even with agents that failed, or containers
+   * that never started: those are their runs' outcomes, with `failedToStart`.
    */
   failure?: { step: FailureStep; reason: string };
   matrix: {
@@ -83,6 +84,11 @@ export type Execution = {
   timedOut?: boolean;
   /** Its initial prompt's limit, in seconds. Absent from runs recorded before timeouts were. */
   timeoutSeconds?: number;
+  /**
+   * Why its container never started, if it didn't: then the agent never ran, `startedAt` and
+   * `finishedAt` are when Thunderjar started `docker run` and gave up on it, and its exit code is null.
+   */
+  failedToStart?: string;
   /**
    * How each turn ran, of an initial prompt of several turns: those that ran, which stop at the
    * first that exited non-zero. Absent for a single prompt.
