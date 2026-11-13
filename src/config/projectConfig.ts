@@ -75,24 +75,42 @@ export const isConcurrency = (value: unknown): value is number => Number.isInteg
 const isCommand = (value: unknown): value is string[] =>
   Array.isArray(value) && value.length > 0 && value.every((part) => typeof part === "string" && part.length > 0);
 
+/** Each runtime hook's old name, then its name: they run once per execution, not once per run. */
+const HOOK_RENAMES = [
+  ["beforeRun", "beforeExecution"],
+  ["afterRun", "afterExecution"],
+] as const;
+
+/** A warning for each of `runtime`'s hooks given by its old name. */
+const hookDeprecations = (runtime: RuntimeConfig): string[] =>
+  HOOK_RENAMES.filter(([oldName]) => runtime[oldName] !== undefined).map(
+    ([oldName, name]) => `${CONFIG_FILE}: runtime.${oldName} is deprecated, rename it ${name}. It runs once per execution, not once per run.`,
+  );
+
+/** `runtime`'s hooks, by their names, whether it gives them by those or by their old ones. */
+function hooksOf(runtime: RuntimeConfig): Pick<RuntimeConfig, "beforeExecution" | "afterExecution"> {
+  const before = runtime.beforeExecution ?? runtime.beforeRun;
+  const after = runtime.afterExecution ?? runtime.afterRun;
+  return { ...(before !== undefined && { beforeExecution: [...before] }), ...(after !== undefined && { afterExecution: [...after] }) };
+}
+
 /** Why `runtime`, as loaded, isn't a RuntimeConfig that can be used with `imageStore`, or undefined if it is. */
 export function runtimeProblem(runtime: unknown, imageStore: unknown): string | undefined {
   if (runtime === undefined) return undefined;
   if (typeof runtime !== "object" || runtime === null || Array.isArray(runtime)) {
     return `must be { command: ["docker", "--context", "<context>"] }, got ${show(runtime)}`;
   }
-  const { command, concurrency, beforeRun, afterRun, keepPostrunImages } = runtime as {
-    command?: unknown;
-    concurrency?: unknown;
-    beforeRun?: unknown;
-    afterRun?: unknown;
-    keepPostrunImages?: unknown;
-  };
+  const fields = runtime as Record<string, unknown>;
+  const { command, concurrency, keepPostrunImages } = fields;
   if (!isCommand(command)) {
     return `command must be a non-empty list of non-empty strings, e.g. ["docker", "--context", "cloud"], got ${show(command)}`;
   }
-  for (const [field, hook] of [["beforeRun", beforeRun], ["afterRun", afterRun]] as const) {
-    if (hook !== undefined && !isCommand(hook)) return `${field} must be a non-empty list of non-empty strings, e.g. ["./scripts/start-runtime.sh"], got ${show(hook)}`;
+  for (const [oldName, name] of HOOK_RENAMES) {
+    if (fields[oldName] !== undefined && fields[name] !== undefined) return `give ${name} or ${oldName}, its old name, not both`;
+    for (const field of [name, oldName]) {
+      const hook = fields[field];
+      if (hook !== undefined && !isCommand(hook)) return `${field} must be a non-empty list of non-empty strings, e.g. ["./scripts/start-runtime.sh"], got ${show(hook)}`;
+    }
   }
   if (concurrency !== undefined && !isConcurrency(concurrency)) return `concurrency must be a whole number, 1 or more, got ${show(concurrency)}`;
   if (keepPostrunImages !== undefined && typeof keepPostrunImages !== "boolean") return `keepPostrunImages must be true or false, got ${show(keepPostrunImages)}`;
@@ -113,7 +131,7 @@ export function runDataStoreProblem(runDataStore: unknown): string | undefined {
 export type ProjectConfig = {
   imageStore: ImageStore | null;
   /** Where `run` runs containers, and how many at once, or `null` for the local Docker daemon. */
-  runtime: (Required<Pick<RuntimeConfig, "command" | "concurrency" | "keepPostrunImages">> & Pick<RuntimeConfig, "beforeRun" | "afterRun">) | null;
+  runtime: (Required<Pick<RuntimeConfig, "command" | "concurrency" | "keepPostrunImages">> & Pick<RuntimeConfig, "beforeExecution" | "afterExecution">) | null;
   /**
    * The run data store, as the config gives it: a SQLite file, relative to the project folder
    * (the one holding `.thunderjar/`) unless absolute, or the variable holding a Postgres URL.
@@ -121,6 +139,8 @@ export type ProjectConfig = {
   runDataStore: { kind: "sqlite"; path: string } | { kind: "postgres"; urlEnv: string };
   /** What prerun builds are given, and how many build at once: no secrets, no SSH agent and 1, unless the config gives them. */
   build: Required<BuildOptions>;
+  /** A warning for each deprecated field the config gives, e.g. a runtime hook by its old name. */
+  deprecations: string[];
 };
 
 /**
@@ -160,9 +180,9 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
             command: [...runtime.command],
             concurrency: runtime.concurrency ?? 1,
             keepPostrunImages: runtime.keepPostrunImages ?? false,
-            ...(runtime.beforeRun !== undefined && { beforeRun: [...runtime.beforeRun] }),
-            ...(runtime.afterRun !== undefined && { afterRun: [...runtime.afterRun] }),
+            ...hooksOf(runtime),
           },
     build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false, concurrency: build?.concurrency ?? 1 },
+    deprecations: runtime === undefined ? [] : hookDeprecations(runtime),
   };
 }

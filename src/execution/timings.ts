@@ -11,7 +11,7 @@
 
 // How long each phase of an execution took, summed over everything that went through it: its
 // builds, pushes, pulls, agents, commits and measurements. Logged when the execution ends, and
-// shown by `run --timings`, so a slow run says where its time went.
+// shown by `run --timings`, so a slow execution says where its time went.
 
 /** The phases of an execution, in the order they're reported. */
 export const PHASES = ["build", "pushPrerun", "pullPrerun", "agent", "collect", "commit", "pushPostrun", "measure", "cleanup"] as const;

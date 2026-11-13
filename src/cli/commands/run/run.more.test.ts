@@ -366,7 +366,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(await docker.images()).toContain(`thunderjar-postrun:${executionId}-1-1`);
   });
 
-  test("a postrun image that can't be removed from the runtime doesn't fail the run: it's recorded, pushed and measured", async () => {
+  test("a postrun image that can't be removed from the runtime doesn't fail the execution: it's recorded, pushed and measured", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     const data = dataDir();
     // The fake fails to remove any image named in `failing`; the postrun image's name isn't known until it runs.
@@ -382,7 +382,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(log).toContain("WARN: execution: couldn't remove the postrun image from the runtime");
   });
 
-  test("--timings prints how long each phase took, once the run and the runtime's afterRun are done", async () => {
+  test("--timings prints how long each phase took, once the execution and the runtime's afterExecution are done", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
 
     const { stdout, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--timings", "--data-dir", dataDir()], { env: docker.env });
@@ -607,8 +607,11 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(exitCode).not.toBe(0);
   });
 
-  /** A copy of 0211 with 2 iterations and concurrency 2, whose runtime's hooks run `beforeRun` and `afterRun` with `sh -c`, and where they write to. */
-  async function copyWithHooks(beforeRun: string, afterRun: string) {
+  /**
+   * A copy of 0211 with 2 iterations and concurrency 2, whose runtime's hooks run `before` and
+   * `after` with `sh -c`, given by their deprecated old names if `oldNames`, and where they write to.
+   */
+  async function copyWithHooks(before: string, after: string, oldNames = false) {
     const copy = await copyWith(2);
     const log = `${copy.dir}/hooks.log`;
     const config = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
@@ -617,7 +620,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
       config,
       (await Bun.file(config).text())
         .replace("iterations: 3", "iterations: 2")
-        .replace("concurrency: 2", `concurrency: 2, beforeRun: ${hook(beforeRun)}, afterRun: ${hook(afterRun)}`),
+        .replace("concurrency: 2", `concurrency: 2, ${oldNames ? "beforeRun" : "beforeExecution"}: ${hook(before)}, ${oldNames ? "afterRun" : "afterExecution"}: ${hook(after)}`),
     );
     const testCase = `${copy.dir}/.thunderjar/test-cases/example.ts`;
     await Bun.write(testCase, (await Bun.file(testCase).text()).replace("iterations: 3", "iterations: 2"));
@@ -626,7 +629,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 
   const LOGS = 'echo "$0 $THUNDERJAR_EXECUTION_ID $THUNDERJAR_CONCURRENCY $THUNDERJAR_CONTAINERS" >> $LOG';
 
-  test("interrupted, it removes its containers from the runtime, killing their agents, runs afterRun, and exits 143", async () => {
+  test("interrupted, it removes its containers from the runtime, killing their agents, runs afterExecution, and exits 143", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithHooks(`${LOGS.replace("$0", "before")}`, `${LOGS.replace("$0", "after")}`);
     // An agent that says it started, with its process ID, then would run for a minute.
@@ -664,7 +667,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect((await readStore(data)).execution.status).toBe("failed");
   }, 30_000);
 
-  test("beforeRun runs before anything runs on the runtime, and afterRun once it's done, each told about the run", async () => {
+  test("beforeExecution runs before anything runs on the runtime, and afterExecution once it's done, each told about the execution", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithHooks(`${LOGS.replace("$0", "before")}`, `${LOGS.replace("$0", "after")}`);
     const data = dataDir();
@@ -676,30 +679,47 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
     expect(await Bun.file(copy.log).text()).toBe(`before ${executionId} 2 2\nafter ${executionId} 2 2\n`);
     const lines = stdout.split("\n");
-    const before = lines.findIndex((line) => line.startsWith("Running the runtime's beforeRun, `sh -c "));
-    const after = lines.findIndex((line) => line.startsWith("Running the runtime's afterRun, `sh -c "));
+    const before = lines.findIndex((line) => line.startsWith("Running the runtime's beforeExecution, `sh -c "));
+    const after = lines.findIndex((line) => line.startsWith("Running the runtime's afterExecution, `sh -c "));
     expect(lines[before]).toEndWith("... done");
     expect(lines[after]).toEndWith("... done");
     expect(before).toBeLessThan(lines.findIndex((line) => line.includes("iteration 1/2")));
     expect(after).toBe(lines.findIndex((line) => line.startsWith("Recorded in ")) + 1);
   }, 30_000);
 
-  test("a beforeRun that fails is an error, and nothing else runs, afterRun included", async () => {
+  test("beforeRun and afterRun, the hooks' deprecated old names, still run, each with a warning naming its new name", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWithHooks(LOGS.replace("$0", "before"), LOGS.replace("$0", "after"), true);
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe(
+      "Warning: thunderjar.config.ts: runtime.beforeRun is deprecated, rename it beforeExecution. It runs once per execution, not once per run.\n" +
+        "Warning: thunderjar.config.ts: runtime.afterRun is deprecated, rename it afterExecution. It runs once per execution, not once per run.\n",
+    );
+    const { executionId } = (await readStore(data)).execution as ExecutionRecord;
+    expect(await Bun.file(copy.log).text()).toBe(`before ${executionId} 2 2\nafter ${executionId} 2 2\n`);
+    expect(stdout).toContain("Running the runtime's beforeExecution, `sh -c ");
+  }, 30_000);
+
+  test("a beforeExecution that fails is an error, and nothing else runs, afterExecution included", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithHooks("echo starting; echo no machine to start >&2; exit 3", LOGS.replace("$0", "after"));
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
 
-    expect(stdout).toMatch(/Running the runtime's beforeRun, `sh -c .*` \.\.\. failed\n$/);
-    expect(stderr).toBe("Error: The runtime's beforeRun failed: no machine to start\n");
+    expect(stdout).toMatch(/Running the runtime's beforeExecution, `sh -c .*` \.\.\. failed\n$/);
+    expect(stderr).toBe("Error: The runtime's beforeExecution failed: no machine to start\n");
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => / (build|push|pull|run) /.test(command))).toEqual([]);
     expect(await Bun.file(copy.log).exists()).toBe(false);
     expect(await Bun.file(data).exists()).toBe(false);
   });
 
-  test("afterRun runs after a run that failed, and an afterRun that fails is an error", async () => {
+  test("afterExecution runs after an execution that failed, and an afterExecution that fails is an error", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"], pullDenied: true });
     await using copy = await copyWithHooks(LOGS.replace("$0", "before"), `${LOGS.replace("$0", "after")}; exit 1`);
 
@@ -707,9 +727,9 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 
     expect(exitCode).toBe(1);
     expect(await Bun.file(copy.log).text()).toMatch(/^before .*\nafter .*\n$/);
-    expect(stdout).toMatch(/Running the runtime's afterRun, `sh -c .*` \.\.\. failed\n$/);
+    expect(stdout).toMatch(/Running the runtime's afterExecution, `sh -c .*` \.\.\. failed\n$/);
     expect(stderr).toStartWith("Error: The runtime couldn't pull ");
-    expect(stderr).toEndWith(`Error: The runtime's afterRun failed: \`sh -c ${LOGS.replace("$0", "after").replace("$LOG", "<PROJECT>/hooks.log")}; exit 1\` exited 1\n`);
+    expect(stderr).toEndWith(`Error: The runtime's afterExecution failed: \`sh -c ${LOGS.replace("$0", "after").replace("$LOG", "<PROJECT>/hooks.log")}; exit 1\` exited 1\n`);
   });
 
   test("--local runs neither hook", async () => {

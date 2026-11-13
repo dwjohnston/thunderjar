@@ -20,7 +20,7 @@ import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
 import { agentEnd, dollars, endedCleanly, failureHint, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
-import { print, printError as error, printJson } from "../../output.ts";
+import { print, printError as error, printJson, printWarning } from "../../output.ts";
 import { type LiveRow, liveRows } from "../../liveRows.ts";
 import { textOutput } from "../../textOutput.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
@@ -135,7 +135,7 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
   return [...varying.map((axis) => permutation[axis]), harness, permutation.initialPrompt].join(" | ");
 }
 
-/** How long an interrupted run waits for its execution to be recorded as failed, before it stops the runtime. */
+/** How long an interrupted `run` waits for its execution to be recorded as failed, before it runs afterExecution. */
 const INTERRUPT_SETTLE_MS = 15_000;
 
 /** A container run whose agent didn't end cleanly: its name, how it ended, and a hint of why. */
@@ -146,7 +146,7 @@ const NAMED_RUNS = 8;
 
 /**
  * What `run` says, once it's done, about the agents that didn't end cleanly, of `total`: how many,
- * then a line for each way they ended and why, most first, with how many and which. So a run with
+ * then a line for each way they ended and why, most first, with how many and which. So an execution with
  * many failures says at once whether they share a cause, e.g. a provider out of credits.
  */
 export function showUnclean(unclean: UncleanRun[], total: number, paint: Paint = plain): string[] {
@@ -196,7 +196,7 @@ export function showTimings({ wallMs, phases }: ExecutionTimings): string {
   ].join("\n");
 }
 
-/** What to say when the run data store can't be used, and what that meant for the run. */
+/** What to say when the run data store can't be used, and what that meant for the execution. */
 const storeFailure = (cwd: string, { path, message }: RunDataStoreError, consequence: string) =>
   `Can't use the run data store, ${displayPath(cwd, path)}, ${consequence}: ${message}\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead.`;
 
@@ -235,6 +235,7 @@ async function run(
 ): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const config = await loadProjectConfig(root);
+  for (const deprecation of config.deprecations) printWarning(deprecation);
   const { imageStore, build } = config;
   const runtime = local ? null : config.runtime;
   const concurrency = concurrencyOption ?? runtime?.concurrency ?? 1;
@@ -319,7 +320,7 @@ async function run(
     containers: plan.permutations.reduce((sum, permutation) => sum + permutation.iterations.length, 0),
   };
   /** Runs the runtime's `hook`, if it has one, on a line of its own. False, with the error written, if it fails. */
-  const runHook = async (hook: "beforeRun" | "afterRun"): Promise<boolean> => {
+  const runHook = async (hook: "beforeExecution" | "afterExecution"): Promise<boolean> => {
     const command = runtime?.[hook];
     if (command === undefined) return true;
     open(`Running the runtime's ${hook}, ${paint.cyan(`\`${command.join(" ")}\``)} ${ellipsis} `);
@@ -335,9 +336,9 @@ async function run(
       return false;
     }
   };
-  if (!(await runHook("beforeRun"))) return;
+  if (!(await runHook("beforeExecution"))) return;
   // Ctrl-C, or a cancelled CI job: without this, its containers would keep running, their agents
-  // still spending, and a runtime started by beforeRun would never be stopped by afterRun.
+  // still spending, and a runtime started by beforeExecution would never be released by afterExecution.
   let interrupted = false;
   let executing: Promise<ExecutionRecord> | undefined;
   const interrupt = (signal: "SIGINT" | "SIGTERM") => {
@@ -355,7 +356,7 @@ async function run(
       }
       // Its container runs fail, now their containers are gone: once they have, the execution is recorded as failed.
       await Promise.race([executing?.catch(() => {}), Bun.sleep(INTERRUPT_SETTLE_MS)]);
-      await runHook("afterRun");
+      await runHook("afterExecution");
       process.exit(signal === "SIGINT" ? 130 : 143);
     })();
   };
@@ -510,12 +511,12 @@ async function run(
     live?.stop();
     line?.stop();
     line = undefined;
-    // `interrupt` runs afterRun itself, and ends the process.
+    // `interrupt` runs afterExecution itself, and ends the process.
     if (interrupted) await new Promise<never>(() => {});
     process.off("SIGINT", onInt);
     process.off("SIGTERM", onTerm);
-    // So a runtime started for the run is stopped, however it ended.
-    await runHook("afterRun");
+    // So a runtime started for the execution is released, however it ended.
+    await runHook("afterExecution");
     if (showsTimings && timings !== undefined) print(showTimings(timings));
   }
 }

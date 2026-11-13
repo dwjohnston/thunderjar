@@ -12,13 +12,13 @@ export default declareConfig(
         imageStore: { repository: Bun.env.THUNDERJAR_IMAGE_REPOSITORY || "ghcr.io/dwjohnston/thunderjar-images" },
         // Supabase Postgres. Use its pooler URL: the direct one is IPv6 only, and GitHub's runners aren't.
         runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL" }),
-        // Containers run on a Docker daemon on a Fly machine. fly-runtime.sh sizes it for the run
+        // Containers run on a Docker daemon on a Fly machine. fly-runtime.sh sizes it for the execution
         // before, and stops it after. Both scripts need FLYIO_TOKEN.
         runtime: {
           command: ["./.thunderjar/fly-docker.sh"],
           concurrency: 16,
-          beforeRun: ["./.thunderjar/fly-runtime.sh", "up"],
-          afterRun: ["./.thunderjar/fly-runtime.sh", "down"],
+          beforeExecution: ["./.thunderjar/fly-runtime.sh", "up"],
+          afterExecution: ["./.thunderjar/fly-runtime.sh", "down"],
         },
         build: { concurrency: 3 },
       }

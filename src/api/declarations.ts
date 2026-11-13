@@ -664,21 +664,27 @@ export type RuntimeConfig = {
    */
   concurrency?: number;
   /**
-   * A command `run` runs once before anything runs on the runtime, e.g. to start it, or size it
-   * for the run. It's given `THUNDERJAR_CONCURRENCY` (how many containers will run at once),
-   * `THUNDERJAR_CONTAINERS` (how many iterations the run has) and `THUNDERJAR_EXECUTION_ID`.
-   * If it exits non-zero, nothing is run. `run --local` and `run --dry-run` don't run it.
+   * A command `run` runs once per execution, before anything runs on the runtime, e.g. to start
+   * it, or size it for the execution. It's given `THUNDERJAR_CONCURRENCY` (how many containers will
+   * run at once), `THUNDERJAR_CONTAINERS` (how many runs the execution has: every iteration of
+   * every permutation) and `THUNDERJAR_EXECUTION_ID`. If it exits non-zero, nothing is run.
+   * `run --local` and `run --dry-run` don't run it.
    */
-  beforeRun?: string[];
+  beforeExecution?: string[];
   /**
-   * A command `run` runs once the run ends, whether it succeeded or failed, e.g. to stop the
-   * runtime. It's given the same variables as `beforeRun`. Not run if `beforeRun` failed.
+   * A command `run` runs once the execution ends, whether it succeeded or failed, e.g. to stop
+   * the runtime. It's given the same variables as `beforeExecution`. Not run if
+   * `beforeExecution` failed.
    */
+  afterExecution?: string[];
+  /** @deprecated Renamed `beforeExecution`: it runs once per execution, not per run. */
+  beforeRun?: string[];
+  /** @deprecated Renamed `afterExecution`: it runs once per execution, not per run. */
   afterRun?: string[];
   /**
    * Whether each postrun image stays on the runtime once it's pushed to the image store and
    * measured. `false` by default: it's removed, so the runtime's disk doesn't fill up, one image
-   * per container run. The image store still has it. Prerun images always stay, for the next run.
+   * per container run. The image store still has it. Prerun images always stay, for the next execution.
    */
   keepPostrunImages?: boolean;
 };

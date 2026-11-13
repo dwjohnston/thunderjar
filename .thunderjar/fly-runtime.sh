@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sizes and stops the Fly machine in app $FLY_APP (default thunderjar-runtime-dwj), for the runtime's
-# beforeRun and afterRun in thunderjar.config.ts.
+# beforeExecution and afterExecution in thunderjar.config.ts.
 #
 #   fly-runtime.sh up     size it for the run, from THUNDERJAR_CONCURRENCY and
 #                         THUNDERJAR_CONTAINERS, and start it

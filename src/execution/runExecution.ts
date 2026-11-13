@@ -94,7 +94,7 @@ export const runsConcurrently = (concurrency = 1, build: BuildOptions = {}): boo
 
 /**
  * Removes every container of execution `executionId`, where they run: `runtime`, or the local
- * Docker daemon for `null`. For a run that's interrupted, so its agents stop, and none is left on
+ * Docker daemon for `null`. For an execution that's interrupted, so its agents stop, and none is left on
  * a runtime that's about to be stopped. Returns their names. Throws a DockerContainerError.
  */
 export async function removeExecutionContainers(executionId: string, imagePrefix: string | undefined, runtime: RuntimeConfig | null): Promise<string[]> {
