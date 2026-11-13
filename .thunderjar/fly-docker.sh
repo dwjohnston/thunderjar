@@ -54,8 +54,8 @@ EOF
   chmod +x "$DIR/bin/ssh"
 }
 
-# Its input is closed: otherwise it reads what's waiting on this script's own, meant for the docker
-# command, e.g. what `docker exec --interactive` is sent.
+# Its input is closed, so it can never read this script's own, which is for the docker command,
+# e.g. what `docker exec --interactive` is sent.
 connected() { "$REAL_SSH" -F "$CONFIG" -O check "$HOST" </dev/null >/dev/null 2>&1; }
 
 # Opens the shared connection in the background, detached from this script's
