@@ -112,7 +112,6 @@ const PHASE_LABELS: Record<string, string> = {
   commit: "committing postrun images",
   pushPostrun: "pushing postrun images",
   measure: "measuring",
-  cleanup: "removing images from the runtime",
 };
 
 /**

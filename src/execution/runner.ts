@@ -90,7 +90,7 @@ export async function runSubmission(
         imagePrefix: submission.imagePrefix,
         imageStore,
         // The runtime's own Docker daemon, on its socket: what a host reaches with the runtime's command.
-        runtime: { command: localRuntime().command, keepPostrunImages: submission.keepPostrunImages },
+        runtime: { command: localRuntime().command },
         concurrency: submission.concurrency,
         prerunFromStore: true,
       },

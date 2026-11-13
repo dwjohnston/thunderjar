@@ -17,4 +17,5 @@ Run a whole execution on the runtime machine, not command by command from the ho
 - The runner runs each container, collects and measures it, pushes its postrun image and writes every record to the run data store. The host only follows its progress, with the same output and `--json` as before.
 - The variables the execution needs, e.g. model API keys and the run data store's URL, are sent to the runner as it starts, and kept in memory only. So is `THUNDERJAR_START_TIMEOUT_SECONDS`, if it's set.
 - Ctrl-C detaches from the execution instead of stopping it. `thunderjar attach <execution ID>` follows it again, and `attach --stop` stops it.
+- The runtime must already be running: `beforeExecution` and `afterExecution` can't be given with a runner.
 - Without `runtime.runner`, and with `run --local`, nothing changes.

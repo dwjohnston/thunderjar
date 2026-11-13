@@ -111,7 +111,7 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(runner.some((command) => command.startsWith("docker commit "))).toBe(true);
     expect(runner).toContain(`docker push --quiet ${postrun}`);
     expect(runner.some((command) => command.startsWith("docker run --rm --interactive"))).toBe(true);
-    expect(runner).toContain(`docker image rm thunderjar-postrun:${executionId}-1-1 ${postrun}`);
+    expect(runner.some((command) => command.includes(" image rm "))).toBe(false);
     expect(runner.some((command) => command.startsWith("docker build"))).toBe(false);
     // Recorded by the runner, and kept in the project's own file.
     expect(execution.status).toBe("complete");
@@ -151,7 +151,6 @@ Recorded in .thunderjar/.data/runs.sqlite
       "committing postrun images",
       "pushing postrun images",
       "measuring",
-      "removing images from the runtime",
       "",
     ]);
   });
@@ -271,19 +270,16 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(stdout).toContain(MEASURES);
   }, 30_000);
 
-  test("an error the runner stops on is reported as run would report its own, and afterExecution still runs", async () => {
+  test("an error the runner stops on is reported as run would report its own", async () => {
     // In the image store already, so the runner must pull it, and can't.
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], pullDenied: true, stored: [PRERUN] });
-    const hooks = `${TMP_DIR}/hooks-${crypto.randomUUID()}.log`;
-    await using _hooks = { [Symbol.asyncDispose]: async () => void (await $`rm -f ${hooks}`.quiet()) };
-    await using copy = await copyWithRunner({ more: `, afterExecution: ["sh", "-c", "echo after >> ${hooks}"]` });
+    await using copy = await copyWithRunner();
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: docker.env });
 
     expect(exitCode).toBe(1);
     expect(stdout).toContain(`Pulling ${PRERUN} into the runtime ... failed`);
     expect(stderr).toStartWith(`Error: The runtime couldn't pull ${PRERUN}: Error response from daemon: pull access denied`);
-    expect(await Bun.file(hooks).text()).toBe("after\n");
     expect(await docker.containers()).toEqual([]);
   });
 });
@@ -293,11 +289,7 @@ describe("0211 remote runtime, with a runner: detaching and attaching", () => {
   async function startSlowRun(docker: FakeDocker) {
     const marks = `/tmp/tj-attach-${crypto.randomUUID()}`;
     await $`mkdir -p ${marks}`.quiet();
-    const hooks = `${marks}/hooks.log`;
-    const copy = await copyWithRunner({
-      agent: `touch ${marks}/started && while [ ! -f ${marks}/release ]; do sleep 0.1; done`,
-      more: `, beforeExecution: ["sh", "-c", "echo before $THUNDERJAR_EXECUTION_ID >> ${hooks}"], afterExecution: ["sh", "-c", "echo after $THUNDERJAR_EXECUTION_ID $THUNDERJAR_CONTAINERS >> ${hooks}"]`,
-    });
+    const copy = await copyWithRunner({ agent: `touch ${marks}/started && while [ ! -f ${marks}/release ]; do sleep 0.1; done` });
     const env = { ...Bun.env, TMPDIR: TMP_DIR, ...docker.env };
     const cli = Bun.spawn(["bun", `${REPO_ROOT}/src/cli/index.ts`, "--log-level", "silent", "run", "example"], { cwd: copy.dir, env, stdout: "pipe", stderr: "pipe" });
     while (!(await Bun.file(`${marks}/started`).exists())) await Bun.sleep(50);
@@ -306,7 +298,6 @@ describe("0211 remote runtime, with a runner: detaching and attaching", () => {
     return {
       copy,
       cli,
-      hooks,
       release: () => Bun.write(`${marks}/release`, ""),
       async [Symbol.asyncDispose]() {
         cli.kill("SIGKILL");
@@ -329,9 +320,8 @@ describe("0211 remote runtime, with a runner: detaching and attaching", () => {
     expect(stderr).toBe(
       `Error: Detached (SIGINT): execution ${executionId} carries on, on the runtime.\nFollow it again with \`thunderjar attach ${executionId}\`, or stop it with \`thunderjar attach ${executionId} --stop\`.\n`,
     );
-    // Still running, and not released.
+    // Still running.
     expect(await docker.containers()).toEqual([`thunderjar-run-${executionId}-1-1`, `thunderjar-runner-${executionId}`]);
-    expect(await Bun.file(slow.hooks).text()).toBe(`before ${executionId}\n`);
 
     await slow.release();
     const attached = await thunderjar(slow.copy.dir, ["attach", executionId], { env: docker.env });
@@ -348,8 +338,6 @@ Recorded in .thunderjar/.data/runs.sqlite
 `);
     expect((await readProjectStore(slow.copy.dir)).execution).toMatchObject({ executionId, status: "complete" });
     expect(await docker.containers()).toEqual([]);
-    // Released once the execution was seen to end, told how many runs it had.
-    expect(await Bun.file(slow.hooks).text()).toBe(`before ${executionId}\nafter ${executionId} 1\n`);
   }, 30_000);
 
   test("attach --stop stops the runner, which removes its containers and records the execution as failed", async () => {
@@ -374,10 +362,9 @@ Recorded in .thunderjar/.data/runs.sqlite
     // In the runner's own store: it was never followed to its end, so nothing was copied here.
     const runnerStore = sqliteStore(`${docker.contextOf(runnerImage as string)}/project/.thunderjar/.data/runs.sqlite`);
     expect(await runnerStore.listExecutions()).toMatchObject([{ executionId, status: "failed" }]);
-    expect(await Bun.file(slow.hooks).text()).toBe(`before ${executionId}\nafter ${executionId} 0\n`);
   }, 30_000);
 
-  test("if the runner dies without saying how the execution ended, run says so, removes its container, and runs afterExecution", async () => {
+  test("if the runner dies without saying how the execution ended, run says so, and removes its container", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using slow = await startSlowRun(docker);
     const [runner] = (await docker.containers()).filter((name) => name.startsWith("thunderjar-runner-"));
@@ -389,7 +376,6 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(exitCode).toBe(1);
     expect(stderr).toBe(`Error: The runner of execution ${executionId} stopped (exit code 137) without saying how the execution ended.\n`);
     expect((await docker.containers()).filter((name) => name.startsWith("thunderjar-runner-"))).toEqual([]);
-    expect(await Bun.file(slow.hooks).text()).toBe(`before ${executionId}\nafter ${executionId} 1\n`);
   }, 30_000);
 
   test("attach to an execution with no runner says so", async () => {

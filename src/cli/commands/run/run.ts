@@ -8,7 +8,7 @@ import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerUnavailableError } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
-import { RunnerUnreachableError, storePrerunImages, submissionEnv, submitExecution } from "../../../execution/onRuntime.ts";
+import { storePrerunImages, submissionEnv, submitExecution } from "../../../execution/onRuntime.ts";
 import { type PlannedExecution, planExecution } from "../../../execution/planExecution.ts";
 import { removeExecutionContainers, runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
 import { storeRunnerImage } from "../../../execution/runnerImage.ts";
@@ -212,8 +212,6 @@ async function run(
   let executing: Promise<Executed> | undefined;
   // Once the execution is a runner's, on the runtime: it's left to carry on, and only followed.
   let submitted = false;
-  // Whether the execution may still be running on the runtime once this ends, so afterExecution mustn't release it.
-  let left = false;
   const following = new AbortController();
   const interrupt = (signal: "SIGINT" | "SIGTERM") => {
     if (interrupted) return;
@@ -265,7 +263,6 @@ async function run(
       concurrency,
       imagePrefix,
       imageStore: store,
-      keepPostrunImages: runtime?.keepPostrunImages ?? false,
       runDataStore: config.runDataStore,
       ...(options.registryLogin !== undefined && { registryLogin: options.registryLogin }),
       env,
@@ -285,7 +282,6 @@ async function run(
   } catch (caught) {
     // Its containers were removed under it, or it was left to its runner: `interrupt` says so, and ends the process.
     if (interrupted) return await new Promise<never>(() => {});
-    if (caught instanceof RunnerUnreachableError) left = true;
     if (!display.reportFailure(caught, cwd) && !reportRunnerFailure(caught, plan.executionId)) throw caught;
     process.exitCode = 1;
   } finally {
@@ -294,8 +290,8 @@ async function run(
     if (interrupted) await new Promise<never>(() => {});
     process.off("SIGINT", onInt);
     process.off("SIGTERM", onTerm);
-    // So a runtime started for the execution is released, however it ended: unless it's still running there.
-    if (!left) await runHook("afterExecution");
+    // So a runtime started for the execution is released, however it ended. None with a runner.
+    await runHook("afterExecution");
     const spent = mergeTimings(hostTimer.summary(), display.timings(), runner !== undefined);
     if (showsTimings && spent !== undefined) print(showTimings(spent));
   }

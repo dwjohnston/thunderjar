@@ -14,7 +14,6 @@ Supervising engineer: David Johnston
 Make executions on a remote runtime more reliable, faster, and easier to debug.
 
 - `run` checks the run data store before it builds or starts anything, reports a store failure as an error rather than a stack trace, and retries a failed Postgres query twice.
-- Set `runtime.keepPostrunImages: true` to keep each postrun image on the runtime once it's pushed and measured, rather than remove it.
 - `run` interrupted with Ctrl-C or SIGTERM removes its execution's containers and runs the runtime's `afterExecution`, instead of leaving agents and the runtime running.
 - `run` ends with the agents that didn't end cleanly, grouped by how and why. The hint of why, in `run` and `show`, is the error the harness reported in its result file, e.g. `402: This request would exceed your available credits`, ahead of the last line of its stderr.
 - `run --timings` prints how long each phase took, summed over the execution. The log has the same, the runtime's disk usage before and after, and why token costs were unparseable.

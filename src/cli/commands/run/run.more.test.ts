@@ -415,42 +415,11 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(commands.find((command) => command.startsWith(`${REMOTE} run --name`))).toContain(` ${PRERUN} -c `);
     expect(commands).toContain(`${REMOTE} push --quiet ${postrun}`);
     expect(commands.some((command) => command.startsWith(`${REMOTE} run --rm --interactive`))).toBe(true);
-    // Pushed and measured, the postrun image is removed from the runtime, by both its tags. The prerun image stays.
-    expect(commands.filter((command) => command.includes(" image rm "))).toEqual([`${REMOTE} image rm thunderjar-postrun:${executionId}-1-1 ${postrun}`]);
+    // Nothing is removed from the runtime: clearing it down is left to whoever runs it.
+    expect(commands.some((command) => command.includes(" image rm "))).toBe(false);
     // Its disk usage is logged before and after.
     expect(commands.filter((command) => command.startsWith(`${REMOTE} system df`))).toHaveLength(2);
-    expect(await docker.images()).toEqual(["thunderjar-prerun:77e9dd16", PRERUN]);
-  });
-
-  test("with keepPostrunImages, each postrun image stays on the runtime", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
-    await using copy = await copyScenarioProject("0211");
-    const config = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
-    await Bun.write(config, (await Bun.file(config).text()).replace('"--context", "cloud"]', '"--context", "cloud"], keepPostrunImages: true'));
-    const data = dataDir();
-
-    const { exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
-
-    expect(exitCode).toBe(0);
-    const { executionId } = (await readStore(data)).execution as ExecutionRecord;
-    expect((await docker.commands()).some((command) => command.includes(" image rm "))).toBe(false);
-    expect(await docker.images()).toContain(`thunderjar-postrun:${executionId}-1-1`);
-  });
-
-  test("a postrun image that can't be removed from the runtime doesn't fail the execution: it's recorded, pushed and measured", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
-    const data = dataDir();
-    // The fake fails to remove any image named in `failing`; the postrun image's name isn't known until it runs.
-    const { stdout, stderr, exitCode, log } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", data], {
-      env: { ...docker.env, FAKE_DOCKER_FAIL_IMAGE_RM: "1" },
-      log: true,
-    });
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("isPrimeTests: {passed: 3, total: 5}");
-    expect((await readStore(data)).execution.status).toBe("complete");
-    expect(log).toContain("WARN: execution: couldn't remove the postrun image from the runtime");
+    expect(await docker.images()).toEqual(["thunderjar-prerun:77e9dd16", PRERUN, `thunderjar-postrun:${executionId}-1-1`, postrun]);
   });
 
   test("--timings prints how long each phase took, once the execution and the runtime's afterExecution are done", async () => {
@@ -471,7 +440,6 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
       "committing postrun images  1×  total <duration>  longest <duration>",
       "pushing postrun images  1×  total <duration>  longest <duration>",
       "measuring  1×  total <duration>  longest <duration>",
-      "removing images from the runtime  1×  total <duration>  longest <duration>",
     ]);
   });
 

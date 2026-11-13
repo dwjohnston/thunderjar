@@ -185,6 +185,10 @@ runtime: {
 
 ✅ **Do** use it when the runtime is far away, or `run` should survive this machine disconnecting.
 
+❌ **Don't** give `beforeExecution` or `afterExecution` with it. Start the runtime before `run`, and stop it yourself when done.
+
+**Why:** the execution carries on after `run` is interrupted, so `run` can't tell when the runtime is free to stop.
+
 ✅ **Do** use a `postgresStore` with it. With a `sqliteStore`, the runner's records are copied to the local file only once `run` or `attach` has followed the execution to its end.
 
 **Why:** Each Docker command sent to a distant runtime is a round trip. On the runtime, they're local. The variables' values are sent as the runner starts, and kept in its memory only.

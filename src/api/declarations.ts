@@ -668,13 +668,13 @@ export type RuntimeConfig = {
    * it, or size it for the execution. It's given `THUNDERJAR_CONCURRENCY` (how many containers will
    * run at once), `THUNDERJAR_CONTAINERS` (how many runs the execution has: every iteration of
    * every permutation) and `THUNDERJAR_EXECUTION_ID`. If it exits non-zero, nothing is run.
-   * `run --local` and `run --dry-run` don't run it.
+   * `run --local` and `run --dry-run` don't run it. Not with a `runner`.
    */
   beforeExecution?: string[];
   /**
    * A command `run` runs once the execution ends, whether it succeeded or failed, e.g. to stop
    * the runtime. It's given the same variables as `beforeExecution`. Not run if
-   * `beforeExecution` failed.
+   * `beforeExecution` failed. Not with a `runner`.
    */
   afterExecution?: string[];
   /** @deprecated Renamed `beforeExecution`: it runs once per execution, not per run. */
@@ -682,18 +682,13 @@ export type RuntimeConfig = {
   /** @deprecated Renamed `afterExecution`: it runs once per execution, not per run. */
   afterRun?: string[];
   /**
-   * Whether each postrun image stays on the runtime once it's pushed to the image store and
-   * measured. `false` by default: it's removed, so the runtime's disk doesn't fill up, one image
-   * per container run. The image store still has it. Prerun images always stay, for the next execution.
-   */
-  keepPostrunImages?: boolean;
-  /**
    * Runs each whole execution on the runtime, in a runner: a container there, from an image
    * holding Thunderjar and this project's `.thunderjar/` folder, with the runtime's Docker socket.
    * The runner runs the containers, measures them, pushes their postrun images and writes the run
    * data store. `run` only builds and pushes the images, starts the runner, and follows it; it can
    * be interrupted without stopping the execution, and `thunderjar attach` follows it again.
    * `{}` is enough to turn it on. Without it, `run` runs each Docker command on the runtime itself.
+   * The runtime must already be running: `beforeExecution` and `afterExecution` can't be given with it.
    */
   runner?: RunnerConfig;
 };
