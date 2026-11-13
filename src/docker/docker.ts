@@ -388,40 +388,5 @@ export async function diskUsage(runtime: DockerRuntime = localRuntime()): Promis
   return out.split("\n").filter(Boolean);
 }
 
-/**
- * Starts a new container `name` from the local image `image`, in place of its entrypoint, that
- * keeps running, doing nothing, until it's removed: for `execInContainer`. Throws a
- * DockerContainerError.
- */
-export async function startContainer(image: string, name: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
-  await mustRun(["run", "--detach", "--name", name, "--pull", runtime.pull, "--entrypoint", "sh", image, "-c", "exec sleep 2147483647"], runtime);
-}
-
 export type ExecResult = { stdout: string; stderr: string; exitCode: number };
 
-/**
- * Runs `command` (a program and its arguments) in the running container `name`, in `workdir`, or
- * its image's working directory if undefined,
- * with `stdin` as its input if given, and returns how it went, however it exited. Throws a
- * DockerContainerError if Docker itself fails, e.g. there's no such container.
- */
-export async function execInContainer(
-  name: string,
-  workdir: string | undefined,
-  command: string[],
-  stdin?: string,
-  runtime: DockerRuntime = localRuntime(),
-): Promise<ExecResult> {
-  const binary = runtime.command;
-  const args = ["exec", ...(stdin === undefined ? [] : ["--interactive"]), ...(workdir === undefined ? [] : ["--workdir", workdir]), name, ...command];
-  const result =
-    stdin === undefined
-      ? await $`${binary} ${args}`.quiet().nothrow()
-      : await $`${binary} ${args} < ${new Response(stdin)}`.quiet().nothrow();
-  log.debug({ container: name, workdir, command, exitCode: result.exitCode, stderr: result.stderr.toString() }, "ran command in container");
-  // `docker exec` exits as the command did, or 1 or 127 when Docker fails, saying why.
-  if (result.exitCode !== 0 && /^(Error response from daemon|OCI runtime exec failed|Cannot connect to the Docker daemon)/.test(result.stderr.toString())) {
-    throw new DockerContainerError(reasonOf(result.stderr) || `${named(runtime, "exec")} exited ${result.exitCode}`);
-  }
-  return { stdout: result.stdout.toString(), stderr: result.stderr.toString(), exitCode: result.exitCode };
-}

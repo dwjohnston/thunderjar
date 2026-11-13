@@ -237,20 +237,12 @@ Recorded in <DATA>/runs.sqlite
         `docker rm --force ${container(n)}`,
       ]),
     );
-    // Then each measure was taken in a container of its own, from the postrun image, then removed:
-    // four of them. saysArr, of the reply, needs no container.
+    // Then its measures were taken in one container, from the postrun image, running a shell session
+    // that's sent each measure's commands, and is removed when it ends. saysArr, of the reply, needs no container.
     for (const n of [1, 2]) {
-      expect(commands.filter((command) => command.includes(` ${container(n)}-measure-5`))).toEqual([]);
-      for (const k of [1, 2, 3, 4]) {
-        const measuring = commands.filter((command) => command.includes(` ${container(n)}-measure-${k}`));
-        expect(measuring[0]).toBe(
-          `docker run --detach --name ${container(n)}-measure-${k} --pull never --entrypoint sh thunderjar-postrun:${id}-${n}-1 -c <script>`,
-        );
-        expect(measuring.slice(1, -1)).not.toBeEmpty();
-        expect(measuring.slice(1, -1).every((command) => command.startsWith(`docker exec `))).toBe(true);
-        expect(measuring.at(-1)).toBe(`docker rm --force ${container(n)}-measure-${k}`);
-        expect(commands.indexOf(measuring[0] as string)).toBeGreaterThan(commands.indexOf(`docker rm --force ${container(n)}`));
-      }
+      const measuring = commands.filter((command) => command.includes(` ${container(n)}-measure-`));
+      expect(measuring).toEqual([`docker run --rm --interactive --name ${container(n)}-measure-1 --pull never --entrypoint sh thunderjar-postrun:${id}-${n}-1 -c <script>`]);
+      expect(commands.indexOf(measuring[0] as string)).toBeGreaterThan(commands.indexOf(`docker rm --force ${container(n)}`));
     }
     expect(await docker.images()).toEqual([
       "thunderjar-prerun:32a1d048",

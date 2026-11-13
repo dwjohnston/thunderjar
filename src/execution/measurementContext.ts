@@ -1,8 +1,9 @@
 // The measurement context over a measurement container: one started from a postrun image, for
-// one measurement, and removed once it's taken. The instrument's logic runs on the host; what it
+// a container run's measurements, and removed once they're taken. The instrument's logic runs on the host; what it
 // asks of the context runs in the container, so nothing it writes reaches the postrun image.
 import type { MeasurementContext } from "../api/declarations.ts";
-import { type DockerRuntime, execInContainer, localRuntime, removeContainer, startContainer } from "../docker/docker.ts";
+import { type DockerRuntime, localRuntime } from "../docker/docker.ts";
+import { openShellSession } from "../docker/shellSession.ts";
 
 /**
  * Where paths, globs and commands resolve for an instrument that has no container: the default
@@ -39,11 +40,15 @@ export function recordedContext({ harnessResult, reply, replies }: Recorded): Op
   };
 }
 
+/** `text` as one word of a shell command. */
+const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
+
 /**
  * Starts the measurement container `container` from `postrunImage`, and returns a context over it.
- * `recorded` is what was recorded of the container run: what the harness's `cli` left, or "" if
- * nothing, and the agent's replies, or why there are none. Throws a DockerContainerError
- * if the container can't be started.
+ * Each thing asked of it is one command in a shell session in the container: on a remote runtime,
+ * one round trip, not a `docker exec` of several. `recorded` is what was recorded of the container
+ * run: what the harness's `cli` left, or "" if nothing, and the agent's replies, or why there are
+ * none. Throws a DockerContainerError if the container can't be started.
  */
 export async function openMeasurementContext(
   postrunImage: string,
@@ -51,24 +56,11 @@ export async function openMeasurementContext(
   { harnessResult, reply, replies }: Recorded,
   runtime: DockerRuntime = localRuntime(),
 ): Promise<OpenedMeasurementContext> {
-  try {
-    await startContainer(postrunImage, container, runtime);
-  } catch (error) {
-    await removeContainer(container, runtime).catch(() => {});
-    throw error;
-  }
+  const session = await openShellSession(postrunImage, container, runtime);
   // Where the agent worked: the postrun image's working directory, as its prerun image's last WORKDIR set it.
-  let workdir: string;
-  try {
-    const pwd = await execInContainer(container, undefined, ["sh", "-c", "pwd"], undefined, runtime);
-    workdir = pwd.exitCode === 0 && pwd.stdout.trim().startsWith("/") ? pwd.stdout.trim() : WORKDIR;
-  } catch (error) {
-    await removeContainer(container, runtime).catch(() => {});
-    throw error;
-  }
-  const run = (command: string[], stdin?: string) => execInContainer(container, workdir, command, stdin, runtime);
-  const mustRun = async (what: string, command: string[], stdin?: string) => {
-    const result = await run(command, stdin);
+  const workdir = session.workdir.startsWith("/") ? session.workdir : WORKDIR;
+  const mustRun = async (what: string, command: string, stdin?: string) => {
+    const result = await session.run(command, stdin);
     if (result.exitCode !== 0) throw new Error(`${what}: ${result.stderr.trim() || `exited ${result.exitCode}`}`);
     return result.stdout;
   };
@@ -77,13 +69,13 @@ export async function openMeasurementContext(
     harnessResult,
     reply,
     replies,
-    exec: (command) => run(["sh", "-c", command]),
-    readFile: (path) => mustRun(`can't read ${path}`, ["cat", "--", path]),
+    exec: (command) => session.run(command),
+    readFile: (path) => mustRun(`can't read ${path}`, `cat -- ${word(path)}`),
     async writeFile(path, contents) {
-      await mustRun(`can't write ${path}`, ["sh", "-c", 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1"', "sh", path], contents);
+      await mustRun(`can't write ${path}`, `mkdir -p -- "$(dirname -- ${word(path)})" && cat > ${word(path)}`, contents);
     },
     async glob(pattern) {
-      const found = await mustRun(`can't list the files in ${workdir}`, ["find", ".", "(", "-type", "f", "-o", "-type", "l", ")"]);
+      const found = await mustRun(`can't list the files in ${workdir}`, "find . \\( -type f -o -type l \\)");
       const glob = new Bun.Glob(pattern);
       return found
         .split("\n")
@@ -92,6 +84,6 @@ export async function openMeasurementContext(
         .filter((path) => glob.match(path))
         .toSorted();
     },
-    close: () => removeContainer(container, runtime),
+    close: () => session.close(),
   };
 }

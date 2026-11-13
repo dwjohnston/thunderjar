@@ -4,7 +4,6 @@ import type { MeasurementResult } from "../api/declarations.ts";
 import type { Measurement } from "../config/measurements.ts";
 import { type Instrument, instruments } from "../instruments/instruments.ts";
 import type { RecordedMeasure, RecordedOutcome } from "../store/runDataStore.ts";
-import { inParallel } from "./inParallel.ts";
 import type { OpenedMeasurementContext } from "./measurementContext.ts";
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -14,38 +13,56 @@ const recordable = (result: MeasurementResult<unknown>): RecordedOutcome =>
   result.outcome === "erroredWhileMeasuring" ? { outcome: "erroredWhileMeasuring", error: { message: message(result.error) } } : result;
 
 /**
- * Takes each measurement, up to `concurrency` at once (one at a time by default), each against a
- * context of its own from `open`, closed once it's taken, so nothing one measurement writes is seen
- * by another. `open` is told whether the instrument needs a measurement container, or only what
- * was recorded of the run. An instrument that throws gives its measure `erroredWhileMeasuring`,
- * and the rest are still taken. Each measure is dated when it's taken, and the result lists them
- * in the order of `measurements`. Throws if a context can't be opened or closed, once those
- * already being taken are.
+ * Takes each measurement, and returns each measure, dated when it's taken, in the order of
+ * `measurements`. Those whose instrument needs a measurement container share one, from
+ * `open(true)`, opened for the first and closed after the last, and are taken one after another,
+ * in that order: on a remote runtime, starting a container costs far more than the commands
+ * measuring runs in it. So what one writes, the next sees. Those that read only what was recorded
+ * of the run each get a context from `open(false)`, taken while the others are. An instrument that
+ * throws gives its measure `erroredWhileMeasuring`, and the rest are still taken. Throws if a
+ * context can't be opened or closed, once those already being taken are.
  */
 export async function measureContainerRun(
   measurements: Measurement[],
   open: (usesContainer: boolean) => Promise<OpenedMeasurementContext>,
   now: () => Date = () => new Date(),
-  concurrency = 1,
 ): Promise<Record<string, RecordedMeasure>> {
   const taken = new Map<string, RecordedMeasure>();
-  const take = async ({ name, declaration, config, contentHash }: Measurement) => {
-    const instrument = instruments[declaration.instrument] as Instrument<Record<string, string>, unknown>;
-    const ctx = await open(instrument.usesContainer !== false);
+  const instrumentOf = ({ declaration }: Measurement) => instruments[declaration.instrument] as Instrument<Record<string, string>, unknown>;
+  const take = async (measurement: Measurement, ctx: OpenedMeasurementContext) => {
+    const { name, declaration, config, contentHash } = measurement;
     let outcome: RecordedOutcome;
     try {
-      outcome = recordable(await instrument.evaluate(config, ctx));
+      outcome = recordable(await instrumentOf(measurement).evaluate(config, ctx));
     } catch (error) {
       outcome = { outcome: "erroredWhileMeasuring", error: { message: message(error) } };
-    } finally {
-      await ctx.close();
     }
     taken.set(name, { instrument: declaration.instrument, contentHash, measuredAt: now().toISOString(), outcome });
   };
-  await inParallel(
-    measurements.map((measurement) => () => take(measurement)),
-    concurrency,
-  );
+  const inContainer = measurements.filter((measurement) => instrumentOf(measurement).usesContainer !== false);
+  const fromRecord = measurements.filter((measurement) => instrumentOf(measurement).usesContainer === false);
+
+  const containerMeasurements = async () => {
+    if (inContainer.length === 0) return;
+    const ctx = await open(true);
+    try {
+      for (const measurement of inContainer) await take(measurement, ctx);
+    } finally {
+      await ctx.close();
+    }
+  };
+  const recordMeasurements = fromRecord.map(async (measurement) => {
+    const ctx = await open(false);
+    try {
+      await take(measurement, ctx);
+    } finally {
+      await ctx.close();
+    }
+  });
+  const settled = await Promise.allSettled([containerMeasurements(), ...recordMeasurements]);
+  const failed = settled.find((outcome) => outcome.status === "rejected");
+  if (failed) throw failed.reason;
+
   const result: Record<string, RecordedMeasure> = {};
   for (const { name } of measurements) {
     const measure = taken.get(name);

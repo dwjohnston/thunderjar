@@ -345,7 +345,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(commands.find((command) => command.startsWith(`${REMOTE} run --name`))).toContain(`--pull missing`);
     expect(commands.find((command) => command.startsWith(`${REMOTE} run --name`))).toContain(` ${PRERUN} -c `);
     expect(commands).toContain(`${REMOTE} push --quiet ${postrun}`);
-    expect(commands.some((command) => command.startsWith(`${REMOTE} run --detach`))).toBe(true);
+    expect(commands.some((command) => command.startsWith(`${REMOTE} run --rm --interactive`))).toBe(true);
     // Pushed and measured, the postrun image is removed from the runtime, by both its tags. The prerun image stays.
     expect(commands.filter((command) => command.includes(" image rm "))).toEqual([`${REMOTE} image rm thunderjar-postrun:${executionId}-1-1 ${postrun}`]);
     // Its disk usage is logged before and after.

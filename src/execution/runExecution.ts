@@ -36,8 +36,6 @@ import { buildPrerunImage, type PrerunBuildHooks, type PrerunImage, prerunImages
 
 const log = moduleLogger("execution");
 
-/** How many of a container run's measurements are taken at once. */
-export const MEASUREMENT_CONCURRENCY = 4;
 
 export type RunHooks = PrerunBuildHooks &
   PushHooks &
@@ -308,8 +306,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
         usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime) : recordedContext(recorded);
       log.debug({ ...at, measurements: measurements.length }, "measuring");
       const measuringAt = Date.now();
-      // A few at once: each measurement container takes seconds to start and remove, on a remote runtime most of all.
-      const result = await timer.time("measure", () => measureContainerRun(measurements, open, undefined, MEASUREMENT_CONCURRENCY));
+      // One measurement container for all of them: on a remote runtime, each takes seconds to start.
+      const result = await timer.time("measure", () => measureContainerRun(measurements, open));
       log.info({ ...at, ms: Date.now() - measuringAt, containers: opened, result }, "measured");
       await store.recordContainerRun({ ...record, result });
       hooks.onMeasured?.(permutation, iteration, result);

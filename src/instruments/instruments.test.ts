@@ -281,11 +281,13 @@ ${CASES}`);
     });
   }, 20_000);
 
-  test("writes the test into a folder of its own in the workdir, and nothing beside the subject", async () => {
+  test("writes the test into a folder of its own in the workdir, nothing beside the subject, and removes the folder once it has run", async () => {
     const ctx = await contextWith({ "src/isPrime.ts": CORRECT });
-    await bunTestFile.evaluate({ subject: "**/isPrime.ts", test: await testFile() }, ctx);
-    expect(await ctx.glob("src/**")).toEqual(["src/isPrime.ts"]);
-    expect(await Bun.file(`${ctx.workdir}/.thunderjar-measure/isPrime.test.ts`).text()).toBe(TEST);
+    const written: Record<string, string> = {};
+    const writing = { ...ctx, writeFile: async (path: string, contents: string) => ((written[path] = contents), ctx.writeFile(path, contents)) };
+    await bunTestFile.evaluate({ subject: "**/isPrime.ts", test: await testFile() }, writing);
+    expect(written).toEqual({ ".thunderjar-measure/isPrime.test.ts": TEST });
+    expect(await ctx.glob("**")).toEqual(["src/isPrime.ts"]);
   }, 20_000);
 
   test("is erroredWhileMeasuring, saying why, when the subject doesn't load", async () => {

@@ -44,7 +44,8 @@
 // `pull --quiet <reference>` and `manifest inspect <reference>` succeed only for a reference that was pushed. `image rm <image>…`
 // removes tags from images, failing for one that doesn't exist or is in failing, or for any if
 // FAKE_DOCKER_FAIL_IMAGE_RM is set. `system df`
-// reports made-up sizes: 100MB an image.
+// reports made-up sizes: 100MB an image. `run --rm --interactive` runs a shell session, as
+// src/docker/shellSession.ts speaks to one; it fails to start for a container named in failing.
 //
 // Without FAKE_DOCKER_DIR the daemon is reachable, no image exists, nothing is recorded, and no
 // container can run. Tests make its state with `fakeDocker()`.
@@ -235,6 +236,51 @@ if (import.meta.main) {
       }
       await append("images", image);
     }
+  } else if (command === "run" && subcommand === "--rm" && rest[0] === "--interactive" && parseRun(rest.slice(1))) {
+    // docker run --rm --interactive --name <name> --pull <pull> --entrypoint sh <image> -c <session script>: a
+    // shell session, as src/docker/shellSession.ts speaks to one. Each command runs as `docker exec` would
+    // run it, its paths mapped into the container, and the container is removed once stdin ends.
+    const { name, image } = parseRun(rest.slice(1))!;
+    if (!dir) fail("fake docker: running a container needs FAKE_DOCKER_DIR");
+    if (!(await list("images")).includes(image)) fail(`docker: Error response from daemon: No such image: ${image}`);
+    if ((await list("failing")).includes(name)) fail(`docker: Error response from daemon: failed to start container ${name}`);
+    const container = `${dir}/containers/${name}`;
+    await Bun.write(`${container}/image`, `${image}\n`);
+    await $`mkdir -p ${container}/root/workspace ${container}/root/thunderjar`.quiet();
+    await $`if [ -d ${filesystemOf(image)} ]; then cp -R ${filesystemOf(image)}/. ${container}/root; fi`.quiet();
+    const input = Bun.stdin.stream().getReader();
+    let buffered = new Uint8Array(0);
+    const fill = async (length: number) => {
+      while (buffered.length < length) {
+        const { done, value } = await input.read();
+        if (done) return false;
+        const joined = new Uint8Array(buffered.length + value.length);
+        joined.set(buffered);
+        joined.set(value, buffered.length);
+        buffered = joined;
+      }
+      return true;
+    };
+    const take = (length: number) => {
+      const taken = buffered.slice(0, length);
+      buffered = buffered.slice(length);
+      return new TextDecoder().decode(taken);
+    };
+    process.stdout.write("ready /workspace\n");
+    for (;;) {
+      while (buffered.indexOf(10) === -1) if (!(await fill(buffered.length + 1))) break;
+      const newline = buffered.indexOf(10);
+      if (newline === -1) break;
+      const [commandLength, stdinLength] = take(newline + 1).trim().split(" ").map(Number) as [number, number];
+      if (!(await fill(commandLength + stdinLength))) break;
+      const [script, stdin] = [take(commandLength), take(stdinLength)];
+      const result = await inContainer(container, ["sh", "-c", script], stdin);
+      const [out, err] = [result.stdout, result.stderr];
+      process.stdout.write(`${result.exitCode} ${out.length} ${err.length}\n`);
+      process.stdout.write(out);
+      process.stdout.write(err);
+    }
+    await $`rm -rf ${container}`.quiet();
   } else if (command === "run" && parseRun(args.slice(1))) {
     // docker run [--detach] --name <name> --pull never [-e <NAME>]… [<option>]… --entrypoint sh <image> -c <script>
     const { detach, name, env, image, script } = parseRun(args.slice(1))!;

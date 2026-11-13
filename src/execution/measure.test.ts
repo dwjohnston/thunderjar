@@ -47,12 +47,12 @@ function opener(files: Record<string, string>, log: string[]) {
 const NOW = new Date("2026-11-01T02:30:00.000Z");
 
 describe("measureContainerRun", () => {
-  test("takes each measurement in a context of its own, closed once it's taken, and records each measure", async () => {
+  test("takes the measurements that use a container in one context, opened once and closed after the last, and records each measure", async () => {
     const log: string[] = [];
 
     const result = await measureContainerRun([EXISTS, IGNORES], opener({ "isPrime.ts": "// @ts-ignore\n" }, log), () => NOW);
 
-    expect(log).toEqual(["open 1", "close 1", "open 2", "close 2"]);
+    expect(log).toEqual(["open 1", "close 1"]);
     expect(result).toEqual({
       exists: {
         instrument: "fileCreated",
@@ -69,17 +69,26 @@ describe("measureContainerRun", () => {
     });
   });
 
-  test("with a concurrency above 1, contexts are open at once, each still its own, and the measures keep their declared order", async () => {
-    const log: string[] = [];
+  test("they're taken one after another, in their order, so what one writes the next sees", async () => {
+    const WRITES = measurement("writes", { instrument: "shell", config: { command: "write" }, metrics: { exitCode: { stat: "max" } } });
+    const order: string[] = [];
+    const open = opener({ "isPrime.ts": "" }, []);
+    const tracking = async () => {
+      const ctx = await open();
+      return {
+        ...ctx,
+        exec: async (command: string) => {
+          order.push(`exec ${command}`);
+          await ctx.writeFile("written.ts", "// @ts-ignore\n");
+          return { stdout: "", stderr: "", exitCode: 0 };
+        },
+        glob: async (pattern: string) => (order.push(`glob ${pattern}`), ctx.glob(pattern)),
+      };
+    };
 
-    const result = await measureContainerRun([EXISTS, IGNORES, SAYS_ELI], opener({ "isPrime.ts": "// @ts-ignore\n" }, log), () => NOW, 2);
+    const result = await measureContainerRun([WRITES, IGNORES], tracking, () => NOW);
 
-    // The second opens before the first closes; the third waits for one of them.
-    expect(log.slice(0, 2)).toEqual(["open 1", "open 2"]);
-    expect(log.indexOf("open 3")).toBeGreaterThan(Math.min(log.indexOf("close 1"), log.indexOf("close 2")));
-    expect(log.toSorted()).toEqual(["close 1", "close 2", "close 3", "open 1", "open 2", "open 3"]);
-    expect(Object.keys(result)).toEqual(["exists", "ignores", "saysEli"]);
-    expect(result.exists?.outcome).toEqual({ outcome: "measured", data: true });
+    expect(order).toEqual(["exec write", "glob **/*.ts"]);
     expect(result.ignores?.outcome).toEqual({ outcome: "measured", data: 1 });
   });
 
@@ -92,7 +101,7 @@ describe("measureContainerRun", () => {
 
     expect(result.ignores?.outcome).toEqual({ outcome: "erroredWhileMeasuring", error: { message: "the container went away" } });
     expect(result.exists?.outcome).toEqual({ outcome: "measured", data: true });
-    expect(log).toEqual(["open 1", "close 1", "open 2", "close 2"]);
+    expect(log).toEqual(["open 1", "close 1"]);
   });
 
   test("an instrument's own erroredWhileMeasuring is recorded by its message", async () => {
@@ -117,37 +126,28 @@ describe("measureContainerRun", () => {
   });
 
 
-  test("each context is opened with whether its instrument uses a container: a reply's doesn't", async () => {
+  test("one that reads only what was recorded gets a context without a container, taken alongside, and the measures keep their order", async () => {
     const asked: boolean[] = [];
     const open = opener({ "isPrime.ts": "" }, []);
 
-    await measureContainerRun([EXISTS, SAYS_ELI], async (usesContainer) => {
+    const result = await measureContainerRun([SAYS_ELI, EXISTS, IGNORES], async (usesContainer) => {
       asked.push(usesContainer);
       return open();
     });
 
-    expect(asked).toEqual([true, false]);
+    expect(asked.toSorted()).toEqual([false, true]);
+    expect(Object.keys(result)).toEqual(["saysEli", "exists", "ignores"]);
   });
 
-  test("with a concurrency, takes that many at once, each in its own context, and lists them in their order", async () => {
-    const log: string[] = [];
-    const open = opener({ "isPrime.ts": "// @ts-ignore\n" }, log);
-    let atOnce = 0;
-    let most = 0;
-    const slowly = async () => {
-      const ctx = await open();
-      atOnce++;
-      most = Math.max(most, atOnce);
-      await Bun.sleep(20);
-      return { ...ctx, close: async () => (atOnce--, ctx.close()) };
-    };
+  test("a container that can't be started fails the measuring, once the others are taken", async () => {
+    const open = opener({}, []);
 
-    const result = await measureContainerRun([IGNORES, EXISTS, SAYS_ELI], slowly, () => NOW, 2);
+    const measuring = measureContainerRun([EXISTS, SAYS_ELI], async (usesContainer) => {
+      if (usesContainer) throw new Error("the runtime can't be reached");
+      return open();
+    });
 
-    expect(most).toBe(2);
-    expect(Object.keys(result)).toEqual(["ignores", "exists", "saysEli"]);
-    expect(result.exists?.outcome).toEqual({ outcome: "measured", data: true });
-    expect(log.filter((line) => line.startsWith("close"))).toHaveLength(3);
+    expect(measuring).rejects.toThrow("the runtime can't be reached");
   });
 
   test("with no measurements, nothing is opened", async () => {
