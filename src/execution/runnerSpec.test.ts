@@ -14,7 +14,9 @@ import { findThunderjarRoot } from "../config/loader.ts";
 import { loadTestCase } from "../config/testCase.ts";
 import { scenario } from "../testing/scenario.ts";
 import { planExecution } from "./planExecution.ts";
-import { hydratePlan, planData } from "./runnerSpec.ts";
+import { receiveSubmission } from "./runner.ts";
+import { hydratePlan, planData, type Submission } from "./runnerSpec.ts";
+import { TMP_DIR } from "../testing/cli.ts";
 
 describe("a plan sent to a runner", () => {
   test("survives being sent as JSON, without its harnesses' functions, which the runner loads again", async () => {
@@ -43,5 +45,22 @@ describe("a plan sent to a runner", () => {
     const other = await findThunderjarRoot(scenario("0201"));
 
     expect(hydratePlan(other, plan)).rejects.toThrow(/harnessModels/);
+  });
+});
+
+describe("receiveSubmission", () => {
+  test("waits for the submission to be written, reads it, and deletes it", async () => {
+    const path = `${TMP_DIR}/submission-${crypto.randomUUID()}.json`;
+    const receiving = receiveSubmission(path, 5000);
+    // Written once it has looked, and found none, a few times.
+    await Bun.sleep(350);
+    await Bun.write(path, JSON.stringify({ name: "example", env: { KEY: "value" } }));
+
+    expect(await receiving).toEqual({ name: "example", env: { KEY: "value" } } as unknown as Submission);
+    expect(await Bun.file(path).exists()).toBe(false);
+  });
+
+  test("gives up if none arrives", async () => {
+    expect(receiveSubmission(`${TMP_DIR}/submission-${crypto.randomUUID()}.json`, 200)).rejects.toThrow(/No submission arrived/);
   });
 });

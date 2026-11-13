@@ -47,6 +47,12 @@ export async function followToEnd(
 ): Promise<Executed> {
   let showing: { hooks: RunHooks; plan: PlanData } | undefined;
   let last: Extract<RunnerEvent, { event: "finished" | "failed" }> | undefined;
+  /** Keeps the runner's log, which goes with its container, beside this command's own, then removes the container. */
+  const tidy = async () => {
+    const log = await runnerLog(command, executionId, imagePrefix);
+    if (log !== undefined) await Bun.write(`${root}/logs/${executionId}-runner.log`, log).catch(() => {});
+    await removeRunner(command, executionId, imagePrefix);
+  };
   const outcome = await followRunner(
     command,
     executionId,
@@ -57,12 +63,13 @@ export async function followToEnd(
       if (showing !== undefined) replayEvent(event, showing.hooks, showing.plan);
     },
     signal,
-  );
+  ).catch(async (error: unknown) => {
+    // It stopped without a last event: nothing more will come of its container.
+    if (error instanceof RunnerLostError) await tidy();
+    throw error;
+  });
   if (outcome === "detached" || last === undefined) return await new Promise<never>(() => {});
-  // Its log goes with its container: kept here, beside this command's own.
-  const log = await runnerLog(command, executionId, imagePrefix);
-  if (log !== undefined) await Bun.write(`${root}/logs/${executionId}-runner.log`, log).catch(() => {});
-  await removeRunner(command, executionId, imagePrefix);
+  await tidy();
   if (last.event === "failed") throw errorOf(last.failure);
   return keepRecords(root, { execution: last.execution, recordedIn: last.recordedIn, containerRuns: last.containerRuns });
 }

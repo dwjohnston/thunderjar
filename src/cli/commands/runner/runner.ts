@@ -13,6 +13,8 @@ import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { removeExecutionContainers } from "../../../execution/runExecution.ts";
 import { receiveSubmission, runSubmission } from "../../../execution/runner.ts";
+import { failureOf, type RunnerEvent } from "../../../execution/runnerEvents.ts";
+import type { Submission } from "../../../execution/runnerSpec.ts";
 import type { ExecutionRecord } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { print } from "../../output.ts";
@@ -28,7 +30,15 @@ const STOP_SETTLE_MS = 15_000;
  */
 async function runner(cwd: string, submissionPath: string): Promise<void> {
   const root = await findThunderjarRoot(cwd);
-  const submission = await receiveSubmission(submissionPath);
+  let submission: Submission;
+  try {
+    submission = await receiveSubmission(submissionPath);
+  } catch (caught) {
+    // None arrived, or it isn't one: said as its last event, so whoever follows is told why.
+    print(JSON.stringify({ event: "failed", failure: failureOf(caught) } satisfies RunnerEvent));
+    process.exitCode = 1;
+    return;
+  }
   let executing: Promise<ExecutionRecord> | undefined;
   let stopping = false;
   const stop = (signal: "SIGINT" | "SIGTERM") => {

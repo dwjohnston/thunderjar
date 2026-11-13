@@ -34,12 +34,12 @@ export const SUBMISSION_WAIT_MS = 120_000;
  */
 export async function receiveSubmission(path: string, waitMs = SUBMISSION_WAIT_MS): Promise<Submission> {
   const deadline = Date.now() + waitMs;
-  const file = Bun.file(path);
-  while (!(await file.exists())) {
+  // A new Bun.file each time: one keeps what it first learnt of the file, that there was none.
+  while (!(await Bun.file(path).exists())) {
     if (Date.now() > deadline) throw new Error(`No submission arrived at ${path} within ${Math.round(waitMs / 1000)}s.`);
     await Bun.sleep(100);
   }
-  const submission = (await file.json()) as Submission;
+  const submission = (await Bun.file(path).json()) as Submission;
   await $`rm -f ${path}`.quiet().nothrow();
   return submission;
 }

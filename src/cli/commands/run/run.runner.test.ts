@@ -355,6 +355,21 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(await Bun.file(slow.hooks).text()).toBe(`before ${executionId}\nafter ${executionId} 0\n`);
   }, 30_000);
 
+  test("if the runner dies without saying how the execution ended, run says so, removes its container, and runs afterExecution", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using slow = await startSlowRun(docker);
+    const [runner] = (await docker.containers()).filter((name) => name.startsWith("thunderjar-runner-"));
+    const executionId = (runner as string).slice("thunderjar-runner-".length);
+
+    await $`kill -KILL ${(await Bun.file(`${docker.env.FAKE_DOCKER_DIR}/containers/${runner}/pid`).text()).trim()}`.quiet();
+    const [exitCode, stderr] = await Promise.all([slow.cli.exited, new Response(slow.cli.stderr).text()]);
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toBe(`Error: The runner of execution ${executionId} stopped (exit code 137) without saying how the execution ended.\n`);
+    expect((await docker.containers()).filter((name) => name.startsWith("thunderjar-runner-"))).toEqual([]);
+    expect(await Bun.file(slow.hooks).text()).toBe(`before ${executionId}\nafter ${executionId} 1\n`);
+  }, 30_000);
+
   test("attach to an execution with no runner says so", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithRunner();
