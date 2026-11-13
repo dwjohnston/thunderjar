@@ -5,9 +5,11 @@ import type { Execution } from "../store/runDataStore.ts";
 
 /**
  * How a container run's agent ended, without how long it took: `done`, `exited 1`, `timed out
- * after 5s`, with `, no result file` if it finished but left none.
+ * after 5s`, with `, no result file` if it finished but left none, or `failed to start` if its
+ * container never did.
  */
 export function agentEnd(execution: Execution, harnessResult: string | null): string {
+  if (execution.failedToStart !== undefined) return "failed to start";
   if (execution.timedOut) return `timed out after ${execution.timeoutSeconds}s`;
   const ended = execution.exitCode === 0 ? "done" : `exited ${execution.exitCode}`;
   return harnessResult === null ? `${ended}, no result file` : ended;
@@ -93,12 +95,21 @@ export function reportedError(harnessResult: string | null | undefined): string 
 }
 
 /**
- * A hint of why a container run's agent didn't end cleanly, cut to HINT_LENGTH: the error its
+ * A hint of why a container run's agent didn't end cleanly, cut to HINT_LENGTH: why its container
+ * didn't start, if it didn't, else the error its
  * harness reported in its result file, if it has one (see `reportedError`), else the last line
  * of its stderr, or, with nothing there, of its result file. Undefined if both are empty or absent.
  */
-export function failureHint({ harnessStderr, harnessResult }: { harnessStderr?: string | null; harnessResult: string | null }): string | undefined {
-  const line = reportedError(harnessResult) ?? lastLine(harnessStderr) ?? lastLine(harnessResult);
+export function failureHint({
+  harnessStderr,
+  harnessResult,
+  execution,
+}: {
+  harnessStderr?: string | null;
+  harnessResult: string | null;
+  execution?: Execution;
+}): string | undefined {
+  const line = execution?.failedToStart ?? reportedError(harnessResult) ?? lastLine(harnessStderr) ?? lastLine(harnessResult);
   if (line === undefined) return undefined;
   return line.length <= HINT_LENGTH ? line : `${line.slice(0, HINT_LENGTH - 1)}…`;
 }

@@ -64,6 +64,13 @@ function copilotTokenCosts(raw: string): TokenCosts {
   return { outcome: "collected", models, ...(apiDurationMs !== undefined && { apiDurationMs }) };
 }
 
+/**
+ * OpenAI's models get OpenRouter's Responses API. On Chat Completions, Copilot sends a tool without
+ * a `name`, and OpenAI rejects every request: 400 "Missing required parameter: 'tools[4].name'"
+ * (gauntlet smoke run 6, openai/gpt-6.1-sol). Other providers keep Copilot's default.
+ */
+const wireApi = (modelId: string) => (modelId.startsWith("openai/") ? " COPILOT_PROVIDER_WIRE_API=responses" : "");
+
 export default declareHarness({
   version: "1.0.105",
   applyParameter: (_config, ctx) =>
@@ -82,10 +89,7 @@ export default declareHarness({
       writeRunScript(
         `rm -f ${USAGE_FILE}; ` +
           `COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY"` +
-          ` COPILOT_PROVIDER_MODEL_ID=${ctx.modelId.split("/").pop()}` +
-          // OpenAI's GPT models take Copilot's tools only over the responses API: over chat completions,
-          // the default, every call fails with 400 "Missing required parameter: 'tools[4].name'".
-          `${ctx.modelId.startsWith("openai/") ? " COPILOT_PROVIDER_WIRE_API=responses" : ""}` +
+          ` COPILOT_PROVIDER_MODEL_ID=${ctx.modelId.split("/").pop()}${wireApi(ctx.modelId)}` +
           ` copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color` +
           ` --output-format json --usage-output-file ${USAGE_FILE} > /thunderjar/result.json; code=$?; ` +
           `[ -f ${USAGE_FILE} ] && printf '{"type":"${USAGE_TYPE}","data":%s}\\n' "$(tr -d '\\n' < ${USAGE_FILE})" >> /thunderjar/result.json; ` +

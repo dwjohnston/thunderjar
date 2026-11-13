@@ -203,6 +203,27 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(runnerLog).toContain("FAKE_HARNESS_KEY");
   });
 
+  test("a container that never starts is its run's outcome on the runner too, timed by the start timeout set here", async () => {
+    // The agent's container would take a minute to appear: the runner gives up on it after 3s.
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], slowStart: { "-1-1": 60 } });
+    await using copy = await copyWithRunner();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: { ...docker.env, THUNDERJAR_START_TIMEOUT_SECONDS: "3" } });
+
+    // No execution-level error: the run's own line says it failed to start, as when run here.
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(1);
+    expect(stdout).toContain(" 1/1  iteration 1/1  fake-harness-alpha | plain  ... failed to start\n");
+    expect(stdout).toContain("  1×  failed to start  it didn't start within <duration>  (1-1)\n");
+    const { execution, containerRuns } = await readProjectStore(copy.dir);
+    expect(execution.status).toBe("failed");
+    expect(containerRuns).toHaveLength(1);
+    expect((containerRuns[0] as ContainerRunRecord).execution).toMatchObject({ exitCode: null, timedOut: false, failedToStart: "it didn't start within 3s" });
+    const { runner } = await commandsOf(docker);
+    expect(runner).toContain(`docker rm --force thunderjar-run-${execution.executionId}-1-1`);
+    expect(runner.some((command) => command.startsWith("docker commit "))).toBe(false);
+  }, 30_000);
+
   test("a variable the runner needs that's unset stops run before anything is built", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithRunner({ runner: '{ env: ["EXTRA_ONE"], registryLogin: { usernameEnv: "REG_USER", passwordEnv: "REG_TOKEN" } }' });

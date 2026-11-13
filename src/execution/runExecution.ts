@@ -7,7 +7,9 @@
 // finishes, so the runs that finished before a crash are kept. Then the task's measurements are taken of it, each in a measurement
 // container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
-// recorded and measured, and the rest still run, but the execution is `failed`.
+// recorded and measured, and the rest still run, but the execution is `failed`. So is a container
+// that never starts: it's recorded, with why, but has nothing to measure. The timeout runs from
+// when the agent starts, not from `docker run`: see runContainer.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
 import { daemonId, diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed, removeImages } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
@@ -294,6 +296,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   };
 
   let status: ExecutionStatus = "complete";
+  // Whether a container was given up on before it started: the runtime may yet make it.
+  let notStarted = false;
   let finished: ExecutionRecord | undefined;
   const runIteration = async (permutation: PlannedPermutation, iteration: PlannedIteration) => {
     await ready.get(permutation.permutation.imageHash)?.promise;
@@ -307,7 +311,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     const at = { executionId, permutation: permutation.number, iteration: iteration.number };
     log.info({ ...at, permutationHash: permutation.permutation.hash }, "container run starting");
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-    const { execution, harnessResult: resultFile, stderr } = await runInContainer({
+    const { execution, harnessResult: resultFile, stderr, committed } = await runInContainer({
       prerunImage: prerunImageOf(permutation),
       postrunImage: iteration.postrunImage,
       env: permutation.env,
@@ -337,6 +341,12 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       log.warn({ ...at, result: resultFile && head(resultFile, 500) }, "token costs unparseable from the result file");
     }
     hooks.onRan?.(permutation, iteration, record);
+    // Its container never started: it has no postrun image to push or measure.
+    if (!committed) {
+      log.warn({ ...at, reason: execution.failedToStart }, "container didn't start");
+      notStarted = true;
+      return;
+    }
     // Committed in the runtime, so pushed from there. When iterations run at once, it's pushed while
     // it's measured, as both only read the postrun image; one at a time, before, so each step's
     // line is shown in turn.
@@ -384,6 +394,12 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   } finally {
     // Nothing is left building, pushing or pulling.
     await preparing;
+    // A container given up on before it started may have been made since, too late to be removed with its run.
+    if (notStarted) {
+      await removeContainersNamed(executionContainerPrefix(executionId, imagePrefix), runtime)
+        .then((removed) => removed.length > 0 && log.warn({ executionId, removed }, "removed containers that started too late"))
+        .catch((error: unknown) => log.warn({ executionId, err: error }, "couldn't look for containers that started too late"));
+    }
     await logDiskUsage("after");
     const spent = timer.summary();
     log.info({ executionId, ...spent }, "execution timings");

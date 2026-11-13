@@ -12,6 +12,8 @@
 //   manifest-unavailable  if present, every `manifest inspect` fails, as if the registry can't be reached
 //   failing       the images whose build or commit fails, and the references whose push or pull fails, one per line
 //   slow          the images whose build takes a second, one per line
+//   slow-start    `<suffix> <seconds>` lines: `run` of a container whose name ends with `<suffix>` waits that
+//                 long before it makes the container, as a slow runtime might
 //   logins        the registry hosts Docker holds a valid login for, one per line
 //   pushed        appended to: each reference pushed, one per line
 //   commands      appended to: one line per command, `docker <args…>`, a newline in an argument as `\n`
@@ -108,6 +110,7 @@ export async function fakeDocker({
   unreachable = false,
   pullDenied = false,
   stored = [],
+  slowStart = {},
 }: {
   images?: string[];
   failing?: string[];
@@ -117,11 +120,14 @@ export async function fakeDocker({
   pullDenied?: boolean;
   /** References already in the registry, as if pushed before. */
   stored?: string[];
+  /** How many seconds `run` waits before it makes a container, by the end of its name, e.g. `{ "-1-1": 3 }`. */
+  slowStart?: Record<string, number>;
 } = {}): Promise<FakeDocker> {
   const dir = `${FIXTURES_DIR}/.tmp/docker-${crypto.randomUUID()}`;
   await Bun.write(`${dir}/images`, lines(images));
   await Bun.write(`${dir}/failing`, lines(failing));
   await Bun.write(`${dir}/slow`, lines(slow));
+  await Bun.write(`${dir}/slow-start`, lines(Object.entries(slowStart).map(([suffix, seconds]) => `${suffix} ${seconds}`)));
   await Bun.write(`${dir}/logins`, lines(loggedIn));
   if (unreachable) await Bun.write(`${dir}/unreachable`, "");
   if (pullDenied) await Bun.write(`${dir}/pull-denied`, "");
@@ -305,6 +311,10 @@ if (import.meta.main) {
     const { detach, name, env, image, script } = parseRun(args.slice(1))!;
     if (!dir) fail("fake docker: running a container needs FAKE_DOCKER_DIR");
     if (!(await list("images")).includes(image)) fail(`docker: Error response from daemon: No such image: ${image}`);
+    for (const line of await list("slow-start")) {
+      const [suffix, seconds] = line.split(" ") as [string, string];
+      if (name.endsWith(suffix)) await Bun.sleep(Number(seconds) * 1000);
+    }
     const container = `${dir}/containers/${name}`;
     if (await state(`containers/${name}/image`).exists()) fail(`docker: Error response from daemon: Conflict. The container name "/${name}" is already in use.`);
     await Bun.write(`${container}/image`, `${image}\n`);
@@ -458,7 +468,8 @@ if (import.meta.main) {
     // docker kill <name>; a container named in `failing` can't be killed, as if the daemon couldn't be reached.
     if ((await list("failing")).includes(subcommand as string)) fail("error during connect: the runtime can't be reached");
     const pidFile = state(`containers/${subcommand}/pid`);
-    if (!dir || !(await pidFile.exists())) fail(`Error response from daemon: cannot kill container: ${subcommand}: container is not running`);
+    if (!dir || !(await state(`containers/${subcommand}/image`).exists())) fail(`Error response from daemon: No such container: ${subcommand}`);
+    if (!(await pidFile.exists())) fail(`Error response from daemon: cannot kill container: ${subcommand}: container is not running`);
     const pids = await processTree((await pidFile.text()).trim());
     await $`kill -KILL ${pids}`.quiet().nothrow();
     console.log(subcommand);

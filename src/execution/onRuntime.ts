@@ -88,9 +88,13 @@ export async function storePrerunImages(
   );
 }
 
+/** Thunderjar's own variables a runner is given if they're set here: how long a container may take to start. */
+const PASSED_SETTINGS = ["THUNDERJAR_START_TIMEOUT_SECONDS"];
+
 /**
  * The variables a runner is given for `plan`: those its harnesses need, the run data store's
- * URL, the registry login's, and `runner.env`, with their values from `env`. Throws a ConfigError
+ * URL, the registry login's, and `runner.env`, with their values from `env`, and those of
+ * PASSED_SETTINGS that are set. Throws a ConfigError
  * naming each that's unset: an empty value counts as unset.
  */
 export function submissionEnv(
@@ -111,7 +115,9 @@ export function submissionEnv(
       `The runner on the runtime needs ${missing.join(", ")}, which ${missing.length === 1 ? "is" : "are"} not set.\nExport ${missing.length === 1 ? "it" : "them"} in the shell that runs thunderjar.`,
     );
   }
-  return Object.fromEntries([...names].map((name) => [name, env[name] as string]));
+  // Thunderjar's own settings that change how the runner runs the execution, passed on if they're set.
+  const settings = PASSED_SETTINGS.filter((name) => env[name]);
+  return Object.fromEntries([...names, ...settings].map((name) => [name, env[name] as string]));
 }
 
 /**
