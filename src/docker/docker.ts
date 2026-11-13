@@ -136,16 +136,29 @@ export async function buildImage(contextDir: string, image: string, options: Bui
   log.info({ image, ms }, "built image");
 }
 
-/** The tagged images in `repository`, as `<repository>:<tag>`. Throws a DockerUnavailableError. */
-export async function imagesIn(repository: string): Promise<Set<string>> {
-  const binary = dockerBinary();
-  log.debug({ repository }, "listing images");
-  const result = await $`${binary} image ls --format ${"{{.Repository}}:{{.Tag}}"} ${repository}`.quiet().nothrow();
+/**
+ * The tagged images in `repository`, as `<repository>:<tag>`, in `runtime`, the local daemon by
+ * default. One command, however many there are. Throws a DockerUnavailableError.
+ */
+export async function imagesIn(repository: string, runtime: DockerRuntime = localRuntime()): Promise<Set<string>> {
+  log.debug({ repository, runtime: runtime.command }, "listing images");
+  const result = await $`${runtime.command} image ls --format ${"{{.Repository}}:{{.Tag}}"} ${repository}`.quiet().nothrow();
   if (result.exitCode !== 0) {
     log.debug({ repository, exitCode: result.exitCode, stderr: result.stderr.toString() }, "listing images failed");
-    throw new DockerUnavailableError(reasonOf(result.stderr) || `\`${binary} image ls\` exited ${result.exitCode}`);
+    throw new DockerUnavailableError(reasonOf(result.stderr) || `${named(runtime, "image ls")} exited ${result.exitCode}`);
   }
   return new Set(result.stdout.toString().split("\n").filter(Boolean));
+}
+
+/**
+ * The ID of `runtime`'s Docker daemon: two runtime commands that reach the same daemon give the
+ * same one. Undefined if it can't be asked.
+ */
+export async function daemonId(runtime: DockerRuntime): Promise<string | undefined> {
+  const result = await $`${runtime.command} info --format ${"{{.ID}}"}`.quiet().nothrow();
+  log.debug({ runtime: runtime.command, exitCode: result.exitCode, stderr: result.stderr.toString() }, "asked for the daemon's ID");
+  const id = result.stdout.toString().trim();
+  return result.exitCode === 0 && id !== "" ? id : undefined;
 }
 
 const DAEMON_UNREACHABLE = /Cannot connect to the Docker daemon|error during connect/;

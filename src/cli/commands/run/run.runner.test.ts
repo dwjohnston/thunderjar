@@ -77,7 +77,6 @@ Building the runner image <RUNNER> ... done
 Pushing <RUNNER> ... done
 Building thunderjar-prerun:77e9dd16 ... done
 Pushing ${PRERUN} ... done
-Pulling ${PRERUN} into the runtime ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
       ${MEASURES}
@@ -106,7 +105,8 @@ Recorded in .thunderjar/.data/runs.sqlite
       `${REMOTE} rm --force ${container}`,
     ]);
     // The runner, on its own Docker: everything else.
-    expect(runner).toContain(`docker pull --quiet ${PRERUN}`);
+    // The fake's runtime shares the host's images, so it has the prerun image: not pulled.
+    expect(runner).toContain(`docker image ls --format {{.Repository}}:{{.Tag}} ${REPOSITORY}`);
     expect(runner.find((command) => command.startsWith("docker run --name"))).toContain(` ${PRERUN} -c `);
     expect(runner.some((command) => command.startsWith("docker commit "))).toBe(true);
     expect(runner).toContain(`docker push --quiet ${postrun}`);
@@ -146,7 +146,6 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(phases).toEqual([
       "building prerun images",
       "pushing prerun images",
-      "pulling prerun images into the runtime",
       "running agents",
       "reading what agents left",
       "committing postrun images",
@@ -162,13 +161,15 @@ Recorded in .thunderjar/.data/runs.sqlite
     await using copy = await copyWithRunner();
     await thunderjar(copy.dir, ["run", "example"], { env: docker.env });
     const before = (await docker.commands()).length;
-    // As on another machine: the local daemon has no prerun image.
-    await Bun.write(`${docker.env.FAKE_DOCKER_DIR}/removed`, "thunderjar-prerun:77e9dd16\n");
+    // As on other machines: neither the local daemon nor the runtime has the prerun image.
+    const removed = Bun.file(`${docker.env.FAKE_DOCKER_DIR}/removed`);
+    await Bun.write(removed, `${(await removed.exists()) ? await removed.text() : ""}thunderjar-prerun:77e9dd16\n${PRERUN}\n`);
 
     const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: docker.env });
 
     expect(exitCode).toBe(0);
     expect(stdout).not.toContain("Building");
+    expect(stdout).toContain(`Pulling ${PRERUN} into the runtime ... done`);
     const again = (await docker.commands()).slice(before);
     expect(again.filter((command) => /^docker (build|tag thunderjar-prerun)/.test(command))).toEqual([]);
     expect(again).toContain(`docker pull --quiet ${PRERUN}`);
@@ -245,12 +246,13 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(exitCode).toBe(0);
     expect((await docker.commands()).filter((command) => command.startsWith(`${REMOTE} logs --follow`)).length).toBeGreaterThan(1);
     expect(stdout.split("\n").filter((line) => line.includes("iteration 1/1"))).toHaveLength(1);
-    expect(stdout.split("\n").filter((line) => line.startsWith("Pulling "))).toHaveLength(1);
+    expect(stdout.split("\n").filter((line) => line.includes(" Pushing "))).toHaveLength(1);
     expect(stdout).toContain(MEASURES);
   }, 30_000);
 
   test("an error the runner stops on is reported as run would report its own, and afterExecution still runs", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], pullDenied: true });
+    // In the image store already, so the runner must pull it, and can't.
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], pullDenied: true, stored: [PRERUN] });
     const hooks = `${TMP_DIR}/hooks-${crypto.randomUUID()}.log`;
     await using _hooks = { [Symbol.asyncDispose]: async () => void (await $`rm -f ${hooks}`.quiet()) };
     await using copy = await copyWithRunner({ more: `, afterExecution: ["sh", "-c", "echo after >> ${hooks}"]` });
@@ -318,7 +320,6 @@ describe("0211 remote runtime, with a runner: detaching and attaching", () => {
     // The agent was changed to wait, so its images' hashes differ from 0211's.
     expect(attached.stdout.replaceAll(executionId, "<ID>").replace(/-h[0-9a-f]{8}/g, "-h<HASH>")).toBe(`Execution <ULID>
 Following test case example, on the runtime
-Pulling ${REPOSITORY}:prerun-h<HASH> into the runtime ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${REPOSITORY}:postrun-e<ID>-h<HASH>-i00 ... done
       ${MEASURES}

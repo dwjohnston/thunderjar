@@ -6,9 +6,10 @@
 // Its state is a folder, FAKE_DOCKER_DIR, which a test writes and reads:
 //
 //   images        the images that exist, `<repository>:<tag>`, one per line; a build or commit adds one
-//   removed       appended to: each image removed with `image rm`, which no longer exists
+//   removed       appended to: each image removed with `image rm`, which no longer exists, unless added to images again since
 //   unreachable   if present, the daemon can't be reached
 //   pull-denied   if present, every pull fails, as for a runtime with no login for the registry
+//   manifest-unavailable  if present, every `manifest inspect` fails, as if the registry can't be reached
 //   failing       the images whose build or commit fails, and the references whose push or pull fails, one per line
 //   slow          the images whose build takes a second, one per line
 //   logins        the registry hosts Docker holds a valid login for, one per line
@@ -38,10 +39,11 @@
 // does with its input closed. `tag` adds an image; `push` records it, if its host is logged in.
 //
 // A leading `--context <name>`, as a runtime's command may give, is recorded and otherwise ignored:
-// the runtime shares the fake's state. `run` takes `--pull missing` as well as `--pull never`.
+// the runtime shares the fake's state. Only `info --format {{.ID}}` tells them apart: with a
+// context, it gives another daemon's ID. `run` takes `--pull missing` as well as `--pull never`.
 // `ps --all --filter name=<text> --format {{.Names}}` lists the containers not yet removed whose
 // name has `<text>` in it. `rm --force <name>…` kills a running container's script first.
-// `pull --quiet <reference>` and `manifest inspect <reference>` succeed only for a reference that was pushed. `image rm <image>…`
+// `pull --quiet <reference>` and `manifest inspect <reference>` succeed only for a reference that was pushed: a pull adds it to images. `image rm <image>…`
 // removes tags from images, failing for one that doesn't exist or is in failing, or for any if
 // FAKE_DOCKER_FAIL_IMAGE_RM is set. `system df`
 // reports made-up sizes: 100MB an image. `run --rm --interactive` runs a shell session, as
@@ -84,6 +86,12 @@ export type FakeDocker = AsyncDisposable & {
   /** Deletes its state. */
   remove: () => Promise<void>;
 };
+
+/** The images of `added` that still exist: each added more times than it's in `removed`, once each, in order. */
+function existing(added: string[], removed: string[]): string[] {
+  const count = (list: string[], image: string) => list.filter((each) => each === image).length;
+  return [...new Set(added)].filter((image) => count(added, image) > count(removed, image));
+}
 
 const lines = (values: string[]) => values.map((value) => `${value}\n`).join("");
 
@@ -129,8 +137,7 @@ export async function fakeDocker({
     commands: async () => ((await commandsFile().exists()) ? (await commandsFile().text()).split("\n").filter(Boolean) : []),
     contextOf: (image) => `${dir}/contexts/${image}`,
     images: async () => {
-      const removed = new Set((await Bun.file(`${dir}/removed`).exists()) ? await listOf(`${dir}/removed`) : []);
-      return (await listOf(`${dir}/images`)).filter((image) => !removed.has(image));
+      return existing(await listOf(`${dir}/images`), (await Bun.file(`${dir}/removed`).exists()) ? await listOf(`${dir}/removed`) : []);
     },
     pushed: async () => ((await Bun.file(`${dir}/pushed`).exists()) ? listOf(`${dir}/pushed`) : []),
     containers: async () =>
@@ -170,8 +177,7 @@ if (import.meta.main) {
   /** The lines of the state file `name`. For `images`: without those removed with `image rm`. */
   const list = async (name: string) => {
     if (name !== "images") return listed(name);
-    const removed = new Set(await listed("removed"));
-    return (await listed("images")).filter((image) => !removed.has(image));
+    return existing(await listed("images"), await listed("removed"));
   };
 
   /** The process `pid`, and every process under it. */
@@ -247,7 +253,7 @@ if (import.meta.main) {
         await Bun.write(`${filesystemOf(image)}${copy[2]}`, `${dockerfile.slice(i + 1, end).join("\n")}\n`);
         i = end;
       }
-      await append("images", image);
+      if (!(await list("images")).includes(image)) await append("images", image);
     }
   } else if (command === "run" && subcommand === "--rm" && rest[0] === "--interactive" && parseRun(rest.slice(1))) {
     // docker run --rm --interactive --name <name> --pull <pull> --entrypoint sh <image> -c <session script>: a
@@ -447,7 +453,7 @@ if (import.meta.main) {
     if (!dir || !(await state(`containers/${name}/image`).exists())) fail(`Error response from daemon: No such container: ${name}`);
     if ((await list("failing")).includes(image)) fail(`Error response from daemon: failed to commit ${name} as ${image}`);
     await $`mkdir -p ${filesystemOf(image)} && cp -R ${dir}/containers/${name}/root/. ${filesystemOf(image)}`.quiet();
-    await append("images", image);
+    if (!(await list("images")).includes(image)) await append("images", image);
   } else if (command === "kill" && rest.length === 0) {
     // docker kill <name>; a container named in `failing` can't be killed, as if the daemon couldn't be reached.
     if ((await list("failing")).includes(subcommand as string)) fail("error during connect: the runtime can't be reached");
@@ -456,6 +462,9 @@ if (import.meta.main) {
     const pids = await processTree((await pidFile.text()).trim());
     await $`kill -KILL ${pids}`.quiet().nothrow();
     console.log(subcommand);
+  } else if (command === "info" && subcommand === "--format" && rest.length === 1) {
+    // docker info --format {{.ID}}: a daemon's ID. One with a --context is another daemon's, though it shares this state.
+    console.log(recorded[0] === "--context" ? `fake-daemon-${recorded[1]}` : "fake-daemon");
   } else if (command === "login" && subcommand !== undefined && rest.length === 0) {
     // docker login <host>, its input closed
     if (!(await list("logins")).includes(subcommand)) fail("Error: Cannot perform an interactive login from a non TTY device");
@@ -483,9 +492,12 @@ if (import.meta.main) {
     if (!(await list("pushed")).includes(reference) || (await list("failing")).includes(reference) || (dir && (await state("pull-denied").exists()))) {
       fail(`Error response from daemon: pull access denied for ${reference}, repository does not exist or may require 'docker login'`);
     }
+    // It's now in the runtime, which shares this state.
+    if (dir && !(await list("images")).includes(reference)) await append("images", reference);
     console.log(reference);
   } else if (command === "manifest" && subcommand === "inspect" && rest.length === 1) {
-    // docker manifest inspect <reference>: found if it was pushed
+    // docker manifest inspect <reference>: found if it was pushed, unless the registry can't be asked
+    if (dir && (await state("manifest-unavailable").exists())) fail("Get \"https://ghcr.io/v2/\": net/http: TLS handshake timeout");
     if (!(await list("pushed")).includes(rest[0] as string)) fail(`no such manifest: ${rest[0]}`);
     console.log("{}");
   } else if (command === "image" && subcommand === "rm" && rest.length > 0) {

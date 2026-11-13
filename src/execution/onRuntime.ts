@@ -50,9 +50,8 @@ export const runnerContainer = (executionId: string, prefix: string = DEFAULT_IM
 
 /**
  * Makes sure `imageStore` has the prerun image of each of `plan`'s permutations, of a test case
- * under `root`, once per image hash, up to `build.concurrency` at once: one that's in the local
- * Docker daemon is pushed, one that's only in the store is left, and any other is built, then
- * pushed. Throws what building and pushing throw; once one fails, no other starts.
+ * under `root`, once per image hash, up to `build.concurrency` at once: one the store has is
+ * left, one that's only in the local Docker daemon is pushed, and any other is built, then pushed. Throws what building and pushing throw; once one fails, no other starts.
  */
 export async function storePrerunImages(
   root: string,
@@ -73,7 +72,8 @@ export async function storePrerunImages(
       if (failed) return;
       try {
         const reference = storedPrerunImage(imageStore.repository, image.permutation.imageHash);
-        if (!exists && (await inRegistry(reference))) {
+        // Its tag is its content's hash: if the store has it, it's neither built nor pushed again.
+        if (await inRegistry(reference)) {
           log.info({ image: image.image, reference }, "prerun image already in the image store: not built or pushed");
           return;
         }
