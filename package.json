@@ -56,7 +56,7 @@
     "react-dom": "19"
   },
   "devDependencies": {
-    "thunderjar-published": "npm:thunderjar@0.3.0-preview-027b6e2",
+    "thunderjar-published": "npm:thunderjar@0.3.0-preview-0aa9acb",
     "@changesets/cli": "^2.31.0",
     "@changesets/get-release-plan": "^4.0.16",
     "@types/bun": "^1.4.3",
