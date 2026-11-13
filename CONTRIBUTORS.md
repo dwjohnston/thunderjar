@@ -71,4 +71,10 @@ bun run dogfood:remote
 
 It needs `fly`, `docker login ghcr.io`, `FLYIO_TOKEN`, `THUNDERJAR_DB_URL` and `ANTHROPIC_API_KEY`.
 
+The Fly machine isn't stopped after each execution:
+
+- `.thunderjar/fly-runtime.sh up` starts it if it's stopped, and resizes it only if it's too small and no other execution is using it.
+- `down` only releases it.
+- A watchdog on the machine, `.thunderjar/fly-machine-init.sh`, stops it once it has been idle for an hour. Set `FLY_IDLE_MINUTES` for another period.
+
 In CI, comment `/slow-tests` on a PR to run `compare-models` this way, or `/slow-tests <test case>` for another one. The outcome comes back as a PR comment. See [`.github/workflows/slow-tests.yml`](./.github/workflows/slow-tests.yml) for the secrets it needs.
