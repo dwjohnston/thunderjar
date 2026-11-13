@@ -48,6 +48,13 @@ const containerRun = (executionId: string, permutation: number, iteration: numbe
   result: {},
 });
 
+/** An execution that stopped on a failed build, before its first container run, recorded with its phase and failure. */
+const failedEarly = (executionId: string): ExecutionRecord => ({
+  ...execution(executionId, "failed"),
+  phase: "images",
+  failure: { step: "build", reason: "Building thunderjar-prerun:32a1d048 failed: exit code: 1\n  RUN exit 1" },
+});
+
 const errorOf = (error: unknown) => (error instanceof RunDataStoreError ? { path: error.path, message: error.message } : error);
 
 describe("sqliteStore", () => {
@@ -85,6 +92,20 @@ describe("sqliteStore", () => {
 
     expect(await store.listExecutions()).toEqual([execution(id, "failed")]);
     expect((await store.containerRunsOf(id)).map((record) => record.postrunImage)).toEqual(["again"]);
+  });
+
+  test("an execution's phase and failure are kept, and one recorded before them reads without them", async () => {
+    const file = storeFileIn(dataDir());
+    const store = sqliteStore(file);
+    const old = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+    const early = "01kfa1bgz1aaaaaaaaaaaaaaaa";
+
+    await store.recordExecution(execution(old));
+    await store.recordExecution({ ...execution(early, "running"), phase: "beforeExecution" });
+    await store.recordExecution(failedEarly(early));
+
+    expect(await sqliteStore(file).listExecutions()).toEqual([failedEarly(early), execution(old)]);
+    expect(await sqliteStore(file).containerRunsOf(early)).toEqual([]);
   });
 
   test("lists executions newest first", async () => {
@@ -191,6 +212,16 @@ describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
     const runs = await reopened.containerRunsOf(id);
     expect(runs.map((record) => [record.permutation, record.iteration])).toEqual([[1, 2], [1, 10], [2, 1], [10, 1]]);
     expect(runs[2]).toEqual({ ...containerRun(id, 2, 1), postrunImage: "again" });
+  });
+
+  test("an execution's phase and failure are kept", async () => {
+    const store = postgresStore(await freshDatabase(), "test db");
+    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+
+    await store.recordExecution({ ...execution(id, "running"), phase: "images" });
+    await store.recordExecution(failedEarly(id));
+
+    expect(await store.listExecutions()).toEqual([failedEarly(id)]);
   });
 });
 

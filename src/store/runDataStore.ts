@@ -21,8 +21,25 @@ import { moduleLogger } from "../log/logger.ts";
 
 const log = moduleLogger("store");
 
-/** `running` until its last container run finishes, or if it was interrupted. */
+/**
+ * `running` until it ends, `complete` or `failed`. Still `running` if its process was killed
+ * before it could record how it ended.
+ */
 export type ExecutionStatus = "running" | "complete" | "failed";
+
+/**
+ * How far an execution has got, in order: running the runtime's `beforeExecution`, getting its
+ * prerun images ready (built, pushed and pulled), then running its containers.
+ */
+export type ExecutionPhase = "beforeExecution" | "images" | "runs";
+
+/**
+ * What an execution was doing when it failed on an error, not because an agent exited non-zero:
+ * the runtime's `beforeExecution`, building, pushing or pulling an image, running or measuring a
+ * container, writing to the run data store, reaching Docker, or none of those (`error`). Or it was
+ * interrupted, by Ctrl-C or SIGTERM.
+ */
+export type FailureStep = "beforeExecution" | "build" | "push" | "pull" | "run" | "measure" | "store" | "docker" | "interrupted" | "error";
 
 /** One execution of a test case. */
 export type ExecutionRecord = {
@@ -30,12 +47,22 @@ export type ExecutionRecord = {
   executionId: string;
   testCase: string;
   task: string;
-  /** ISO timestamp of when it started running, once its prerun images were built. */
+  /**
+   * ISO timestamp of when it started: before the runtime's `beforeExecution` and its builds. In
+   * executions recorded before those were, once its prerun images were ready.
+   */
   startedAt: string;
   /** ISO timestamp of when it ended; absent while it's running. */
   finishedAt?: string;
   /** `failed` if any container run's agent exited non-zero, or the execution stopped on an error. */
   status: ExecutionStatus;
+  /** How far it got: where it is while running, or where it was when it ended. Absent from executions recorded before phases were. */
+  phase?: ExecutionPhase;
+  /**
+   * Why it stopped, if it stopped on an error or was interrupted: what it was doing, and the
+   * error `run` printed. Absent if it ran to the end, even with agents that failed.
+   */
+  failure?: { step: FailureStep; reason: string };
   matrix: {
     /** The size of each axis, in AXES order. */
     shape: number[];
