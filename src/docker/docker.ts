@@ -343,7 +343,7 @@ export async function runContainer(
     timer = setTimeout(() => {
       notStarted = `it didn't start within ${startSeconds}s`;
       log.warn({ container: name, startSeconds }, "container didn't start in time, giving up on it");
-      killing = killTimedOut(name, child, runtime);
+      killing = giveUpStarting(name, child, runtime);
     }, startSeconds * 1000);
     watching = watchFor(child.stdout as ReadableStream<Uint8Array>, startMarker, () => {
       if (notStarted !== undefined) return;
@@ -416,6 +416,19 @@ async function killTimedOut(name: string, child: { exited: Promise<number>; kill
   }
   child.kill("SIGKILL");
   return killedAt;
+}
+
+/**
+ * Gives up on the container `name`, run by the `docker run` process `child`, which hasn't started:
+ * removes it, if it exists yet, whether it's only created or now running, and stops `child`.
+ * `docker kill` won't do: a container that's created but not yet started "is not running". One
+ * the runtime makes later still is removed once the execution ends. Returns when.
+ */
+async function giveUpStarting(name: string, child: { kill(signal?: number | NodeJS.Signals): void }, runtime: DockerRuntime): Promise<number> {
+  const gaveUpAt = Date.now();
+  await removeContainer(name, runtime).catch((error: unknown) => log.warn({ container: name, err: error }, "couldn't remove the container that didn't start"));
+  child.kill("SIGKILL");
+  return gaveUpAt;
 }
 
 /**

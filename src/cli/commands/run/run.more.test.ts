@@ -144,7 +144,7 @@ Recorded in <DATA>/runs.sqlite
     expect(await docker.containers()).toEqual([]);
   }, 30_000);
 
-  test("a container that never starts is that run's outcome, killed before it exists, and the execution goes on to the end", async () => {
+  test("a container that never starts is that run's outcome, given up on before it exists, and the execution goes on to the end", async () => {
     // fake-crasher's container would take a minute to appear: it's given up on after 3s.
     await using docker = await fakeDocker({ slowStart: { "-2-1": 60 } });
     const data = dataDir();
@@ -176,10 +176,11 @@ Recorded in <DATA>/runs.sqlite
     const crasher = store.containerRuns[1] as ContainerRunRecord;
     expect(crasher.execution).toMatchObject({ exitCode: null, timedOut: false, timeoutSeconds: 2, failedToStart: "it didn't start within 3s" });
     expect(crasher).toMatchObject({ harnessResult: null, harnessStderr: null, result: {} });
-    // The kill found no such container, so it wasn't tried again; nothing was committed or measured for it.
+    // It was removed, before it existed, rather than killed; nothing was committed or measured for it.
     const id = store.execution.executionId;
     const commands = await docker.commands();
-    expect(commands.filter((command) => command === `docker kill thunderjar-run-${id}-2-1`)).toHaveLength(1);
+    expect(commands.filter((command) => command.includes(`thunderjar-run-${id}-2-1`) && command.startsWith("docker kill"))).toEqual([]);
+    expect(commands).toContain(`docker rm --force thunderjar-run-${id}-2-1`);
     expect(commands.filter((command) => command.includes(`thunderjar-postrun:${id}-2-1`))).toEqual([]);
     expect(log).toContain("WARN: execution: container didn't start");
     expect(await docker.containers()).toEqual([]);
