@@ -687,6 +687,36 @@ export type RuntimeConfig = {
    * per container run. The image store still has it. Prerun images always stay, for the next execution.
    */
   keepPostrunImages?: boolean;
+  /**
+   * Runs each whole execution on the runtime, in a runner: a container there, from an image
+   * holding Thunderjar and this project's `.thunderjar/` folder, with the runtime's Docker socket.
+   * The runner runs the containers, measures them, pushes their postrun images and writes the run
+   * data store. `run` only builds and pushes the images, starts the runner, and follows it; it can
+   * be interrupted without stopping the execution, and `thunderjar attach` follows it again.
+   * `{}` is enough to turn it on. Without it, `run` runs each Docker command on the runtime itself.
+   */
+  runner?: RunnerConfig;
+};
+
+/** How a runtime's runner is started: see `RuntimeConfig.runner`. */
+export type RunnerConfig = {
+  /**
+   * More environment variables the runner is given, by name, beside those the harnesses need and
+   * the run data store's URL. Their values are copied from `run`'s environment as the execution
+   * is submitted, and kept in the runner's memory only.
+   */
+  env?: string[];
+  /**
+   * The variables holding a user name and a password or token for the image store's registry.
+   * The runner logs in with them before it pulls or pushes. Without it, the runner uses no login.
+   */
+  registryLogin?: { usernameEnv: string; passwordEnv: string };
+  /**
+   * More `docker run` options for the runner's container, e.g. another path for the Docker
+   * socket: `["-v", "/run/user/1000/docker.sock:/var/run/docker.sock"]`. By default it mounts
+   * `/var/run/docker.sock`.
+   */
+  runOptions?: string[];
 };
 
 /**

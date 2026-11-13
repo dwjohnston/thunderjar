@@ -390,3 +390,99 @@ export async function diskUsage(runtime: DockerRuntime = localRuntime()): Promis
 
 export type ExecResult = { stdout: string; stderr: string; exitCode: number };
 
+
+/**
+ * Starts a container `name` from `image` in `runtime`, running the image's own entrypoint, and
+ * leaves it running: `docker run --detach`. `runOptions` are more `docker run` options, before
+ * the image. Throws a DockerPullError if the runtime can't pull `image`, or a DockerContainerError.
+ */
+export async function startDetached(image: string, name: string, runOptions: string[], runtime: DockerRuntime): Promise<void> {
+  const args = ["run", "--detach", "--name", name, "--pull", "missing", ...runOptions, image];
+  log.info({ image, container: name, runOptions, runtime: runtime.command }, "starting detached container");
+  const result = await $`${runtime.command} ${args}`.quiet().nothrow();
+  if (result.exitCode === 0) return;
+  const stderr = result.stderr.toString();
+  log.error({ container: name, exitCode: result.exitCode, stderr }, "starting detached container failed");
+  const reason = reasonOf(stderr) || `${named(runtime, "run")} exited ${result.exitCode}`;
+  if (/pull access denied|manifest unknown|not found: manifest|unauthorized|denied:/.test(stderr)) throw new DockerPullError(reason, image);
+  throw new DockerContainerError(reason);
+}
+
+/**
+ * Writes `text` to the file `path` in the running container `name`, whole or not at all: to a
+ * file beside it, then renamed. `text` goes over the command's input, never on its command line.
+ * Throws a DockerContainerError.
+ */
+export async function writeContainerFile(name: string, path: string, text: string, runtime: DockerRuntime): Promise<void> {
+  const args = ["exec", "--interactive", name, "sh", "-c", `cat > ${path}.part && mv ${path}.part ${path}`];
+  const result = await $`${runtime.command} ${args} < ${new Response(text)}`.quiet().nothrow();
+  log.debug({ command: [...runtime.command, ...args], exitCode: result.exitCode, bytes: text.length }, "wrote file into container");
+  if (result.exitCode !== 0) {
+    log.warn({ container: name, path, exitCode: result.exitCode, stderr: result.stderr.toString() }, "writing a file into a container failed");
+    throw new DockerContainerError(reasonOf(result.stderr) || `${named(runtime, "exec")} exited ${result.exitCode}`);
+  }
+}
+
+/** Stops the container `name`, giving it `graceSeconds` to stop itself before it's killed. Throws a DockerContainerError. */
+export async function stopContainer(name: string, graceSeconds: number, runtime: DockerRuntime): Promise<void> {
+  await mustRun(["stop", "--time", String(graceSeconds), name], runtime);
+}
+
+/** Whether a container is running, and the code it exited with if not. */
+export type ContainerState = { running: boolean; exitCode: number };
+
+/**
+ * The state of the container `name` in `runtime`, or undefined if there's no such container.
+ * Throws a DockerContainerError if Docker can't be asked.
+ */
+export async function containerState(name: string, runtime: DockerRuntime): Promise<ContainerState | undefined> {
+  const result = await $`${runtime.command} inspect --format ${"{{.State.Running}} {{.State.ExitCode}}"} ${name}`.quiet().nothrow();
+  if (result.exitCode !== 0) {
+    const reason = reasonOf(result.stderr);
+    if (reason !== undefined && /No such (object|container)/i.test(reason)) return undefined;
+    throw new DockerContainerError(reason || `${named(runtime, "inspect")} exited ${result.exitCode}`);
+  }
+  const [running, exitCode] = result.stdout.toString().trim().split(" ");
+  return { running: running === "true", exitCode: Number(exitCode) };
+}
+
+/**
+ * Follows what the container `name` writes to its stdout, from its start, calling `onLine` with
+ * each whole line, until the container stops, the connection to `runtime` drops, or `signal`
+ * aborts. Returns how `docker logs --follow` exited: 0 once the container has stopped.
+ */
+export async function followLogs(name: string, runtime: DockerRuntime, onLine: (line: string) => void, signal?: AbortSignal): Promise<number> {
+  const child = Bun.spawn([...runtime.command, "logs", "--follow", name], { env: { ...Bun.env }, stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const abort = () => child.kill();
+  signal?.addEventListener("abort", abort);
+  if (signal?.aborted) abort();
+  try {
+    const decoder = new TextDecoder();
+    let rest = "";
+    for await (const chunk of child.stdout) {
+      const lines = (rest + decoder.decode(chunk, { stream: true })).split("\n");
+      rest = lines.pop() ?? "";
+      for (const line of lines) onLine(line);
+    }
+    return await child.exited;
+  } finally {
+    signal?.removeEventListener("abort", abort);
+  }
+}
+
+/** The last `lines` lines the container `name` wrote to its stderr, or "" if they can't be read. */
+export async function stderrTail(name: string, runtime: DockerRuntime, lines = 20): Promise<string> {
+  const result = await $`${runtime.command} logs --tail ${String(lines)} ${name}`.quiet().nothrow();
+  return result.exitCode === 0 ? result.stderr.toString().trim() : "";
+}
+
+/**
+ * Logs Docker in to the registry `host` as `username`, with `password` given on its input, never
+ * on a command line. Docker keeps the login in its config folder, DOCKER_CONFIG. Throws a DockerLoginError.
+ */
+export async function login(host: string, username: string, password: string): Promise<void> {
+  const binary = dockerBinary();
+  const result = await $`${binary} login ${host} --username ${username} --password-stdin < ${new Response(password)}`.quiet().nothrow();
+  log.debug({ host, exitCode: result.exitCode }, "logged in to registry");
+  if (result.exitCode !== 0) throw new DockerLoginError(reasonOf(result.stderr)?.replace(/^error: /i, "") || `\`${binary} login\` exited ${result.exitCode}`);
+}

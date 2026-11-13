@@ -47,6 +47,16 @@
 // reports made-up sizes: 100MB an image. `run --rm --interactive` runs a shell session, as
 // src/docker/shellSession.ts speaks to one; it fails to start for a container named in failing.
 //
+// A runner (src/execution/runner.ts) really runs too. `run --detach --name <name> --pull missing
+// [<option>]… <image>`, with no `--entrypoint`, starts the CLI's `runner` command on the host, in
+// the `project/` of the build context `<image>` was built from, left running, with this fake as
+// its Docker and only PATH and HOME beside: what it needs must come in its submission. `exec
+// --interactive <name> sh -c <script>` on it runs the script with /run/thunderjar mapped into
+// the container, `logs --follow <name>` writes its stdout until it stops, `logs --tail <n> <name>`
+// the end of its stderr, `inspect --format <format> <name>` whether it's running and its exit
+// code, and `stop --time <seconds> <name>` sends it SIGTERM and waits for it. `login <host>
+// --username <name> --password-stdin` adds `<host>` to logins.
+//
 // Without FAKE_DOCKER_DIR the daemon is reachable, no image exists, nothing is recorded, and no
 // container can run. Tests make its state with `fakeDocker()`.
 
@@ -124,7 +134,8 @@ export async function fakeDocker({
     },
     pushed: async () => ((await Bun.file(`${dir}/pushed`).exists()) ? listOf(`${dir}/pushed`) : []),
     containers: async () =>
-      (await Bun.file(`${dir}/containers`).exists())
+      // A folder: Bun.file's exists() is false for one.
+      (await $`test -d ${dir}/containers`.quiet().nothrow()).exitCode === 0
         ? (await Array.fromAsync(new Glob("*/image").scan({ cwd: `${dir}/containers` }))).map((file) => file.slice(0, -"/image".length)).sort()
         : [],
     fileIn: async (image, path) => {
@@ -202,6 +213,8 @@ if (import.meta.main) {
   };
 
   const [command, subcommand, ...rest] = args;
+  /** Whether the runner in `container` is still running: it writes its exit code as it stops. */
+  const runnerRunning = async (container: string) => !(await Bun.file(`${container}/exitcode`).exists());
   if (command === "image" && subcommand === "ls" && rest[0] === "--format" && rest.length === 3) {
     // docker image ls --format {{.Repository}}:{{.Tag}} <repository>
     const repository = rest[2] as string;
@@ -315,6 +328,91 @@ if (import.meta.main) {
       // Killed, it exits as Docker reports a killed container: 128 + SIGKILL.
       process.exit(child.signalCode ? 137 : exitCode);
     }
+  } else if (command === "run" && subcommand === "--detach" && rest[0] === "--name" && rest[2] === "--pull" && !rest.includes("--entrypoint")) {
+    // docker run --detach --name <name> --pull missing [<option>]… <image>: a runner
+    const [name, image] = [rest[1] as string, rest.at(-1) as string];
+    if (!dir) fail("fake docker: running a container needs FAKE_DOCKER_DIR");
+    if (!(await list("images")).includes(image) && !(await list("pushed")).includes(image)) fail(`docker: Error response from daemon: pull access denied for ${image}, repository does not exist or may require 'docker login'`);
+    const container = `${dir}/containers/${name}`;
+    if (await state(`containers/${name}/image`).exists()) fail(`docker: Error response from daemon: Conflict. The container name "/${name}" is already in use.`);
+    await Bun.write(`${container}/image`, `${image}\n`);
+    await Bun.write(`${container}/runner`, "");
+    await $`mkdir -p ${container}/run ${container}/root/workspace ${container}/root/var/log`.quiet();
+    const cli = `${FIXTURES_DIR}/../src/cli/index.ts`;
+    const script = `bun "$CLI" --log-file "$C/root/var/log/thunderjar-runner.log" runner --submission "$C/run/submission.json" > "$C/stdout" 2> "$C/stderr" & echo $! > "$C/pid"; wait $!; echo $? > "$C/exitcode"`;
+    const child = Bun.spawn(["sh", "-c", script], {
+      cwd: `${dir}/contexts/${image}/project`,
+      env: {
+        PATH: Bun.env.PATH ?? "/usr/bin:/bin",
+        HOME: `${container}/root`,
+        TMPDIR: Bun.env.TMPDIR ?? "/tmp",
+        THUNDERJAR_DOCKER: FAKE_DOCKER,
+        FAKE_DOCKER_DIR: dir as string,
+        ...(Bun.env.THUNDERJAR_LOG_LEVEL && { THUNDERJAR_LOG_LEVEL: Bun.env.THUNDERJAR_LOG_LEVEL }),
+        ...(Bun.env.FAKE_RUNNER_ENV && (JSON.parse(Bun.env.FAKE_RUNNER_ENV) as Record<string, string>)),
+        C: container,
+        CLI: cli,
+      },
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    child.unref();
+    console.log(crypto.randomUUID().replaceAll("-", ""));
+  } else if (command === "exec" && subcommand === "--interactive" && dir && (await state(`containers/${rest[0]}/runner`).exists())) {
+    // docker exec --interactive <runner> sh -c <script>, its /run/thunderjar mapped into the container
+    const container = `${dir}/containers/${rest[0]}`;
+    if (!(await runnerRunning(container))) fail(`Error response from daemon: container ${rest[0]} is not running`);
+    const program = rest.slice(1).map((arg) => arg.replaceAll("/run/thunderjar", `${container}/run`));
+    const result = await $`${program} < ${new Response(await Bun.stdin.text())}`.quiet().nothrow();
+    process.stderr.write(result.stderr);
+    process.exit(result.exitCode);
+  } else if (command === "logs" && (subcommand === "--follow" || subcommand === "--tail")) {
+    // docker logs --follow <name>, or docker logs --tail <n> <name>
+    const name = args.at(-1) as string;
+    const container = `${dir}/containers/${name}`;
+    if (!dir || !(await state(`containers/${name}/image`).exists())) fail(`Error response from daemon: No such container: ${name}`);
+    if (subcommand === "--tail") {
+      const stderr = Bun.file(`${container}/stderr`);
+      process.stderr.write((await stderr.exists()) ? (await stderr.text()).split("\n").slice(-Number(rest[0]) - 1).join("\n") : "");
+    } else {
+      let written = 0;
+      for (;;) {
+        const running = await runnerRunning(container);
+        // A new Bun.file each time: one read caches the file's size.
+        const stdout = Bun.file(`${container}/stdout`);
+        const bytes = (await stdout.exists()) ? new Uint8Array(await stdout.arrayBuffer()) : new Uint8Array(0);
+        if (bytes.length > written) {
+          process.stdout.write(bytes.slice(written));
+          written = bytes.length;
+        }
+        // FAKE_DOCKER_DROP_LOGS: the connection drops after its first lines, as an SSH connection might.
+        if (Bun.env.FAKE_DOCKER_DROP_LOGS && written > 0 && !(await Bun.file(`${container}/dropped`).exists())) {
+          await Bun.write(`${container}/dropped`, "");
+          process.exit(255);
+        }
+        if (!running) break;
+        await Bun.sleep(50);
+      }
+    }
+  } else if (command === "inspect" && subcommand === "--format" && rest.length === 2) {
+    // docker inspect --format {{.State.Running}} {{.State.ExitCode}} <name>
+    const name = rest[1] as string;
+    if (!dir || !(await state(`containers/${name}/image`).exists())) fail(`Error response from daemon: No such container: ${name}`);
+    const exited = Bun.file(`${dir}/containers/${name}/exitcode`);
+    console.log((await exited.exists()) ? `false ${(await exited.text()).trim()}` : "true 0");
+  } else if (command === "stop" && subcommand === "--time" && rest.length === 2) {
+    // docker stop --time <seconds> <name>
+    const container = `${dir}/containers/${rest[1]}`;
+    if (!dir || !(await state(`containers/${rest[1]}/pid`).exists())) fail(`Error response from daemon: No such container: ${rest[1]}`);
+    await $`kill -TERM ${(await Bun.file(`${container}/pid`).text()).trim()}`.quiet().nothrow();
+    for (let waited = 0; waited < Number(rest[0]) * 1000 && (await runnerRunning(container)); waited += 50) await Bun.sleep(50);
+    console.log(rest[1]);
+  } else if (command === "login" && rest[0] === "--username" && rest[2] === "--password-stdin" && rest.length === 3) {
+    // docker login <host> --username <name> --password-stdin
+    if ((await Bun.stdin.text()) === "") fail("Error: Cannot perform an interactive login from a non TTY device");
+    if (dir) await append("logins", subcommand as string);
+    console.log("Login Succeeded");
   } else if (command === "exec") {
     // docker exec [--interactive] [--workdir <dir>] <name> <command…>, always in root/workspace; `sh -c pwd` prints /workspace
     const interactive = subcommand === "--interactive";
