@@ -7,7 +7,7 @@ import { copyScenarioProject, thunderjar, TMP_DIR } from "../../../testing/cli.t
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { FAKE_DOCKER, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
-import { KEY, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
+import { KEY, dataDir, permutation, readStore, removeDataDirs, shownExecution, storeExists } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
 
@@ -24,7 +24,7 @@ describe("0202 typical project, without the key fake-harness-alpha needs", () =>
     expect(stderr).toBe(MISSING);
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual([]);
-    expect(await Bun.file(data).exists()).toBe(false);
+    expect(await storeExists(data)).toBe(false);
   });
 
   test("so does the dry run", async () => {
@@ -180,7 +180,7 @@ describe("0402 broken declarations", () => {
     );
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual([]);
-    expect(await Bun.file(data).exists()).toBe(false);
+    expect(await storeExists(data)).toBe(false);
   });
 });
 
@@ -247,7 +247,7 @@ describe("0207 image store", () => {
     );
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual(["docker login ghcr.io"]);
-    expect(await Bun.file(data).exists()).toBe(false);
+    expect(await storeExists(data)).toBe(false);
   });
 
   test("pushes the prerun image once built, and the postrun image before it's measured", async () => {
@@ -275,7 +275,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(commands.indexOf(`docker push --quiet ${postrun}`)).toBeLessThan(commands.findIndex((command) => command.includes("-measure-")));
   });
 
-  test("a prerun push the registry refuses is an error, and nothing is run or written", async () => {
+  test("a prerun push the registry refuses is an error, and nothing is run, but the execution is recorded as failed, with why", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"], failing: [PRERUN] });
     const data = dataDir();
 
@@ -287,7 +287,23 @@ Check that your Docker login for ghcr.io can push to ${REPOSITORY}: on ghcr.io, 
 `);
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => command.startsWith("docker run"))).toEqual([]);
-    expect(await Bun.file(data).exists()).toBe(false);
+    const shown = await shownExecution(scenario("0207"), data);
+    expect(shown.executions).toBe("<ULID>  example  <MINUTE>  1 permutation × 1 iteration  failed (push)\n");
+    expect(shown.show).toBe(`Execution  <ULID>
+Test case  example
+Task       is-prime
+Started    <MINUTE>
+Status     failed
+Failed at  push
+Matrix     1 permutation × 1 iteration
+
+Error
+  Pushing ${PRERUN} failed: denied: permission_denied: The token provided does not match expected scopes.
+  Check that your Docker login for ghcr.io can push to ${REPOSITORY}: on ghcr.io, a token needs the write:packages scope.
+
+No container runs recorded.
+`);
+    expect(shown.showJson.execution).toMatchObject({ status: "failed", phase: "images", failure: { step: "push" } });
   });
 });
 
@@ -302,6 +318,34 @@ describe("0201 minimal existing setup, with imageStore: null", () => {
     expect(commands[0]).toBe("docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun");
     expect(commands.filter((command) => /^docker (login|tag|push)\b/.test(command))).toEqual([]);
   });
+
+  test("interrupted while a prerun image builds, it starts no container, and records the execution as failed, interrupted", async () => {
+    const { stdout: plan } = await thunderjar(scenario("0201"), ["run", "example", "--dry-run"]);
+    const prerun = /prerun image (\S+)/.exec(plan)?.[1] as string;
+    await using docker = await fakeDocker({ slow: [prerun] });
+    const data = dataDir();
+    const cli = Bun.spawn(["bun", `${REPO_ROOT}/src/cli/index.ts`, "run", "example", "--data-dir", data, "--log-level", "silent"], {
+      cwd: scenario("0201"),
+      env: { ...Bun.env, TMPDIR: TMP_DIR, ...docker.env },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    while (!(await docker.commands()).some((command) => command.startsWith("docker build"))) await Bun.sleep(20);
+
+    cli.kill("SIGINT");
+    const [exitCode, stderr] = await Promise.all([cli.exited, new Response(cli.stderr).text()]);
+
+    expect(exitCode).toBe(130);
+    const { execution, containerRuns } = await readStore(data);
+    expect(stderr).toBe(`Error: Interrupted (SIGINT): stopping execution ${execution.executionId}'s containers.\n`);
+    expect(execution).toMatchObject({ status: "failed", phase: "images", finishedAt: expect.any(String), failure: { step: "interrupted", reason: "Interrupted (SIGINT)" } });
+    expect(containerRuns).toEqual([]);
+    // The build it was waiting for finished, but no iteration started after it.
+    expect((await docker.commands()).filter((command) => command.startsWith("docker run"))).toEqual([]);
+    const shown = await shownExecution(scenario("0201"), data);
+    expect(shown.executions).toBe("<ULID>  example  <MINUTE>  1 permutation × 1 iteration  failed (interrupted)\n");
+    expect(shown.show).toContain("Status     failed\nFailed at  interrupted\n");
+  }, 30_000);
 });
 
 describe("0211 remote runtime", () => {
@@ -588,7 +632,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(Object.keys(containerRuns[0]?.result ?? {})).toHaveLength(4);
   }, 30_000);
 
-  test("when the first prerun image fails to build, before any iteration starts, nothing is recorded", async () => {
+  test("when the first prerun image fails to build, before any iteration starts, the execution is recorded as failed, with no container runs", async () => {
     const { copy, alpha } = await copyWithTwoImages(2, 2);
     await using _copy = copy;
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], failing: [alpha] });
@@ -598,7 +642,9 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 
     expect(exitCode).toBe(1);
     expect(stderr).toContain(`Building ${alpha} failed`);
-    expect(await Bun.file(data).exists()).toBe(false);
+    const { execution, containerRuns } = await readStore(data);
+    expect(execution).toMatchObject({ status: "failed", phase: "images", failure: { step: "build", reason: expect.stringContaining(`Building ${alpha} failed: `) } });
+    expect(containerRuns).toEqual([]);
   }, 30_000);
 
   test("--iterations overrides the test case's, in what's run, written and recorded", async () => {
@@ -686,7 +732,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     // Its agents were killed, not left running.
     // Gone, or a zombie nobody has reaped yet: `ps` prints its state, or nothing.
     for (const pid of agents) expect((await $`ps -o stat= -p ${pid}`.quiet().nothrow().text()).trim()).toMatch(/^(Z.*)?$/);
-    expect((await readStore(data)).execution.status).toBe("failed");
+    expect((await readStore(data)).execution).toMatchObject({ status: "failed", phase: "runs", failure: { step: "interrupted", reason: "Interrupted (SIGTERM)" } });
   }, 30_000);
 
   test("beforeExecution runs before anything runs on the runtime, and afterExecution once it's done, each told about the execution", async () => {
@@ -726,7 +772,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(stdout).toContain("Running the runtime's beforeExecution, `sh -c ");
   }, 30_000);
 
-  test("a beforeExecution that fails is an error, and nothing else runs, afterExecution included", async () => {
+  test("a beforeExecution that fails is an error, and nothing else runs, afterExecution included, but the execution is recorded as failed, with why", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithHooks("echo starting; echo no machine to start >&2; exit 3", LOGS.replace("$0", "after"));
     const data = dataDir();
@@ -738,7 +784,22 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => / (build|push|pull|run) /.test(command))).toEqual([]);
     expect(await Bun.file(copy.log).exists()).toBe(false);
-    expect(await Bun.file(data).exists()).toBe(false);
+    const shown = await shownExecution(copy.dir, data);
+    expect(shown.executions).toBe("<ULID>  example  <MINUTE>  1 permutation × 2 iterations  failed (beforeExecution)\n");
+    expect(shown.show).toContain(`Status     failed
+Failed at  beforeExecution
+Matrix     1 permutation × 2 iterations
+
+Error
+  The runtime's beforeExecution failed: no machine to start
+
+No container runs recorded.
+`);
+    expect(shown.executionsJson[0]).toMatchObject({
+      status: "failed",
+      phase: "beforeExecution",
+      failure: { step: "beforeExecution", reason: "The runtime's beforeExecution failed: no machine to start" },
+    });
   });
 
   test("afterExecution runs after an execution that failed, and an afterExecution that fails is an error", async () => {
@@ -765,7 +826,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(await Bun.file(copy.log).exists()).toBe(false);
   }, 30_000);
 
-  test("a pull the runtime can't make is an error saying what to check, and nothing is run or written", async () => {
+  test("a pull the runtime can't make is an error saying what to check, and nothing is run, but the execution is recorded as failed, with why", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"], pullDenied: true });
     const data = dataDir();
 
@@ -781,6 +842,13 @@ Make sure it can reach the image store's registry and is logged in to it. \`thun
 `);
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => / run /.test(command))).toEqual([]);
-    expect(await Bun.file(data).exists()).toBe(false);
+    const { execution, containerRuns } = await readStore(data);
+    expect(execution).toMatchObject({
+      status: "failed",
+      phase: "images",
+      failure: { step: "pull", reason: expect.stringContaining(`The runtime couldn't pull ${PRERUN}: Error response from daemon: pull access denied`) },
+    });
+    expect(containerRuns).toEqual([]);
+    expect((await shownExecution(scenario("0211"), data)).executions).toBe("<ULID>  example  <MINUTE>  1 permutation × 1 iteration  failed (pull)\n");
   });
 });

@@ -10,7 +10,7 @@ import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 import type { ExecutionSummary } from "../../../execution/executionSummary.ts";
-import { ALPHA_JSON, ALPHA_MEASURES, AWKWARD, BETA_MEASURES, ISO, KEY, SHA, alphaPermutation, containerCommands, dataDir, filesIn, measure, measured, permutation, postgresSchema, readStore, removeDataDirs, usePostgres } from "./runTestSupport.ts";
+import { ALPHA_JSON, ALPHA_MEASURES, AWKWARD, BETA_MEASURES, ISO, KEY, SHA, alphaPermutation, containerCommands, dataDir, filesIn, measure, measured, permutation, postgresSchema, readStore, removeDataDirs, shownExecution, usePostgres } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
 
@@ -142,6 +142,7 @@ Recorded in <DATA>/runs.sqlite
       startedAt: ISO,
       finishedAt: ISO,
       status: "complete",
+      phase: "runs",
       matrix: { shape: [1, 1, 1, 2, 1], permutations: 2, iterations: 1 },
     });
     const [alpha, beta] = store.containerRuns as [ContainerRunRecord, ContainerRunRecord];
@@ -529,7 +530,7 @@ export default declareHarness({ version: "1.0.0", applyParameter: () => writeRun
     expect(await docker.containers()).toEqual([]);
   });
 
-  test("Docker that can't be reached is an error, and nothing is run or written", async () => {
+  test("Docker that can't be reached is an error, and nothing is run, but the execution is recorded as failed, with why", async () => {
     await using docker = await fakeDocker({ unreachable: true });
     const data = dataDir();
 
@@ -540,10 +541,19 @@ export default declareHarness({ version: "1.0.0", applyParameter: () => writeRun
       "Error: Docker can't be reached, so nothing can be run: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
     );
     expect(exitCode).toBe(1);
-    expect(await Bun.file(data).exists()).toBe(false);
+    const { execution, containerRuns } = await readStore(data);
+    expect(execution).toMatchObject({
+      status: "failed",
+      phase: "images",
+      failure: {
+        step: "docker",
+        reason: "Docker can't be reached, so nothing can be run: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
+      },
+    });
+    expect(containerRuns).toEqual([]);
   });
 
-  test("a failed build is an error, and nothing is run or written", async () => {
+  test("a failed build is an error, and nothing is run, but the execution is recorded as failed, with why, for executions and show", async () => {
     await using docker = await fakeDocker({ failing: ["thunderjar-prerun:32a1d048"] });
     const data = dataDir();
 
@@ -555,7 +565,39 @@ export default declareHarness({ version: "1.0.0", applyParameter: () => writeRun
     );
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => command.startsWith("docker run"))).toEqual([]);
-    expect(await Bun.file(data).exists()).toBe(false);
+    const reason = 'Building thunderjar-prerun:32a1d048 failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1';
+    const { execution, containerRuns } = await readStore(data);
+    expect(execution).toEqual({
+      executionId: expect.stringMatching(/^[0-7][0-9a-z]{25}$/),
+      testCase: "example",
+      task: "is-prime",
+      startedAt: ISO,
+      finishedAt: ISO,
+      status: "failed",
+      phase: "images",
+      matrix: { shape: [1, 1, 1, 1, 1], permutations: 1, iterations: 1 },
+      failure: { step: "build", reason },
+    });
+    expect(containerRuns).toEqual([]);
+
+    const shown = await shownExecution(scenario("0202"), data);
+    expect(shown.executions).toBe("<ULID>  example  <MINUTE>  1 permutation × 1 iteration  failed (build)\n");
+    expect(shown.show).toBe(`Execution  <ULID>
+Test case  example
+Task       is-prime
+Started    <MINUTE>
+Status     failed
+Failed at  build
+Matrix     1 permutation × 1 iteration
+
+Error
+  ${reason}
+
+No container runs recorded.
+`);
+    expect(shown.executionsJson).toEqual([{ ...execution, executionId: "<ULID>" }]);
+    expect(shown.showJson.execution).toEqual({ ...execution, executionId: "<ULID>" });
+    expect(shown.showJson.permutations).toEqual([expect.objectContaining({ permutation: 1, iterations: 0 })]);
   });
 });
 

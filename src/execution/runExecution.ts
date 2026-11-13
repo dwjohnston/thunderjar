@@ -10,14 +10,16 @@
 // recorded and measured, and the rest still run, but the execution is `failed`.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
 import { diskUsage, inRegistry, localRuntime, remoteRuntime, removeContainersNamed, removeImages } from "../docker/docker.ts";
-import { loadMeasurements } from "../config/measurements.ts";
+import type { Measurement } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
-import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
+import { AXES, parsePair } from "../config/permutations.ts";
 import type {
   ContainerRunRecord,
   Execution,
+  ExecutionPhase,
   ExecutionRecord,
   ExecutionStatus,
+  FailureStep,
   RecordedMeasure,
   RunDataStore,
 } from "../store/runDataStore.ts";
@@ -77,6 +79,10 @@ export type ExecutionToRun = {
   runtime?: RuntimeConfig | null;
   /** How many iterations' containers run at once: 1, one after another, by default. */
   concurrency?: number;
+  /** Its task's measurements, loaded before the execution was recorded, so a broken one stops it first. */
+  measurements: Measurement[];
+  /** Aborted when it's interrupted: then no more builds, pushes, pulls or iterations start. */
+  signal?: AbortSignal;
 };
 
 /**
@@ -95,6 +101,60 @@ export async function removeExecutionContainers(executionId: string, imagePrefix
   const removed = await removeContainersNamed(executionContainerPrefix(executionId, imagePrefix), runtime === null ? localRuntime() : remoteRuntime(runtime.command));
   log.warn({ executionId, removed }, "execution interrupted: removed its containers");
   return removed;
+}
+
+/** An execution's record in the run data store, kept up to date as it goes. See `executionRecorder`. */
+export type ExecutionRecorder = {
+  /** The record as last written. */
+  readonly current: ExecutionRecord;
+  /** Records that it has got to `phase`, unless it's there already or has ended. */
+  enter(phase: ExecutionPhase): Promise<void>;
+  /** Records that it ended, `complete` or `failed`, unless it has ended already. Returns the record. */
+  finish(status: Exclude<ExecutionStatus, "running">): Promise<ExecutionRecord>;
+  /** Records that it failed while doing `step`, for `reason`, unless it has ended already. */
+  fail(step: FailureStep, reason: string): Promise<void>;
+};
+
+/**
+ * Records execution `record` in `store` as `running`, in `phase`, as it starts, before the
+ * runtime's `beforeExecution` or any build, so one that fails before its first container run is
+ * still recorded, with why. Writes go one after another, in order. Throws a RunDataStoreError if
+ * the first can't be written; a later write that fails throws from the call that made it.
+ */
+export async function executionRecorder(
+  store: RunDataStore,
+  record: Pick<ExecutionRecord, "executionId" | "testCase" | "task" | "matrix">,
+  phase: ExecutionPhase,
+): Promise<ExecutionRecorder> {
+  const { executionId, testCase, task, matrix } = record;
+  let current: ExecutionRecord = { executionId, testCase, task, startedAt: new Date().toISOString(), status: "running", phase, matrix };
+  let writing: Promise<void> = Promise.resolve();
+  const write = (next: ExecutionRecord) => {
+    current = next;
+    // Each waits for the one before, so the last written is the last made, whether or not that one failed.
+    writing = writing.catch(() => {}).then(() => store.recordExecution(next));
+    return writing;
+  };
+  await write(current);
+  const ended = () => current.status !== "running";
+  return {
+    get current() {
+      return current;
+    },
+    async enter(next) {
+      if (ended() || current.phase === next) return;
+      await write({ ...current, phase: next });
+    },
+    async finish(status) {
+      if (!ended()) await write({ ...current, status, finishedAt: new Date().toISOString() });
+      return current;
+    },
+    async fail(step, reason) {
+      if (ended()) return;
+      log.error({ executionId: current.executionId, phase: current.phase, step, reason }, "execution failed");
+      await write({ ...current, status: "failed", finishedAt: new Date().toISOString(), failure: { step, reason } });
+    },
+  };
 }
 
 /** What a container run left, as recorded: its result file, the end of its stderr, and its reply. */
@@ -140,17 +200,18 @@ function containerRunRecord(
 }
 
 /**
- * Runs `run`, recording it in `store`, and returns its execution record. With an image store,
+ * Runs `run`, recording its container runs in `store`, and its progress and end through
+ * `recorder`, and returns its execution record. With an image store,
  * each prerun image is pushed once built, and each postrun image as soon as it's recorded,
- * while it's measured, then removed from the runtime. Throws a ConfigError if its task's measurements are wrong, a
+ * while it's measured, then removed from the runtime. Throws a
  * DockerUnavailableError, ConfigError or DockerBuildError if a prerun image can't be built, a
  * DockerPushError if one can't be pushed, a DockerPullError if the runtime can't pull one, and a
  * DockerContainerError if Docker fails while running or measuring one. Once anything fails, no
- * more builds or iterations start, and those going finish first. The execution is recorded as its
- * first iteration starts, so if one fails before then, nothing is; after, it's recorded as `failed`.
+ * more builds or iterations start, and those going finish first. If it throws, the execution is
+ * left `running`, for the caller to record as failed, with the error as it reports it.
  */
-export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks = {}): Promise<ExecutionRecord> {
-  const { root, testCase, plan, imagePrefix, imageStore = null, build = {}, runtime: remote = null } = run;
+export async function runExecution(run: ExecutionToRun, store: RunDataStore, recorder: ExecutionRecorder, hooks: RunHooks = {}): Promise<ExecutionRecord> {
+  const { root, testCase, plan, imagePrefix, imageStore = null, build = {}, runtime: remote = null, measurements } = run;
   if (remote !== null && imageStore === null) throw new Error("A runtime needs an image store: it runs images from it.");
   const runtime = remote === null ? localRuntime() : remoteRuntime(remote.command);
   const { executionId } = plan;
@@ -160,7 +221,6 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     { executionId, testCase: run.name, task: testCase.task, permutations: plan.permutations.length, imageStore: imageStore?.repository, runtime: remote?.command, concurrency: run.concurrency ?? 1 },
     "execution starting",
   );
-  const measurements = await loadMeasurements(root, testCase.task);
   /** Logs how much disk the runtime's Docker uses, `when` the execution starts or ends. Only for a remote runtime, whose disk nobody watches. */
   const logDiskUsage = async (when: "before" | "after") => {
     if (remote === null) return;
@@ -171,6 +231,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     }
   };
   await logDiskUsage("before");
+  await recorder.enter("images");
   const images = await prerunImages(
     plan.permutations.map(({ permutation }) => permutation),
     imagePrefix,
@@ -213,7 +274,15 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     ready.get(image.permutation.imageHash)?.resolve();
   };
   const preparing = inParallel(
-    images.map((image) => () => (failure === undefined ? failing(() => prepare(image)) : Promise.resolve())),
+    images.map(
+      (image) => () =>
+        failure === undefined
+          ? failing(async () => {
+              run.signal?.throwIfAborted();
+              await prepare(image);
+            })
+          : Promise.resolve(),
+    ),
     build.concurrency ?? 1,
   )
     .catch(() => {})
@@ -226,31 +295,13 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     if (failure !== undefined) throw failure.error;
   }
 
-  let startedAt = "";
-  const executionRecord = (status: ExecutionStatus, finishedAt?: string): ExecutionRecord => ({
-    executionId: plan.executionId,
-    testCase: run.name,
-    task: testCase.task,
-    startedAt,
-    finishedAt,
-    status,
-    matrix: { shape: matrixShape(testCase), permutations: plan.permutations.length, iterations: testCase.iterations },
-  });
-  let recording: Promise<void> | undefined;
-  const recordStart = () => {
-    if (recording === undefined) {
-      startedAt = new Date().toISOString();
-      recording = store.recordExecution(executionRecord("running"));
-    }
-    return recording;
-  };
-
   let status: ExecutionStatus = "complete";
   let finished: ExecutionRecord | undefined;
   const runIteration = async (permutation: PlannedPermutation, iteration: PlannedIteration) => {
     await ready.get(permutation.permutation.imageHash)?.promise;
     if (failure !== undefined) throw failure.error;
-    await recordStart();
+    run.signal?.throwIfAborted();
+    await recorder.enter("runs");
     await runAndMeasure(permutation, iteration);
     hooks.onDone?.(permutation, iteration);
   };
@@ -323,15 +374,15 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     }
   };
 
+  let threw = false;
   try {
     await inParallel(
       plan.permutations.flatMap((permutation) => permutation.iterations.map((iteration) => () => failing(() => runIteration(permutation, iteration)))),
       run.concurrency ?? 1,
     );
-    await recordStart();
   } catch (error) {
-    status = "failed";
-    log.error({ executionId, err: error }, "execution failed");
+    threw = true;
+    log.error({ executionId, err: error }, "execution stopped on an error");
     throw error;
   } finally {
     // Nothing is left building, pushing or pulling.
@@ -340,10 +391,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     const spent = timer.summary();
     log.info({ executionId, ...spent }, "execution timings");
     hooks.onTimings?.(spent);
-    if (recording !== undefined) {
-      await recording;
-      finished = executionRecord(status, new Date().toISOString());
-      await store.recordExecution(finished);
+    if (!threw) {
+      finished = await recorder.finish(status);
       log.info({ executionId, status, ms: Date.now() - executionStartedAt }, "execution finished");
     }
   }

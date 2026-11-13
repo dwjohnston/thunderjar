@@ -3,7 +3,7 @@
 import { expect } from "bun:test";
 import { $, Glob, SQL } from "bun";
 import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
-import { TMP_DIR } from "../../../testing/cli.ts";
+import { TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import type { FakeDocker } from "../../../testing/fakeDocker.ts";
 
 /** What 0202's fake-harness-alpha needs: `plan` and `run` stop without it. */
@@ -52,6 +52,31 @@ export async function readStore(dir: string) {
     files: filesIn(dir),
     execution: execution as ExecutionRecord,
     containerRuns: execution ? await store.containerRunsOf(execution.executionId) : [],
+  };
+}
+
+/** Whether a run data store was written in `dir`, a `--data-dir`. */
+export const storeExists = (dir: string) => Bun.file(storeFileIn(dir)).exists();
+
+/** The minute an execution started, as `executions` and `show` print it, replaced: it's when the test ran. */
+const atMinute = (text: string) => text.replace(/\d{4}-\d\d-\d\d \d\d:\d\d/g, "<MINUTE>");
+
+/**
+ * What `executions` and `show` print, run in `cwd`, of the one execution recorded in `dir`, a
+ * `--data-dir`, as text and as JSON, the minute it started replaced with `<MINUTE>`.
+ */
+export async function shownExecution(cwd: string, dir: string) {
+  const { executionId } = (await readStore(dir)).execution;
+  const cli = async (args: string[]) => {
+    const { stdout, stderr, exitCode } = await thunderjar(cwd, [...args, "--data-dir", dir]);
+    expect({ stderr, exitCode }).toEqual({ stderr: "", exitCode: 0 });
+    return stdout;
+  };
+  return {
+    executions: atMinute(await cli(["executions"])),
+    show: atMinute(await cli(["show", executionId])),
+    executionsJson: JSON.parse(await cli(["executions", "--json"])) as ExecutionRecord[],
+    showJson: JSON.parse(await cli(["show", executionId, "--json"])) as { execution: ExecutionRecord; permutations: unknown[] },
   };
 }
 

@@ -2,18 +2,19 @@ import { Command, InvalidArgumentError, Option } from "commander";
 import type { TestCaseDeclaration } from "../../../api/declarations.ts";
 import { RUN_SCRIPT_PATH } from "../../../api/files.ts";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
-import { AXES, parsePair } from "../../../config/permutations.ts";
+import { loadMeasurements } from "../../../config/measurements.ts";
+import { AXES, matrixShape, parsePair } from "../../../config/permutations.ts";
 import { checkBuildSecrets, isConcurrency, loadProjectConfig } from "../../../config/projectConfig.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerBuildError, DockerContainerError, DockerPullError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { type PlannedExecution, type PlannedIteration, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
-import { removeExecutionContainers, runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
+import { type ExecutionRecorder, executionRecorder, removeExecutionContainers, runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
 import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
 import type { ExecutionTimings } from "../../../execution/timings.ts";
 import { ulid } from "../../../execution/ulid.ts";
-import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type ExecutionRecord, type FailureStep, type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
@@ -201,6 +202,29 @@ const storeFailure = (cwd: string, { path, message }: RunDataStoreError, consequ
   `Can't use the run data store, ${displayPath(cwd, path)}, ${consequence}: ${message}\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead.`;
 
 /**
+ * What `run` says of `caught`, the error its execution stopped on, and what the execution was doing:
+ * its step. Undefined for an error it doesn't expect. `marksLine` if the waiting line shown, if any, is
+ * marked failed. `running` if a container run's line is waiting, not its measures'.
+ */
+function stoppedBy(caught: unknown, cwd: string, concurrent: boolean, running: boolean): { step: FailureStep; message: string; marksLine: boolean } | undefined {
+  if (caught instanceof DockerUnavailableError) return { step: "docker", message: `Docker can't be reached, so nothing can be run: ${caught.message}`, marksLine: false };
+  if (caught instanceof DockerBuildError) return { step: "build", message: `Building ${caught.image} failed: ${caught.message}`, marksLine: true };
+  if (caught instanceof DockerContainerError && concurrent) return { step: "run", message: `Running or measuring a container failed: ${caught.message}`, marksLine: false };
+  if (caught instanceof DockerPushError) return { step: "push", message: pushFailure(caught.reference, caught), marksLine: true };
+  if (caught instanceof DockerPullError) {
+    return {
+      step: "pull",
+      message: `The runtime couldn't pull ${caught.reference}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
+      marksLine: true,
+    };
+  }
+  if (caught instanceof RunDataStoreError) return { step: "store", message: storeFailure(cwd, caught, "so the execution stopped"), marksLine: true };
+  if (caught instanceof DockerContainerError && running) return { step: "run", message: `Running a container failed: ${caught.message}`, marksLine: true };
+  if (caught instanceof DockerContainerError) return { step: "measure", message: `Measuring a container run failed: ${caught.message}`, marksLine: true };
+  return undefined;
+}
+
+/**
  * Runs test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it: builds its
  * missing prerun images, then runs each iteration in a container, writing a line for each as it
  * finishes, and one of its measures once they're taken, and records them in the run data store
@@ -243,6 +267,8 @@ async function run(
   const testCase = withIterations(await loadTestCase(root, name), iterations);
   await checkRequiredEnv(root, testCase);
   checkBuildSecrets(build);
+  // A broken measurement is a configuration error: found before the execution starts, so it isn't recorded.
+  const measurements = await loadMeasurements(root, testCase.task);
   try {
     await checkImageStore(imageStore);
   } catch (caught) {
@@ -258,9 +284,17 @@ async function run(
   }
   const plan = await planExecution(root, testCase, ulid(), imagePrefix);
   const { store, where } = await openStore(cwd, dataDir, root);
-  // Before anything is built or started: otherwise it's found out as the first container run is recorded.
+  // Recorded as it starts, before anything is built or started, so an execution that fails before
+  // its first container run is still listed, with why. And a store that can't be used is found
+  // out now, not as the first container run is recorded.
+  let recorder: ExecutionRecorder;
   try {
     await store.check();
+    recorder = await executionRecorder(
+      store,
+      { executionId: plan.executionId, testCase: name, task: testCase.task, matrix: { shape: matrixShape(testCase), permutations: plan.permutations.length, iterations: testCase.iterations } },
+      runtime?.beforeExecution === undefined ? "images" : "beforeExecution",
+    );
   } catch (caught) {
     if (!(caught instanceof RunDataStoreError)) throw caught;
     error(storeFailure(cwd, caught, "so nothing was run"));
@@ -314,6 +348,18 @@ async function run(
     line?.fail();
     line = undefined;
   };
+  /**
+   * Records that the execution failed while doing `step`, for `reason`, the error just written. If
+   * the store can't be written, says so, unless it was the store that failed.
+   */
+  const recordFailure = async (step: FailureStep, reason: string) => {
+    try {
+      await recorder.fail(step, reason);
+    } catch (caught) {
+      if (!(caught instanceof RunDataStoreError)) throw caught;
+      if (step !== "store") error(storeFailure(cwd, caught, "so the failure wasn't recorded"));
+    }
+  };
   const facts: RunFacts = {
     executionId: plan.executionId,
     concurrency,
@@ -331,7 +377,10 @@ async function run(
     } catch (caught) {
       if (!(caught instanceof RuntimeHookError)) throw caught;
       fail();
-      error(`The runtime's ${hook} failed: ${caught.message}`);
+      const message = `The runtime's ${hook} failed: ${caught.message}`;
+      error(message);
+      // afterExecution runs once the execution has ended, however it ended.
+      if (hook === "beforeExecution") await recordFailure(hook, message);
       process.exitCode = 1;
       return false;
     }
@@ -340,10 +389,13 @@ async function run(
   // Ctrl-C, or a cancelled CI job: without this, its containers would keep running, their agents
   // still spending, and a runtime started by beforeExecution would never be released by afterExecution.
   let interrupted = false;
+  // So nothing more is built or started once it's interrupted: a container started after its containers were removed would be left running.
+  const interruption = new AbortController();
   let executing: Promise<ExecutionRecord> | undefined;
   const interrupt = (signal: "SIGINT" | "SIGTERM") => {
     if (interrupted) return;
     interrupted = true;
+    interruption.abort();
     void (async () => {
       live?.stop();
       line?.stop();
@@ -356,6 +408,8 @@ async function run(
       }
       // Its container runs fail, now their containers are gone: once they have, the execution is recorded as failed.
       await Promise.race([executing?.catch(() => {}), Bun.sleep(INTERRUPT_SETTLE_MS)]);
+      // Unless it ended first, so it isn't left `running`.
+      await recordFailure("interrupted", `Interrupted (${signal})`);
       await runHook("afterExecution");
       process.exit(signal === "SIGINT" ? 130 : 143);
     })();
@@ -367,7 +421,7 @@ async function run(
   let timings: ExecutionTimings | undefined;
   const unclean: UncleanRun[] = [];
   try {
-    executing = runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
+    executing = runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency, measurements, signal: interruption.signal }, store, recorder, {
       onBuilding: (image) => {
         if (live !== undefined) return void prerunRows.set(image, live.add(`${paint.cyan(image)}  ${paint.dim("building")} `));
         if (concurrent) return print(`Building ${paint.cyan(image)}`);
@@ -479,33 +533,14 @@ async function run(
     if (failedImage !== undefined) showPrerun(failedImage, paint.red("failed"), false);
     // Left as they were, so the error is written under them.
     live?.stop();
-    if (caught instanceof DockerUnavailableError) {
-      error(`Docker can't be reached, so nothing can be run: ${caught.message}`);
-    } else if (caught instanceof DockerBuildError) {
-      fail();
-      error(`Building ${caught.image} failed: ${caught.message}`);
-    } else if (caught instanceof DockerContainerError && concurrent) {
-      error(`Running or measuring a container failed: ${caught.message}`);
-    } else if (caught instanceof DockerPushError) {
-      fail();
-      error(pushFailure(caught.reference, caught));
-    } else if (caught instanceof DockerPullError) {
-      fail();
-      error(
-        `The runtime couldn't pull ${caught.reference}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
-      );
-    } else if (caught instanceof RunDataStoreError) {
-      fail();
-      error(storeFailure(cwd, caught, "so the execution stopped"));
-    } else if (caught instanceof DockerContainerError && line !== undefined && !measuring) {
-      fail();
-      error(`Running a container failed: ${caught.message}`);
-    } else if (caught instanceof DockerContainerError) {
-      fail();
-      error(`Measuring a container run failed: ${caught.message}`);
-    } else {
+    const stopped = stoppedBy(caught, cwd, concurrent, line !== undefined && !measuring);
+    if (stopped === undefined) {
+      await recordFailure("error", caught instanceof Error ? caught.message : String(caught));
       throw caught;
     }
+    if (stopped.marksLine) fail();
+    error(stopped.message);
+    await recordFailure(stopped.step, stopped.message);
     process.exitCode = 1;
   } finally {
     live?.stop();
