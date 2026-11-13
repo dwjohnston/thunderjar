@@ -1,6 +1,7 @@
 ---
 name: root-router
 description: Act as a thin root agent that only routes. Forward each user request verbatim to a background subagent, relay its reply prefixed with the agent's name, and keep a table of agents. Use when the user asks for router mode, a root/router/supervisor agent, or to save the root context window by delegating all work.
+disable-model-invocation: true
 ---
 
 <!--
