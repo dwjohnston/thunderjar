@@ -118,10 +118,10 @@ preflight() {
   for n in fly ssh jq flock nc docker bun; do
     if command -v "$n" >/dev/null; then echo "  ok       tool $n"; else echo "  MISSING  tool $n"; missing=1; fi
   done
-  for n in FLYIO_TOKEN THUNDERJAR_DB_CONNECTION OPENROUTER_TOKEN ANTHROPIC_API_KEY GHCR_USER GHCR_TOKEN; do
+  for n in FLYIO_TOKEN THUNDERJAR_DB_CONNECTION OPENROUTER_TOKEN AAK GHCR_USER GHCR_TOKEN; do
     if [ -n "${!n:-}" ]; then echo "  ok       var  $n"; else echo "  MISSING  var  $n"; missing=1; fi
   done
-  for n in THUNDERJAR_DB_URL OPENROUTER_API_KEY FLY_API_TOKEN; do
+  for n in THUNDERJAR_DB_URL OPENROUTER_API_KEY FLY_API_TOKEN ANTHROPIC_API_KEY; do
     if [ -n "${!n:-}" ]; then echo "  ok       mapped $n"; else echo "  MISSING  mapped $n"; missing=1; fi
   done
   if docker_up; then echo "  ok       local docker daemon"; else echo "  info     local docker daemon not running (builds then need another daemon)"; fi

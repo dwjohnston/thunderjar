@@ -56,10 +56,16 @@ It needs `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, and what the remote config i
 
 ```sh
 scripts/gauntlet/bootstrap.sh
-source scripts/gauntlet/env.sh    # maps THUNDERJAR_DB_CONNECTION, OPENROUTER_TOKEN, FLYIO_TOKEN to the names read here; sets THUNDERJAR_REMOTE=1
+source scripts/gauntlet/env.sh    # maps THUNDERJAR_DB_CONNECTION, OPENROUTER_TOKEN, FLYIO_TOKEN, AAK to the names read here; sets THUNDERJAR_REMOTE=1
 bun src/cli/index.ts run gauntlet-wrong-failing-test
 # or, without sourcing:
 scripts/gauntlet/bootstrap.sh run run gauntlet-wrong-failing-test
 ```
+
+`env.sh` also sets, unless already set:
+
+- `THUNDERJAR_RUN_DATA=sqlite`: run data goes to the local SQLite file, for sandboxes that can't reach Postgres. Set it to `postgres` to use Supabase.
+- `THUNDERJAR_GAUNTLET_PAIRS=openrouter`, only when there's no `ANTHROPIC_API_KEY` (or `AAK`): just the Copilot and OpenCode pairs. With a key, all 12 pairs run.
+- `THUNDERJAR_DOCKER` to `fly-docker.sh`: prerun images build on the Fly machine.
 
 Daemon log and tool-install logs go to `/tmp/gauntlet/`. Never run these with `set -x`.
