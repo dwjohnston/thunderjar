@@ -441,7 +441,7 @@ async function run(
         const cost = knownCost(tokenCosts);
         const tokens = totalTokens(tokenCosts);
         const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
-        const outcome = execution.timedOut ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`;
+        const outcome = execution.timedOut || execution.failedToStart !== undefined ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`;
         if (live !== undefined) {
           outcomes.set(iteration.postrunImage, outcome);
           return showStep(iteration.postrunImage, "");

@@ -118,12 +118,31 @@ test("runContainer stops waiting for a timed-out container it can't kill, and sa
 
   const stop = await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "sleep 60", { timeoutSeconds: 1 });
 
-  expect(stop.timedOut).toBe(true);
+  expect(stop.outcome).toBe("timedOut");
   // Three tries at `docker kill`, two seconds apart, not the script's minute.
   expect(Date.now() - startedAt).toBeLessThan(20_000);
   expect((await docker.commands()).filter((command) => command === "docker kill tj-run-1")).toHaveLength(3);
   await removeContainer("tj-run-1");
 }, 30_000);
+
+test("given a start marker, runContainer times the script from when it prints it, not from `docker run`", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"], slowStart: { "tj-run-1": 2 } });
+  Object.assign(Bun.env, docker.env);
+
+  const stop = await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "echo started && sleep 0.5", { timeoutSeconds: 1, startMarker: "started" });
+
+  expect(stop.outcome).toBe("exited");
+  await removeContainer("tj-run-1");
+}, 30_000);
+
+test("a container whose `docker run` fails before its start marker never started, and says why", async () => {
+  await using docker = await fakeDocker();
+  Object.assign(Bun.env, docker.env);
+
+  const stop = await runContainer("tj-prerun:missing", "tj-run-1", "echo started", { timeoutSeconds: 1, startMarker: "started" });
+
+  expect(stop).toMatchObject({ outcome: "notStarted", reason: "docker: Error response from daemon: No such image: tj-prerun:missing" });
+});
 
 test("readContainerFile throws a DockerContainerError when there's no such container", async () => {
   await using docker = await fakeDocker();

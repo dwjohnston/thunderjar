@@ -11,7 +11,7 @@ import {
   runContainer,
 } from "../docker/docker.ts";
 import type { Execution } from "../store/runDataStore.ts";
-import { RESULT_PATH, RUN_PATH, STDERR_PATH, timedRun } from "./runScript.ts";
+import { RESULT_PATH, RUN_PATH, START_MARKER, STDERR_PATH, timedRun } from "./runScript.ts";
 import { type Timer, untimed } from "./timings.ts";
 
 export { NOW_MS_FUNCTION, RUN_PATH, STDERR_PATH } from "./runScript.ts";
@@ -39,6 +39,8 @@ export type ContainerRunOutcome = {
   harnessResult: string | null;
   /** The run script's standard error, or null if it never ran. */
   stderr: string | null;
+  /** Whether its container was committed into its postrun image: not if it never started. */
+  committed: boolean;
 };
 
 /** Whether `value` is plausibly ms since the epoch: from 2001-09-09 (13 digits) up to 2286. */
@@ -75,8 +77,9 @@ export function parseExecution(text: string | undefined, timeoutSeconds: number,
 
 /**
  * Runs `run`, commits its container into its postrun image, even when the agent exits
- * non-zero or is killed for taking longer than its timeout, and removes the container. Throws a
- * DockerContainerError if Docker fails.
+ * non-zero or is killed for taking longer than its timeout, and removes the container. A container
+ * that never started is an outcome too, with `failedToStart`, and nothing to commit. Throws a
+ * DockerContainerError if Docker fails otherwise.
  */
 export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
   const runtime = run.runtime ?? localRuntime();
@@ -87,17 +90,29 @@ export async function runInContainer(run: ContainerRun): Promise<ContainerRunOut
         env: run.env,
         runOptions: run.runOptions,
         timeoutSeconds: run.timeoutSeconds,
+        startMarker: START_MARKER,
         runtime,
       }),
     );
-    const killedAt = stop.timedOut ? stop.killedAt : undefined;
+    if (stop.outcome === "notStarted") {
+      const execution: Execution = {
+        startedAt: stop.spawnedAt,
+        finishedAt: stop.gaveUpAt,
+        exitCode: null,
+        timedOut: false,
+        timeoutSeconds: run.timeoutSeconds,
+        failedToStart: stop.reason,
+      };
+      return { execution, harnessResult: null, stderr: null, committed: false };
+    }
+    const killedAt = stop.outcome === "timedOut" ? stop.killedAt : undefined;
     const [execution, harnessResult, stderr] = await time("collect", async () => [
       parseExecution(await readContainerFile(run.container, RUN_PATH, runtime), run.timeoutSeconds, killedAt),
       (await readContainerFile(run.container, RESULT_PATH, runtime)) ?? null,
       (await readContainerFile(run.container, STDERR_PATH, runtime)) ?? null,
     ] as const);
     await time("commit", () => commitContainer(run.container, run.postrunImage, run.prerunImage, runtime));
-    return { execution, harnessResult, stderr };
+    return { execution, harnessResult, stderr, committed: true };
   } finally {
     await removeContainer(run.container, runtime).catch(() => {});
   }

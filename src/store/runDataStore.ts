@@ -57,6 +57,11 @@ export type Execution = {
   /** Its initial prompt's limit, in seconds. Absent from runs recorded before timeouts were. */
   timeoutSeconds?: number;
   /**
+   * Why its container never started, if it didn't: then the agent never ran, `startedAt` and
+   * `finishedAt` are when Thunderjar started `docker run` and gave up on it, and its exit code is null.
+   */
+  failedToStart?: string;
+  /**
    * How each turn ran, of an initial prompt of several turns: those that ran, which stop at the
    * first that exited non-zero. Absent for a single prompt.
    */

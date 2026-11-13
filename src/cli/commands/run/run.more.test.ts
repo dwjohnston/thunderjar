@@ -119,6 +119,71 @@ Recorded in <DATA>/runs.sqlite
     // Each was committed, and removed.
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
   }, 30_000);
+
+  test("the timeout runs from when the agent starts: a container slower to start than the timeout still ends cleanly, and the one that hangs still times out", async () => {
+    // fake-silent's container takes 3s to start, past its 2s timeout; its agent then takes no time.
+    await using docker = await fakeDocker({ slowStart: { "-3-1": 3 } });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(1);
+    expect(stdout).toContain(`
+ 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
+      isPrimeTsExists: false
+ 2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (<duration>)
+      isPrimeTsExists: false
+ 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
+      isPrimeTsExists: true
+`);
+    const [sleeper, , silent] = (await readStore(data)).containerRuns as [ContainerRunRecord, ContainerRunRecord, ContainerRunRecord];
+    expect(sleeper.execution).toMatchObject({ exitCode: null, timedOut: true, timeoutSeconds: 2 });
+    expect(silent.execution).toMatchObject({ exitCode: 0, timedOut: false });
+    expect(silent.execution.failedToStart).toBeUndefined();
+    expect(await docker.containers()).toEqual([]);
+  }, 30_000);
+
+  test("a container that never starts is that run's outcome, killed before it exists, and the execution goes on to the end", async () => {
+    // fake-crasher's container would take a minute to appear: it's given up on after 3s.
+    await using docker = await fakeDocker({ slowStart: { "-2-1": 60 } });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode, log } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data], {
+      env: { ...docker.env, THUNDERJAR_START_TIMEOUT_SECONDS: "3" },
+      paths: { "<DATA>": data },
+      log: true,
+    });
+
+    // No execution-level error: the run's own line says it failed to start, and the rest ran.
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(1);
+    expect(stdout).toEndWith(`
+ 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
+      isPrimeTsExists: false
+ 2/3  iteration 1/1  fake-crasher | plain  ... failed to start
+ 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
+      isPrimeTsExists: true
+3 of 3 agents didn't end cleanly:
+  1×  timed out after <duration>  (1-1)
+  1×  failed to start  it didn't start within <duration>  (2-1)
+  1×  done, no result file  (3-1)
+Recorded in <DATA>/runs.sqlite
+`);
+    const store = await readStore(data);
+    expect(store.execution.status).toBe("failed");
+    expect(store.containerRuns).toHaveLength(3);
+    const crasher = store.containerRuns[1] as ContainerRunRecord;
+    expect(crasher.execution).toMatchObject({ exitCode: null, timedOut: false, timeoutSeconds: 2, failedToStart: "it didn't start within 3s" });
+    expect(crasher).toMatchObject({ harnessResult: null, harnessStderr: null, result: {} });
+    // The kill found no such container, so it wasn't tried again; nothing was committed or measured for it.
+    const id = store.execution.executionId;
+    const commands = await docker.commands();
+    expect(commands.filter((command) => command === `docker kill thunderjar-run-${id}-2-1`)).toHaveLength(1);
+    expect(commands.filter((command) => command.includes(`thunderjar-postrun:${id}-2-1`))).toEqual([]);
+    expect(log).toContain("WARN: execution: container didn't start");
+    expect(await docker.containers()).toEqual([]);
+  }, 30_000);
 });
 
 describe("0206 run options", () => {
