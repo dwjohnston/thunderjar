@@ -118,7 +118,7 @@ export function runtimeProblem(runtime: unknown, imageStore: unknown): string | 
     return `must be { command: ["docker", "--context", "<context>"] }, got ${show(runtime)}`;
   }
   const fields = runtime as Record<string, unknown>;
-  const { command, concurrency, keepPostrunImages } = fields;
+  const { command, concurrency } = fields;
   if (!isCommand(command)) {
     return `command must be a non-empty list of non-empty strings, e.g. ["docker", "--context", "cloud"], got ${show(command)}`;
   }
@@ -130,8 +130,11 @@ export function runtimeProblem(runtime: unknown, imageStore: unknown): string | 
     }
   }
   if (concurrency !== undefined && !isConcurrency(concurrency)) return `concurrency must be a whole number, 1 or more, got ${show(concurrency)}`;
-  if (keepPostrunImages !== undefined && typeof keepPostrunImages !== "boolean") return `keepPostrunImages must be true or false, got ${show(keepPostrunImages)}`;
   if (imageStore === null) return "needs an imageStore: the runtime pulls the images it runs from it";
+  if (fields.runner !== undefined) {
+    const hook = HOOK_RENAMES.flat().find((field) => fields[field] !== undefined);
+    if (hook !== undefined) return `${hook} can't be given with a runner: its execution carries on after \`run\` ends, so start and stop the runtime yourself`;
+  }
   return runnerProblem(fields.runner);
 }
 
@@ -149,7 +152,7 @@ export type ProjectConfig = {
   imageStore: ImageStore | null;
   /** Where `run` runs containers, and how many at once, or `null` for the local Docker daemon. */
   runtime:
-    | (Required<Pick<RuntimeConfig, "command" | "concurrency" | "keepPostrunImages">> &
+    | (Required<Pick<RuntimeConfig, "command" | "concurrency">> &
         Pick<RuntimeConfig, "beforeExecution" | "afterExecution"> & {
           /** How its runner is started, if executions run in one on the runtime: see `RuntimeConfig.runner`. */
           runner?: Required<Pick<RunnerConfig, "env" | "runOptions">> & Pick<RunnerConfig, "registryLogin">;
@@ -202,7 +205,6 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
         : {
             command: [...runtime.command],
             concurrency: runtime.concurrency ?? 1,
-            keepPostrunImages: runtime.keepPostrunImages ?? false,
             ...hooksOf(runtime),
             ...(runtime.runner !== undefined && {
               runner: {

@@ -136,7 +136,6 @@ export default declareConfig({
     expect((await loadProjectConfig(await findThunderjarRoot(scenario("0211")))).runtime).toEqual({
       command: [env ?? "docker", "--context", "cloud"],
       concurrency: 1,
-      keepPostrunImages: false,
     });
   });
 
@@ -198,9 +197,10 @@ describe("runtimeProblem", () => {
     expect(runtimeProblem({ command: ["docker"], runner: { runOptions: [""] } }, STORE)).toBe('runner.runOptions must be a list of non-empty strings, got [""]');
   });
 
-  test("keepPostrunImages is true or false", () => {
-    expect(runtimeProblem({ command: ["docker"], keepPostrunImages: true }, STORE)).toBeUndefined();
-    expect(runtimeProblem({ command: ["docker"], keepPostrunImages: "yes" }, STORE)).toBe('keepPostrunImages must be true or false, got "yes"');
+  test.each([["beforeExecution"], ["afterExecution"], ["beforeRun"], ["afterRun"]])("%s can't be given with a runner", (hook) => {
+    expect(runtimeProblem({ command: ["docker"], runner: {}, [hook]: ["./up.sh"] }, STORE)).toBe(
+      `${hook} can't be given with a runner: its execution carries on after \`run\` ends, so start and stop the runtime yourself`,
+    );
   });
 
   test.each([[0], [-1], [1.5], ["4"], [null]])("concurrency %p is not a number of containers", (concurrency) => {

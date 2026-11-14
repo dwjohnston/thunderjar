@@ -67,8 +67,6 @@ export type SubmissionSummary = {
 export type Submission = SubmissionSummary & {
   imagePrefix: string;
   imageStore: ImageStore;
-  /** Whether each postrun image stays on the runtime once it's pushed and measured. */
-  keepPostrunImages: boolean;
   runDataStore: ProjectConfig["runDataStore"];
   /** The variables holding the login for the image store's registry, if the runner logs in. */
   registryLogin?: { usernameEnv: string; passwordEnv: string };

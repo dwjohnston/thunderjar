@@ -14,7 +14,7 @@
 // shown by `run --timings`, so a slow execution says where its time went.
 
 /** The phases of an execution, in the order they're reported. */
-export const PHASES = ["build", "pushPrerun", "pullPrerun", "agent", "collect", "commit", "pushPostrun", "measure", "cleanup"] as const;
+export const PHASES = ["build", "pushPrerun", "pullPrerun", "agent", "collect", "commit", "pushPostrun", "measure"] as const;
 export type Phase = (typeof PHASES)[number];
 
 /** One phase's total: how many times it ran, how long they took together, and the longest. */

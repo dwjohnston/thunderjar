@@ -129,3 +129,11 @@ th.measurement {
 th.method {
   font-weight: 400;
 }
+
+.failure pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  font-size: 0.85em;
+  white-space: pre-wrap;
+}

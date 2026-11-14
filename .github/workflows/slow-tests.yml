@@ -13,6 +13,9 @@ name: Slow tests
 #   THUNDERJAR_DB_URL  Supabase Postgres URL (the pooler one: the direct one is IPv6 only)
 #   ANTHROPIC_API_KEY  for Claude Code
 #   OPENROUTER_API_KEY for Copilot and OpenCode, only in test cases with those harnesses
+# Repository variables:
+#   FLY_MACHINE                   the name of CI's machine in the Fly app, e.g. tj-ci: not the one
+#                                 used for development. The workflow starts it, and stops it after.
 # Optional repository variables:
 #   FLY_APP, FLY_ORG              the Fly app and org, if not thunderjar-runtime-dwj and personal
 #   THUNDERJAR_IMAGE_REPOSITORY   if not ghcr.io/dwjohnston/thunderjar-images
@@ -26,7 +29,7 @@ permissions:
   issues: write
   pull-requests: write
 
-# One run at a time: they share the Fly machine, and each run stops it when it ends.
+# One run at a time: they share CI's Fly machine, and each run stops it when it ends.
 concurrency:
   group: slow-tests
   cancel-in-progress: false
@@ -44,6 +47,7 @@ jobs:
       THUNDERJAR_IMAGE_REPOSITORY: ${{ vars.THUNDERJAR_IMAGE_REPOSITORY }}
       FLY_APP: ${{ vars.FLY_APP }}
       FLY_ORG: ${{ vars.FLY_ORG }}
+      FLY_MACHINE: ${{ vars.FLY_MACHINE }}
       FLYIO_TOKEN: ${{ secrets.FLYIO_TOKEN }}
       THUNDERJAR_DB_URL: ${{ secrets.THUNDERJAR_DB_URL }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -88,6 +92,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Start CI's Fly machine
+        run: |
+          [ -n "$FLY_MACHINE" ] || { echo "Set the FLY_MACHINE repository variable to CI's Fly machine" >&2; exit 1; }
+          ./.thunderjar/fly-machine.sh start
+
       - name: Run the test case
         id: run
         env:
@@ -98,12 +107,17 @@ jobs:
           status=${PIPESTATUS[0]}
           id=$(grep -m1 -oP '^Execution \K\S+' run.log)
           if [ -n "$id" ]; then
-            # Nothing is recorded if the execution stopped before its first container, e.g. in beforeExecution.
+            # Nothing is recorded if the execution stopped before its first container, e.g. on a failed build.
             if ./node_modules/.bin/thunderjar show "$id" > show.log 2>&1; then
               echo "execution=$id" >> "$GITHUB_OUTPUT"
             fi
           fi
           exit "$status"
+
+      - name: Stop CI's Fly machine
+        # Never without FLY_MACHINE: it could stop the development machine.
+        if: always() && steps.command.outcome == 'success' && vars.FLY_MACHINE != ''
+        run: ./.thunderjar/fly-machine.sh stop
 
       - name: Post the outcome
         if: always() && steps.command.outputs.test-case != ''

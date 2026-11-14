@@ -21,14 +21,12 @@ export default declareConfig(
         imageStore: { repository: Bun.env.THUNDERJAR_IMAGE_REPOSITORY || "ghcr.io/dwjohnston/thunderjar-images" },
         // Supabase Postgres. Use its pooler URL: the direct one is IPv6 only, and GitHub's runners aren't.
         runDataStore: localRunData ? sqlite : postgresStore({ urlEnv: "THUNDERJAR_DB_URL" }),
-        // Containers run on a Docker daemon on a Fly machine. fly-runtime.sh starts and sizes it for
-        // the execution before, and releases it after. The machine stops itself after an hour idle
-        // (FLY_IDLE_MINUTES). Both scripts need FLYIO_TOKEN.
+        // Containers run on a Docker daemon on a Fly machine, picked with FLY_MACHINE. It must
+        // already be running: start it with `.thunderjar/fly-machine.sh start` before working, and
+        // stop it with `.thunderjar/fly-machine.sh stop` after. Needs FLYIO_TOKEN.
         runtime: {
           command: ["./.thunderjar/fly-docker.sh"],
           concurrency: 16,
-          beforeExecution: ["./.thunderjar/fly-runtime.sh", "up"],
-          afterExecution: ["./.thunderjar/fly-runtime.sh", "down"],
           // Spread, so it type-checks against thunderjar-published, which doesn't know `runner` yet.
           ...(onRuntime && { runner: { registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" } } }),
         },

@@ -11,7 +11,7 @@
 // that never starts: it's recorded, with why, but has nothing to measure. The timeout runs from
 // when the agent starts, not from `docker run`: see runContainer.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
-import { daemonId, diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed, removeImages } from "../docker/docker.ts";
+import { daemonId, diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
@@ -371,14 +371,6 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       hooks.onMeasured?.(permutation, iteration, result);
     }
     await pushing;
-
-    // Once it's in the image store and measured, the runtime needn't keep it: each one left there
-    // fills its disk. Pulled from the store again if it's ever wanted. Kept with a runtime's keepPostrunImages.
-    if (stored !== undefined && !remote?.keepPostrunImages) {
-      await timer
-        .time("cleanup", () => removeImages([iteration.postrunImage, stored], runtime))
-        .catch((error: unknown) => log.warn({ ...at, err: error }, "couldn't remove the postrun image from the runtime"));
-    }
   };
 
   try {
