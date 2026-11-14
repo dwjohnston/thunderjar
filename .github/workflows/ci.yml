@@ -37,6 +37,27 @@ jobs:
       - name: Installed package smoke test
         run: bun run test:package
 
+  # Builds the versioned docs site, as the deploy after a release does, so a release
+  # PR whose docs won't build can't be merged.
+  docs:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Every release tag is needed to build its docs.
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # The release's tag is only pushed on merge. Tag this commit with the version it
+      # would release, so its docs are built too. On other PRs that tag already exists.
+      - name: Tag the version this PR would release
+        run: |
+          tag="v$(jq -r .version package.json)"
+          git rev-parse -q --verify "refs/tags/$tag" > /dev/null || git tag "$tag" HEAD
+      - run: bun run docs:build:versions
+
   build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
