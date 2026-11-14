@@ -638,20 +638,22 @@ export type BuildOptions = {
   ssh?: boolean;
   /**
    * How many prerun images `build` and `run` build at once: 1, one after another, by default.
-   * Builds run on the machine that runs Thunderjar, so set it to what its CPU, memory and network
-   * can take. With more than 1, or a runtime concurrency above 1, `run` starts each iteration as
-   * soon as its own prerun image is built, pushed and pulled, without waiting for the rest.
+   * Builds run on the runtime, if there's one, or else on the machine that runs Thunderjar, so set
+   * it to what that machine's CPU, memory and network can take. With more than 1, or a runtime
+   * concurrency above 1, `run` starts each iteration as soon as its own prerun image is ready,
+   * without waiting for the rest.
    */
   concurrency?: number;
 };
 
 /**
- * Where `run` runs containers, instead of the local Docker daemon: any command that takes the
- * `docker` CLI's arguments. Thunderjar puts `command` in front of each `docker` subcommand it
- * would run, e.g. `["docker", "--context", "cloud"]`, `["docker", "-H", "ssh://me@build-host"]`
- * or `["podman", "--remote"]`.
+ * Where `build` builds images and `run` runs containers, instead of the local Docker daemon: any
+ * command that takes the `docker` CLI's arguments. Thunderjar puts `command` in front of each
+ * `docker` subcommand it would run, e.g. `["docker", "--context", "cloud"]`,
+ * `["docker", "-H", "ssh://me@build-host"]` or `["podman", "--remote"]`. `--local` ignores it.
  *
- * Images are still built and pushed locally. The runtime pulls them from the image store, so
+ * Prerun images are built on it, and pushed from it to the image store. It pulls those the store
+ * already had and it doesn't, so
  * `imageStore` must be set, and the runtime must be able to pull from it, and push to it: its
  * registry login is set up on the runtime, not by Thunderjar. `thunderjar doctor` checks it.
  */
@@ -685,7 +687,7 @@ export type RuntimeConfig = {
    * Runs each whole execution on the runtime, in a runner: a container there, from an image
    * holding Thunderjar and this project's `.thunderjar/` folder, with the runtime's Docker socket.
    * The runner runs the containers, measures them, pushes their postrun images and writes the run
-   * data store. `run` only builds and pushes the images, starts the runner, and follows it; it can
+   * data store. `run` only has the runtime build and push the images, starts the runner, and follows it; it can
    * be interrupted without stopping the execution, and `thunderjar attach` follows it again.
    * `{}` is enough to turn it on. Without it, `run` runs each Docker command on the runtime itself.
    * The runtime must already be running: `beforeExecution` and `afterExecution` can't be given with it.

@@ -239,7 +239,7 @@ async function run(
   const onTerm = () => interrupt("SIGTERM");
   process.on("SIGINT", onInt);
   process.on("SIGTERM", onTerm);
-  // What this does itself, with a runner: build and push the images. The runner times the rest.
+  // What this does itself, with a runner: have the runtime build and push the images. The runner times the rest.
   const hostTimer = timings();
   /** The execution, run here: each Docker command given to the local daemon, or the runtime. */
   const executeHere = async ({ store, where }: OpenStore): Promise<Executed> => {
@@ -249,13 +249,13 @@ async function run(
   /** The execution, run by a runner on the runtime: its images stored, then submitted and followed. */
   const executeOnRuntime = async (command: string[], options: NonNullable<typeof runner>, env: Record<string, string>): Promise<Executed> => {
     const store = imageStore as NonNullable<typeof imageStore>;
-    const runnerImage = await storeRunnerImage(root, store.repository, {
+    const runnerImage = await storeRunnerImage(root, store.repository, command, {
       onBuilding: (image) => open(`Building the runner image ${paint.cyan(image)} ${ellipsis} `),
       onBuilt: () => close(done),
       onPushing: (_image, reference) => open(`Pushing ${paint.cyan(reference)} ${ellipsis} `),
       onPushed: () => close(done),
     });
-    await storePrerunImages(root, plan, imagePrefix, store, build, display.hooks, hostTimer.time);
+    await storePrerunImages(root, plan, imagePrefix, store, command, build, display.hooks, hostTimer.time);
     const submission: Submission = {
       name,
       testCase,
@@ -300,14 +300,14 @@ async function run(
 export function createRunCommand(): Command {
   return new Command("run")
     .description(
-      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency. Builds up to the config's build concurrency of prerun images at once. With more than one of either, each iteration starts as soon as its own prerun image is ready. --iterations overrides the test case's iterations.",
+      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, builds the prerun images on it and runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency. Builds up to the config's build concurrency of prerun images at once. With more than one of either, each iteration starts as soon as its own prerun image is ready. --iterations overrides the test case's iterations.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(
       "--dry-run",
       "print the images, environment variables and commands the execution would use, without running anything",
     )
-    .option("--local", "run containers on the local Docker daemon, even if thunderjar.config.ts gives a runtime")
+    .option("--local", "build images and run containers on the local Docker daemon, even if thunderjar.config.ts gives a runtime")
     .addOption(
       new Option("--concurrency <n>", "run up to <n> containers at once, instead of the runtime's concurrency, or one at a time").argParser((value: string) => {
         const n = Number(value);

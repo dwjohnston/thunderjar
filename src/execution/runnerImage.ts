@@ -21,7 +21,7 @@
 // version of Thunderjar and of the project's declarations, and found there after.
 import { $, CryptoHasher, Glob } from "bun";
 import { abbreviateHash } from "../config/permutations.ts";
-import { buildImage, inRegistry } from "../docker/docker.ts";
+import { buildImage, inRegistry, remoteRuntime } from "../docker/docker.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { type PushHooks, pushToStore } from "./imageStore.ts";
 import type { PrerunBuildHooks } from "./prerunBuilds.ts";
@@ -123,10 +123,12 @@ export async function runnerContext(root: string): Promise<RunnerContext> {
 
 /**
  * Makes sure the image store `repository` has the runner image for the project whose
- * `.thunderjar/` folder is `root`, building and pushing it if it isn't there, calling `hooks`,
- * and returns its reference. Throws a DockerBuildError or a DockerPushError.
+ * `.thunderjar/` folder is `root`, building it on the runtime's daemon, which `command` reaches,
+ * and pushing it from there, if it isn't there, calling `hooks`, and returns its reference.
+ * Throws a DockerBuildError or a DockerPushError.
  */
-export async function storeRunnerImage(root: string, repository: string, hooks: PrerunBuildHooks & PushHooks = {}): Promise<string> {
+export async function storeRunnerImage(root: string, repository: string, command: string[], hooks: PrerunBuildHooks & PushHooks = {}): Promise<string> {
+  const runtime = remoteRuntime(command);
   const context = await runnerContext(root);
   const reference = storedRunnerImage(repository, context.hash);
   if (await inRegistry(reference)) {
@@ -137,11 +139,11 @@ export async function storeRunnerImage(root: string, repository: string, hooks: 
   try {
     for (const { path, from, text } of context.files) await Bun.write(`${contextDir}/${path}`, text ?? Bun.file(from as string));
     hooks.onBuilding?.(reference);
-    await buildImage(contextDir, reference);
+    await buildImage(contextDir, reference, {}, runtime);
     hooks.onBuilt?.(reference);
   } finally {
     await $`rm -rf ${contextDir}`.quiet();
   }
-  await pushToStore(reference, reference, hooks);
+  await pushToStore(reference, reference, hooks, runtime);
   return reference;
 }
