@@ -8,7 +8,7 @@ const remote = Bun.env.THUNDERJAR_REMOTE === "1";
 const localRunData = Bun.env.THUNDERJAR_RUN_DATA === "sqlite";
 // With THUNDERJAR_ON_RUNTIME=1 as well, a remote execution runs on the Fly machine itself, in a
 // runner: a container there, with Thunderjar and this folder, that runs the containers, measures
-// them and writes the run data. `run` only builds, submits and follows. The runner logs in to ghcr
+// them and writes the run data. `run` only has the Fly daemon build, then submits and follows. The runner logs in to ghcr
 // with GHCR_USER and GHCR_TOKEN, sent to it with the model keys and THUNDERJAR_DB_URL as it starts.
 const onRuntime = Bun.env.THUNDERJAR_ON_RUNTIME === "1";
 const sqlite = sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" });
@@ -16,7 +16,7 @@ const sqlite = sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" });
 export default declareConfig(
   remote
     ? {
-        // Prerun and postrun images are pushed here, and the Fly daemon pulls them from here.
+        // Prerun images are built on the Fly daemon and pushed here from it, as are postrun images.
         // Needs `docker login ghcr.io` with a token that can write packages.
         imageStore: { repository: Bun.env.THUNDERJAR_IMAGE_REPOSITORY || "ghcr.io/dwjohnston/thunderjar-images" },
         // Supabase Postgres. Use its pooler URL: the direct one is IPv6 only, and GitHub's runners aren't.

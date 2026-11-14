@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
-import { DockerBuildError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
+import { DockerBuildError, DockerPushError, DockerUnavailableError, localRuntime, remoteRuntime } from "../../../docker/docker.ts";
 import { prerunImage } from "../../../execution/images.ts";
 import { checkImageStore, ImageStoreLoginError, pushPrerunImages } from "../../../execution/imageStore.ts";
 import { buildPrerunImages } from "../../../execution/prerunBuilds.ts";
@@ -36,7 +36,8 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string, pa
 
 /**
  * Builds each prerun image test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above
- * it, needs that doesn't exist yet, writing `Building <image> ... done` for each, or, with a build
+ * it, needs that doesn't exist yet, on the config's runtime's daemon, unless `local` or there's
+ * none, writing `Building <image> ... done` for each, or, with a build
  * concurrency above 1, building that many at once and writing `Building <image>` and `Built <image>`
  * as each starts and ends. Then, with an
  * image store, pushes each of them, writing `Pushing <reference> ... done`, then a count. Exits 1
@@ -44,9 +45,11 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string, pa
  * image store's registry (before anything is built), or a build or push fails. With `json`, prints
  * the images built, those already present and the references pushed as JSON once it's done.
  */
-async function build(cwd: string, name: string, imagePrefix?: string, json = false): Promise<void> {
+async function build(cwd: string, name: string, imagePrefix?: string, json = false, local = false): Promise<void> {
   const root = await findThunderjarRoot(cwd);
-  const { imageStore, build: buildOptions } = await loadProjectConfig(root);
+  const { imageStore, build: buildOptions, runtime: config } = await loadProjectConfig(root);
+  // Where images are built, and pushed from: the runtime, which runs them, unless --local.
+  const runtime = local || config === null ? localRuntime() : remoteRuntime(config.command);
   const testCase = await loadTestCase(root, name);
   checkBuildSecrets(buildOptions);
   const permutations = await hashPermutations(root, testCase);
@@ -58,6 +61,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
   const ellipsis = paint.dim("...");
   const done = paint.green("done");
   try {
+    if (!local && config !== null) print(paint.dim(`Building with \`${config.command.join(" ")}\``));
     await checkImageStore(imageStore);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
       onBuilding: (image) => {
@@ -68,7 +72,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
         if (concurrent) return print(`Built ${paint.cyan(image)}`);
         line?.finish(done);
       },
-    }, buildOptions);
+    }, buildOptions, runtime);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
       onPushing: (_image, reference) => {
         line = waitingLine(`Pushing ${paint.cyan(reference)} ${ellipsis} `);
@@ -76,7 +80,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
       onPushed: () => {
         line?.finish(done);
       },
-    });
+    }, runtime);
     if (json) printJson({ built, present, pushed });
     else print(
       [
@@ -108,17 +112,18 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
 export function createBuildCommand(): Command {
   return new Command("build")
     .description(
-      "Build the prerun Docker image of each permutation of a test case, unless it already exists. Permutations with the same hash share one image. With an image store in thunderjar.config.ts, each is then pushed there, after checking your docker login for its registry.",
+      "Build the prerun Docker image of each permutation of a test case, unless it already exists. Permutations with the same hash share one image. With a runtime in thunderjar.config.ts, they're built on its Docker daemon, unless --local is given. With an image store, each is then pushed there, after checking your docker login for its registry.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option("--dry-run", "print each prerun image's name and Dockerfile, without building anything")
+    .option("--local", "build on the local Docker daemon, even if thunderjar.config.ts gives a runtime")
     .addOption(imagePrefixOption())
     .addOption(jsonOption())
     .action(
-      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string; json?: boolean }) => {
+      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string; json?: boolean; local?: boolean }) => {
         if (options.dryRun && options.json) printJson(await prerunDockerfiles(process.cwd(), name, options.imagePrefix));
         else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
-        else await build(process.cwd(), name, options.imagePrefix, options.json);
+        else await build(process.cwd(), name, options.imagePrefix, options.json, options.local);
       }),
     );
 }

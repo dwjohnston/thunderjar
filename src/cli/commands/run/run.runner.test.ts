@@ -45,20 +45,25 @@ async function readProjectStore(dir: string) {
   return { execution: execution as ExecutionRecord, containerRuns: execution ? await store.containerRunsOf(execution.executionId) : [] };
 }
 
-/** The commands given to the runtime's command, to the host's Docker, and by the runner to its own. */
+/**
+ * The commands given to the runtime's command, before the runner is started, to build and push the
+ * images, and from then on; to the host's Docker; and by the runner to its own.
+ */
 async function commandsOf(docker: FakeDocker, runnerImage?: string) {
   const commands = await docker.commands();
   const submitted = commands.findIndex((command) => command.startsWith(`${REMOTE} run --detach`));
+  const before = commands.slice(0, submitted === -1 ? undefined : submitted);
   return {
-    runtime: commands.filter((command) => command.startsWith(REMOTE)),
-    host: commands.slice(0, submitted === -1 ? undefined : submitted).filter((command) => !command.startsWith(REMOTE)),
+    building: before.filter((command) => command.startsWith(REMOTE)),
+    runtime: submitted === -1 ? [] : commands.slice(submitted).filter((command) => command.startsWith(REMOTE)),
+    host: before.filter((command) => !command.startsWith(REMOTE)),
     runner: submitted === -1 ? [] : commands.slice(submitted).filter((command) => !command.startsWith(REMOTE)),
-    runnerImage: runnerImage ?? commands.find((command) => command.startsWith("docker build -t ") && command.includes(":runner-h"))?.split(" ")[3],
+    runnerImage: runnerImage ?? commands.map((command) => new RegExp(`^${REMOTE} build -t (\\S+:runner-h\\w+) `).exec(command)?.[1]).find(Boolean),
   };
 }
 
 describe("0211 remote runtime, with a runner", () => {
-  test("builds and pushes the images here, then the runner runs, measures, pushes and records the execution, and run only follows it", async () => {
+  test("has the runtime build and push the images, then the runner runs, measures, pushes and records the execution, and run only follows it", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithRunner();
 
@@ -68,7 +73,7 @@ describe("0211 remote runtime, with a runner", () => {
     expect(exitCode).toBe(0);
     const { execution, containerRuns } = await readProjectStore(copy.dir);
     const { executionId } = execution;
-    const { runtime, host, runner, runnerImage } = await commandsOf(docker);
+    const { building, runtime, host, runner, runnerImage } = await commandsOf(docker);
     expect(runnerImage).toMatch(/^ghcr\.io\/acme\/thunderjar-images:runner-h[0-9a-f]{8}$/);
     const postrun = `${REPOSITORY}:postrun-e${executionId}-h0af800ad-i00`;
     expect(stdout.replace(executionId, "<ID>").replaceAll(runnerImage as string, "<RUNNER>")).toBe(`Execution <ULID>
@@ -82,18 +87,17 @@ Pushing ${PRERUN} ... done
       ${MEASURES}
 Recorded in .thunderjar/.data/runs.sqlite
 `);
-    // Here: only the images are built and pushed.
-    expect(host).toEqual([
-      "docker login ghcr.io",
-      `docker manifest inspect ${runnerImage}`,
-      expect.stringMatching(/^docker build -t \S+:runner-h\w+ /),
-      `docker tag ${runnerImage} ${runnerImage}`,
-      `docker push --quiet ${runnerImage}`,
-      "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
-      `docker manifest inspect ${PRERUN}`,
-      expect.stringMatching(/^docker build -t thunderjar-prerun:77e9dd16 /),
-      `docker tag thunderjar-prerun:77e9dd16 ${PRERUN}`,
-      `docker push --quiet ${PRERUN}`,
+    // Here: only the login and the image store are asked about. Nothing is built here.
+    expect(host).toEqual(["docker login ghcr.io", `docker manifest inspect ${runnerImage}`, `docker manifest inspect ${PRERUN}`]);
+    // The images are built on the runtime, and pushed from there.
+    expect(building).toEqual([
+      expect.stringMatching(new RegExp(`^${REMOTE} build -t \\S+:runner-h\\w+ `)),
+      `${REMOTE} tag ${runnerImage} ${runnerImage}`,
+      `${REMOTE} push --quiet ${runnerImage}`,
+      `${REMOTE} image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun`,
+      expect.stringMatching(new RegExp(`^${REMOTE} build -t thunderjar-prerun:77e9dd16 `)),
+      `${REMOTE} tag thunderjar-prerun:77e9dd16 ${PRERUN}`,
+      `${REMOTE} push --quiet ${PRERUN}`,
     ]);
     // Through the runtime's command: the runner is started, sent its submission, followed, and removed.
     const container = `thunderjar-runner-${executionId}`;
@@ -105,7 +109,7 @@ Recorded in .thunderjar/.data/runs.sqlite
       `${REMOTE} rm --force ${container}`,
     ]);
     // The runner, on its own Docker: everything else.
-    // The fake's runtime shares the host's images, so it has the prerun image: not pulled.
+    // It was built on the runtime, so the runtime has the prerun image: not pulled.
     expect(runner).toContain(`docker image ls --format {{.Repository}}:{{.Tag}} ${REPOSITORY}`);
     expect(runner.find((command) => command.startsWith("docker run --name"))).toContain(` ${PRERUN} -c `);
     expect(runner.some((command) => command.startsWith("docker commit "))).toBe(true);

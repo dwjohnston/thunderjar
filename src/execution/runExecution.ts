@@ -1,6 +1,7 @@
 // Running one execution of a test case: its missing prerun images are built, up to the build
-// options' `concurrency` at once, and each pushed to the image store and pulled into the runtime,
-// if there are ones, unless the image store, or the runtime, already has it. Every iteration of every permutation, in plan's order, runs in a container
+// options' `concurrency` at once, on the runtime's daemon if there's one, and each pushed from there
+// to the image store, if there's one, unless the image store already has it. A runtime pulls only
+// those the store already had and it doesn't. Every iteration of every permutation, in plan's order, runs in a container
 // (see containerRun.ts), up to `concurrency` of them at once. With either above 1, each starts as
 // soon as its own prerun image is ready, while the rest are still being built; otherwise, once
 // they all are. Each is recorded in the run data store as soon as it
@@ -11,7 +12,7 @@
 // that never starts: it's recorded, with why, but has nothing to measure. The timeout runs from
 // when the agent starts, not from `docker run`: see runContainer.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
-import { daemonId, diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
+import { diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
@@ -195,15 +196,11 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     storeAnswers.set(reference, answer);
     return answer;
   };
-  // Whether prerun images are built on the runtime's own daemon, as when THUNDERJAR_DOCKER points at
-  // it. Asked only once one is pushed, and false if either daemon can't say.
-  let sameDaemon: Promise<boolean> | undefined;
-  const buildsOnRuntime = () =>
-    (sameDaemon ??= Promise.all([daemonId(localRuntime()), daemonId(runtime)]).then(([local, other]) => local !== undefined && local === other));
   if (run.prerunFromStore && remote === null) throw new Error("Prerun images are only run from the image store on a runtime.");
   const hashed = plan.permutations.map(({ permutation }) => permutation);
-  // From the store, none is looked for in the local daemon: whether it's there says nothing.
-  const images = run.prerunFromStore ? storedPrerunImages(hashed, imagePrefix) : await prerunImages(hashed, imagePrefix);
+  // From the store, none is looked for: whether it's built says nothing. Otherwise each is looked for
+  // where it's built: on the runtime, if there's one.
+  const images = run.prerunFromStore ? storedPrerunImages(hashed, imagePrefix) : await prerunImages(hashed, imagePrefix, runtime);
   // Asked of the registry for every image at once, rather than as each one's turn to build comes.
   if (imageStore !== null && !run.prerunFromStore) for (const { permutation } of images) void inStore(storedPrerunImage(imageStore.repository, permutation.imageHash));
   // A remote runtime runs each prerun image as the image store has it, by its stored reference.
@@ -235,7 +232,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       return;
     }
     if (reference === undefined) {
-      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build));
+      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build, runtime));
       ready.get(image.permutation.imageHash)?.resolve();
       return;
     }
@@ -245,16 +242,17 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     if (stored && remote !== null) {
       log.info({ image: image.image, reference }, "prerun image already in the image store: not built or pushed");
     } else {
-      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build));
+      // Built, and pushed from, the runtime's daemon, if there's one: it never leaves it.
+      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build, runtime));
       if (stored) log.info({ image: image.image, reference }, "prerun image already in the image store: not pushed");
-      else await timer.time("pushPrerun", () => pushToStore(image.image, reference, hooks));
+      else await timer.time("pushPrerun", () => pushToStore(image.image, reference, hooks, runtime));
     }
     if (remote !== null) {
       if ((await onRuntime).has(reference)) {
         log.info({ reference }, "prerun image already in the runtime: not pulled");
-      } else if (!stored && (await buildsOnRuntime())) {
+      } else if (!stored) {
         // Pushing it tagged it as `reference` on the daemon it was built on, which is the runtime's.
-        log.info({ reference }, "prerun image built and pushed on the runtime's own daemon: not pulled");
+        log.info({ reference }, "prerun image built and pushed on the runtime: not pulled");
       } else {
         // So a runtime that can't reach the image store, or has no login for it, fails before its agent runs.
         await timer.time("pullPrerun", () => pullIntoRuntime([reference], runtime, hooks));
