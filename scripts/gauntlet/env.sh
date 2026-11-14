@@ -6,7 +6,7 @@
 #   THUNDERJAR_DB_CONNECTION -> THUNDERJAR_DB_URL   (thunderjar.config.ts: postgresStore urlEnv)
 #   FLYIO_TOKEN              -> FLY_API_TOKEN       (flyctl; fly-*.sh also read FLYIO_TOKEN)
 #   OPENROUTER_TOKEN         -> OPENROUTER_API_KEY  (harnesses)
-#   AAK                      -> ANTHROPIC_API_KEY   (Claude Code harness)
+#   AAK                      -> ANTHROPIC_API_KEY   (Claude Code harness; cloud sessions filter the real name)
 #   GHCR_TOKEN / GHCR_USER   -> used by bootstrap.sh for `docker login ghcr.io`
 # Also sets THUNDERJAR_REMOTE=1, THUNDERJAR_RUN_DATA and THUNDERJAR_GAUNTLET_PAIRS (below) and, if a local dockerd was started by bootstrap.sh, nothing else:
 # DOCKER_HOST is left alone (the default socket /var/run/docker.sock is used).
@@ -22,6 +22,8 @@ export THUNDERJAR_REMOTE=1
 # Build prerun images on the Fly machine's daemon, not the local one: this sandbox's egress proxy
 # re-signs TLS, and build steps (npm, git) don't trust its CA. It also leaves the prerun images
 # where the containers run. Docker's client still uses this machine's `docker login`.
+# THUNDERJAR_DOCKER is every `docker` Thunderjar runs locally, not only builds: with it set,
+# `run --local` runs its containers on the Fly machine too. Unset it to use the local daemon.
 [ -z "${THUNDERJAR_DOCKER:-}" ] && export THUNDERJAR_DOCKER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.thunderjar/fly-docker.sh"
 # Without ANTHROPIC_API_KEY, gauntlet test cases run only their OpenRouter pairs (Copilot, OpenCode).
 [ -z "${THUNDERJAR_GAUNTLET_PAIRS:-}" ] && [ -z "${ANTHROPIC_API_KEY:-}" ] && export THUNDERJAR_GAUNTLET_PAIRS=openrouter

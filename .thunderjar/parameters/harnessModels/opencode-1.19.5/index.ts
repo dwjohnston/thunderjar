@@ -71,9 +71,19 @@ export default declareHarness({
     [
       `RUN npm install -g opencode-ai@${ctx.version}`,
       "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+      // As `node`, OpenCode's plugin package is installed where OpenCode looks for it. Otherwise
+      // every run installs it as it starts: 175 MB of ~/.config and ~/.npm in each postrun image,
+      // to commit and push. Before the model is written, so every model's image shares the layer.
+      "USER node",
+      `RUN mkdir -p ~/.config/opencode && cd ~/.config/opencode && echo '{"dependencies":{"@opencode-ai/plugin":"${ctx.version}"}}' > package.json && npm install --no-audit --no-fund && npm cache clean --force`,
+      "USER root",
       writeModel(ctx.modelId),
       // The prompt and model are read from their files, so quotes and newlines reach the agent intact.
-      writeRunScript(`opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`),
+      // OPENCODE_PERMISSION: with nobody to ask, `opencode run` rejects a command that touches a path
+      // outside /workspace (the external_directory permission), and then stops, exiting 0 with no reply.
+      writeRunScript(
+        `OPENCODE_PERMISSION='{"external_directory":"allow"}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
+      ),
       "USER node",
     ].join("\n"),
   collectReply: opencodeReply,

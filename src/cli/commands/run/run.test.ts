@@ -237,20 +237,12 @@ Recorded in <DATA>/runs.sqlite
         `docker rm --force ${container(n)}`,
       ]),
     );
-    // Then each measure was taken in a container of its own, from the postrun image, then removed:
-    // four of them. saysArr, of the reply, needs no container.
+    // Then its measures were taken in one container, from the postrun image, running a shell session
+    // that's sent each measure's commands, and is removed when it ends. saysArr, of the reply, needs no container.
     for (const n of [1, 2]) {
-      expect(commands.filter((command) => command.includes(` ${container(n)}-measure-5`))).toEqual([]);
-      for (const k of [1, 2, 3, 4]) {
-        const measuring = commands.filter((command) => command.includes(` ${container(n)}-measure-${k}`));
-        expect(measuring[0]).toBe(
-          `docker run --detach --name ${container(n)}-measure-${k} --pull never --entrypoint sh thunderjar-postrun:${id}-${n}-1 -c <script>`,
-        );
-        expect(measuring.slice(1, -1)).not.toBeEmpty();
-        expect(measuring.slice(1, -1).every((command) => command.startsWith(`docker exec `))).toBe(true);
-        expect(measuring.at(-1)).toBe(`docker rm --force ${container(n)}-measure-${k}`);
-        expect(commands.indexOf(measuring[0] as string)).toBeGreaterThan(commands.indexOf(`docker rm --force ${container(n)}`));
-      }
+      const measuring = commands.filter((command) => command.includes(` ${container(n)}-measure-`));
+      expect(measuring).toEqual([`docker run --rm --interactive --name ${container(n)}-measure-1 --pull never --entrypoint sh thunderjar-postrun:${id}-${n}-1 -c <script>`]);
+      expect(commands.indexOf(measuring[0] as string)).toBeGreaterThan(commands.indexOf(`docker rm --force ${container(n)}`));
     }
     expect(await docker.images()).toEqual([
       "thunderjar-prerun:32a1d048",
@@ -376,6 +368,23 @@ export default declareTestCase({
     expect(await docker.commands()).toEqual([]);
   });
 
+  test("with a postgresStore that can't be reached, nothing is built or run, and the error says so", async () => {
+    await using copy = await copyScenarioProject("0202");
+    await usePostgres(copy.dir);
+    await using docker = await fakeDocker();
+    const env = { ...docker.env, ...KEY, THUNDERJAR_DB_URL: "postgres://user:secret@127.0.0.1:1/none" };
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses"], { env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toMatch(
+      /^Error: Can't use the run data store, Postgres at \$THUNDERJAR_DB_URL, so nothing was run: .+\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead\.\n$/,
+    );
+    expect(stderr).not.toContain("secret");
+    expect(exitCode).toBe(1);
+    expect((await docker.commands()).filter((command) => !command.startsWith("docker image ls"))).toEqual([]);
+  });
+
   // Only with THUNDERJAR_POSTGRES_URL set to a Postgres it may create a schema in.
   test.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("with a postgresStore, the run is recorded in Postgres, and executions and show read it there", async () => {
     await using copy = await copyScenarioProject("0202");
@@ -423,6 +432,8 @@ export default declareHarness({ version: "1.0.0", applyParameter: () => writeRun
       isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":1,\\"comments\\":0,\\"exports\\":0}\\n", stdoutTruncated: false}   isPrimeTests: erroredWhileMeasuring (isPrime.test.ts didn't run against isPrime.ts: ReferenceError: partial is not defined)   isPrimeTsExists: true   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: 0
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
 ${BETA_MEASURES}
+1 of 2 agents didn't end cleanly:
+  1×  exited 3, no result file  Error: unknown model  (1-1)
 Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
@@ -465,6 +476,8 @@ export default declareHarness({ version: "1.0.0", applyParameter: () => writeRun
     expect(exitCode).toBe(0);
     expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done, no result file (<duration>)
       isPrimeShape: {exitCode: 1, stdout: "", stdoutTruncated: false}   isPrimeTests: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
+1 of 1 agents didn't end cleanly:
+  1×  done, no result file  (1-1)
 Recorded in <DATA>/runs.sqlite
 `);
     const [record] = (await readStore(data)).containerRuns;

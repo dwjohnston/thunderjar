@@ -180,7 +180,7 @@ async function runTest(testPath: string, subject: string, reportPath: string, ct
 /**
  * Runs `test`, a Bun test file on the host, against each file matching `subject` with
  * `bun test`, so the image must have `bun`. The test is written into the workdir, in
- * `.thunderjar-measure/`, and finds the subject's absolute path in `THUNDERJAR_SUBJECT`. The value
+ * `.thunderjar-measure/`, removed once it has run, and finds the subject's absolute path in `THUNDERJAR_SUBJECT`. The value
  * is how many tests passed, of how many, the total counting skipped and failed tests too, summed
  * over every match. `skipped` when nothing matches; `erroredWhileMeasuring` when the test doesn't
  * run, such as when the subject doesn't load. Its default score is the pass rate, and a run of no
@@ -204,6 +204,9 @@ export const bunTestFile: Instrument<{ subject: string; test: string }, { passed
     } catch (error) {
       if (error instanceof CannotRun) return { outcome: "erroredWhileMeasuring", error };
       throw error;
+    } finally {
+      // The measurements after it share its container, and mustn't find its test or reports there.
+      await ctx.exec(`rm -rf -- ${shellWord(MEASURE_DIR)}`);
     }
     return { outcome: "measured", data: total };
   },

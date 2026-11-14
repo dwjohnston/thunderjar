@@ -3,10 +3,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
 import type { ContainerRunRecord, ExecutionRecord } from "../../../store/runDataStore.ts";
-import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
+import { copyScenarioProject, thunderjar, TMP_DIR } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { FAKE_DOCKER, fakeDocker } from "../../../testing/fakeDocker.ts";
-import { scenario } from "../../../testing/scenario.ts";
+import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
 import { KEY, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
@@ -81,6 +81,10 @@ describe("0204 misbehaving agents", () => {
       isPrimeTsExists: false
  3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
       isPrimeTsExists: true
+3 of 3 agents didn't end cleanly:
+  1×  timed out after <duration>  (1-1)
+  1×  exited 1  fake-crasher: no space left on device  (2-1)
+  1×  done, no result file  (3-1)
 Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
@@ -114,6 +118,71 @@ Recorded in <DATA>/runs.sqlite
     );
     // Each was committed, and removed.
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
+  }, 30_000);
+
+  test("the timeout runs from when the agent starts: a container slower to start than the timeout still ends cleanly, and the one that hangs still times out", async () => {
+    // fake-silent's container takes 3s to start, past its 2s timeout; its agent then takes no time.
+    await using docker = await fakeDocker({ slowStart: { "-3-1": 3 } });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(1);
+    expect(stdout).toContain(`
+ 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
+      isPrimeTsExists: false
+ 2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (<duration>)
+      isPrimeTsExists: false
+ 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
+      isPrimeTsExists: true
+`);
+    const [sleeper, , silent] = (await readStore(data)).containerRuns as [ContainerRunRecord, ContainerRunRecord, ContainerRunRecord];
+    expect(sleeper.execution).toMatchObject({ exitCode: null, timedOut: true, timeoutSeconds: 2 });
+    expect(silent.execution).toMatchObject({ exitCode: 0, timedOut: false });
+    expect(silent.execution.failedToStart).toBeUndefined();
+    expect(await docker.containers()).toEqual([]);
+  }, 30_000);
+
+  test("a container that never starts is that run's outcome, given up on before it exists, and the execution goes on to the end", async () => {
+    // fake-crasher's container would take a minute to appear: it's given up on after 3s.
+    await using docker = await fakeDocker({ slowStart: { "-2-1": 60 } });
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode, log } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data], {
+      env: { ...docker.env, THUNDERJAR_START_TIMEOUT_SECONDS: "3" },
+      paths: { "<DATA>": data },
+      log: true,
+    });
+
+    // No execution-level error: the run's own line says it failed to start, and the rest ran.
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(1);
+    expect(stdout).toEndWith(`
+ 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
+      isPrimeTsExists: false
+ 2/3  iteration 1/1  fake-crasher | plain  ... failed to start
+ 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
+      isPrimeTsExists: true
+3 of 3 agents didn't end cleanly:
+  1×  timed out after <duration>  (1-1)
+  1×  failed to start  it didn't start within <duration>  (2-1)
+  1×  done, no result file  (3-1)
+Recorded in <DATA>/runs.sqlite
+`);
+    const store = await readStore(data);
+    expect(store.execution.status).toBe("failed");
+    expect(store.containerRuns).toHaveLength(3);
+    const crasher = store.containerRuns[1] as ContainerRunRecord;
+    expect(crasher.execution).toMatchObject({ exitCode: null, timedOut: false, timeoutSeconds: 2, failedToStart: "it didn't start within 3s" });
+    expect(crasher).toMatchObject({ harnessResult: null, harnessStderr: null, result: {} });
+    // It was removed, before it existed, rather than killed; nothing was committed or measured for it.
+    const id = store.execution.executionId;
+    const commands = await docker.commands();
+    expect(commands.filter((command) => command.includes(`thunderjar-run-${id}-2-1`) && command.startsWith("docker kill"))).toEqual([]);
+    expect(commands).toContain(`docker rm --force thunderjar-run-${id}-2-1`);
+    expect(commands.filter((command) => command.includes(`thunderjar-postrun:${id}-2-1`))).toEqual([]);
+    expect(log).toContain("WARN: execution: container didn't start");
     expect(await docker.containers()).toEqual([]);
   }, 30_000);
 });
@@ -336,25 +405,81 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
       expect.stringMatching(/^docker build -t thunderjar-prerun:77e9dd16 /),
       `docker tag thunderjar-prerun:77e9dd16 ${PRERUN}`,
       `docker push --quiet ${PRERUN}`,
+      // Pushed, it's pulled unless it was built on the runtime's own daemon: this one's is another.
+      "docker info --format {{.ID}}",
     ]);
+    expect(commands).toContain(`${REMOTE} info --format {{.ID}}`);
     expect(commands).toContain(`${REMOTE} pull --quiet ${PRERUN}`);
     // The runtime runs the stored prerun image, pulling it if it must.
     expect(commands.find((command) => command.startsWith(`${REMOTE} run --name`))).toContain(`--pull missing`);
     expect(commands.find((command) => command.startsWith(`${REMOTE} run --name`))).toContain(` ${PRERUN} -c `);
     expect(commands).toContain(`${REMOTE} push --quiet ${postrun}`);
-    expect(commands.some((command) => command.startsWith(`${REMOTE} run --detach`))).toBe(true);
-    // Once pushed and measured, the postrun image is removed from the runtime, so its disk doesn't fill.
-    const postrunLocal = `thunderjar-postrun:${executionId}-1-1`;
-    expect(commands.at(-1)).toBe(`${REMOTE} image rm ${postrunLocal} ${postrun}`);
-    expect(await docker.images()).not.toContain(postrunLocal);
-    expect(await docker.images()).not.toContain(postrun);
+    expect(commands.some((command) => command.startsWith(`${REMOTE} run --rm --interactive`))).toBe(true);
+    // Pushed and measured, the postrun image is removed from the runtime, by both its tags. The prerun image stays.
+    expect(commands.filter((command) => command.includes(" image rm "))).toEqual([`${REMOTE} image rm thunderjar-postrun:${executionId}-1-1 ${postrun}`]);
+    // Its disk usage is logged before and after.
+    expect(commands.filter((command) => command.startsWith(`${REMOTE} system df`))).toHaveLength(2);
+    expect(await docker.images()).toEqual(["thunderjar-prerun:77e9dd16", PRERUN]);
+  });
+
+  test("with keepPostrunImages, each postrun image stays on the runtime", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyScenarioProject("0211");
+    const config = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
+    await Bun.write(config, (await Bun.file(config).text()).replace('"--context", "cloud"]', '"--context", "cloud"], keepPostrunImages: true'));
+    const data = dataDir();
+
+    const { exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    const { executionId } = (await readStore(data)).execution as ExecutionRecord;
+    expect((await docker.commands()).some((command) => command.includes(" image rm "))).toBe(false);
+    expect(await docker.images()).toContain(`thunderjar-postrun:${executionId}-1-1`);
+  });
+
+  test("a postrun image that can't be removed from the runtime doesn't fail the execution: it's recorded, pushed and measured", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    const data = dataDir();
+    // The fake fails to remove any image named in `failing`; the postrun image's name isn't known until it runs.
+    const { stdout, stderr, exitCode, log } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", data], {
+      env: { ...docker.env, FAKE_DOCKER_FAIL_IMAGE_RM: "1" },
+      log: true,
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("isPrimeTests: {passed: 3, total: 5}");
+    expect((await readStore(data)).execution.status).toBe("complete");
+    expect(log).toContain("WARN: execution: couldn't remove the postrun image from the runtime");
+  });
+
+  test("--timings prints how long each phase took, once the execution and the runtime's afterExecution are done", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+
+    const { stdout, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--timings", "--data-dir", dataDir()], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    const lines = stdout.split("\n");
+    const from = lines.indexOf("Timings: <duration> in all");
+    expect(from).toBeGreaterThan(lines.findIndex((line) => line.startsWith("Recorded in ")));
+    expect(lines.slice(from + 1, -1).map((line) => line.trim().replace(/ {2,}/g, "  "))).toEqual([
+      "building prerun images  1×  total <duration>  longest <duration>",
+      "pushing prerun images  1×  total <duration>  longest <duration>",
+      "pulling prerun images into the runtime  1×  total <duration>  longest <duration>",
+      "running agents  1×  total <duration>  longest <duration>",
+      "reading what agents left  1×  total <duration>  longest <duration>",
+      "committing postrun images  1×  total <duration>  longest <duration>",
+      "pushing postrun images  1×  total <duration>  longest <duration>",
+      "measuring  1×  total <duration>  longest <duration>",
+      "removing images from the runtime  1×  total <duration>  longest <duration>",
+    ]);
   });
 
   test("a prerun image already in the image store is neither built nor pushed again, only pulled into the runtime", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });
-    // As on a fresh machine: the image store has it, the local daemon doesn't.
-    await $`${FAKE_DOCKER} image rm thunderjar-prerun:77e9dd16`.env({ ...Bun.env, ...docker.env }).quiet();
+    // As on a fresh machine: the image store has it, the local daemon and the runtime don't.
+    await $`${FAKE_DOCKER} image rm thunderjar-prerun:77e9dd16 ${PRERUN}`.env({ ...Bun.env, ...docker.env }).quiet();
     const before = (await docker.commands()).length;
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });
@@ -368,6 +493,64 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(commands.some((command) => command.startsWith("docker build"))).toBe(false);
     expect(commands).not.toContain(`docker push --quiet ${PRERUN}`);
     expect(commands).toContain(`${REMOTE} pull --quiet ${PRERUN}`);
+  });
+
+  test("a prerun image the image store and the runtime both have is neither built, pushed nor pulled", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });
+    const before = (await docker.commands()).length;
+
+    const { stdout, stderr, exitCode, log } = await thunderjar(scenario("0211"), ["run", "example", "--timings", "--data-dir", dataDir()], {
+      env: docker.env,
+      log: true,
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toMatch(/Building|Pushing ghcr.io\/acme\/thunderjar-images:prerun|Pulling|pushing prerun images|pulling prerun images/);
+    const commands = (await docker.commands()).slice(before);
+    // The runtime's images are listed once, for all of them.
+    expect(commands.filter((command) => command.startsWith(`${REMOTE} image ls`))).toEqual([`${REMOTE} image ls --format {{.Repository}}:{{.Tag}} ${REPOSITORY}`]);
+    expect(commands.filter((command) => /^docker( --context cloud)? (build|tag \S+ \S+:prerun|push --quiet \S+:prerun|pull|info)\b/.test(command))).toEqual([]);
+    expect(log).toContain("prerun image already in the image store: not built or pushed");
+    expect(log).toContain("prerun image already in the runtime: not pulled");
+  });
+
+  test("a prerun image built and pushed on the runtime's own daemon isn't pulled into it", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyScenarioProject("0211");
+    const config = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
+    // The runtime's command is the one builds use: the same daemon, as with THUNDERJAR_DOCKER pointing at a remote one.
+    await Bun.write(config, (await Bun.file(config).text()).replace(', "--context", "cloud"]', "]"));
+
+    const { stdout, stderr, exitCode, log } = await thunderjar(copy.dir, ["run", "example", "--data-dir", dataDir()], { env: docker.env, log: true });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(`Pushing ${PRERUN} ... done`);
+    expect(stdout).not.toContain("Pulling");
+    const commands = await docker.commands();
+    expect(commands).toContain(`docker push --quiet ${PRERUN}`);
+    expect(commands.some((command) => command.startsWith("docker pull"))).toBe(false);
+    expect(log).toContain("prerun image built and pushed on the runtime's own daemon: not pulled");
+  });
+
+  test("a prerun image is pushed if the image store can't say whether it has it", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });
+    // Every `manifest inspect` now fails, as if the registry can't be reached.
+    await Bun.write(`${docker.env.FAKE_DOCKER_DIR}/manifest-unavailable`, "");
+    const before = (await docker.commands()).length;
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(`Pushing ${PRERUN} ... done`);
+    const commands = (await docker.commands()).slice(before);
+    expect(commands.filter((command) => command === `docker manifest inspect ${PRERUN}`)).toHaveLength(1);
+    expect(commands).toContain(`docker push --quiet ${PRERUN}`);
+    expect(commands.some((command) => command.startsWith("docker build"))).toBe(false);
   });
 
   test("--local runs on the local Docker daemon, ignoring the runtime", async () => {
@@ -413,11 +596,12 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(at("iteration 2/3  fake-harness-alpha | plain  started")).toBeLessThan(firstDone);
     expect(at("iteration 3/3  fake-harness-alpha | plain  started")).toBeGreaterThan(firstDone);
     for (const n of [1, 2, 3]) {
-      expect(lines.filter((line) => line.startsWith(` 1/1  iteration ${n}/3  fake-harness-alpha | plain  `))).toEqual([
-        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  started`,
-        expect.stringMatching(/  done \(.*\)$/),
-        expect.stringMatching(/  pushed ghcr\.io\/acme\/thunderjar-images:postrun-/),
+      const mine = lines.filter((line) => line.startsWith(` 1/1  iteration ${n}/3  fake-harness-alpha | plain  `));
+      expect(mine.slice(0, 2)).toEqual([` 1/1  iteration ${n}/3  fake-harness-alpha | plain  started`, expect.stringMatching(/  done \(.*\)$/)]);
+      // Its postrun image is pushed while it's measured, so these two come in either order.
+      expect(mine.slice(2).toSorted()).toEqual([
         ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1`,
+        expect.stringMatching(/  pushed ghcr\.io\/acme\/thunderjar-images:postrun-/),
       ]);
     }
     const { execution, containerRuns } = await readStore(data);
@@ -572,8 +756,11 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(exitCode).not.toBe(0);
   });
 
-  /** A copy of 0211 with 2 iterations and concurrency 2, whose runtime's hooks run `beforeRun` and `afterRun` with `sh -c`, and where they write to. */
-  async function copyWithHooks(beforeRun: string, afterRun: string) {
+  /**
+   * A copy of 0211 with 2 iterations and concurrency 2, whose runtime's hooks run `before` and
+   * `after` with `sh -c`, given by their deprecated old names if `oldNames`, and where they write to.
+   */
+  async function copyWithHooks(before: string, after: string, oldNames = false) {
     const copy = await copyWith(2);
     const log = `${copy.dir}/hooks.log`;
     const config = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
@@ -582,7 +769,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
       config,
       (await Bun.file(config).text())
         .replace("iterations: 3", "iterations: 2")
-        .replace("concurrency: 2", `concurrency: 2, beforeRun: ${hook(beforeRun)}, afterRun: ${hook(afterRun)}`),
+        .replace("concurrency: 2", `concurrency: 2, ${oldNames ? "beforeRun" : "beforeExecution"}: ${hook(before)}, ${oldNames ? "afterRun" : "afterExecution"}: ${hook(after)}`),
     );
     const testCase = `${copy.dir}/.thunderjar/test-cases/example.ts`;
     await Bun.write(testCase, (await Bun.file(testCase).text()).replace("iterations: 3", "iterations: 2"));
@@ -591,7 +778,45 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 
   const LOGS = 'echo "$0 $THUNDERJAR_EXECUTION_ID $THUNDERJAR_CONCURRENCY $THUNDERJAR_CONTAINERS" >> $LOG';
 
-  test("beforeRun runs before anything runs on the runtime, and afterRun once it's done, each told about the run", async () => {
+  test("interrupted, it removes its containers from the runtime, killing their agents, runs afterExecution, and exits 143", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWithHooks(`${LOGS.replace("$0", "before")}`, `${LOGS.replace("$0", "after")}`);
+    // An agent that says it started, with its process ID, then would run for a minute.
+    const harness = `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`;
+    // Outside the project: the fake Docker maps any path with /thunderjar or /workspace in it into the container.
+    const marks = `/tmp/tj-interrupt-${crypto.randomUUID()}`;
+    await $`mkdir -p ${marks}`.quiet();
+    await using _marks = { [Symbol.asyncDispose]: async () => void (await $`rm -rf ${marks}`.quiet()) };
+    await Bun.write(harness, (await Bun.file(harness).text()).replace("`printf", () => `\`echo $$ > ${marks}/started-$$ && sleep 60 && printf`));
+    const data = dataDir();
+    const cli = Bun.spawn(["bun", `${REPO_ROOT}/src/cli/index.ts`, "run", "example", "--data-dir", data, "--log-level", "silent"], {
+      cwd: copy.dir,
+      env: { ...Bun.env, TMPDIR: TMP_DIR, ...docker.env },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    // Both iterations' containers are running their agents.
+    const started = () => [...new Bun.Glob("started-*").scanSync({ cwd: marks })];
+    while (started().length < 2) await Bun.sleep(50);
+    const agents = await Promise.all(started().map(async (file) => (await Bun.file(`${marks}/${file}`).text()).trim()));
+
+    cli.kill("SIGTERM");
+    const [exitCode, stderr] = await Promise.all([cli.exited, new Response(cli.stderr).text()]);
+
+    expect(exitCode).toBe(143);
+    const { executionId } = (await readStore(data)).execution as ExecutionRecord;
+    expect(stderr).toBe(`Error: Interrupted (SIGTERM): stopping execution ${executionId}'s containers on the runtime.\n`);
+    // One command removes both, in the order Docker listed them.
+    const removal = (await docker.commands()).find((command) => command.startsWith(`${REMOTE} rm --force `) && command.split(" ").length === 7);
+    expect(removal?.split(" ").slice(5).toSorted()).toEqual([`thunderjar-run-${executionId}-1-1`, `thunderjar-run-${executionId}-1-2`]);
+    expect(await Bun.file(copy.log).text()).toBe(`before ${executionId} 2 2\nafter ${executionId} 2 2\n`);
+    // Its agents were killed, not left running.
+    // Gone, or a zombie nobody has reaped yet: `ps` prints its state, or nothing.
+    for (const pid of agents) expect((await $`ps -o stat= -p ${pid}`.quiet().nothrow().text()).trim()).toMatch(/^(Z.*)?$/);
+    expect((await readStore(data)).execution.status).toBe("failed");
+  }, 30_000);
+
+  test("beforeExecution runs before anything runs on the runtime, and afterExecution once it's done, each told about the execution", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithHooks(`${LOGS.replace("$0", "before")}`, `${LOGS.replace("$0", "after")}`);
     const data = dataDir();
@@ -603,30 +828,47 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
     expect(await Bun.file(copy.log).text()).toBe(`before ${executionId} 2 2\nafter ${executionId} 2 2\n`);
     const lines = stdout.split("\n");
-    const before = lines.findIndex((line) => line.startsWith("Running the runtime's beforeRun, `sh -c "));
-    const after = lines.findIndex((line) => line.startsWith("Running the runtime's afterRun, `sh -c "));
+    const before = lines.findIndex((line) => line.startsWith("Running the runtime's beforeExecution, `sh -c "));
+    const after = lines.findIndex((line) => line.startsWith("Running the runtime's afterExecution, `sh -c "));
     expect(lines[before]).toEndWith("... done");
     expect(lines[after]).toEndWith("... done");
     expect(before).toBeLessThan(lines.findIndex((line) => line.includes("iteration 1/2")));
     expect(after).toBe(lines.findIndex((line) => line.startsWith("Recorded in ")) + 1);
   }, 30_000);
 
-  test("a beforeRun that fails is an error, and nothing else runs, afterRun included", async () => {
+  test("beforeRun and afterRun, the hooks' deprecated old names, still run, each with a warning naming its new name", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWithHooks(LOGS.replace("$0", "before"), LOGS.replace("$0", "after"), true);
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe(
+      "Warning: thunderjar.config.ts: runtime.beforeRun is deprecated, rename it beforeExecution. It runs once per execution, not once per run.\n" +
+        "Warning: thunderjar.config.ts: runtime.afterRun is deprecated, rename it afterExecution. It runs once per execution, not once per run.\n",
+    );
+    const { executionId } = (await readStore(data)).execution as ExecutionRecord;
+    expect(await Bun.file(copy.log).text()).toBe(`before ${executionId} 2 2\nafter ${executionId} 2 2\n`);
+    expect(stdout).toContain("Running the runtime's beforeExecution, `sh -c ");
+  }, 30_000);
+
+  test("a beforeExecution that fails is an error, and nothing else runs, afterExecution included", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithHooks("echo starting; echo no machine to start >&2; exit 3", LOGS.replace("$0", "after"));
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: docker.env });
 
-    expect(stdout).toMatch(/Running the runtime's beforeRun, `sh -c .*` \.\.\. failed\n$/);
-    expect(stderr).toBe("Error: The runtime's beforeRun failed: no machine to start\n");
+    expect(stdout).toMatch(/Running the runtime's beforeExecution, `sh -c .*` \.\.\. failed\n$/);
+    expect(stderr).toBe("Error: The runtime's beforeExecution failed: no machine to start\n");
     expect(exitCode).toBe(1);
     expect((await docker.commands()).filter((command) => / (build|push|pull|run) /.test(command))).toEqual([]);
     expect(await Bun.file(copy.log).exists()).toBe(false);
     expect(await Bun.file(data).exists()).toBe(false);
   });
 
-  test("afterRun runs after a run that failed, and an afterRun that fails is an error", async () => {
+  test("afterExecution runs after an execution that failed, and an afterExecution that fails is an error", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"], pullDenied: true });
     await using copy = await copyWithHooks(LOGS.replace("$0", "before"), `${LOGS.replace("$0", "after")}; exit 1`);
 
@@ -634,9 +876,9 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 
     expect(exitCode).toBe(1);
     expect(await Bun.file(copy.log).text()).toMatch(/^before .*\nafter .*\n$/);
-    expect(stdout).toMatch(/Running the runtime's afterRun, `sh -c .*` \.\.\. failed\n$/);
+    expect(stdout).toMatch(/Running the runtime's afterExecution, `sh -c .*` \.\.\. failed\n$/);
     expect(stderr).toStartWith("Error: The runtime couldn't pull ");
-    expect(stderr).toEndWith(`Error: The runtime's afterRun failed: \`sh -c ${LOGS.replace("$0", "after").replace("$LOG", "<PROJECT>/hooks.log")}; exit 1\` exited 1\n`);
+    expect(stderr).toEndWith(`Error: The runtime's afterExecution failed: \`sh -c ${LOGS.replace("$0", "after").replace("$LOG", "<PROJECT>/hooks.log")}; exit 1\` exited 1\n`);
   });
 
   test("--local runs neither hook", async () => {

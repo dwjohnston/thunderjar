@@ -87,6 +87,7 @@ describe("loadProjectConfig", () => {
       runDataStore: { kind: "sqlite", path: "./.thunderjar/.data/runs.sqlite" },
       runtime: null,
       build: { secrets: [], ssh: false, concurrency: 1 },
+      deprecations: [],
     });
   });
 
@@ -96,6 +97,7 @@ describe("loadProjectConfig", () => {
       runtime: null,
       runDataStore: { kind: "sqlite", path: "./.thunderjar/.data/runs.sqlite" },
       build: { secrets: [], ssh: false, concurrency: 1 },
+      deprecations: [],
     });
   });
 
@@ -134,7 +136,23 @@ export default declareConfig({
     expect((await loadProjectConfig(await findThunderjarRoot(scenario("0211")))).runtime).toEqual({
       command: [env ?? "docker", "--context", "cloud"],
       concurrency: 1,
+      keepPostrunImages: false,
     });
+  });
+
+  test("a runtime's hooks given by their old names load by their new ones, with a deprecation for each", async () => {
+    await using copy = await copyScenarioProject("0211");
+    const path = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
+    const config = await Bun.file(path).text();
+    await Bun.write(path, config.replace('"cloud"]', '"cloud"], beforeRun: ["./up.sh"], afterRun: ["./down.sh"]'));
+
+    const { runtime, deprecations } = await loadProjectConfig(`${copy.dir}/.thunderjar`);
+    expect(runtime).toMatchObject({ beforeExecution: ["./up.sh"], afterExecution: ["./down.sh"] });
+    expect(runtime).not.toContainKeys(["beforeRun", "afterRun"]);
+    expect(deprecations).toEqual([
+      "thunderjar.config.ts: runtime.beforeRun is deprecated, rename it beforeExecution. It runs once per execution, not once per run.",
+      "thunderjar.config.ts: runtime.afterRun is deprecated, rename it afterExecution. It runs once per execution, not once per run.",
+    ]);
   });
 
   test("a runtime without an image store is a config error, so run stops before Docker is asked anything", async () => {
@@ -167,6 +185,11 @@ describe("runtimeProblem", () => {
     expect(runtimeProblem({ command: ["docker"], concurrency: 4 }, STORE)).toBeUndefined();
   });
 
+  test("keepPostrunImages is true or false", () => {
+    expect(runtimeProblem({ command: ["docker"], keepPostrunImages: true }, STORE)).toBeUndefined();
+    expect(runtimeProblem({ command: ["docker"], keepPostrunImages: "yes" }, STORE)).toBe('keepPostrunImages must be true or false, got "yes"');
+  });
+
   test.each([[0], [-1], [1.5], ["4"], [null]])("concurrency %p is not a number of containers", (concurrency) => {
     expect(runtimeProblem({ command: ["docker"], concurrency }, STORE)).toBe(`concurrency must be a whole number, 1 or more, got ${JSON.stringify(concurrency)}`);
   });
@@ -178,13 +201,29 @@ describe("runtimeProblem", () => {
     },
   );
 
-  test("beforeRun and afterRun are commands", () => {
-    expect(runtimeProblem({ command: ["docker"], beforeRun: ["./up.sh"], afterRun: ["./down.sh", "now"] }, STORE)).toBeUndefined();
-    expect(runtimeProblem({ command: ["docker"], beforeRun: "./up.sh" }, STORE)).toBe(
-      'beforeRun must be a non-empty list of non-empty strings, e.g. ["./scripts/start-runtime.sh"], got "./up.sh"',
+  test("beforeExecution and afterExecution are commands", () => {
+    expect(runtimeProblem({ command: ["docker"], beforeExecution: ["./up.sh"], afterExecution: ["./down.sh", "now"] }, STORE)).toBeUndefined();
+    expect(runtimeProblem({ command: ["docker"], beforeExecution: "./up.sh" }, STORE)).toBe(
+      'beforeExecution must be a non-empty list of non-empty strings, e.g. ["./scripts/start-runtime.sh"], got "./up.sh"',
     );
+    expect(runtimeProblem({ command: ["docker"], afterExecution: [] }, STORE)).toBe(
+      'afterExecution must be a non-empty list of non-empty strings, e.g. ["./scripts/start-runtime.sh"], got []',
+    );
+  });
+
+  test("beforeRun and afterRun, their deprecated old names, are still commands", () => {
+    expect(runtimeProblem({ command: ["docker"], beforeRun: ["./up.sh"], afterRun: ["./down.sh", "now"] }, STORE)).toBeUndefined();
     expect(runtimeProblem({ command: ["docker"], afterRun: [] }, STORE)).toBe(
       'afterRun must be a non-empty list of non-empty strings, e.g. ["./scripts/start-runtime.sh"], got []',
+    );
+  });
+
+  test("a hook given by both its name and its old name is an error", () => {
+    expect(runtimeProblem({ command: ["docker"], beforeExecution: ["./up.sh"], beforeRun: ["./up.sh"] }, STORE)).toBe(
+      "give beforeExecution or beforeRun, its old name, not both",
+    );
+    expect(runtimeProblem({ command: ["docker"], afterExecution: ["./down.sh"], afterRun: ["./down.sh"] }, STORE)).toBe(
+      "give afterExecution or afterRun, its old name, not both",
     );
   });
 

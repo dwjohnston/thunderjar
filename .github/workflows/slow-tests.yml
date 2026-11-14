@@ -98,7 +98,7 @@ jobs:
           status=${PIPESTATUS[0]}
           id=$(grep -m1 -oP '^Execution \K\S+' run.log)
           if [ -n "$id" ]; then
-            # Nothing is recorded if the run stopped before its first container, e.g. in beforeRun.
+            # Nothing is recorded if the execution stopped before its first container, e.g. in beforeExecution.
             if ./node_modules/.bin/thunderjar show "$id" > show.log 2>&1; then
               echo "execution=$id" >> "$GITHUB_OUTPUT"
             fi

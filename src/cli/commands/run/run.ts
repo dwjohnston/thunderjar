@@ -9,17 +9,18 @@ import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerBuildError, DockerContainerError, DockerPullError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { type PlannedExecution, type PlannedIteration, type PlannedPermutation, planExecution } from "../../../execution/planExecution.ts";
-import { runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
+import { removeExecutionContainers, runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
 import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
+import type { ExecutionTimings } from "../../../execution/timings.ts";
 import { ulid } from "../../../execution/ulid.ts";
-import { type RecordedMeasure, type RecordedOutcome } from "../../../store/runDataStore.ts";
+import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { agentEnd, dollars, endedCleanly, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, endedCleanly, failureHint, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
-import { print, printError as error, printJson } from "../../output.ts";
+import { print, printError as error, printJson, printWarning } from "../../output.ts";
 import { type LiveRow, liveRows } from "../../liveRows.ts";
 import { textOutput } from "../../textOutput.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
@@ -134,6 +135,71 @@ function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutatio
   return [...varying.map((axis) => permutation[axis]), harness, permutation.initialPrompt].join(" | ");
 }
 
+/** How long an interrupted `run` waits for its execution to be recorded as failed, before it runs afterExecution. */
+const INTERRUPT_SETTLE_MS = 15_000;
+
+/** A container run whose agent didn't end cleanly: its name, how it ended, and a hint of why. */
+export type UncleanRun = { run: string; end: string; why?: string };
+
+/** How many container runs a line of `showUnclean` names before `…`. */
+const NAMED_RUNS = 8;
+
+/**
+ * What `run` says, once it's done, about the agents that didn't end cleanly, of `total`: how many,
+ * then a line for each way they ended and why, most first, with how many and which. So an execution with
+ * many failures says at once whether they share a cause, e.g. a provider out of credits.
+ */
+export function showUnclean(unclean: UncleanRun[], total: number, paint: Paint = plain): string[] {
+  if (unclean.length === 0) return [];
+  const groups = new Map<string, UncleanRun[]>();
+  for (const run of unclean) {
+    const key = `${run.end}\n${run.why ?? ""}`;
+    groups.set(key, [...(groups.get(key) ?? []), run]);
+  }
+  const sorted = [...groups.values()].sort((a, b) => b.length - a.length);
+  const width = String(sorted[0]?.length ?? 1).length;
+  return [
+    paint.red(`${unclean.length} of ${total} agents didn't end cleanly:`),
+    ...sorted.map((runs) => {
+      const { end, why } = runs[0] as UncleanRun;
+      const names = runs.slice(0, NAMED_RUNS).map(({ run }) => run);
+      const which = `${names.join(", ")}${runs.length > NAMED_RUNS ? ", …" : ""}`;
+      return `  ${String(runs.length).padStart(width)}×  ${paint.red(end)}${why === undefined ? "" : `  ${why}`}  ${paint.dim(`(${which})`)}`;
+    }),
+  ];
+}
+
+/** What `--timings` calls each phase. */
+const PHASE_LABELS: Record<string, string> = {
+  build: "building prerun images",
+  pushPrerun: "pushing prerun images",
+  pullPrerun: "pulling prerun images into the runtime",
+  agent: "running agents",
+  collect: "reading what agents left",
+  commit: "committing postrun images",
+  pushPostrun: "pushing postrun images",
+  measure: "measuring",
+  cleanup: "removing images from the runtime",
+};
+
+/**
+ * `--timings`' lines: how long the execution took, then each phase that ran, with how many
+ * times, how long they took together, and the longest. Phases overlap when several run at once,
+ * so their totals can add up to more than the whole.
+ */
+export function showTimings({ wallMs, phases }: ExecutionTimings): string {
+  const rows = Object.entries(phases).map(([phase, { count, totalMs, maxMs }]) => [PHASE_LABELS[phase] ?? phase, `${count}×`, `total ${duration(totalMs)}`, `longest ${duration(maxMs)}`]);
+  const widths = [0, 1, 2].map((column) => Math.max(0, ...rows.map((row) => (row[column] as string).length)));
+  return [
+    `Timings: ${duration(wallMs)} in all`,
+    ...rows.map(([label, count, total, longest]) => `  ${(label as string).padEnd(widths[0] as number)}  ${(count as string).padStart(widths[1] as number)}  ${(total as string).padEnd(widths[2] as number)}  ${longest}`),
+  ].join("\n");
+}
+
+/** What to say when the run data store can't be used, and what that meant for the execution. */
+const storeFailure = (cwd: string, { path, message }: RunDataStoreError, consequence: string) =>
+  `Can't use the run data store, ${displayPath(cwd, path)}, ${consequence}: ${message}\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead.`;
+
 /**
  * Runs test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it: builds its
  * missing prerun images, then runs each iteration in a container, writing a line for each as it
@@ -165,9 +231,11 @@ async function run(
   concurrencyOption?: number,
   iterations?: number,
   json = false,
+  showsTimings = false,
 ): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const config = await loadProjectConfig(root);
+  for (const deprecation of config.deprecations) printWarning(deprecation);
   const { imageStore, build } = config;
   const runtime = local ? null : config.runtime;
   const concurrency = concurrencyOption ?? runtime?.concurrency ?? 1;
@@ -190,6 +258,15 @@ async function run(
   }
   const plan = await planExecution(root, testCase, ulid(), imagePrefix);
   const { store, where } = await openStore(cwd, dataDir, root);
+  // Before anything is built or started: otherwise it's found out as the first container run is recorded.
+  try {
+    await store.check();
+  } catch (caught) {
+    if (!(caught instanceof RunDataStoreError)) throw caught;
+    error(storeFailure(cwd, caught, "so nothing was run"));
+    process.exitCode = 1;
+    return;
+  }
   const permutations = plan.permutations.length;
   // Where a postrun image's push line goes: under its iteration, lined up with it, like its measures.
   const underIteration = " ".repeat(ordinal(permutations, permutations).length + 3);
@@ -243,7 +320,7 @@ async function run(
     containers: plan.permutations.reduce((sum, permutation) => sum + permutation.iterations.length, 0),
   };
   /** Runs the runtime's `hook`, if it has one, on a line of its own. False, with the error written, if it fails. */
-  const runHook = async (hook: "beforeRun" | "afterRun"): Promise<boolean> => {
+  const runHook = async (hook: "beforeExecution" | "afterExecution"): Promise<boolean> => {
     const command = runtime?.[hook];
     if (command === undefined) return true;
     open(`Running the runtime's ${hook}, ${paint.cyan(`\`${command.join(" ")}\``)} ${ellipsis} `);
@@ -259,9 +336,38 @@ async function run(
       return false;
     }
   };
-  if (!(await runHook("beforeRun"))) return;
+  if (!(await runHook("beforeExecution"))) return;
+  // Ctrl-C, or a cancelled CI job: without this, its containers would keep running, their agents
+  // still spending, and a runtime started by beforeExecution would never be released by afterExecution.
+  let interrupted = false;
+  let executing: Promise<ExecutionRecord> | undefined;
+  const interrupt = (signal: "SIGINT" | "SIGTERM") => {
+    if (interrupted) return;
+    interrupted = true;
+    void (async () => {
+      live?.stop();
+      line?.stop();
+      line = undefined;
+      error(`Interrupted (${signal}): stopping execution ${plan.executionId}'s containers${runtime === null ? "" : " on the runtime"}.`);
+      try {
+        await removeExecutionContainers(plan.executionId, imagePrefix, runtime);
+      } catch (caught) {
+        error(`Couldn't remove its containers: ${caught instanceof Error ? caught.message : String(caught)}`);
+      }
+      // Its container runs fail, now their containers are gone: once they have, the execution is recorded as failed.
+      await Promise.race([executing?.catch(() => {}), Bun.sleep(INTERRUPT_SETTLE_MS)]);
+      await runHook("afterExecution");
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    })();
+  };
+  const onInt = () => interrupt("SIGINT");
+  const onTerm = () => interrupt("SIGTERM");
+  process.on("SIGINT", onInt);
+  process.on("SIGTERM", onTerm);
+  let timings: ExecutionTimings | undefined;
+  const unclean: UncleanRun[] = [];
   try {
-    const record = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
+    executing = runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, {
       onBuilding: (image) => {
         if (live !== undefined) return void prerunRows.set(image, live.add(`${paint.cyan(image)}  ${paint.dim("building")} `));
         if (concurrent) return print(`Building ${paint.cyan(image)}`);
@@ -324,13 +430,18 @@ async function run(
         }
         open(`${headOf(permutation, iteration)}  ${ellipsis} `);
       },
-      onRan: (permutation, iteration, { execution, harnessResult, tokenCosts }) => {
+      onRan: (permutation, iteration, record) => {
+        const { execution, harnessResult, tokenCosts } = record;
+        if (!endedCleanly(execution, harnessResult)) {
+          const why = failureHint(record);
+          unclean.push({ run: `${permutation.number}-${iteration.number}`, end: agentEnd(execution, harnessResult), ...(why !== undefined && { why }) });
+        }
         const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
         // Its cost if it can be trusted, else its tokens, if it has either.
         const cost = knownCost(tokenCosts);
         const tokens = totalTokens(tokenCosts);
         const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
-        const outcome = execution.timedOut ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`;
+        const outcome = execution.timedOut || execution.failedToStart !== undefined ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`;
         if (live !== undefined) {
           outcomes.set(iteration.postrunImage, outcome);
           return showStep(iteration.postrunImage, "");
@@ -351,12 +462,17 @@ async function run(
         close(`${" ".repeat(ordinal(permutation.number, permutations).length + 3)}${showMeasures(result, paint)}`);
       },
       onDone: (_permutation, iteration) => rows.get(iteration.postrunImage)?.done(),
+      onTimings: (spent) => void (timings = spent),
     });
+    const record = await executing;
     live?.stop();
+    for (const line of showUnclean(unclean, facts.containers, paint)) print(line);
     print(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
     if (json) printJson({ execution: record, recordedIn: where, containerRuns: await store.containerRunsOf(record.executionId) });
     if (record.status === "failed") process.exitCode = 1;
   } catch (caught) {
+    // Its containers were removed under it: `interrupt` says so, and ends the process.
+    if (interrupted) return await new Promise<never>(() => {});
     // The prerun image whose build, push or pull failed, marked so on its line.
     const failedImage =
       caught instanceof DockerBuildError ? caught.image : caught instanceof DockerPushError || caught instanceof DockerPullError ? pulledImages.get(caught.reference) : undefined;
@@ -378,6 +494,9 @@ async function run(
       error(
         `The runtime couldn't pull ${caught.reference}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
       );
+    } else if (caught instanceof RunDataStoreError) {
+      fail();
+      error(storeFailure(cwd, caught, "so the execution stopped"));
     } else if (caught instanceof DockerContainerError && line !== undefined && !measuring) {
       fail();
       error(`Running a container failed: ${caught.message}`);
@@ -392,8 +511,13 @@ async function run(
     live?.stop();
     line?.stop();
     line = undefined;
-    // So a runtime started for the run is stopped, however it ended.
-    await runHook("afterRun");
+    // `interrupt` runs afterExecution itself, and ends the process.
+    if (interrupted) await new Promise<never>(() => {});
+    process.off("SIGINT", onInt);
+    process.off("SIGTERM", onTerm);
+    // So a runtime started for the execution is released, however it ended.
+    await runHook("afterExecution");
+    if (showsTimings && timings !== undefined) print(showTimings(timings));
   }
 }
 
@@ -421,6 +545,7 @@ export function createRunCommand(): Command {
         return Number(value);
       }),
     )
+    .option("--timings", "once the execution ends, print how long each of its phases took: builds, pushes, pulls, agents, commits and measuring")
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())
     .addOption(jsonOption())
@@ -428,11 +553,11 @@ export function createRunCommand(): Command {
       reportingConfigErrors(
         async (
           name: string,
-          options: { dryRun?: boolean; local?: boolean; concurrency?: number; iterations?: number; imagePrefix: string; dataDir?: string; json?: boolean },
+          options: { dryRun?: boolean; local?: boolean; concurrency?: number; iterations?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean },
         ) => {
           if (options.dryRun && options.json) printJson(executionPlanJson(await planDryRun(process.cwd(), name, options.imagePrefix, options.iterations)));
           else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, options.iterations, painter()));
-          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, options.iterations, options.json);
+          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, options.iterations, options.json, options.timings);
         },
       ),
     );

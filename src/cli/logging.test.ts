@@ -55,6 +55,7 @@ describe("the diagnostic log", () => {
       "INFO: docker: committed container",
       "INFO: execution: container run finished",
       "INFO: execution: measured",
+      "INFO: execution: execution timings",
       "INFO: execution: execution finished",
     ]);
     expect(log).toContain('    status: "complete"');
@@ -67,7 +68,7 @@ describe("the diagnostic log", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(messages(log as string)[0]).toBe("DEBUG: cli: command started");
-    expect(messages(log as string)).toContain("DEBUG: docker: running docker");
+    expect(messages(log as string)).toContain("DEBUG: docker: ran docker");
   });
 
   test("THUNDERJAR_LOG_LEVEL=warn: nothing, as nothing went wrong", async () => {

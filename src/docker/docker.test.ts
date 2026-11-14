@@ -4,6 +4,7 @@ import { FAKE_DOCKER, fakeDocker } from "../testing/fakeDocker.ts";
 import { $ } from "bun";
 import { FIXTURES_DIR } from "../testing/scenario.ts";
 import {
+  buildFailureReason,
   buildImage,
   checkLogin,
   commitContainer,
@@ -12,13 +13,12 @@ import {
   DockerLoginError,
   DockerPushError,
   DockerUnavailableError,
-  execInContainer,
   imagesIn,
   pushImage,
   readContainerFile,
+  reasonOf,
   removeContainer,
   runContainer,
-  startContainer,
 } from "./docker.ts";
 
 const saved = { THUNDERJAR_DOCKER: Bun.env.THUNDERJAR_DOCKER, FAKE_DOCKER_DIR: Bun.env.FAKE_DOCKER_DIR };
@@ -118,12 +118,31 @@ test("runContainer stops waiting for a timed-out container it can't kill, and sa
 
   const stop = await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "sleep 60", { timeoutSeconds: 1 });
 
-  expect(stop.timedOut).toBe(true);
+  expect(stop.outcome).toBe("timedOut");
   // Three tries at `docker kill`, two seconds apart, not the script's minute.
   expect(Date.now() - startedAt).toBeLessThan(20_000);
   expect((await docker.commands()).filter((command) => command === "docker kill tj-run-1")).toHaveLength(3);
   await removeContainer("tj-run-1");
 }, 30_000);
+
+test("given a start marker, runContainer times the script from when it prints it, not from `docker run`", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"], slowStart: { "tj-run-1": 2 } });
+  Object.assign(Bun.env, docker.env);
+
+  const stop = await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "echo started && sleep 0.5", { timeoutSeconds: 1, startMarker: "started" });
+
+  expect(stop.outcome).toBe("exited");
+  await removeContainer("tj-run-1");
+}, 30_000);
+
+test("a container whose `docker run` fails before its start marker never started, and says why", async () => {
+  await using docker = await fakeDocker();
+  Object.assign(Bun.env, docker.env);
+
+  const stop = await runContainer("tj-prerun:missing", "tj-run-1", "echo started", { timeoutSeconds: 1, startMarker: "started" });
+
+  expect(stop).toMatchObject({ outcome: "notStarted", reason: "docker: Error response from daemon: No such image: tj-prerun:missing" });
+});
 
 test("readContainerFile throws a DockerContainerError when there's no such container", async () => {
   await using docker = await fakeDocker();
@@ -133,35 +152,6 @@ test("readContainerFile throws a DockerContainerError when there's no such conta
 
   expect(error).toBeInstanceOf(DockerContainerError);
   expect((error as Error).message).toBe("Error response from daemon: No such container: tj-run-1");
-});
-
-test("a started container holds its image's files, and runs commands, with input, however they exit", async () => {
-  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
-  Object.assign(Bun.env, docker.env);
-  await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "echo hi > /workspace/a.txt");
-  await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa");
-  await removeContainer("tj-run-1");
-
-  await startContainer("tj-postrun:x-1-1", "tj-measure-1");
-
-  expect(await execInContainer("tj-measure-1", "/workspace", ["cat", "a.txt"])).toEqual({ stdout: "hi\n", stderr: "", exitCode: 0 });
-  expect(await execInContainer("tj-measure-1", "/workspace", ["sh", "-c", "cat; echo no >&2; exit 3"], "in\n")).toEqual({
-    stdout: "in\n",
-    stderr: "no\n",
-    exitCode: 3,
-  });
-  await removeContainer("tj-measure-1");
-  expect(await docker.containers()).toEqual([]);
-});
-
-test("execInContainer throws a DockerContainerError when there's no such container", async () => {
-  await using docker = await fakeDocker();
-  Object.assign(Bun.env, docker.env);
-
-  const error = await execInContainer("tj-measure-1", "/workspace", ["true"]).catch((e: unknown) => e);
-
-  expect(error).toBeInstanceOf(DockerContainerError);
-  expect((error as Error).message).toBe("Error response from daemon: No such container: tj-measure-1");
 });
 
 test("checkLogin passes for a registry Docker holds a login for", async () => {
@@ -207,4 +197,50 @@ test("pushImage throws a DockerPushError with the registry's reason", async () =
   const error = await pushImage("tj-prerun:aaaaaaaa", "ghcr.io/acme/images:prerun-haaaaaaaa").catch((e: unknown) => e);
   expect(error).toBeInstanceOf(DockerPushError);
   expect((error as Error).message).toStartWith("denied: ");
+});
+
+test("buildFailureReason adds the end of the failed step's output to Docker's last line", () => {
+  const stderr = `#5 [2/7] RUN npm install --global bun@1.3.14
+#5 71.42 npm error code EAI_AGAIN
+#5 ERROR: process "/bin/sh -c npm install --global bun@1.3.14" did not complete successfully: exit code: 1
+------
+ > [2/7] RUN npm install --global bun@1.3.14:
+71.42 npm error code EAI_AGAIN
+71.42 npm error syscall getaddrinfo
+71.42 npm error errno EAI_AGAIN
+71.42 npm error request to https://registry.npmjs.org/bun failed, reason: getaddrinfo EAI_AGAIN registry.npmjs.org
+71.42 npm error A complete log of this run can be found in: /root/.npm/_logs/debug-0.log
+71.43 npm error and one more line
+------
+Dockerfile:2
+--------------------
+   2 | >>> RUN npm install --global bun@1.3.14
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm install --global bun@1.3.14" did not complete successfully: exit code: 1
+`;
+  expect(buildFailureReason(stderr)).toBe(`ERROR: failed to build: failed to solve: process "/bin/sh -c npm install --global bun@1.3.14" did not complete successfully: exit code: 1
+  npm error syscall getaddrinfo
+  npm error errno EAI_AGAIN
+  npm error request to https://registry.npmjs.org/bun failed, reason: getaddrinfo EAI_AGAIN registry.npmjs.org
+  npm error A complete log of this run can be found in: /root/.npm/_logs/debug-0.log
+  npm error and one more line`);
+});
+
+test("buildFailureReason is Docker's last line when no step's output is repeated", () => {
+  expect(buildFailureReason("#1 load\nERROR: failed to build: secret id=npm: env NPM_TOKEN is not set\n")).toBe("ERROR: failed to build: secret id=npm: env NPM_TOKEN is not set");
+  expect(buildFailureReason("")).toBe("");
+});
+
+test("reasonOf is the last line, unless the daemon couldn't be reached: then the line that says so", () => {
+  expect(reasonOf("Unable to find image\nError response from daemon: pull access denied\n")).toBe("Error response from daemon: pull access denied");
+  const unreachable = `error during connect: Get "http://docker.example.com/v1.56/images/json": command [ssh -T -- tjfly docker system dial-stdio] has exited with exit status 255: stderr=Error: app thunderjar-runtime has no started VMs.
+It may be unhealthy or not have been deployed yet.
+Try the following command to verify:
+
+fly status
+`;
+  expect(reasonOf(unreachable)).toBe(
+    'error during connect: Get "http://docker.example.com/v1.56/images/json": command [ssh -T -- tjfly docker system dial-stdio] has exited with exit status 255: stderr=Error: app thunderjar-runtime has no started VMs.',
+  );
+  expect(reasonOf(`error during connect: ${"x".repeat(900)}`)).toHaveLength(400);
 });

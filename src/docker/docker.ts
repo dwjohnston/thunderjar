@@ -68,8 +68,44 @@ export const remoteRuntime = (command: string[]): DockerRuntime => ({ command, p
 /** How a failed command is named in an error: `docker run`, or the runtime's command and its subcommand. */
 const named = (runtime: DockerRuntime, subcommand: string | undefined) => `\`${[...runtime.command, subcommand].join(" ")}\``;
 
-/** The last line of a failed command's stderr: where Docker puts its reason. */
-const reasonOf = (stderr: { toString(): string }) => stderr.toString().trim().split("\n").at(-1);
+/** How much of a connection error is shown: it quotes the whole command and URL that failed. */
+const CONNECT_REASON_LENGTH = 400;
+
+/**
+ * Why a command failed, from its stderr: its last line, where Docker puts its reason. Unless the
+ * daemon couldn't be reached: then the line that says so, since what follows it is the output of
+ * whatever was connecting, e.g. an SSH proxy's hints, whose last line says nothing.
+ */
+export function reasonOf(stderr: { toString(): string }): string | undefined {
+  const lines = stderr.toString().trim().split("\n");
+  const connect = lines.find((line) => /^(error during connect|Cannot connect to the Docker daemon)/.test(line));
+  if (connect === undefined) return lines.at(-1);
+  return connect.length <= CONNECT_REASON_LENGTH ? connect : `${connect.slice(0, CONNECT_REASON_LENGTH - 1)}…`;
+}
+
+/** How many lines of a failed build step's output are shown with Docker's reason. */
+const BUILD_STEP_LINES = 5;
+
+/**
+ * Why a build failed, from its stderr: Docker's last line, which only names the step and its exit
+ * code, then the end of what that step wrote, which says why, e.g. npm's `getaddrinfo EAI_AGAIN`.
+ * BuildKit repeats a failed step's output between `------` lines, under ` > [2/7] RUN …:`, each
+ * line starting with its time, which is dropped. Without that block, just the last line.
+ */
+export function buildFailureReason(stderr: string): string | undefined {
+  const last = reasonOf(stderr);
+  const lines = stderr.split("\n");
+  const start = lines.findLastIndex((line) => /^ > \[.*\].*:$/.test(line));
+  if (start === -1) return last;
+  const end = lines.indexOf("------", start);
+  const output = lines
+    .slice(start + 1, end === -1 ? undefined : end)
+    .map((line) => line.replace(/^\d+\.\d+ /, "").trimEnd())
+    .filter((line) => line !== "")
+    .slice(-BUILD_STEP_LINES);
+  if (output.length === 0) return last;
+  return [last, ...output.map((line) => `  ${line}`)].join("\n");
+}
 
 /**
  * Builds the Dockerfile at the root of the build context `contextDir`, and tags the image `image`,
@@ -95,21 +131,34 @@ export async function buildImage(contextDir: string, image: string, options: Bui
   if (result.exitCode !== 0) {
     // The user is told only the last line of Docker's output: the whole of it is here.
     log.error({ image, exitCode: result.exitCode, ms, stderr: result.stderr.toString() }, "image build failed");
-    throw new DockerBuildError(reasonOf(result.stderr) || `\`${binary} build\` exited ${result.exitCode}`, image);
+    throw new DockerBuildError(buildFailureReason(result.stderr.toString()) || `\`${binary} build\` exited ${result.exitCode}`, image);
   }
   log.info({ image, ms }, "built image");
 }
 
-/** The tagged images in `repository`, as `<repository>:<tag>`. Throws a DockerUnavailableError. */
-export async function imagesIn(repository: string): Promise<Set<string>> {
-  const binary = dockerBinary();
-  log.debug({ repository }, "listing images");
-  const result = await $`${binary} image ls --format ${"{{.Repository}}:{{.Tag}}"} ${repository}`.quiet().nothrow();
+/**
+ * The tagged images in `repository`, as `<repository>:<tag>`, in `runtime`, the local daemon by
+ * default. One command, however many there are. Throws a DockerUnavailableError.
+ */
+export async function imagesIn(repository: string, runtime: DockerRuntime = localRuntime()): Promise<Set<string>> {
+  log.debug({ repository, runtime: runtime.command }, "listing images");
+  const result = await $`${runtime.command} image ls --format ${"{{.Repository}}:{{.Tag}}"} ${repository}`.quiet().nothrow();
   if (result.exitCode !== 0) {
     log.debug({ repository, exitCode: result.exitCode, stderr: result.stderr.toString() }, "listing images failed");
-    throw new DockerUnavailableError(reasonOf(result.stderr) || `\`${binary} image ls\` exited ${result.exitCode}`);
+    throw new DockerUnavailableError(reasonOf(result.stderr) || `${named(runtime, "image ls")} exited ${result.exitCode}`);
   }
   return new Set(result.stdout.toString().split("\n").filter(Boolean));
+}
+
+/**
+ * The ID of `runtime`'s Docker daemon: two runtime commands that reach the same daemon give the
+ * same one. Undefined if it can't be asked.
+ */
+export async function daemonId(runtime: DockerRuntime): Promise<string | undefined> {
+  const result = await $`${runtime.command} info --format ${"{{.ID}}"}`.quiet().nothrow();
+  log.debug({ runtime: runtime.command, exitCode: result.exitCode, stderr: result.stderr.toString() }, "asked for the daemon's ID");
+  const id = result.stdout.toString().trim();
+  return result.exitCode === 0 && id !== "" ? id : undefined;
 }
 
 const DAEMON_UNREACHABLE = /Cannot connect to the Docker daemon|error during connect/;
@@ -178,17 +227,59 @@ export async function pullImage(reference: string, runtime: DockerRuntime): Prom
 
 /** Runs `binary args…`, throwing a DockerContainerError with Docker's reason if it fails. */
 async function mustRun(args: string[], runtime: DockerRuntime = localRuntime()): Promise<string> {
-  log.debug({ command: [...runtime.command, ...args] }, "running docker");
+  const startedAt = Date.now();
   const result = await $`${runtime.command} ${args}`.quiet().nothrow();
+  log.debug({ command: [...runtime.command, ...args], exitCode: result.exitCode, ms: Date.now() - startedAt }, "ran docker");
   if (result.exitCode !== 0) {
-    log.debug({ command: [...runtime.command, ...args], exitCode: result.exitCode, stderr: result.stderr.toString() }, "docker failed");
+    // At warn, so the default log level keeps Docker's whole reason: the error carries only its last line.
+    log.warn({ command: [...runtime.command, ...args], exitCode: result.exitCode, stderr: result.stderr.toString() }, "docker failed");
     throw new DockerContainerError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`);
   }
   return result.stdout.toString();
 }
 
 /** How a container run by `runContainer` stopped. */
-export type ContainerStop = { timedOut: false } | { timedOut: true; /** Epoch ms, when it was killed. */ killedAt: number };
+export type ContainerStop =
+  | { outcome: "exited" }
+  | { outcome: "timedOut"; /** Epoch ms, when it was killed. */ killedAt: number }
+  | {
+      /** It never started: `docker run` failed, or gave no sign of starting in time, before its script did. */
+      outcome: "notStarted";
+      reason: string;
+      /** Epoch ms, when `docker run` was started, and when it was given up on. */
+      spawnedAt: number;
+      gaveUpAt: number;
+    };
+
+/**
+ * How long a container given a `startMarker` may take to start, in seconds, before it's given up
+ * on: THUNDERJAR_START_TIMEOUT_SECONDS, or 600. Generous, as a remote runtime can be slow to start
+ * one, e.g. while it pulls an image, and that time isn't the agent's.
+ */
+export const startTimeoutSeconds = (): number => {
+  const seconds = Number(Bun.env.THUNDERJAR_START_TIMEOUT_SECONDS);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : 600;
+};
+
+/**
+ * Reads `stream` to its end, so whatever writes to it never waits, and calls `onSeen` once, as soon
+ * as a line of it is `marker`. Resolves once it ends.
+ */
+async function watchFor(stream: ReadableStream<Uint8Array>, marker: string, onSeen: () => void): Promise<void> {
+  const decoder = new TextDecoder();
+  let pending = "";
+  let seen = false;
+  for await (const chunk of stream) {
+    if (seen) continue;
+    pending += decoder.decode(chunk, { stream: true });
+    const lines = pending.split("\n");
+    pending = (lines.pop() as string).slice(-marker.length);
+    if (lines.includes(marker)) {
+      seen = true;
+      onSeen();
+    }
+  }
+}
 
 /**
  * Runs `script` with `sh -c`, in place of the image's entrypoint, in a new container `name` from
@@ -199,6 +290,13 @@ export type ContainerStop = { timedOut: false } | { timedOut: true; /** Epoch ms
  *
  * If it's still running after `timeoutSeconds`, it's killed with `docker kill`, which stops every
  * process in it, whatever the image has installed, and it's left stopped, like one that finished.
+ *
+ * Given a `startMarker`, a line `script` prints to stdout once it has started, the timeout runs from
+ * when that line arrives, not from `docker run`: so the time a slow runtime takes to start the
+ * container isn't the script's. No extra command is needed to tell: the line comes back on `docker
+ * run`'s own output. If it hasn't arrived within `startTimeoutSeconds()`, or `docker run` fails
+ * before it does, the container never started: that's returned, with why, rather than thrown.
+ *
  * Throws a DockerContainerError if the script, or Docker, fails.
  */
 export async function runContainer(
@@ -209,8 +307,9 @@ export async function runContainer(
     env = [],
     runOptions = [],
     timeoutSeconds,
+    startMarker,
     runtime = localRuntime(),
-  }: { env?: string[]; runOptions?: string[]; timeoutSeconds?: number; runtime?: DockerRuntime } = {},
+  }: { env?: string[]; runOptions?: string[]; timeoutSeconds?: number; startMarker?: string; runtime?: DockerRuntime } = {},
 ): Promise<ContainerStop> {
   const passed = env.flatMap((variable) => ["-e", variable]);
   const args = ["run", "--name", name, "--pull", runtime.pull, ...passed, ...runOptions, "--entrypoint", "sh", image, "-c", script];
@@ -218,35 +317,70 @@ export async function runContainer(
   log.info({ image, container: name, env, runOptions, timeoutSeconds, runtime: runtime.command }, "running container");
   log.trace({ container: name, script }, "container script");
   const startedAt = Date.now();
-  const child = Bun.spawn([...runtime.command, ...args], { env: { ...Bun.env }, stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+  const child = Bun.spawn([...runtime.command, ...args], {
+    env: { ...Bun.env },
+    stdin: "ignore",
+    stdout: startMarker === undefined ? "ignore" : "pipe",
+    stderr: "pipe",
+  });
   let killing: Promise<number | undefined> | undefined;
-  const timer =
-    timeoutSeconds === undefined
-      ? undefined
-      : setTimeout(() => {
-          log.warn({ container: name, timeoutSeconds }, "container timed out, killing it");
-          killing = killTimedOut(name, child, runtime);
-        }, timeoutSeconds * 1000);
+  /** Why it was given up on before it started, once it has been. */
+  let notStarted: string | undefined;
+  let started = startMarker === undefined;
+  const timeOut = () => {
+    if (timeoutSeconds === undefined) return undefined;
+    return setTimeout(() => {
+      log.warn({ container: name, timeoutSeconds }, "container timed out, killing it");
+      killing = killTimedOut(name, child, runtime);
+    }, timeoutSeconds * 1000);
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let watching: Promise<void> = Promise.resolve();
+  if (startMarker === undefined) {
+    timer = timeOut();
+  } else {
+    const startSeconds = startTimeoutSeconds();
+    timer = setTimeout(() => {
+      notStarted = `it didn't start within ${startSeconds}s`;
+      log.warn({ container: name, startSeconds }, "container didn't start in time, giving up on it");
+      killing = giveUpStarting(name, child, runtime);
+    }, startSeconds * 1000);
+    watching = watchFor(child.stdout as ReadableStream<Uint8Array>, startMarker, () => {
+      if (notStarted !== undefined) return;
+      started = true;
+      clearTimeout(timer);
+      log.debug({ container: name, ms: Date.now() - startedAt }, "container started");
+      timer = timeOut();
+    }).catch(() => {});
+  }
   const reading = new Response(child.stderr).text();
   const exitCode = await child.exited;
-  // Once it has exited, its stderr is read for at most a few seconds more: when it was killed, a
+  // Once it has exited, its output is read for at most a few seconds more: when it was killed, a
   // process it started, such as the ssh that reaches a remote runtime, may still hold it open.
   let waiting: ReturnType<typeof setTimeout> | undefined;
-  const stderr = await Promise.race([reading, new Promise<string>((resolve) => (waiting = setTimeout(() => resolve(""), 5000)))]);
+  const [stderr] = await Promise.race([
+    Promise.all([reading, watching]),
+    new Promise<[string, void]>((resolve) => (waiting = setTimeout(() => resolve(["", undefined]), 5000))),
+  ]);
   clearTimeout(waiting);
   clearTimeout(timer);
   const killedAt = await killing;
   const ms = Date.now() - startedAt;
+  if (notStarted !== undefined || (!started && exitCode !== 0)) {
+    const reason = notStarted ?? (reasonOf(stderr) || `${named(runtime, "run")} exited ${exitCode}`);
+    log.error({ container: name, exitCode, ms, stderr }, "container didn't start");
+    return { outcome: "notStarted", reason, spawnedAt: startedAt, gaveUpAt: Date.now() };
+  }
   if (killedAt !== undefined) {
     log.info({ container: name, ms }, "container killed");
-    return { timedOut: true, killedAt };
+    return { outcome: "timedOut", killedAt };
   }
   if (exitCode !== 0) {
     log.error({ container: name, exitCode, ms, stderr }, "container failed");
     throw new DockerContainerError(reasonOf(stderr) || `${named(runtime, "run")} exited ${exitCode}`);
   }
   log.info({ container: name, ms }, "container finished");
-  return { timedOut: false };
+  return { outcome: "exited" };
 }
 
 /** How many times, and how far apart, `docker kill` is tried on a container that timed out. */
@@ -257,7 +391,8 @@ const KILL_RETRY_MS = 2000;
  * Kills the container `name`, which timed out, run by the `docker run` process `child`, and returns
  * when, or undefined if it had already finished: then it didn't time out. `docker kill` is tried
  * KILL_ATTEMPTS times: if it never succeeds, e.g. the runtime can't be reached, `child` is killed
- * instead, so the run doesn't wait on it forever, and the container is left to be removed.
+ * instead, so the run doesn't wait on it forever, and the container is left to be removed. So it is
+ * at once if there's no such container, as when the runtime hasn't made it yet.
  */
 async function killTimedOut(name: string, child: { exited: Promise<number>; kill(signal?: number | NodeJS.Signals): void }, runtime: DockerRuntime): Promise<number | undefined> {
   const killedAt = Date.now();
@@ -270,13 +405,30 @@ async function killTimedOut(name: string, child: { exited: Promise<number>; kill
     } catch (error) {
       // It finished just as the time ran out: there's nothing to kill.
       if (finished || (error instanceof Error && /is not running/.test(error.message))) return undefined;
+      if (error instanceof Error && /No such container/i.test(error.message)) {
+        log.warn({ container: name }, "no such container to kill: stopped waiting for it");
+        break;
+      }
       log.warn({ container: name, attempt, err: error }, "couldn't kill the timed-out container");
       if (attempt < KILL_ATTEMPTS) await Bun.sleep(KILL_RETRY_MS);
+      else log.error({ container: name }, "gave up killing the timed-out container: stopped waiting for it");
     }
   }
-  log.error({ container: name }, "gave up killing the timed-out container: stopped waiting for it");
   child.kill("SIGKILL");
   return killedAt;
+}
+
+/**
+ * Gives up on the container `name`, run by the `docker run` process `child`, which hasn't started:
+ * removes it, if it exists yet, whether it's only created or now running, and stops `child`.
+ * `docker kill` won't do: a container that's created but not yet started "is not running". One
+ * the runtime makes later still is removed once the execution ends. Returns when.
+ */
+async function giveUpStarting(name: string, child: { kill(signal?: number | NodeJS.Signals): void }, runtime: DockerRuntime): Promise<number> {
+  const gaveUpAt = Date.now();
+  await removeContainer(name, runtime).catch((error: unknown) => log.warn({ container: name, err: error }, "couldn't remove the container that didn't start"));
+  child.kill("SIGKILL");
+  return gaveUpAt;
 }
 
 /**
@@ -330,39 +482,25 @@ export async function removeContainer(name: string, runtime: DockerRuntime = loc
 }
 
 /**
- * Starts a new container `name` from the local image `image`, in place of its entrypoint, that
- * keeps running, doing nothing, until it's removed: for `execInContainer`. Throws a
- * DockerContainerError.
+ * Removes every container in `runtime`, running or stopped, whose name starts with `prefix`, and
+ * returns their names. A running one is killed first. Throws a DockerContainerError.
  */
-export async function startContainer(image: string, name: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
-  await mustRun(["run", "--detach", "--name", name, "--pull", runtime.pull, "--entrypoint", "sh", image, "-c", "exec sleep 2147483647"], runtime);
+export async function removeContainersNamed(prefix: string, runtime: DockerRuntime = localRuntime()): Promise<string[]> {
+  // Docker's name filter matches anywhere in a name, so the start is checked here.
+  const listed = await mustRun(["ps", "--all", "--filter", `name=${prefix}`, "--format", "{{.Names}}"], runtime);
+  const names = listed.split("\n").filter((name) => name.startsWith(prefix));
+  if (names.length > 0) await mustRun(["rm", "--force", ...names], runtime);
+  return names;
+}
+
+/**
+ * How much disk `runtime`'s Docker uses, as `docker system df` reports it: a line per kind, e.g.
+ * `Images: 37.33GB (25.4GB (68%) reclaimable)`. Throws a DockerContainerError.
+ */
+export async function diskUsage(runtime: DockerRuntime = localRuntime()): Promise<string[]> {
+  const out = await mustRun(["system", "df", "--format", "{{.Type}}: {{.Size}} ({{.Reclaimable}} reclaimable)"], runtime);
+  return out.split("\n").filter(Boolean);
 }
 
 export type ExecResult = { stdout: string; stderr: string; exitCode: number };
 
-/**
- * Runs `command` (a program and its arguments) in the running container `name`, in `workdir`, or
- * its image's working directory if undefined,
- * with `stdin` as its input if given, and returns how it went, however it exited. Throws a
- * DockerContainerError if Docker itself fails, e.g. there's no such container.
- */
-export async function execInContainer(
-  name: string,
-  workdir: string | undefined,
-  command: string[],
-  stdin?: string,
-  runtime: DockerRuntime = localRuntime(),
-): Promise<ExecResult> {
-  const binary = runtime.command;
-  const args = ["exec", ...(stdin === undefined ? [] : ["--interactive"]), ...(workdir === undefined ? [] : ["--workdir", workdir]), name, ...command];
-  const result =
-    stdin === undefined
-      ? await $`${binary} ${args}`.quiet().nothrow()
-      : await $`${binary} ${args} < ${new Response(stdin)}`.quiet().nothrow();
-  log.debug({ container: name, workdir, command, exitCode: result.exitCode, stderr: result.stderr.toString() }, "ran command in container");
-  // `docker exec` exits as the command did, or 1 or 127 when Docker fails, saying why.
-  if (result.exitCode !== 0 && /^(Error response from daemon|OCI runtime exec failed|Cannot connect to the Docker daemon)/.test(result.stderr.toString())) {
-    throw new DockerContainerError(reasonOf(result.stderr) || `${named(runtime, "exec")} exited ${result.exitCode}`);
-  }
-  return { stdout: result.stdout.toString(), stderr: result.stderr.toString(), exitCode: result.exitCode };
-}

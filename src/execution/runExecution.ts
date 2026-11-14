@@ -1,15 +1,17 @@
 // Running one execution of a test case: its missing prerun images are built, up to the build
 // options' `concurrency` at once, and each pushed to the image store and pulled into the runtime,
-// if there are ones. Every iteration of every permutation, in plan's order, runs in a container
+// if there are ones, unless the image store, or the runtime, already has it. Every iteration of every permutation, in plan's order, runs in a container
 // (see containerRun.ts), up to `concurrency` of them at once. With either above 1, each starts as
 // soon as its own prerun image is ready, while the rest are still being built; otherwise, once
 // they all are. Each is recorded in the run data store as soon as it
 // finishes, so the runs that finished before a crash are kept. Then the task's measurements are taken of it, each in a measurement
 // container from its postrun image, and recorded with it. An agent exiting non-zero, or killed
 // for running past its initial prompt's `timeoutSeconds`, is a result, not an error: it's
-// recorded and measured, and the rest still run, but the execution is `failed`.
+// recorded and measured, and the rest still run, but the execution is `failed`. So is a container
+// that never starts: it's recorded, with why, but has nothing to measure. The timeout runs from
+// when the agent starts, not from `docker run`: see runContainer.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
-import { inRegistry, localRuntime, remoteRuntime, removeImages } from "../docker/docker.ts";
+import { daemonId, diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed, removeImages } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
@@ -23,20 +25,19 @@ import type {
 } from "../store/runDataStore.ts";
 import { agentOutput, head, storedStderr } from "./agentOutput.ts";
 import { runInContainer } from "./containerRun.ts";
-import { containerName, storedPostrunImage, storedPrerunImage } from "./images.ts";
+import { containerName, executionContainerPrefix, storedPostrunImage, storedPrerunImage } from "./images.ts";
 import { type PullHooks, pullIntoRuntime, type PushHooks, pushToStore } from "./imageStore.ts";
 import { inParallel } from "./inParallel.ts";
 import { measureContainerRun } from "./measure.ts";
 import { openMeasurementContext, recordedContext } from "./measurementContext.ts";
 import { collectReply } from "./reply.ts";
+import { type ExecutionTimings, timings } from "./timings.ts";
 import { collectTokenCosts } from "./tokenCosts.ts";
 import type { PlannedExecution, PlannedIteration, PlannedPermutation } from "./planExecution.ts";
 import { buildPrerunImage, type PrerunBuildHooks, type PrerunImage, prerunImages } from "./prerunBuilds.ts";
 
 const log = moduleLogger("execution");
 
-/** How many of a container run's measurements are taken at once. */
-export const MEASUREMENT_CONCURRENCY = 4;
 
 export type RunHooks = PrerunBuildHooks &
   PushHooks &
@@ -54,6 +55,8 @@ export type RunHooks = PrerunBuildHooks &
   onMeasured?: (permutation: PlannedPermutation, iteration: PlannedIteration, result: Record<string, RecordedMeasure>) => void;
   /** Called once each iteration has nothing left to do: run, pushed and measured. Not if it throws. */
   onDone?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
+  /** Called once, as the execution ends, however it ends, with how long each of its phases took. */
+  onTimings?: (timings: ExecutionTimings) => void;
 };
 
 export type ExecutionToRun = {
@@ -84,6 +87,17 @@ export type ExecutionToRun = {
  * pulls and container runs happen at once, in any order.
  */
 export const runsConcurrently = (concurrency = 1, build: BuildOptions = {}): boolean => concurrency > 1 || (build.concurrency ?? 1) > 1;
+
+/**
+ * Removes every container of execution `executionId`, where they run: `runtime`, or the local
+ * Docker daemon for `null`. For an execution that's interrupted, so its agents stop, and none is left on
+ * a runtime that's about to be stopped. Returns their names. Throws a DockerContainerError.
+ */
+export async function removeExecutionContainers(executionId: string, imagePrefix: string | undefined, runtime: RuntimeConfig | null): Promise<string[]> {
+  const removed = await removeContainersNamed(executionContainerPrefix(executionId, imagePrefix), runtime === null ? localRuntime() : remoteRuntime(runtime.command));
+  log.warn({ executionId, removed }, "execution interrupted: removed its containers");
+  return removed;
+}
 
 /** What a container run left, as recorded: its result file, the end of its stderr, and its reply. */
 type RecordedTurn = { harnessResult: string | null; harnessStderr: string | null; reply: Reply };
@@ -142,16 +156,50 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   if (remote !== null && imageStore === null) throw new Error("A runtime needs an image store: it runs images from it.");
   const runtime = remote === null ? localRuntime() : remoteRuntime(remote.command);
   const { executionId } = plan;
+  const timer = timings();
   const executionStartedAt = Date.now();
   log.info(
     { executionId, testCase: run.name, task: testCase.task, permutations: plan.permutations.length, imageStore: imageStore?.repository, runtime: remote?.command, concurrency: run.concurrency ?? 1 },
     "execution starting",
   );
   const measurements = await loadMeasurements(root, testCase.task);
+  /** Logs how much disk the runtime's Docker uses, `when` the execution starts or ends. Only for a remote runtime, whose disk nobody watches. */
+  const logDiskUsage = async (when: "before" | "after") => {
+    if (remote === null) return;
+    try {
+      log.info({ executionId, when, usage: await diskUsage(runtime) }, "runtime disk usage");
+    } catch (error) {
+      log.debug({ executionId, error: error instanceof Error ? error.message : String(error) }, "couldn't read the runtime's disk usage");
+    }
+  };
+  await logDiskUsage("before");
+  // The stored prerun images a remote runtime already has, listed with one command, so they aren't
+  // pulled again. None if it can't be asked: then each is pulled.
+  const onRuntime =
+    remote === null || imageStore === null
+      ? Promise.resolve(new Set<string>())
+      : imagesIn(imageStore.repository, runtime).catch((error: unknown) => {
+          log.info({ error: error instanceof Error ? error.message : String(error) }, "couldn't list the runtime's images: each prerun image is pulled");
+          return new Set<string>();
+        });
+  // Whether each stored prerun image is in the image store, asked once per execution.
+  const storeAnswers = new Map<string, Promise<boolean>>();
+  const inStore = (reference: string): Promise<boolean> => {
+    const answer = storeAnswers.get(reference) ?? inRegistry(reference);
+    storeAnswers.set(reference, answer);
+    return answer;
+  };
+  // Whether prerun images are built on the runtime's own daemon, as when THUNDERJAR_DOCKER points at
+  // it. Asked only once one is pushed, and false if either daemon can't say.
+  let sameDaemon: Promise<boolean> | undefined;
+  const buildsOnRuntime = () =>
+    (sameDaemon ??= Promise.all([daemonId(localRuntime()), daemonId(runtime)]).then(([local, other]) => local !== undefined && local === other));
   const images = await prerunImages(
     plan.permutations.map(({ permutation }) => permutation),
     imagePrefix,
   );
+  // Asked of the registry for every image at once, rather than as each one's turn to build comes.
+  if (imageStore !== null) for (const { permutation } of images) void inStore(storedPrerunImage(imageStore.repository, permutation.imageHash));
   // A remote runtime runs each prerun image as the image store has it, by its stored reference.
   const prerunImageOf = (permutation: PlannedPermutation) =>
     remote === null ? permutation.prerunImage : storedPrerunImage((imageStore as ImageStore).repository, permutation.permutation.imageHash);
@@ -173,19 +221,31 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   for (const { promise } of ready.values()) promise.catch(() => {});
   const prepare = async ({ exists, ...image }: PrerunImage & { exists: boolean }) => {
     const reference = imageStore === null ? undefined : storedPrerunImage(imageStore.repository, image.permutation.imageHash);
-    // A remote runtime needs it only in the image store: if it's there, from an earlier run on
-    // this machine or another, it's neither built nor pushed again.
-    if (!exists && reference !== undefined && remote !== null && (await inRegistry(reference))) {
-      log.info({ image: image.image, reference }, "prerun image already in the image store: not built or pushed");
-      await pullIntoRuntime([reference], runtime, hooks);
+    if (reference === undefined) {
+      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build));
       ready.get(image.permutation.imageHash)?.resolve();
       return;
     }
-    if (!exists) await buildPrerunImage(root, image, hooks, build);
-    if (reference !== undefined) {
-      await pushToStore(image.image, reference, hooks);
-      // So a runtime that can't reach the image store, or has no login for it, fails before its agent runs.
-      if (remote !== null) await pullIntoRuntime([reference], runtime, hooks);
+    // Its tag is its content's hash, so if the image store has it, from an earlier execution on this
+    // machine or another, it isn't pushed again. Nor built, for a remote runtime: it needs it only there.
+    const stored = await inStore(reference);
+    if (stored && remote !== null) {
+      log.info({ image: image.image, reference }, "prerun image already in the image store: not built or pushed");
+    } else {
+      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build));
+      if (stored) log.info({ image: image.image, reference }, "prerun image already in the image store: not pushed");
+      else await timer.time("pushPrerun", () => pushToStore(image.image, reference, hooks));
+    }
+    if (remote !== null) {
+      if ((await onRuntime).has(reference)) {
+        log.info({ reference }, "prerun image already in the runtime: not pulled");
+      } else if (!stored && (await buildsOnRuntime())) {
+        // Pushing it tagged it as `reference` on the daemon it was built on, which is the runtime's.
+        log.info({ reference }, "prerun image built and pushed on the runtime's own daemon: not pulled");
+      } else {
+        // So a runtime that can't reach the image store, or has no login for it, fails before its agent runs.
+        await timer.time("pullPrerun", () => pullIntoRuntime([reference], runtime, hooks));
+      }
     }
     ready.get(image.permutation.imageHash)?.resolve();
   };
@@ -223,6 +283,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   };
 
   let status: ExecutionStatus = "complete";
+  // Whether a container was given up on before it started: the runtime may yet make it.
+  let notStarted = false;
   let finished: ExecutionRecord | undefined;
   const runIteration = async (permutation: PlannedPermutation, iteration: PlannedIteration) => {
     await ready.get(permutation.permutation.imageHash)?.promise;
@@ -236,7 +298,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     const at = { executionId, permutation: permutation.number, iteration: iteration.number };
     log.info({ ...at, permutationHash: permutation.permutation.hash }, "container run starting");
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-    const { execution, harnessResult: resultFile, stderr } = await runInContainer({
+    const { execution, harnessResult: resultFile, stderr, committed } = await runInContainer({
       prerunImage: prerunImageOf(permutation),
       postrunImage: iteration.postrunImage,
       env: permutation.env,
@@ -244,6 +306,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       timeoutSeconds: permutation.timeoutSeconds,
       container,
       runtime,
+      time: timer.time,
     });
     const ran = { harnessResult: resultFile, harnessStderr: storedStderr(stderr), reply: collectReply(permutation.harness.collectReply, resultFile) };
     const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, [resultFile], {
@@ -262,14 +325,20 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     else if (execution.exitCode !== 0) log.warn({ ...at, exitCode: execution.exitCode, output }, "agent exited non-zero");
     else if (output.some((turn) => turn.stderr !== undefined)) log.debug({ ...at, output }, "agent output");
     if (tokenCosts.outcome === "unavailable" && tokenCosts.reason === "unparseable") {
-      log.debug({ ...at, result: resultFile && head(resultFile, 500) }, "token costs unparseable from the result file");
+      log.warn({ ...at, result: resultFile && head(resultFile, 500) }, "token costs unparseable from the result file");
     }
     hooks.onRan?.(permutation, iteration, record);
+    // Its container never started: it has no postrun image to push or measure.
+    if (!committed) {
+      log.warn({ ...at, reason: execution.failedToStart }, "container didn't start");
+      notStarted = true;
+      return;
+    }
     // Committed in the runtime, so pushed from there. When iterations run at once, it's pushed while
     // it's measured, as both only read the postrun image; one at a time, before, so each step's
     // line is shown in turn.
     const stored = imageStore === null ? undefined : storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);
-    const pushing = stored === undefined ? undefined : pushToStore(iteration.postrunImage, stored, hooks, runtime);
+    const pushing = stored === undefined ? undefined : timer.time("pushPostrun", () => pushToStore(iteration.postrunImage, stored, hooks, runtime));
     // Awaited below, so a failed push isn't unhandled while the measurements are taken.
     pushing?.catch(() => {});
     if (!runsConcurrently(run.concurrency, build)) await pushing;
@@ -282,8 +351,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
         usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime) : recordedContext(recorded);
       log.debug({ ...at, measurements: measurements.length }, "measuring");
       const measuringAt = Date.now();
-      // A few at once: each measurement container takes seconds to start and remove, on a remote runtime most of all.
-      const result = await measureContainerRun(measurements, open, undefined, MEASUREMENT_CONCURRENCY);
+      // One measurement container for all of them: on a remote runtime, each takes seconds to start.
+      const result = await timer.time("measure", () => measureContainerRun(measurements, open));
       log.info({ ...at, ms: Date.now() - measuringAt, containers: opened, result }, "measured");
       await store.recordContainerRun({ ...record, result });
       hooks.onMeasured?.(permutation, iteration, result);
@@ -291,11 +360,11 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     await pushing;
 
     // Once it's in the image store and measured, the runtime needn't keep it: each one left there
-    // fills its disk. Pulled from the store again if it's ever wanted.
-    if (stored !== undefined) {
-      await removeImages([iteration.postrunImage, stored], runtime).catch((error: unknown) =>
-        log.warn({ ...at, err: error }, "couldn't remove the postrun image from the runtime"),
-      );
+    // fills its disk. Pulled from the store again if it's ever wanted. Kept with a runtime's keepPostrunImages.
+    if (stored !== undefined && !remote?.keepPostrunImages) {
+      await timer
+        .time("cleanup", () => removeImages([iteration.postrunImage, stored], runtime))
+        .catch((error: unknown) => log.warn({ ...at, err: error }, "couldn't remove the postrun image from the runtime"));
     }
   };
 
@@ -312,6 +381,16 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   } finally {
     // Nothing is left building, pushing or pulling.
     await preparing;
+    // A container given up on before it started may have been made since, too late to be removed with its run.
+    if (notStarted) {
+      await removeContainersNamed(executionContainerPrefix(executionId, imagePrefix), runtime)
+        .then((removed) => removed.length > 0 && log.warn({ executionId, removed }, "removed containers that started too late"))
+        .catch((error: unknown) => log.warn({ executionId, err: error }, "couldn't look for containers that started too late"));
+    }
+    await logDiskUsage("after");
+    const spent = timer.summary();
+    log.info({ executionId, ...spent }, "execution timings");
+    hooks.onTimings?.(spent);
     if (recording !== undefined) {
       await recording;
       finished = executionRecord(status, new Date().toISOString());

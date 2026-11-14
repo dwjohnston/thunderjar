@@ -77,6 +77,12 @@ export default declareHarness({
     [
       `RUN npm install -g @github/copilot@${ctx.version}`,
       "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+      // As `node`, Copilot is run once, so it unpacks itself into ~/.cache/copilot in the image.
+      // Otherwise every run does: 500 MB in each postrun image, to commit and push. Before the
+      // model is written, so every model's image shares the layer.
+      "USER node",
+      "RUN copilot --version",
+      "USER root",
       writeModel(ctx.modelId),
       // The prompt and model are read from their files, so quotes and newlines reach the agent intact.
       // Copilot's exit code is kept as the script's, after the usage line is appended.

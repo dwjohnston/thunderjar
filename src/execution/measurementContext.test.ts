@@ -45,9 +45,11 @@ describe("openMeasurementContext", () => {
       await ctx.close();
     }
     expect(await docker.containers()).toEqual([]);
-    expect((await docker.commands()).filter((command) => command.includes("-measure-1"))[0]).toBe(
-      "docker run --detach --name tj-run-x-1-1-measure-1 --pull never --entrypoint sh tj-postrun:x-1-1 -c exec sleep 2147483647",
+    // One `docker run`, its shell sent each command: no `docker exec`, and no `docker rm`, as it removes itself.
+    expect((await docker.commands()).filter((command) => command.includes("-measure-1"))[0]).toStartWith(
+      "docker run --rm --interactive --name tj-run-x-1-1-measure-1 --pull never --entrypoint sh tj-postrun:x-1-1 -c ",
     );
+    expect((await docker.commands()).filter((command) => / (exec|rm) /.test(command) && command.includes("-measure-"))).toEqual([]);
   });
 
   test("writes files, folders and all, which only that container sees", async () => {

@@ -1,22 +1,23 @@
-// A runtime's `beforeRun` and `afterRun` commands: run once around a run, e.g. to start a remote
-// runtime and size it for the run, then stop it. Each is told about the run through variables.
+// A runtime's `beforeExecution` and `afterExecution` commands: run once around an execution, e.g.
+// to start a remote runtime and size it for the execution, then release it. Each is told about the
+// execution through variables.
 
 /** Thrown when a runtime hook exits non-zero, or can't be started: the message is its reason. */
 export class RuntimeHookError extends Error {
   constructor(
     message: string,
-    readonly hook: "beforeRun" | "afterRun",
+    readonly hook: "beforeExecution" | "afterExecution",
   ) {
     super(message);
   }
 }
 
-/** What a hook is told about the run. */
+/** What a hook is told about the execution. */
 export type RunFacts = {
   executionId: string;
   /** How many containers run at once. */
   concurrency: number;
-  /** How many container runs there are: every iteration of every permutation. */
+  /** How many runs the execution has, each in its own container: every iteration of every permutation. */
   containers: number;
 };
 
@@ -32,7 +33,7 @@ export const hookEnv = ({ executionId, concurrency, containers }: RunFacts): Rec
  * and waits for it. Throws a RuntimeHookError, with the last line it wrote to stderr, if it exits
  * non-zero or can't be started.
  */
-export async function runRuntimeHook(hook: "beforeRun" | "afterRun", command: string[], facts: RunFacts): Promise<void> {
+export async function runRuntimeHook(hook: "beforeExecution" | "afterExecution", command: string[], facts: RunFacts): Promise<void> {
   let child;
   try {
     child = Bun.spawn(command, { env: { ...Bun.env, ...hookEnv(facts) }, stdin: "ignore", stdout: "ignore", stderr: "pipe" });
