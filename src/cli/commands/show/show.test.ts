@@ -191,6 +191,16 @@ No container runs recorded.
     });
   });
 
+  test("<execution> still running, recorded with its phase, says where it is, or was when its process was last heard of", async () => {
+    const data = await copyOfStore();
+    changeStore(data, "UPDATE executions SET record = json_set(record, '$.phase', 'images') WHERE execution_id = $id", { id: RUNNING });
+
+    const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", RUNNING, "--data-dir", data]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Status     running\nPhase      getting prerun images ready\nMatrix     1 permutation × 1 iteration\n");
+  });
+
   test("<execution> <container run>: its parameters, how the agent ran, each measure as stored, and each metric's score, or why it has none", async () => {
     expect(await thunderjar(scenario("0203"), ["show", BASELINE, "6-3"])).toEqual({
       stdout: `Container run  6-3

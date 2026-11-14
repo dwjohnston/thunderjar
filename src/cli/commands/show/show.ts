@@ -12,7 +12,7 @@ import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, Ru
 import { type Paint, padEnd, painter, plain, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { dollars, duration, endedCleanly, minute, paintStatus, plural, showResolved, showStat, showValue, thousands } from "../../format.ts";
+import { dollars, duration, endedCleanly, minute, PHASE_NAMES, paintStatus, plural, showResolved, showStat, showValue, thousands } from "../../format.ts";
 import { print, printError, printJson } from "../../output.ts";
 
 const GAP = "   ";
@@ -159,9 +159,12 @@ function permutationTable(summary: ExecutionSummary, paint: Paint): string[] {
   return lines;
 }
 
-/** One execution: what it was, then its permutation table, or that it has no container runs. */
+/**
+ * One execution: what it was, then, if it stopped on an error or was interrupted, what it was doing
+ * and why, then its permutation table, or that it has no container runs.
+ */
 export function renderExecution(execution: ExecutionRecord, runs: ContainerRunRecord[], measurements: Measurement[], paint: Paint = plain): string {
-  const { executionId, testCase, task, startedAt, status, matrix } = execution;
+  const { executionId, testCase, task, startedAt, status, matrix, phase, failure } = execution;
   const header = labelled(
     [
       ["Execution", paint.bold(executionId)],
@@ -169,12 +172,17 @@ export function renderExecution(execution: ExecutionRecord, runs: ContainerRunRe
       ["Task", task],
       ["Started", minute(startedAt)],
       ["Status", paintStatus(status, paint)],
+      // Where a running one is, or was when its process was last heard of.
+      ...(status === "running" && phase !== undefined ? [["Phase", PHASE_NAMES[phase]] as [string, string]] : []),
+      ...(failure === undefined ? [] : [["Failed at", paint.red(failure.step)] as [string, string]]),
       ["Matrix", `${plural(matrix.permutations, "permutation")} × ${plural(matrix.iterations, "iteration")}`],
     ],
     paint,
   );
+  // Why it stopped, as `run` said it, its later lines indented under its first.
+  const why = failure === undefined ? [] : [paint.bold("Error"), ...failure.reason.split("\n").map((line) => `  ${line}`.trimEnd()), ""];
   const body = runs.length === 0 ? [paint.dim("No container runs recorded.")] : permutationTable(summariseExecution(execution, runs, measurements), paint);
-  return [...header, "", ...body].join("\n");
+  return [...header, "", ...why, ...body].join("\n");
 }
 
 /** A recorded reply, after `label`, its later lines lined up under its first: its text, or why there's none. */

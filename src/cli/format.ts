@@ -11,6 +11,17 @@ export { agentEnd, endedCleanly, failureHint, knownCost, tokensOf, totalTokens }
 export const paintStatus = (status: ExecutionRecord["status"], paint: Paint) =>
   (status === "complete" ? paint.green : status === "failed" ? paint.red : paint.yellow)(status);
 
+/** An execution's status, and, if it stopped on an error or was interrupted, what it was doing: e.g. `failed (build)`. */
+export const paintExecutionStatus = ({ status, failure }: Pick<ExecutionRecord, "status" | "failure">, paint: Paint) =>
+  `${paintStatus(status, paint)}${failure === undefined ? "" : paint.dim(` (${failure.step})`)}`;
+
+/** What `show` calls each phase of an execution. */
+export const PHASE_NAMES: Record<NonNullable<ExecutionRecord["phase"]>, string> = {
+  beforeExecution: "running the runtime's beforeExecution",
+  images: "getting prerun images ready",
+  runs: "running containers",
+};
+
 /** A count with thousands separators, e.g. `12,480`. */
 export const thousands = (n: number) => Math.round(n).toLocaleString("en-US");
 
