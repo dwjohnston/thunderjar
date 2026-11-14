@@ -91,13 +91,14 @@ RUN git config --system user.name "Thunderjar agent" \\\\
 });
 `;
 
-const initialPrompt = declaration(
-  "declareInitialPrompt",
-  `{
-  prompt: "Create a file isPrime.ts exporting a function that tests for primality.",
+const initialPrompt = `import { declareInitialPrompt, writePrompt } from "thunderjar";
+
+// Writes the prompt to /thunderjar/prompt.txt, for the harness's run script to pass to the agent.
+export default declareInitialPrompt({
+  applyParameter: () => writePrompt("Create a file isPrime.ts exporting a function that tests for primality."),
   timeoutSeconds: 600,
-}`,
-);
+});
+`;
 
 const measurement = declaration(
   "declareMeasurement",

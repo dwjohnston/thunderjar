@@ -5,8 +5,12 @@
 //   WORKDIR /workspace         Thunderjar's
 //   code state fragment        gets the codebase into /workspace, e.g. by cloning it at a commit
 //   prompt set fragment        puts its prompt files in /workspace
-//   harness fragment           installs the agent; ctx.version is the harness's version
-//   initial prompt fragment    usually left out: the prompt is used when the harness runs
+//   harness fragment           installs the agent, and writes /thunderjar/thunderjar-run.sh and
+//                              /thunderjar/model.txt; ctx.version and ctx.modelId are the pair's
+//   initial prompt fragment    writes /thunderjar/prompt.txt; may set WORKDIR, for where the agent runs
+//
+// Running an iteration is then `sh /thunderjar/thunderjar-run.sh`: see src/api/files.ts. It runs
+// in the image's working directory, so the last WORKDIR of the fragments is where the agent works.
 //
 // The build context is a folder Thunderjar assembles for the image. Each folder parameter's
 // `files/` folder is copied into it at its `ctx.dir`, `PARAMETER_DIRS[role]`, named by role rather
@@ -58,6 +62,8 @@ export type PrerunParameters = {
   promptSet: Loaded<PromptSetDeclaration>;
   harness: Loaded<HarnessDeclaration>;
   initialPrompt: Loaded<InitialPromptDeclaration>;
+  /** The pair's model ID, for the harness's fragment. */
+  modelId: string;
 };
 
 /** The ctx `applyParameter` gets, by parameter. */
@@ -130,7 +136,7 @@ export function renderPrerun(parameters: PrerunParameters): string {
     baseImage: renderFragment("baseImage", parameters.baseImage, { dir: PARAMETER_DIRS.baseImage }, problems),
     codeState: renderFragment("codeState", parameters.codeState, { dir: PARAMETER_DIRS.codeState }, problems),
     promptSet: renderFragment("promptSet", parameters.promptSet, { dir: PARAMETER_DIRS.promptSet }, problems),
-    harness: renderFragment("harness", parameters.harness, { dir: PARAMETER_DIRS.harness, version: parameters.harness.declaration.version }, problems),
+    harness: renderFragment("harness", parameters.harness, { dir: PARAMETER_DIRS.harness, version: parameters.harness.declaration.version, modelId: parameters.modelId }, problems),
     initialPrompt: renderFragment("initialPrompt", parameters.initialPrompt, {}, problems),
   };
   if (problems.length > 0) throw problemsError(problems);

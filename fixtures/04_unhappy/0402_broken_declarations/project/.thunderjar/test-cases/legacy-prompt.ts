@@ -6,6 +6,6 @@ export default declareTestCase({
   promptSet: ["snerk"],
   harnessModel: ["fake-harness-alpha/fake-model-small-001"],
   task: "is-prime",
-  initialPrompt: ["muddled"],
+  initialPrompt: ["legacy"],
   iterations: 1,
 });

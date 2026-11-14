@@ -1,4 +1,4 @@
-import { declareHarness, type TokenCosts } from "thunderjar-published";
+import { declareHarness, type TokenCosts, writeModel, writeRunScript } from "thunderjar-published";
 
 // OpenCode, on OpenRouter. OpenCode's built-in openrouter provider reads OPENROUTER_API_KEY itself.
 // A test case names a model as "openrouter/" plus its OpenRouter ID, e.g. "opencode-1.19.5/openrouter/anthropic/claude-haiku-5.5".
@@ -64,14 +64,15 @@ function opencodeTokenCosts(raw: string, ctx: { modelId: string }): TokenCosts {
 
 export default declareHarness({
   version: "1.19.5",
-  applyParameter: (_config, ctx) => `RUN npm install -g opencode-ai@${ctx.version}
-RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
-USER node`,
-  // The prompt is read from its file, so quotes and newlines reach the agent intact. Any turn after
-  // the first continues the session.
-  cli: (ctx) =>
-    `opencode run --model ${ctx.modelId} --format json${ctx.turn === 0 ? "" : " --continue"}` +
-    ` "$(cat ${ctx.promptPath})" > ${ctx.resultPath}`,
+  applyParameter: (_config, ctx) =>
+    [
+      `RUN npm install -g opencode-ai@${ctx.version}`,
+      "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+      writeModel(ctx.modelId),
+      // The prompt and model are read from their files, so quotes and newlines reach the agent intact.
+      writeRunScript(`opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`),
+      "USER node",
+    ].join("\n"),
   collectReply: opencodeReply,
   collectTokenCosts: opencodeTokenCosts,
   requiredEnv: ["OPENROUTER_API_KEY"],

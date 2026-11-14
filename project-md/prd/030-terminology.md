@@ -76,8 +76,8 @@ Each experiment parameter has its own **parameter hash**, of what it outputs rat
 source:
 
 1. **The text it renders**: its Dockerfile fragment, once `resolve` and `applyParameter` have
-   run, and for a harness its `cli` rendered with sample values and its `requiredEnv`, for an
-   initial prompt its prompt and timeout.
+   run, for a harness rendered with a sample model ID, with its `requiredEnv`, and for an
+   initial prompt with its timeout.
 2. **Its `files/` folder**, by content: what its fragment can copy into the image.
 3. **Nothing else.** Comments, helpers and names aren't hashed. A task's measurements aren't
    in any parameter hash, because changing them doesn't change what runs.

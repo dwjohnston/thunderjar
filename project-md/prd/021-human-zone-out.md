@@ -22,7 +22,7 @@ be cited as settled. Entries are removed once the user has read the thing proper
     execution ID ([030-terminology.md](030-terminology.md#experiment-execution)).
   - **Execution** — step 2 of a container run, when the harness is invoked
     ([030-terminology.md](030-terminology.md#container-run)).
-  - The `Execution` type and the execution wrapper — the harness process's timing and
+  - The `Execution` type and the run script — the harness process's timing and
     exit code ([085-experiment-results.md](085-experiment-results.md#execution)).
 
   The first and third sit side by side in `ContainerRunRecord`: `executionId` refers to
