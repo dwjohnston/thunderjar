@@ -14,6 +14,6 @@
   "exclude": [
     "node_modules",
     ".data",
-    "**/*.template.ts"
+    "**/*.test.ts"
   ]
 }

@@ -121,7 +121,7 @@ tr.iteration td:first-child {
 tr.iteration {
   color: var(--muted);
 }
-/* A measurement's name, above a column per method it aggregates by. */
+/* A measurement's name, above a column per metric of it. */
 th.measurement {
   border-bottom: 0;
   padding-bottom: 0;

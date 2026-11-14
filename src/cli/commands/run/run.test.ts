@@ -9,6 +9,7 @@ import type { ContainerRunRecord } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
+import type { ExecutionSummary } from "../../../execution/executionSummary.ts";
 import { ALPHA_JSON, ALPHA_MEASURES, AWKWARD, BETA_MEASURES, ISO, KEY, SHA, alphaPermutation, containerCommands, dataDir, filesIn, measure, measured, permutation, postgresSchema, readStore, removeDataDirs, usePostgres } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
@@ -179,7 +180,8 @@ Recorded in <DATA>/runs.sqlite
         ],
       },
       result: {
-        isPrimeTemplateTest: measured("templateTest", { passed: 3, failed: 2 }),
+        isPrimeShape: measured("shell", { exitCode: 0, stdout: '{"lines":3,"comments":2,"exports":1}\n', stdoutTruncated: false }),
+        isPrimeTests: measured("bunTestFile", { passed: 3, total: 5 }),
         isPrimeTsExists: measured("fileCreated", true),
         saysArr: measured("replyMatches", true),
         tsIgnoreCount: measured("grep", 1),
@@ -194,7 +196,8 @@ Recorded in <DATA>/runs.sqlite
     expect(beta.parameters.baseImage).toEqual(alpha.parameters.baseImage);
     expect(beta.parameters.harnessModel).not.toEqual(alpha.parameters.harnessModel);
     expect(beta.result).toEqual({
-      isPrimeTemplateTest: measured("templateTest", { passed: 5, failed: 0 }),
+      isPrimeShape: measured("shell", { exitCode: 0, stdout: '{"lines":2,"comments":1,"exports":1}\n', stdoutTruncated: false }),
+      isPrimeTests: measured("bunTestFile", { passed: 5, total: 5 }),
       isPrimeTsExists: measured("fileCreated", true),
       saysArr: measured("replyMatches", false),
       tsIgnoreCount: measured("grep", 0),
@@ -203,6 +206,20 @@ Recorded in <DATA>/runs.sqlite
     for (const name of Object.keys(alpha.result)) {
       expect(beta.result[name]?.contentHash).toBe(alpha.result[name]?.contentHash as string);
     }
+    // isPrimeShape's metrics, read from each run's one stored stdout, tell the agents apart.
+    const shown = await thunderjar(scenario("0202"), ["show", id, "--data-dir", data, "--json"]);
+    const { permutations } = JSON.parse(shown.stdout) as ExecutionSummary;
+    const shapes = permutations.map(({ measures }) =>
+      Object.fromEntries(Object.entries(measures.isPrimeShape!.metrics).map(([name, { value }]) => [name, value])),
+    );
+    expect(shapes).toEqual([
+      { lines: 3, comments: 2, singleExport: 1 },
+      { lines: 2, comments: 1, singleExport: 1 },
+    ]);
+    expect(permutations.map(({ measures }) => measures.isPrimeTests!.metrics)).toMatchObject([
+      { passRate: { value: 0.6, better: "higher" }, passed: { value: 3 } },
+      { passRate: { value: 1 }, passed: { value: 5 } },
+    ]);
 
     // Each container ran from its prerun image, then was committed into its postrun image and removed.
     const container = (n: number) => `thunderjar-run-${id}-${n}-1`;
@@ -220,10 +237,10 @@ Recorded in <DATA>/runs.sqlite
       ]),
     );
     // Then each measure was taken in a container of its own, from the postrun image, then removed:
-    // three of them. saysArr, of the reply, needs no container.
+    // four of them. saysArr, of the reply, needs no container.
     for (const n of [1, 2]) {
-      expect(commands.filter((command) => command.includes(` ${container(n)}-measure-4`))).toEqual([]);
-      for (const k of [1, 2, 3]) {
+      expect(commands.filter((command) => command.includes(` ${container(n)}-measure-5`))).toEqual([]);
+      for (const k of [1, 2, 3, 4]) {
         const measuring = commands.filter((command) => command.includes(` ${container(n)}-measure-${k}`));
         expect(measuring[0]).toBe(
           `docker run --detach --name ${container(n)}-measure-${k} --pull never --entrypoint sh thunderjar-postrun:${id}-${n}-1 -c <script>`,
@@ -401,7 +418,7 @@ export default declareHarness({ version: "1.0.0", applyParameter: () => writeRun
     expect(exitCode).toBe(1);
     expect(stdout).toEndWith(`
  1/2  iteration 1/1  fake-harness-alpha | plain  ... exited 3, no result file (<duration>)
-      isPrimeTemplateTest: erroredWhileMeasuring (isPrime.ts has no export to bind {{defaultExport}} to)   isPrimeTsExists: true   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: 0
+      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":1,\\"comments\\":0,\\"exports\\":0}\\n", stdoutTruncated: false}   isPrimeTests: erroredWhileMeasuring (isPrime.test.ts didn't run against isPrime.ts: ReferenceError: partial is not defined)   isPrimeTsExists: true   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: 0
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
 ${BETA_MEASURES}
 Recorded in <DATA>/runs.sqlite
@@ -409,9 +426,9 @@ Recorded in <DATA>/runs.sqlite
     const store = await readStore(data);
     expect(store.execution.status).toBe("failed");
     // What the agent left is measured all the same.
-    expect(store.containerRuns[0]?.result.isPrimeTemplateTest?.outcome).toEqual({
+    expect(store.containerRuns[0]?.result.isPrimeTests?.outcome).toEqual({
       outcome: "erroredWhileMeasuring",
-      error: { message: "isPrime.ts has no export to bind {{defaultExport}} to" },
+      error: { message: "isPrime.test.ts didn't run against isPrime.ts: ReferenceError: partial is not defined" },
     });
     expect(store.containerRuns.map(({ execution, harnessResult }) => [execution.exitCode, harnessResult])).toEqual([
       [3, null],
@@ -442,12 +459,13 @@ export default declareHarness({ version: "1.0.0", applyParameter: () => writeRun
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done, no result file (<duration>)
-      isPrimeTemplateTest: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
+      isPrimeShape: {exitCode: 1, stdout: "", stdoutTruncated: false}   isPrimeTests: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
 Recorded in <DATA>/runs.sqlite
 `);
     const [record] = (await readStore(data)).containerRuns;
     expect(record?.result).toEqual({
-      isPrimeTemplateTest: measure("templateTest", { outcome: "skipped", reason: "no file matches **/isPrime.ts" }),
+      isPrimeShape: measured("shell", { exitCode: 1, stdout: "", stdoutTruncated: false }),
+      isPrimeTests: measure("bunTestFile", { outcome: "skipped", reason: "no file matches **/isPrime.ts" }),
       isPrimeTsExists: measured("fileCreated", false),
       saysArr: measure("replyMatches", { outcome: "skipped", reason: "no reply: the agent left no result file" }),
       tsIgnoreCount: measure("grep", { outcome: "skipped", reason: "no file matches **/*.ts" }),

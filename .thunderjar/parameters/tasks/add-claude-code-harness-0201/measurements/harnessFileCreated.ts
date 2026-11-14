@@ -4,5 +4,5 @@ import { declareMeasurement } from "thunderjar-published";
 export default declareMeasurement({
   instrument: "fileCreated",
   config: { glob: "fixtures/02_regular/0201_minimal_existing_setup/project/.thunderjar/parameters/harnessModels/claude-code*/index.ts" },
-  aggregate: ["rate"],
+  metrics: { exists: { stat: "rate" } },
 });

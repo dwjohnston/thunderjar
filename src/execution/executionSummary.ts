@@ -1,12 +1,13 @@
 // An execution's recorded results, summarised: a summary per permutation, combining its iterations,
-// and which parameters vary between permutations. Measures combine by the methods the task's
+// and which parameters vary between permutations. Measures are read by the metrics the task's
 // measurements declare today (see aggregate.ts). `show` prints it, as a table or as JSON, and
 // `view` renders it, so the two always agree. It holds only plain data, so it serialises as JSON.
 import { AXES, type Axis } from "../config/permutations.ts";
 import type { Measurement } from "../config/measurements.ts";
-import type { TokenCosts } from "../api/declarations.ts";
-import type { ContainerRunRecord, ExecutionRecord, RecordedOutcome } from "../store/runDataStore.ts";
-import { type AggregatedMeasure, type AggregateMethod, aggregatePermutation } from "./aggregate.ts";
+import type { Better, Stat, TokenCosts } from "../api/declarations.ts";
+import type { ContainerRunRecord, ExecutionRecord } from "../store/runDataStore.ts";
+import { STATS, type ScoreKind } from "../instruments/instruments.ts";
+import { type AggregatedMeasurement, aggregatePermutation, type LeftOut } from "./aggregate.ts";
 import { agentEnd, endedCleanly, knownCost, totalTokens } from "./runFacts.ts";
 
 /** Values across a permutation's iterations: their mean, least and greatest, and how many iterations had one. */
@@ -32,18 +33,21 @@ export type PermutationSummary = {
   agent: { end: string; runs: number }[];
   /** Its runs whose agent exited non-zero, timed out, or left no result file. */
   unclean: { run: string; end: string }[];
-  /** Each measurement's values, combined by its methods, keyed by name. */
-  measures: Record<string, AggregatedMeasure>;
-  /** The measures its iterations gave no value, left out of the aggregate. */
-  leftOut: { run: string; measure: string; outcome?: RecordedOutcome }[];
+  /** Each measurement's measures, read by its metrics and combined, keyed by name. */
+  measures: Record<string, AggregatedMeasurement>;
+  /** Its iterations left out of a measurement's metrics, or of one metric, and why, by run name. */
+  leftOut: (Omit<LeftOut, "iteration"> & { run: string })[];
   /** Its runs without token costs collected, and why: undefined if recorded before token costs were. */
   withoutTokenCosts: { run: string; tokenCosts?: TokenCosts }[];
 };
 
+/** A metric as declared: its name, its statistic, the kind of score that combines, and which way is better. */
+export type SummarisedMetric = { name: string; stat: Stat; kind: ScoreKind; better?: Better };
+
 export type ExecutionSummary = {
   execution: ExecutionRecord;
-  /** The task's measurements as declared today, in order, and the methods each combines by. */
-  measurements: { name: string; aggregate: AggregateMethod[] }[];
+  /** The task's measurements as declared today, in order, and each one's metrics, in order. */
+  measurements: { name: string; metrics: SummarisedMetric[] }[];
   /** The axes whose parameter differs between container runs. */
   varyingAxes: Axis[];
   /** The parameters every container run shares. */
@@ -72,6 +76,7 @@ function tally(values: string[]): { end: string; runs: number }[] {
 
 function summarisePermutation(permutation: number, runs: ContainerRunRecord[], measurements: Measurement[]): PermutationSummary {
   const [first] = runs;
+  const { measures, leftOut } = runs.length === 0 ? { measures: {}, leftOut: [] } : aggregatePermutation(runs, measurements);
   return {
     permutation,
     parameters: first && (Object.fromEntries(AXES.map((axis) => [axis, first.parameters[axis].name])) as Record<Axis, string>),
@@ -84,13 +89,8 @@ function summarisePermutation(permutation: number, runs: ContainerRunRecord[], m
     unclean: runs
       .filter(({ execution, harnessResult }) => !endedCleanly(execution, harnessResult))
       .map((run) => ({ run: runName(run), end: agentEnd(run.execution, run.harnessResult) })),
-    measures: runs.length === 0 ? {} : aggregatePermutation(runs, measurements),
-    leftOut: measurements.flatMap(({ name }) =>
-      runs.flatMap((run) => {
-        const outcome = run.result[name]?.outcome;
-        return outcome?.outcome === "measured" ? [] : [{ run: runName(run), measure: name, outcome }];
-      }),
-    ),
+    measures,
+    leftOut: leftOut.map(({ iteration, ...rest }) => ({ run: runName({ permutation, iteration }), ...rest })),
     withoutTokenCosts: runs.filter(({ tokenCosts }) => tokenCosts?.outcome !== "collected").map((run) => ({ run: runName(run), tokenCosts: run.tokenCosts })),
   };
 }
@@ -110,7 +110,15 @@ export function summariseExecution(execution: ExecutionRecord, runs: ContainerRu
   const namesOf = (axis: Axis) => new Set(runs.map(({ parameters }) => parameters[axis].name));
   return {
     execution,
-    measurements: measurements.map(({ name, declaration }) => ({ name, aggregate: [...declaration.aggregate] })),
+    measurements: measurements.map(({ name, declaration }) => ({
+      name,
+      metrics: Object.entries(declaration.metrics).map(([metric, { stat, better }]) => ({
+        name: metric,
+        stat,
+        kind: STATS[stat],
+        ...(better === undefined ? {} : { better }),
+      })),
+    })),
     varyingAxes: AXES.filter((axis) => namesOf(axis).size > 1),
     commonParameters: runs.length === 0 ? [] : AXES.filter((axis) => namesOf(axis).size === 1).map((axis) => ({ axis, name: runs[0]!.parameters[axis].name })),
     recordsTokenCosts: runs.some(({ tokenCosts }) => tokenCosts !== undefined),

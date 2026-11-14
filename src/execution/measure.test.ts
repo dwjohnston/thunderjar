@@ -11,9 +11,9 @@ const measurement = (name: string, declaration: MeasurementDeclaration): Measure
   contentHash: `hash-of-${name}`,
 });
 
-const EXISTS = measurement("exists", { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] });
-const IGNORES = measurement("ignores", { instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, aggregate: ["max"] });
-const SAYS_ELI = measurement("saysEli", { instrument: "replyMatches", config: { pattern: "Eli" }, aggregate: ["rate"] });
+const EXISTS = measurement("exists", { instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, metrics: { exists: { stat: "rate" } } });
+const IGNORES = measurement("ignores", { instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, metrics: { count: { stat: "max" } } });
+const SAYS_ELI = measurement("saysEli", { instrument: "replyMatches", config: { pattern: "Eli" }, metrics: { matches: { stat: "rate" } } });
 
 /** An opener of contexts over `files`, each recording what was done with it in `log`. */
 function opener(files: Record<string, string>, log: string[]) {
@@ -82,24 +82,26 @@ describe("measureContainerRun", () => {
   });
 
   test("an instrument's own erroredWhileMeasuring is recorded by its message", async () => {
-    const templateTest = measurement("tests", {
-      instrument: "templateTest",
-      config: { subject: "isPrime.ts", template: "./isPrime.test.template.ts" },
-      aggregate: ["sum"],
+    const bunTestFile = measurement("tests", {
+      instrument: "bunTestFile",
+      config: { subject: "isPrime.ts", test: "./isPrime.test.ts" },
+      metrics: { passRate: { stat: "mean" } },
     });
-    const template = `${import.meta.dir}/measure.test.ts`;
+    const test = `${import.meta.dir}/measure.test.ts`;
 
+    // The fake context's `bun test` writes no report.
     const result = await measureContainerRun(
-      [{ ...templateTest, config: { ...templateTest.config, template } }],
-      opener({ "isPrime.ts": "const notExported = 1;\n" }, []),
+      [{ ...bunTestFile, config: { ...bunTestFile.config, test } }],
+      opener({ "isPrime.ts": "export const isPrime = (n: number) => n > 1;\n" }, []),
       () => NOW,
     );
 
     expect(result.tests?.outcome).toEqual({
       outcome: "erroredWhileMeasuring",
-      error: { message: "isPrime.ts has no export to bind {{defaultExport}} to" },
+      error: { message: "measure.test.ts didn't run against isPrime.ts" },
     });
   });
+
 
   test("each context is opened with whether its instrument uses a container: a reply's doesn't", async () => {
     const asked: boolean[] = [];

@@ -89,7 +89,7 @@ Use the cheapest instrument that answers the question.
 |---|---|
 | Does a file exist? | `fileCreated` |
 | How often does some text appear? | `grep` |
-| Does the code behave? | `templateTest` |
+| Does the code behave? | `bunTestFile` |
 | Does this command pass? | `shell` |
 | What did the agent say? | `replyMatches` |
 
@@ -101,9 +101,39 @@ import { declareMeasurement } from "thunderjar";
 export default declareMeasurement({
   instrument: "shell",
   config: { command: "bun run typecheck" },
-  aggregate: ["rate"],
+  metrics: { typeChecks: { stat: "rate", better: "higher" } },
 });
 ```
+
+Each measurement declares its `metrics`: what to read from the instrument's value, and how to combine it across iterations.
+
+- `score` reads one run's value as a number or a boolean, or `undefined` when the metric doesn't apply to that run. Leave it out to use the instrument's default score: the value itself for `fileCreated`, `grep` and `replyMatches`, the pass rate for `bunTestFile`, exit 0 for `shell`.
+- `stat` is the one statistic: `rate` or `count` for booleans, `mean`, `median`, `min`, `max` or `sum` for numbers.
+- `better` is `"higher"` or `"lower"`, or left out when neither is.
+
+One command can feed several metrics: have it print JSON, and give each metric a `score` that parses `stdout`.
+
+```ts
+const counts = (v: { exitCode: number; stdout: string }) =>
+  v.exitCode === 0 ? (JSON.parse(v.stdout) as { lines: number; exports: number }) : undefined;
+
+export default declareMeasurement({
+  instrument: "shell",
+  config: { command: "node scripts/count.js src/list.ts" },
+  metrics: {
+    lines: { score: (v) => counts(v)?.lines, stat: "median", better: "lower" },
+    singleExport: { score: (v) => (counts(v) ? counts(v)!.exports === 1 : undefined), stat: "rate", better: "higher" },
+  },
+});
+```
+
+✅ **Do** return `undefined` from a `score` when the metric doesn't apply, e.g. the file it reads is missing.
+
+❌ **Don't** return 0 or `false` to mean "doesn't apply".
+
+**Why:** a 0 is counted in the statistic, and drags it down. `undefined` leaves the run out, and `show` says why.
+
+⚠️ **Warning:** `shell` stores the command's stdout in the run data store as it is, up to 64 KiB. A command that prints secrets or other sensitive data will persist them. Nothing transforms the output before it's stored.
 
 ✅ **Do** use `shell` to run the project's own typecheck and tests.
 

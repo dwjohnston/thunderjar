@@ -389,13 +389,20 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * @name declareMeasurement
  * @file parameters/tasks/<task>/measurements/<name>.ts
  * @description
- * What is measured after each run.
+ * What is measured after each run. Its instrument runs once per run, and what it returns, the
+ * measure, is stored as it is. Each of its `metrics` reads a score from the measure whenever
+ * results are read, so a metric can be added, changed or removed without measuring again.
  *
  * ```ts
  * export default declareMeasurement({
- *   instrument: "fileCreated",
- *   config: { glob: "**\/isPrime.ts" },
- *   aggregate: ["rate"],
+ *   instrument: "bunTestFile",
+ *   config: { subject: "**\/isPrime.ts", test: "./isPrime.test.ts" },
+ *   metrics: {
+ *     // bunTestFile's default score is the pass rate: passed / total, or undefined when total is 0.
+ *     passRate: { stat: "mean", better: "higher" },
+ *     // Anything else reads the stored { passed, total } with a score.
+ *     passed: { score: (v) => v.passed, stat: "mean", better: "higher" },
+ *   },
  * });
  * ```
  */
@@ -403,74 +410,139 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "templateTest" | "replyMatches" | "shell"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell"}
  * @description
- * What to measure. Each instrument takes its own `config`:
+ * What to measure. Each instrument takes its own `config`, and returns its own value, the measure:
  *
- * | Instrument | `config` | Value |
- * | --- | --- | --- |
- * | `fileCreated` | `{ glob }` | Whether the agent left a matching file |
- * | `grep` | `{ glob, pattern }` | Lines across the matching files that match `pattern` |
- * | `templateTest` | `{ subject, template }` | Tests passed and failed |
- * | `replyMatches` | `{ pattern, turn? }` | Whether the agent's reply matches `pattern` |
- * | `shell` | `{ command }` | Whether `command` exits 0 |
+ * | Instrument | `config` | Value | Default score |
+ * | --- | --- | --- | --- |
+ * | `fileCreated` | `{ glob }` | `boolean`: whether the agent left a matching file | the value |
+ * | `grep` | `{ glob, pattern }` | `number`: lines across the matching files that match `pattern` | the value |
+ * | `bunTestFile` | `{ subject, test }` | `{ passed, total }`: tests passed, of all the tests | the pass rate, `passed / total` |
+ * | `replyMatches` | `{ pattern, turn? }` | `boolean`: whether the agent's reply matches `pattern` | the value |
+ * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
+ *
+ * `shell` stores `command`'s stdout as it is, up to 64 KiB, in the run data store. A command that
+ * prints secrets or other sensitive data will persist them: nothing transforms its output before
+ * it's stored.
  */
 
 /**
  * @docs
- * @name aggregate
- * @type {string[]}
+ * @name metrics
+ * @type {Record<string, { score?: (value) => number | boolean | undefined; stat: Stat; better?: "higher" | "lower" }>}
  * @description
- * How values combine across iterations. Booleans: `rate`, `count`. Numbers: `mean`, `median`,
- * `min`, `max`, `sum`.
+ * **Required**, with at least one entry. What to read from each run's value, keyed by the
+ * metric's name, which must be an identifier. Each metric has:
+ *
+ * - `score`: reads one run's value as a number or a boolean, or `undefined` when the metric
+ *   doesn't apply to that run. Never return 0 or `false` to mean that. Leave it out to use the
+ *   instrument's default score.
+ * - `stat`: the one statistic across a permutation's iterations. Booleans: `rate`, `count`.
+ *   Numbers: `mean`, `median`, `min`, `max`, `sum`.
+ * - `better`: `"higher"` or `"lower"`, if either is better. Left out, neither is.
  */
 
-/** Each built-in instrument's config and value, by name. */
+/**
+ * Each built-in instrument's config, value and default score, by name. An instrument whose
+ * value is a number or a boolean has the value as its score by default; one with neither needs
+ * a `defaultScore`, or a metric of it a `score` of its own.
+ */
 export type InstrumentTypes = {
   /** Did the agent leave a file matching `glob`? */
   fileCreated: { config: { glob: string }; value: boolean };
   /** How many lines, across the files matching `glob`, match `pattern`, a JavaScript regular expression? */
   grep: { config: { glob: string; pattern: string }; value: number };
   /**
-   * How many tests pass and fail when `template`, a path relative to the measurement's file, is
-   * rendered against each file matching `subject` and run with `bun test`?
+   * How many tests pass, of all of them, when `test`, a Bun test file at a path relative to the
+   * measurement's file, is run with `bun test` against each file matching `subject`? The test
+   * finds the subject's absolute path in `Bun.env.THUNDERJAR_SUBJECT`. `total` counts skipped
+   * and failed tests too. By default, a metric's score is the pass rate, `passed / total`, and a
+   * run of no tests doesn't apply.
    */
-  templateTest: { config: { subject: string; template: string }; value: { passed: number; failed: number } };
+  bunTestFile: { config: { subject: string; test: string }; value: { passed: number; total: number }; defaultScore: number };
   /**
    * Does the agent's reply match `pattern`, a JavaScript regular expression? Its reply to `turn`,
    * counting from 1, of an initial prompt of several turns, or by default its last.
    */
   replyMatches: { config: { pattern: string; turn?: number }; value: boolean };
   /**
-   * Does `command`, any shell command, exit 0? It runs with `sh -c` in the measurement
-   * container, in `workdir`, so it can use whatever the image has installed.
+   * What `command`, any shell command, did: its exit code, and its stdout, as it is, up to 64 KiB.
+   * It runs with `sh -c` in the measurement container, in `workdir`, so it can use whatever the
+   * image has installed. By default, a metric's score is whether it exited 0.
    */
-  shell: { config: { command: string }; value: boolean };
+  shell: { config: { command: string }; value: { exitCode: number; stdout: string; stdoutTruncated: boolean }; defaultScore: boolean };
 };
 
 export type InstrumentName = keyof InstrumentTypes;
 
-/** The ways values of type `T` can combine across iterations. */
-export type AggregateFor<T> = [T] extends [boolean]
-  ? "rate" | "count"
-  : [T] extends [number]
-    ? "mean" | "median" | "min" | "max" | "sum"
-    : [T] extends [Record<string, number>]
-      ? "sum" | "mean"
+/** What an instrument returns for one run: the measure. */
+export type ValueOf<I extends InstrumentName> = InstrumentTypes[I]["value"];
+
+/** What a metric's score is: a number or a boolean. */
+export type Score = number | boolean;
+
+/** Every statistic a metric can have. */
+export type Stat = "rate" | "count" | "mean" | "median" | "min" | "max" | "sum";
+
+/** The statistics that combine scores of type `S`: booleans by `rate` or `count`, numbers by the rest. */
+export type StatFor<S> = [S] extends [boolean] ? "rate" | "count" : [S] extends [number] ? "mean" | "median" | "min" | "max" | "sum" : never;
+
+/** Whether a higher or a lower score is better. */
+export type Better = "higher" | "lower";
+
+/**
+ * The score a metric of instrument `I` has without a `score`: the instrument's default score, or
+ * its value, if that's a number or a boolean. `never` if it has neither, so `score` is required.
+ */
+export type DefaultScoreOf<I extends InstrumentName> = InstrumentTypes[I] extends { defaultScore: infer D }
+  ? D
+  : [ValueOf<I>] extends [boolean]
+    ? boolean
+    : [ValueOf<I>] extends [number]
+      ? number
       : never;
 
-/** An instrument and its config: a `config` that doesn't fit the instrument is a type error. */
+/** The scores statistic `T` combines: booleans for `rate` and `count`, numbers for the rest. */
+export type ScoreFor<T extends Stat> = T extends "rate" | "count" ? boolean : number;
+
+/**
+ * One metric of instrument `I`, whose statistic is `T`. Its `score` must return what `T`
+ * combines, or undefined. Leaving it out reads the instrument's default score, so it's required
+ * where `T` doesn't combine that, or the instrument has none.
+ *
+ * The statistic decides the score's type, rather than the score the statistic's: TypeScript
+ * infers `stat` first, so a `score`'s return type can't be checked against it the other way round.
+ */
+export type MetricOf<I extends InstrumentName, T extends Stat = Stat> = { stat: T; better?: Better } & ([DefaultScoreOf<I>] extends [never]
+  ? { score: (value: ValueOf<I>) => ScoreFor<T> | undefined }
+  : T extends StatFor<DefaultScoreOf<I>>
+    ? { score?: (value: ValueOf<I>) => ScoreFor<T> | undefined }
+    : { score: (value: ValueOf<I>) => ScoreFor<T> | undefined });
+
+/** A metric as loaded at runtime, whatever its instrument. */
+export type Metric = { score?: (value: never) => unknown; stat: Stat; better?: Better };
+
+/** A measurement as loaded at runtime: an instrument, its config, and its metrics, by name. */
 export type MeasurementDeclaration = {
   [I in InstrumentName]: {
     instrument: I;
     config: InstrumentTypes[I]["config"];
-    /** How its values combine across iterations, e.g. `rate`. */
-    aggregate: AggregateFor<InstrumentTypes[I]["value"]>[];
+    metrics: Record<string, Metric>;
   };
 }[InstrumentName];
 
-export function declareMeasurement(declaration: MeasurementDeclaration): MeasurementDeclaration {
-  return declared("declareMeasurement", declaration);
+/**
+ * An instrument, its config, and its metrics. A `config` that doesn't fit the instrument is a
+ * type error, and so is a metric's `stat` that doesn't fit its score: its `score`'s, or else the
+ * instrument's default score's.
+ */
+export function declareMeasurement<I extends InstrumentName, T extends Record<string, Stat>>(declaration: {
+  instrument: I;
+  config: InstrumentTypes[I]["config"];
+  metrics: { [K in keyof T]: MetricOf<I, T[K]> };
+}): MeasurementDeclaration {
+  return declared("declareMeasurement", declaration) as unknown as MeasurementDeclaration;
 }
 
 /**

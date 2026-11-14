@@ -62,7 +62,10 @@ describe("0203 recorded executions", () => {
 
     expect(body.summary.execution).toMatchObject({ testCase: "is-prime-baseline", status: "complete" });
     expect(body.summary.permutations).toHaveLength(8);
-    expect(body.summary.permutations[1]!.measures.isPrimeTsExists).toEqual({ measured: 5, values: { rate: 1 } });
+    expect(body.summary.permutations[1]!.measures.isPrimeTsExists).toEqual({
+      measured: 5,
+      metrics: { exists: { kind: "boolean", stat: "rate", value: 1, applicable: 5, notApplicable: 0, failed: [] } },
+    });
     expect(body.containerRuns).toHaveLength(40);
     expect(body.containerRuns.slice(0, 6).map(({ permutation, iteration }) => `${permutation}-${iteration}`)).toEqual(["1-1", "1-2", "1-3", "1-4", "1-5", "2-1"]);
   });

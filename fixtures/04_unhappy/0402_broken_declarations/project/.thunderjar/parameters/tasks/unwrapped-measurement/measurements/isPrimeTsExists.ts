@@ -1,5 +1,5 @@
 export default {
   instrument: "fileCreated",
   config: { glob: "**/isPrime.ts" },
-  aggregate: ["rate"],
+  metrics: { exists: { stat: "rate" } },
 };

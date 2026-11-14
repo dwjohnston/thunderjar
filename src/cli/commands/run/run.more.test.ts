@@ -173,7 +173,7 @@ describe("0402 broken declarations", () => {
 
     expect(stdout).toBe("");
     expect(stderr).toBe(
-      'Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest, replyMatches, shell\n',
+      'Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell\n',
     );
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual([]);
@@ -262,7 +262,7 @@ Building thunderjar-prerun:77e9dd16 ... done
 Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
-      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
+      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1
 Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     expect(await docker.pushed()).toEqual([PRERUN, postrun]);
@@ -323,7 +323,7 @@ Pushing ${PRERUN} ... done
 Pulling ${PRERUN} into the runtime ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
-      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1
+      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1
 Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     const commands = await docker.commands();
@@ -390,13 +390,13 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
         ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  started`,
         expect.stringMatching(/  done \(.*\)$/),
         expect.stringMatching(/  pushed ghcr\.io\/acme\/thunderjar-images:postrun-/),
-        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   tsIgnoreCount: 1`,
+        ` 1/1  iteration ${n}/3  fake-harness-alpha | plain  isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1`,
       ]);
     }
     const { execution, containerRuns } = await readStore(data);
     expect(execution.status).toBe("complete");
     expect(containerRuns.map((run) => run.iteration).sort()).toEqual([1, 2, 3]);
-    expect(containerRuns.every((run) => run.result !== undefined && Object.keys(run.result).length === 3)).toBe(true);
+    expect(containerRuns.every((run) => run.result !== undefined && Object.keys(run.result).length === 4)).toBe(true);
   }, 30_000);
 
   test("--concurrency 1 overrides the runtime's, running them one after another as before", async () => {
@@ -501,7 +501,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     const { execution, containerRuns } = await readStore(data);
     expect(execution.status).toBe("failed");
     expect(containerRuns.map((run) => run.permutation)).toEqual([1]);
-    expect(Object.keys(containerRuns[0]?.result ?? {})).toHaveLength(3);
+    expect(Object.keys(containerRuns[0]?.result ?? {})).toHaveLength(4);
   }, 30_000);
 
   test("when the first prerun image fails to build, before any iteration starts, nothing is recorded", async () => {

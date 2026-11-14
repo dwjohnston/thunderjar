@@ -52,9 +52,9 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("run, against real Docker", ()
 Building <PREFIX>-prerun:32a1d048 ... done
 Building <PREFIX>-prerun:577ed2bd ... done
  1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
-      isPrimeTemplateTest: {passed: 3, failed: 2}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
+      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
-      isPrimeTemplateTest: {passed: 5, failed: 0}   isPrimeTsExists: true   saysArr: false   tsIgnoreCount: 0
+      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":2,\\"comments\\":1,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 5, total: 5}   isPrimeTsExists: true   saysArr: false   tsIgnoreCount: 0
 Recorded in <DATA>/runs.sqlite
 `);
 
@@ -69,7 +69,7 @@ Recorded in <DATA>/runs.sqlite
       expect(record.execution.exitCode).toBe(0);
       expect(record.execution).toMatchObject(JSON.parse(await inImage(record.postrunImage, "cat /thunderjar/run.json")));
       expect(await inImage(record.postrunImage, "cat /thunderjar/result.json")).toBe((record.harnessResult as string).trim());
-      // Nothing measuring wrote, like a rendered test, is in it.
+      // Nothing measuring wrote, like the test bunTestFile ran, is in it.
       expect(await inImage(record.postrunImage, "pwd && ls -A")).toBe("/workspace\nFAKE_INSTRUCTIONS.md\nisPrime.ts");
     }
 
@@ -77,13 +77,15 @@ Recorded in <DATA>/runs.sqlite
     const measures = (record: ContainerRunRecord) =>
       Object.fromEntries(Object.entries(record.result).map(([name, { instrument, outcome }]) => [name, [instrument, outcome]]));
     expect(measures(alpha)).toEqual({
-      isPrimeTemplateTest: ["templateTest", { outcome: "measured", data: { passed: 3, failed: 2 } }],
+      isPrimeShape: ["shell", { outcome: "measured", data: { exitCode: 0, stdout: '{"lines":3,"comments":2,"exports":1}\n', stdoutTruncated: false } }],
+      isPrimeTests: ["bunTestFile", { outcome: "measured", data: { passed: 3, total: 5 } }],
       isPrimeTsExists: ["fileCreated", { outcome: "measured", data: true }],
       saysArr: ["replyMatches", { outcome: "measured", data: true }],
       tsIgnoreCount: ["grep", { outcome: "measured", data: 1 }],
     });
     expect(measures(beta)).toEqual({
-      isPrimeTemplateTest: ["templateTest", { outcome: "measured", data: { passed: 5, failed: 0 } }],
+      isPrimeShape: ["shell", { outcome: "measured", data: { exitCode: 0, stdout: '{"lines":2,"comments":1,"exports":1}\n', stdoutTruncated: false } }],
+      isPrimeTests: ["bunTestFile", { outcome: "measured", data: { passed: 5, total: 5 } }],
       isPrimeTsExists: ["fileCreated", { outcome: "measured", data: true }],
       saysArr: ["replyMatches", { outcome: "measured", data: false }],
       tsIgnoreCount: ["grep", { outcome: "measured", data: 0 }],

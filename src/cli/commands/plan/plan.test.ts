@@ -275,7 +275,7 @@ describe("0402 broken declarations", () => {
       "a measurement naming an unknown instrument",
       "unknown-instrument",
       [
-        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, templateTest, replyMatches, shell`,
+        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell`,
       ],
     ],
     [
@@ -284,17 +284,27 @@ describe("0402 broken declarations", () => {
       [`${measurement("misfit-config/measurements/isPrimeTsExists.ts")}: config.glob: must be a glob pattern, got undefined`],
     ],
     [
-      "a measurement combining its values in a way its instrument's can't be",
-      "unfit-aggregate",
+      "a metric whose stat doesn't combine its instrument's default score",
+      "unfit-stat",
       [
-        `${measurement("unfit-aggregate/measurements/isPrimeTsExists.ts")}: aggregate: "mean" is not a way fileCreated's values combine. Use one of: rate, count`,
+        `${measurement("unfit-stat/measurements/isPrimeTsExists.ts")}: metrics.exists.stat: "mean" doesn't combine fileCreated's default score, a boolean. Use one of: rate, count, or give the metric a score`,
       ],
     ],
     [
-      "a templateTest measurement whose template is missing",
-      "missing-template",
+      "a measurement without metrics",
+      "missing-metrics",
+      [`${measurement("missing-metrics/measurements/isPrimeTsExists.ts")}: metrics: must be an object of metrics by name, got undefined`],
+    ],
+    [
+      "a measurement still declaring aggregate",
+      "leftover-aggregate",
+      [`${measurement("leftover-aggregate/measurements/isPrimeTsExists.ts")}: aggregate: is no longer supported: use metrics, e.g. metrics: { passes: { stat: "rate" } }`],
+    ],
+    [
+      "a bunTestFile measurement whose test is missing",
+      "missing-test",
       [
-        `${measurement("missing-template/measurements/isPrimeTemplateTest.ts")}: config.template: "./isPrime.tset.template.ts" has no matching ${measurement("missing-template/measurements/isPrime.tset.template.ts")}`,
+        `${measurement("missing-test/measurements/isPrimeTests.ts")}: config.test: "./isPrime.tset.ts" has no matching ${measurement("missing-test/measurements/isPrime.tset.ts")}`,
       ],
     ],
     [

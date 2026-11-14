@@ -44,7 +44,7 @@ Basically changes are merged to main, they will be installable via `bunx skills 
 The repo runs thunderjar on itself from [`.thunderjar/`](./.thunderjar/). It uses a published release, installed as an npm alias devDependency:
 
 ```json
-"thunderjar-published": "npm:thunderjar@0.3.0-preview-027b6e2"
+"thunderjar-published": "npm:thunderjar@0.3.0-preview-0aa9acb"
 ```
 
 `.thunderjar/` code imports from `thunderjar-published`, not `thunderjar`.

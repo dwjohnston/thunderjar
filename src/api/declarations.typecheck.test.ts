@@ -1,6 +1,6 @@
 // Type tests of `applyParameter`'s arguments. Checked by `bun run typecheck`, not run for behaviour:
 // every `@ts-expect-error` must be a real error, and every other line must compile.
-import { test } from "bun:test";
+import { describe, it, test } from "bun:test";
 import {
   declareBaseImage,
   declareCodeState,
@@ -105,29 +105,113 @@ test("a base image must say how it is applied: it carries the FROM", () => {
   declareCodeState({});
 });
 
-test("a measurement's config and aggregate are typed by its instrument", () => {
-  declareMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate", "count"] });
-  declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, aggregate: ["mean", "max"] });
-  declareMeasurement({
-    instrument: "templateTest",
-    config: { subject: "**/isPrime.ts", template: "./isPrime.test.template.ts" },
-    aggregate: ["sum", "mean"],
-  });
-  declareMeasurement({ instrument: "shell", config: { command: "bunx tsc --noEmit" }, aggregate: ["rate"] });
+test("a measurement's config is typed by its instrument, and it needs metrics", () => {
   // @ts-expect-error - not an instrument
-  declareMeasurement({ instrument: "fileCraeted", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] });
+  declareMeasurement({ instrument: "fileCraeted", config: { glob: "**/isPrime.ts" }, metrics: { exists: { stat: "rate" } } });
   // @ts-expect-error - fileCreated's config is a glob
-  declareMeasurement({ instrument: "fileCreated", config: { path: "isPrime.ts" }, aggregate: ["rate"] });
+  declareMeasurement({ instrument: "fileCreated", config: { path: "isPrime.ts" }, metrics: { exists: { stat: "rate" } } });
   // @ts-expect-error - grep needs a pattern
-  declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts" }, aggregate: ["max"] });
-  // @ts-expect-error - a boolean has no mean
-  declareMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["mean"] });
-  // @ts-expect-error - a count has no rate
-  declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts", pattern: "x" }, aggregate: ["rate"] });
+  declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts" }, metrics: { count: { stat: "max" } } });
   // @ts-expect-error - shell needs a command
-  declareMeasurement({ instrument: "shell", config: { cmd: "true" }, aggregate: ["rate"] });
-  // @ts-expect-error - a shell command's pass or fail has no sum
-  declareMeasurement({ instrument: "shell", config: { command: "true" }, aggregate: ["sum"] });
-  // @ts-expect-error - pass and fail counts have no median
-  declareMeasurement({ instrument: "templateTest", config: { subject: "*.ts", template: "./t.ts" }, aggregate: ["median"] });
+  declareMeasurement({ instrument: "shell", config: { cmd: "true" }, metrics: { passes: { stat: "rate" } } });
+  // @ts-expect-error - metrics is required
+  declareMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" } });
+  // @ts-expect-error - aggregate is gone: metrics replaces it
+  declareMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, aggregate: ["rate"] });
+});
+
+describe("declareMeasurement: a metric's stat fits its score's type", () => {
+  it("identity score, boolean value: rate and count", () => {
+    declareMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, metrics: { exists: { stat: "rate" } } });
+    declareMeasurement({ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, metrics: { exists: { stat: "count" } } });
+    declareMeasurement({
+      instrument: "fileCreated",
+      config: { glob: "**/isPrime.ts" },
+      // @ts-expect-error - "mean" doesn't combine booleans
+      metrics: { exists: { stat: "mean" } },
+    });
+  });
+
+  it("identity score, number value: mean, median, min, max and sum", () => {
+    declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, metrics: { count: { stat: "median" } } });
+    declareMeasurement({
+      instrument: "grep",
+      config: { glob: "**/*.ts", pattern: "@ts-ignore" },
+      // @ts-expect-error - "rate" doesn't combine numbers
+      metrics: { count: { stat: "rate" } },
+    });
+  });
+
+  it("default score: shell's is a boolean, bunTestFile's a number", () => {
+    declareMeasurement({ instrument: "shell", config: { command: "bunx tsc --noEmit" }, metrics: { typeChecks: { stat: "rate" } } });
+    declareMeasurement({
+      instrument: "shell",
+      config: { command: "bunx tsc --noEmit" },
+      // @ts-expect-error - shell's default score is a boolean
+      metrics: { typeChecks: { stat: "mean" } },
+    });
+    declareMeasurement({ instrument: "bunTestFile", config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" }, metrics: { passRate: { stat: "mean" } } });
+    declareMeasurement({
+      instrument: "bunTestFile",
+      config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
+      // @ts-expect-error - bunTestFile's default score is a number
+      metrics: { passRate: { stat: "rate" } },
+    });
+  });
+
+  it("explicit score: the stat follows what score returns, not the instrument", () => {
+    declareMeasurement({
+      instrument: "shell",
+      config: { command: "wc -l < isPrime.ts" },
+      metrics: {
+        lines: { score: (v) => Number(v.stdout), stat: "median" },
+        short: { score: (v) => Number(v.stdout) < 30, stat: "rate" },
+      },
+    });
+    declareMeasurement({
+      instrument: "shell",
+      config: { command: "wc -l < isPrime.ts" },
+      // @ts-expect-error - "count" doesn't combine numbers
+      metrics: { lines: { score: (v) => Number(v.stdout), stat: "count" } },
+    });
+    declareMeasurement({
+      instrument: "bunTestFile",
+      config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
+      // @ts-expect-error - "mean" doesn't combine booleans
+      metrics: { allPassed: { score: (v) => v.passed === v.total, stat: "mean" } },
+    });
+  });
+
+  it("score may return undefined, and nothing but a number or boolean", () => {
+    declareMeasurement({
+      instrument: "bunTestFile",
+      config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
+      metrics: { failed: { score: (v) => (v.total === 0 ? undefined : v.total - v.passed), stat: "mean" } },
+    });
+    declareMeasurement({
+      instrument: "shell",
+      config: { command: "cat package.json" },
+      // @ts-expect-error - a string isn't a score
+      metrics: { name: { score: (v) => v.stdout, stat: "count" } },
+    });
+  });
+
+  it("score is typed by the instrument's value", () => {
+    declareMeasurement({
+      instrument: "bunTestFile",
+      config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
+      // @ts-expect-error - bunTestFile's value has no stdout
+      metrics: { lines: { score: (v) => Number(v.stdout), stat: "mean" } },
+    });
+  });
+
+  it("better is higher or lower", () => {
+    declareMeasurement({ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, metrics: { count: { stat: "mean", better: "lower" } } });
+    declareMeasurement({
+      instrument: "grep",
+      config: { glob: "**/*.ts", pattern: "@ts-ignore" },
+      // @ts-expect-error - better is "higher" or "lower"
+      metrics: { count: { stat: "mean", better: "fewer" } },
+    });
+  });
 });

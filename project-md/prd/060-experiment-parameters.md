@@ -303,12 +303,20 @@ export default declareInitialPrompt({
 ## Measuring instruments & measurements
 
 - **Measuring instrument** — single-purpose, reusable evaluation logic (built-in
-  or user-defined), parameterized by a config type and a value type. Examples:
-  `grep`, `fileCreated`, `templateTest`, `shell`.
+  or user-defined), parameterized by a config type and a value type, whose
+  value can be of any shape. It has a `version` for that shape, and may have a
+  default score. Examples: `grep`, `fileCreated`, `bunTestFile`, `shell`.
 - **Measurement** — an instrument plus a specific config, declared on a task.
   Copied per task, never shared by reference, so changing one task's
   measurement config can't silently change another task's meaning or history.
-- **Measure** — the value one measurement produces for one iteration.
+- **Measure** — the value one measurement produces for one iteration, stored as
+  the instrument returned it.
+- **Metric** — a score read from a measure, a number or a boolean, or
+  `undefined` where it doesn't apply, with one statistic across iterations and
+  optionally which way is better. A measurement declares one or more in
+  `metrics`. Metrics are computed when results are read, so they can change
+  without re-measuring. See
+  [085-experiment-results.md](085-experiment-results.md#measures-and-metrics).
 - **Result** — the set of measures for an iteration. Can grow after the fact:
   new measurements can be backfilled against a preserved artifact (the
   committed container image) without re-running the agent.
@@ -343,52 +351,95 @@ Keeping instrument logic host-side means it stays unit-testable against a fake
 context — layer 1 of [120-test-boundaries.md](120-test-boundaries.md) — without
 requiring Thunderjar's own runtime inside every base image.
 
-### `templateTest`
+### `declareMeasurement`
 
-The instrument that shows why `writeFile` is on the context. A test against
-agent output can't be written in advance, because the thing it tests doesn't
-exist yet and won't have a predictable name. So the file supplied is a
-*template*, populated at measure time from whatever the agent actually
-produced:
+A measurement names its instrument, the instrument's config, and its metrics.
+
+```ts
+export default declareMeasurement({
+  instrument: "bunTestFile",
+  config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" },
+  metrics: {
+    passRate: { stat: "mean", better: "higher" }, // the default score: passed / total
+    passed: { score: (v) => v.passed, stat: "mean", better: "higher" },
+  },
+});
+```
+
+`metrics` is required, with at least one entry, each named by an identifier. A metric's
+`score` reads the instrument's value, and is optional where the instrument has a default
+score. Its `stat` must fit what the score returns: `rate` or `count` for booleans, `mean`,
+`median`, `min`, `max` or `sum` for numbers. A misfit is a type error, and, where the score
+type is known without running anything, an error at `plan` and `run`.
+
+| Instrument | Value | Default score |
+| --- | --- | --- |
+| `fileCreated` | `boolean` | the value |
+| `grep` | `number` | the value |
+| `replyMatches` | `boolean` | the value |
+| `bunTestFile` | `{ passed: number; total: number }` | the pass rate, `passed / total`, or not applicable with no tests |
+| `shell` | `{ exitCode: number; stdout: string; stdoutTruncated: boolean }` | whether it exited 0 |
+
+### `bunTestFile`
+
+The instrument that shows why `writeFile` is on the context. It runs an ordinary
+Bun test file against each file matching `subject`. The test can't import the
+agent's file by name, because it doesn't exist yet and won't have a
+predictable name, so it reads its absolute path from
+`Bun.env.THUNDERJAR_SUBJECT`, falling back to a reference implementation
+beside it when run on the host.
 
 ```ts
 // declared on the task
 {
-  instrument: "templateTest",
+  instrument: "bunTestFile",
   config: {
-    subject: "output/**/*.ts",             // resolved in the measurement container
-    template: "./prime.test.template.ts",  // host-side, part of the measurement's content hash
+    subject: "**/isPrime.ts",    // resolved in the measurement container
+    test: "./isPrime.test.ts",  // host-side, part of the measurement's content hash
   },
+  metrics: { passRate: { stat: "mean" } },
 }
 ```
 
 ```ts
-// prime.test.template.ts — not runnable as-is
-import { {{defaultExport}} } from "{{subjectPath}}";
-test("17 is prime", () => expect({{defaultExport}}(17)).toBe(true));
+// isPrime.test.ts — runs on the host as it is
+import { expect, test } from "bun:test";
+const { isPrime }: typeof import("./isPrime.reference.ts") = await import(Bun.env.THUNDERJAR_SUBJECT ?? "./isPrime.reference.ts");
+test("17 is prime", () => expect(isPrime(17)).toBe(true));
 ```
 
-Rendered into the measurement container and run there, so it gets the real
-pinned runtime and installed dependencies. Its value type is a count rather
-than a boolean — a measurement, not a verdict. The glob matching nothing gives
-`skipped`; a template that can't bind gives `erroredWhileMeasuring`.
+Written into the measurement container and run there, so it gets the real
+pinned runtime and installed dependencies. Its value is `{ passed, total }`,
+read from Bun's JUnit report, summed over every subject the glob matches;
+`total` includes skipped and failed tests. The glob matching nothing gives
+`skipped`; a test that doesn't run against the subject gives
+`erroredWhileMeasuring`.
 
 ### `shell`
 
 The escape hatch: runs any shell command in the measurement container, with
-`sh -c` in `workdir`, and records whether it exited 0. Use it for whatever no
-other instrument measures, with whatever the image has installed.
+`sh -c` in `workdir`, and stores what happened, unparsed:
+`{ exitCode, stdout, stdoutTruncated }`. Use it for whatever no other
+instrument measures, with whatever the image has installed.
 
 ```ts
 {
   instrument: "shell",
   config: { command: "bunx tsc --noEmit" },
-  aggregate: ["rate"],
+  metrics: { typeChecks: { stat: "rate" } }, // the default score: exit 0
 }
 ```
 
-Its value is a boolean, so it aggregates as `rate` or `count`. A non-zero exit,
-including a command that isn't found, is `false`, not `erroredWhileMeasuring`.
+- A non-zero exit, including a command that isn't found, is still `measured`,
+  never `erroredWhileMeasuring`.
+- `stdout` is capped at 64 KiB, with `stdoutTruncated` set when it was cut.
+- To get any other value from a command, write a `score` that parses `stdout`,
+  e.g. a command that prints JSON, read by several metrics.
+- Version 2: version 1 stored whether it exited 0.
+
+> **Warning:** stdout is stored in the run data store as it is. A command that
+> prints secrets or other sensitive data will persist them. There is
+> deliberately no transform step before storing.
 
 ## Open questions
 
