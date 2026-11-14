@@ -26,6 +26,7 @@
     "access": "public"
   },
   "scripts": {
+    "tj": "bun src/cli/index.ts",
     "build": "rm -rf dist && bun build src/cli/index.ts --target bun --outdir dist --entry-naming [name].[ext] --production",
     "lint": "bun scripts/lint-layers.ts --check && oxlint",
     "lint:generate": "bun scripts/lint-layers.ts",
