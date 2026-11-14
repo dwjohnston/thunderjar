@@ -18,9 +18,10 @@ import { gauntletHarnessModels } from "../shared/gauntletHarnessModels";
 export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["thunderjar-nested-skills-root", "thunderjar-nested-skills-a"],
-  promptSet: ["none"],
-  harnessModel: [...gauntletHarnessModels],
+  promptSet: ["none", "nested-skills-reading-files"],
+  harnessModel: ["claude-code-2.1.311/claude-haiku-5-5", "copilot-1.0.105/anthropic/claude-haiku-5.5", "opencode-1.19.5/openrouter/anthropic/claude-haiku-5.5",
+  ],
   task: "gauntlet-nested-skills",
-  initialPrompt: ["plain"],
+  initialPrompt: ["plain", "slash-base"],
   iterations: 1,
 });

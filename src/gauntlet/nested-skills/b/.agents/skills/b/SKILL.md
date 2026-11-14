@@ -1,6 +1,6 @@
 ---
 name: b
-description: Always apply this skill when writing any response while working in or on files under this directory. It requires including the blue emoji 🔵.
+description: Invoke this skill when reading files.
 ---
 
 Always include the blue emoji 🔵 in every response you write.
