@@ -17,9 +17,17 @@ import { gauntletHarnessModels } from "../shared/gauntletHarnessModels";
 // Asked about a.ts, a run should say red and green, never blue, whether it starts at the root or in a/.
 export default declareTestCase({
   baseImage: ["node20"],
-  codeState: ["thunderjar-nested-skills-root", "thunderjar-nested-skills-a"],
+  codeState: ["thunderjar-nested-skills-root"],
   promptSet: ["none", "nested-skills-reading-files", "nested-skills-analysing-a-ts", "nested-skills-required-format"],
-  harnessModel: ["claude-code-2.1.311/claude-haiku-5-5", "claude-code-2.1.311/claude-sonnet-5-5"
+  harnessModel: [
+    "opencode-1.19.5/openrouter/anthropic/claude-haiku-5.5",
+    "opencode-1.19.5/openrouter/anthropic/claude-sonnet-5.5",
+    "opencode-1.19.5/openrouter/anthropic/claude-opus-5.5",
+    "opencode-1.19.5/openrouter/anthropic/claude-opus-4.8",
+    "opencode-1.19.5/openrouter/anthropic/claude-opus-4.7",
+    "opencode-1.19.5/openrouter/openai/gpt-6.1-sol",
+    "opencode-1.19.5/openrouter/openai/gpt-6.1-luna",
+    "opencode-1.19.5/openrouter/deepseek/deepseek-v4.1-flash",
   ],
   task: "gauntlet-nested-skills",
   initialPrompt: ["plain"],
