@@ -21,7 +21,7 @@ import type {
   RecordedMeasure,
   RunDataStore,
 } from "../store/runDataStore.ts";
-import { agentOutput, head } from "./agentOutput.ts";
+import { agentOutput, head, storedStderr } from "./agentOutput.ts";
 import { runInContainer } from "./containerRun.ts";
 import { containerName, storedPostrunImage, storedPrerunImage } from "./images.ts";
 import { type PullHooks, pullIntoRuntime, type PushHooks, pushToStore } from "./imageStore.ts";
@@ -82,13 +82,16 @@ export type ExecutionToRun = {
  */
 export const runsConcurrently = (concurrency = 1, build: BuildOptions = {}): boolean => concurrency > 1 || (build.concurrency ?? 1) > 1;
 
+/** What a container run left, as recorded: its result file, the end of its stderr, and its reply. */
+type RecordedTurn = { harnessResult: string | null; harnessStderr: string | null; reply: Reply };
+
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
 function containerRunRecord(
   { plan, name, testCase }: ExecutionToRun,
   { number: permutationNumber, permutation, version }: PlannedPermutation,
   iteration: PlannedIteration,
   execution: Execution,
-  last: { harnessResult: string | null; reply: Reply },
+  last: RecordedTurn,
   tokenCosts: TokenCosts,
 ): ContainerRunRecord {
   const { harness } = parsePair(permutation.harnessModel);
@@ -114,6 +117,7 @@ function containerRunRecord(
     harnessModel: { harness, version, modelId: permutation.modelId },
     execution,
     harnessResult: last.harnessResult,
+    harnessStderr: last.harnessStderr,
     reply: last.reply,
     tokenCosts,
     result: {},
@@ -229,7 +233,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       container,
       runtime,
     });
-    const ran = { harnessResult: resultFile, reply: collectReply(permutation.harness.collectReply, resultFile) };
+    const ran = { harnessResult: resultFile, harnessStderr: storedStderr(stderr), reply: collectReply(permutation.harness.collectReply, resultFile) };
     const tokenCosts = collectTokenCosts(permutation.collectTokenCosts, [resultFile], {
       version: permutation.version,
       modelId: permutation.modelId,

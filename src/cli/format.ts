@@ -5,7 +5,7 @@ import { knownCost, totalTokens } from "../execution/runFacts.ts";
 import { type Paint, plain } from "./colour.ts";
 import type { Stat } from "../api/declarations.ts";
 
-export { agentEnd, endedCleanly, knownCost, tokensOf, totalTokens } from "../execution/runFacts.ts";
+export { agentEnd, endedCleanly, failureHint, knownCost, tokensOf, totalTokens } from "../execution/runFacts.ts";
 
 /** An execution's status, coloured: complete green, failed red, running yellow. */
 export const paintStatus = (status: ExecutionRecord["status"], paint: Paint) =>

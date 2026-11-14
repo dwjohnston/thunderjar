@@ -104,6 +104,11 @@ export type ContainerRunRecord = {
   execution: Execution;
   /** The text of the result file the harness's `cli` left, or null if it left none. */
   harnessResult: string | null;
+  /**
+   * The tail of the run script's stderr, or null if it left none: it never ran. Absent from runs
+   * recorded before stderr was.
+   */
+  harnessStderr?: string | null;
   /** The agent's final reply, read from the result file by its harness's `collectReply`, or why there's none. Absent from runs recorded before replies were. */
   reply?: Reply;
   /**
@@ -115,10 +120,10 @@ export type ContainerRunRecord = {
   /** The session ID its turns shared. Absent from runs recorded before sessions were. */
   sessionId?: string;
   /**
-   * Each turn's result file and reply, of an initial prompt of several turns. `harnessResult` and
-   * `reply` are its last turn's. Absent for a single prompt.
+   * Each turn's result file, stderr and reply, of an initial prompt of several turns.
+   * `harnessResult`, `harnessStderr` and `reply` are its last turn's. Absent for a single prompt.
    */
-  turns?: { harnessResult: string | null; reply: Reply }[];
+  turns?: { harnessResult: string | null; harnessStderr?: string | null; reply: Reply }[];
   /** The run's measures, by measurement name. Empty until it has been measured. */
   result: Record<string, RecordedMeasure>;
 };

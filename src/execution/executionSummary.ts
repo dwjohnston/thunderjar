@@ -8,7 +8,7 @@ import type { Better, Stat, TokenCosts } from "../api/declarations.ts";
 import type { ContainerRunRecord, ExecutionRecord } from "../store/runDataStore.ts";
 import { STATS, type ScoreKind } from "../instruments/instruments.ts";
 import { type AggregatedMeasurement, aggregatePermutation, type LeftOut } from "./aggregate.ts";
-import { agentEnd, endedCleanly, knownCost, totalTokens } from "./runFacts.ts";
+import { agentEnd, endedCleanly, failureHint, knownCost, totalTokens } from "./runFacts.ts";
 
 /** Values across a permutation's iterations: their mean, least and greatest, and how many iterations had one. */
 export type Spread = { mean: number; min: number; max: number; of: number };
@@ -31,8 +31,11 @@ export type PermutationSummary = {
   costUsd?: Spread;
   /** How its agents ended, e.g. `done` or `exited 1`, and how many runs ended each way, most first. */
   agent: { end: string; runs: number }[];
-  /** Its runs whose agent exited non-zero, timed out, or left no result file. */
-  unclean: { run: string; end: string }[];
+  /**
+   * Its runs whose agent exited non-zero, timed out, or left no result file, with a hint of why:
+   * the last line of its stderr, or else of its result file, if it has one.
+   */
+  unclean: { run: string; end: string; why?: string }[];
   /** Each measurement's measures, read by its metrics and combined, keyed by name. */
   measures: Record<string, AggregatedMeasurement>;
   /** Its iterations left out of a measurement's metrics, or of one metric, and why, by run name. */
@@ -88,7 +91,10 @@ function summarisePermutation(permutation: number, runs: ContainerRunRecord[], m
     agent: tally(runs.map(({ execution, harnessResult }) => agentEnd(execution, harnessResult))),
     unclean: runs
       .filter(({ execution, harnessResult }) => !endedCleanly(execution, harnessResult))
-      .map((run) => ({ run: runName(run), end: agentEnd(run.execution, run.harnessResult) })),
+      .map((run) => {
+        const why = failureHint(run);
+        return { run: runName(run), end: agentEnd(run.execution, run.harnessResult), ...(why !== undefined && { why }) };
+      }),
     measures,
     leftOut: leftOut.map(({ iteration, ...rest }) => ({ run: runName({ permutation, iteration }), ...rest })),
     withoutTokenCosts: runs.filter(({ tokenCosts }) => tokenCosts?.outcome !== "collected").map((run) => ({ run: runName(run), tokenCosts: run.tokenCosts })),

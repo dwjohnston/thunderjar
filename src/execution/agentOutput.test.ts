@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { agentOutput, head, RESULT_LIMIT, STDERR_LIMIT, tail } from "./agentOutput.ts";
+import { agentOutput, head, RESULT_LIMIT, STDERR_LIMIT, storedStderr, tail } from "./agentOutput.ts";
 
 describe("tail", () => {
   test("short text is kept whole", () => {
@@ -48,5 +48,19 @@ describe("agentOutput", () => {
     expect(output?.stderr).toEndWith("sERR");
     expect(output?.stderr).toStartWith("[8 characters cut]…");
     expect(output?.result).toEndWith("rEND");
+  });
+});
+
+describe("storedStderr", () => {
+  test("short text is kept whole, and null stays null", () => {
+    expect(storedStderr("short", 16)).toBe("short");
+    expect(storedStderr(null)).toBeNull();
+  });
+
+  test("long text keeps its last bytes, never part of a character", () => {
+    expect(storedStderr("abcdef", 3)).toBe("def");
+    // "é" is two bytes: the last 3 of "aébc" cut it in half, so it's dropped.
+    expect(storedStderr("aéébc", 5)).toBe("ébc");
+    expect(storedStderr("aébc", 3)).toBe("bc");
   });
 });

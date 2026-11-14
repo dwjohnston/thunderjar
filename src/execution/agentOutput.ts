@@ -33,6 +33,20 @@ export function head(text: string, limit: number): string {
   return `${text.slice(0, limit)}…[${text.length - limit} characters cut]`;
 }
 
+/** How much of a turn's standard error a container run's record keeps: its last 16 KiB. */
+export const STORED_STDERR_BYTES = 16 * 1024;
+
+/**
+ * A turn's standard error as its container run's record keeps it: its last `bytes` bytes, about,
+ * never cut mid-character. Null stays null: the turn never ran.
+ */
+export function storedStderr(stderr: string | null, bytes: number = STORED_STDERR_BYTES): string | null {
+  if (stderr === null) return null;
+  const encoded = new TextEncoder().encode(stderr);
+  if (encoded.length <= bytes) return stderr;
+  return new TextDecoder().decode(encoded.subarray(encoded.length - bytes)).replace(/^\uFFFD+/, "");
+}
+
 /** One turn's output, as logged. A field is left out if the turn left nothing there. */
 export type TurnOutput = { turn: number; stderr?: string; result?: string };
 
