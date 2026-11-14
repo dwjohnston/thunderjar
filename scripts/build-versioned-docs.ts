@@ -8,8 +8,9 @@ const DOCS_DIR = "docs";
 const THEME_DIR = `${DOCS_DIR}/.vitepress/theme`;
 // Older tags' copies that use the CLI bundle src/, which Vite can't do. The current copies read each tag's own src/.
 const RUNTIME_FILES = [`${DOCS_DIR}/.vitepress/config.ts`, `${DOCS_DIR}/cli/[command].paths.ts`];
-// The docs import the CLI from src/ (which reads package.json) to generate the CLI reference pages.
-const SOURCE_DIRS = [DOCS_DIR, "src"];
+// The docs import the CLI from src/ (which reads package.json) to generate the CLI reference pages,
+// and scripts/docgen.ts to generate the declaration reference.
+const SOURCE_DIRS = [DOCS_DIR, "src", "scripts/docgen.ts"];
 // Left out of the docs hash, because its version changes with every release.
 const SOURCE_FILES = ["package.json"];
 const TEST_FILE = /\.test\.ts$/;
@@ -23,9 +24,9 @@ Build the docs for every stable release tag into one GitHub Pages site.
 - Stable tags only: v1.2.3, not v1.2.3-next.0 or v1.2.3-rc.1.
 - Tags whose docs are identical share one build, at the oldest tag's URL.
   Newer tags in the group get redirect pages to it.
-- Docs are identical when the hash of the ${SOURCE_DIRS.join("/ and ")}/ trees matches,
-  ignoring ${THEME_DIR}/ and test files. src/ is included because the CLI
-  reference pages are generated from it. ${SOURCE_FILES.join(", ")} is extracted
+- Docs are identical when the hash of ${SOURCE_DIRS.join(", ")} matches,
+  ignoring ${THEME_DIR}/ and test files. src/ and scripts/docgen.ts are
+  included because the reference pages are generated from them. ${SOURCE_FILES.join(", ")} is extracted
   but not hashed, since its version changes with every release.
 - Every version is built with the current theme, so all get the version switcher.
 - The site root (${SITE_ROOT}) serves the latest release.
