@@ -6,6 +6,11 @@ const remote = Bun.env.THUNDERJAR_REMOTE === "1";
 // With THUNDERJAR_RUN_DATA=sqlite as well, a remote run records its data in the local SQLite file
 // instead of Supabase: for machines that can't reach Postgres, e.g. a sandbox that only allows HTTPS.
 const localRunData = Bun.env.THUNDERJAR_RUN_DATA === "sqlite";
+// With THUNDERJAR_ON_RUNTIME=1 as well, a remote execution runs on the Fly machine itself, in a
+// runner: a container there, with Thunderjar and this folder, that runs the containers, measures
+// them and writes the run data. `run` only builds, submits and follows. The runner logs in to ghcr
+// with GHCR_USER and GHCR_TOKEN, sent to it with the model keys and THUNDERJAR_DB_URL as it starts.
+const onRuntime = Bun.env.THUNDERJAR_ON_RUNTIME === "1";
 const sqlite = sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" });
 
 export default declareConfig(
@@ -24,6 +29,8 @@ export default declareConfig(
           concurrency: 16,
           beforeExecution: ["./.thunderjar/fly-runtime.sh", "up"],
           afterExecution: ["./.thunderjar/fly-runtime.sh", "down"],
+          // Spread, so it type-checks against thunderjar-published, which doesn't know `runner` yet.
+          ...(onRuntime && { runner: { registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" } } }),
         },
         build: { concurrency: 3 },
       }

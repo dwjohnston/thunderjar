@@ -164,6 +164,31 @@ runtime: { command: ["docker", "--context", "cloud"], concurrency: 4 },
 
 **Why:** Each container is an agent that also runs builds and tests. Too many at once starve each other, so timings and timeouts stop being comparable between runs.
 
+### `runner`
+
+Runs each whole execution on the runtime, instead of one Docker command at a time from this machine.
+
+```ts
+runtime: {
+  command: ["docker", "--context", "cloud"],
+  runner: { registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" } },
+},
+```
+
+- `run` builds a runner image, holding Thunderjar and the `.thunderjar/` folder, pushes it to the image store, and starts it on the runtime with the runtime's Docker socket.
+- The runner runs the containers, measures them, pushes postrun images and writes the run data store. `run` only follows it.
+- Ctrl-C leaves the execution running. `thunderjar attach <execution ID>` follows it again, and `attach <execution ID> --stop` stops it.
+- `{}` is enough to turn it on.
+  - `registryLogin`: the variables holding a user and token for the image store's registry. The runner logs in with them.
+  - `env`: more variables to give the runner, by name.
+  - `runOptions`: more `docker run` options for the runner's container, e.g. another path for the Docker socket.
+
+✅ **Do** use it when the runtime is far away, or `run` should survive this machine disconnecting.
+
+✅ **Do** use a `postgresStore` with it. With a `sqliteStore`, the runner's records are copied to the local file only once `run` or `attach` has followed the execution to its end.
+
+**Why:** Each Docker command sent to a distant runtime is a round trip. On the runtime, they're local. The variables' values are sent as the runner starts, and kept in its memory only.
+
 ## Check the change
 
 ```sh

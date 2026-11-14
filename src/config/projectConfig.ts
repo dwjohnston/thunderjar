@@ -1,6 +1,6 @@
 // Loads `.thunderjar/thunderjar.config.ts`: where images are pushed, if anywhere, and what prerun
 // builds are given beside their build context.
-import type { BuildOptions, ConfigDeclaration, ImageStore, RuntimeConfig } from "../api/declarations.ts";
+import type { BuildOptions, ConfigDeclaration, ImageStore, RunnerConfig, RuntimeConfig } from "../api/declarations.ts";
 import { ConfigError, loadDeclaration, type Problem, problemsError } from "./loader.ts";
 import { ENV_NAME } from "./envName.ts";
 
@@ -94,6 +94,23 @@ function hooksOf(runtime: RuntimeConfig): Pick<RuntimeConfig, "beforeExecution" 
   return { ...(before !== undefined && { beforeExecution: [...before] }), ...(after !== undefined && { afterExecution: [...after] }) };
 }
 
+/** Why `runner`, a runtime's, isn't a RunnerConfig, or undefined if it is. */
+function runnerProblem(runner: unknown): string | undefined {
+  if (runner === undefined) return undefined;
+  if (typeof runner !== "object" || runner === null || Array.isArray(runner)) return `runner must be an object, e.g. {}, got ${show(runner)}`;
+  const { env, registryLogin, runOptions } = runner as Record<string, unknown>;
+  const isNames = (value: unknown): value is string[] => Array.isArray(value) && value.every((name) => typeof name === "string" && ENV_NAME.test(name));
+  if (env !== undefined && !isNames(env)) return `runner.env must be a list of environment variable names, got ${show(env)}`;
+  if (registryLogin !== undefined) {
+    const { usernameEnv, passwordEnv } = (registryLogin ?? {}) as Record<string, unknown>;
+    if (!isNames([usernameEnv, passwordEnv])) return `runner.registryLogin must be { usernameEnv, passwordEnv }, each an environment variable name, got ${show(registryLogin)}`;
+  }
+  if (runOptions !== undefined && !(Array.isArray(runOptions) && runOptions.every((option) => typeof option === "string" && option !== ""))) {
+    return `runner.runOptions must be a list of non-empty strings, got ${show(runOptions)}`;
+  }
+  return undefined;
+}
+
 /** Why `runtime`, as loaded, isn't a RuntimeConfig that can be used with `imageStore`, or undefined if it is. */
 export function runtimeProblem(runtime: unknown, imageStore: unknown): string | undefined {
   if (runtime === undefined) return undefined;
@@ -115,7 +132,7 @@ export function runtimeProblem(runtime: unknown, imageStore: unknown): string | 
   if (concurrency !== undefined && !isConcurrency(concurrency)) return `concurrency must be a whole number, 1 or more, got ${show(concurrency)}`;
   if (keepPostrunImages !== undefined && typeof keepPostrunImages !== "boolean") return `keepPostrunImages must be true or false, got ${show(keepPostrunImages)}`;
   if (imageStore === null) return "needs an imageStore: the runtime pulls the images it runs from it";
-  return undefined;
+  return runnerProblem(fields.runner);
 }
 
 /** Why `runDataStore` isn't a run data store, or undefined if it is. */
@@ -131,7 +148,13 @@ export function runDataStoreProblem(runDataStore: unknown): string | undefined {
 export type ProjectConfig = {
   imageStore: ImageStore | null;
   /** Where `run` runs containers, and how many at once, or `null` for the local Docker daemon. */
-  runtime: (Required<Pick<RuntimeConfig, "command" | "concurrency" | "keepPostrunImages">> & Pick<RuntimeConfig, "beforeExecution" | "afterExecution">) | null;
+  runtime:
+    | (Required<Pick<RuntimeConfig, "command" | "concurrency" | "keepPostrunImages">> &
+        Pick<RuntimeConfig, "beforeExecution" | "afterExecution"> & {
+          /** How its runner is started, if executions run in one on the runtime: see `RuntimeConfig.runner`. */
+          runner?: Required<Pick<RunnerConfig, "env" | "runOptions">> & Pick<RunnerConfig, "registryLogin">;
+        })
+    | null;
   /**
    * The run data store, as the config gives it: a SQLite file, relative to the project folder
    * (the one holding `.thunderjar/`) unless absolute, or the variable holding a Postgres URL.
@@ -181,6 +204,15 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
             concurrency: runtime.concurrency ?? 1,
             keepPostrunImages: runtime.keepPostrunImages ?? false,
             ...hooksOf(runtime),
+            ...(runtime.runner !== undefined && {
+              runner: {
+                env: [...(runtime.runner.env ?? [])],
+                runOptions: [...(runtime.runner.runOptions ?? [])],
+                ...(runtime.runner.registryLogin !== undefined && {
+                  registryLogin: { usernameEnv: runtime.runner.registryLogin.usernameEnv, passwordEnv: runtime.runner.registryLogin.passwordEnv },
+                }),
+              },
+            }),
           },
     build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false, concurrency: build?.concurrency ?? 1 },
     deprecations: runtime === undefined ? [] : hookDeprecations(runtime),

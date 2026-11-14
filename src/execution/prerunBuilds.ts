@@ -71,6 +71,12 @@ export async function prerunImages(permutations: HashedPermutation[], imagePrefi
   });
 }
 
+/** The prerun image of each of `permutations`, once per image hash, in plan order, none looked for in the local Docker daemon. */
+export function storedPrerunImages(permutations: HashedPermutation[], imagePrefix?: string): (PrerunImage & { exists: boolean })[] {
+  const unique = [...new Map(permutations.map((permutation) => [permutation.imageHash, permutation])).values()];
+  return unique.map((permutation) => ({ permutation, image: prerunImage(permutation.imageHash, imagePrefix), exists: false }));
+}
+
 /**
  * Builds `image` from `permutation`'s Dockerfile, of a test case under `root` (the `.thunderjar/`
  * folder), given `build`'s secrets and SSH agent, calling `hooks`. Throws a ConfigError, or a

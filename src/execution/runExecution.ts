@@ -34,7 +34,7 @@ import { collectReply } from "./reply.ts";
 import { type ExecutionTimings, timings } from "./timings.ts";
 import { collectTokenCosts } from "./tokenCosts.ts";
 import type { PlannedExecution, PlannedIteration, PlannedPermutation } from "./planExecution.ts";
-import { buildPrerunImage, type PrerunBuildHooks, type PrerunImage, prerunImages } from "./prerunBuilds.ts";
+import { buildPrerunImage, type PrerunBuildHooks, type PrerunImage, prerunImages, storedPrerunImages } from "./prerunBuilds.ts";
 
 const log = moduleLogger("execution");
 
@@ -79,6 +79,12 @@ export type ExecutionToRun = {
   runtime?: RuntimeConfig | null;
   /** How many iterations' containers run at once: 1, one after another, by default. */
   concurrency?: number;
+  /**
+   * Whether every prerun image is already in the image store, so each is only pulled into the
+   * runtime, and none is built or pushed here. For a runner on the runtime (see runner.ts), whose
+   * host stored them before it submitted the execution. Needs a `runtime`.
+   */
+  prerunFromStore?: boolean;
 };
 
 /**
@@ -194,12 +200,12 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   let sameDaemon: Promise<boolean> | undefined;
   const buildsOnRuntime = () =>
     (sameDaemon ??= Promise.all([daemonId(localRuntime()), daemonId(runtime)]).then(([local, other]) => local !== undefined && local === other));
-  const images = await prerunImages(
-    plan.permutations.map(({ permutation }) => permutation),
-    imagePrefix,
-  );
+  if (run.prerunFromStore && remote === null) throw new Error("Prerun images are only run from the image store on a runtime.");
+  const hashed = plan.permutations.map(({ permutation }) => permutation);
+  // From the store, none is looked for in the local daemon: whether it's there says nothing.
+  const images = run.prerunFromStore ? storedPrerunImages(hashed, imagePrefix) : await prerunImages(hashed, imagePrefix);
   // Asked of the registry for every image at once, rather than as each one's turn to build comes.
-  if (imageStore !== null) for (const { permutation } of images) void inStore(storedPrerunImage(imageStore.repository, permutation.imageHash));
+  if (imageStore !== null && !run.prerunFromStore) for (const { permutation } of images) void inStore(storedPrerunImage(imageStore.repository, permutation.imageHash));
   // A remote runtime runs each prerun image as the image store has it, by its stored reference.
   const prerunImageOf = (permutation: PlannedPermutation) =>
     remote === null ? permutation.prerunImage : storedPrerunImage((imageStore as ImageStore).repository, permutation.permutation.imageHash);
@@ -221,6 +227,13 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   for (const { promise } of ready.values()) promise.catch(() => {});
   const prepare = async ({ exists, ...image }: PrerunImage & { exists: boolean }) => {
     const reference = imageStore === null ? undefined : storedPrerunImage(imageStore.repository, image.permutation.imageHash);
+    // Stored by the host that submitted the execution: only pulled, if the runtime doesn't have it.
+    if (run.prerunFromStore && reference !== undefined) {
+      if ((await onRuntime).has(reference)) log.info({ reference }, "prerun image already in the runtime: not pulled");
+      else await timer.time("pullPrerun", () => pullIntoRuntime([reference], runtime, hooks));
+      ready.get(image.permutation.imageHash)?.resolve();
+      return;
+    }
     if (reference === undefined) {
       if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build));
       ready.get(image.permutation.imageHash)?.resolve();

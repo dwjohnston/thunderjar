@@ -185,6 +185,19 @@ describe("runtimeProblem", () => {
     expect(runtimeProblem({ command: ["docker"], concurrency: 4 }, STORE)).toBeUndefined();
   });
 
+  test("a runner is an object of env names, a registry login's variables, and run options", () => {
+    expect(runtimeProblem({ command: ["docker"], runner: {} }, STORE)).toBeUndefined();
+    expect(
+      runtimeProblem({ command: ["docker"], runner: { env: ["EXTRA"], registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" }, runOptions: ["-v", "/a:/b"] } }, STORE),
+    ).toBeUndefined();
+    expect(runtimeProblem({ command: ["docker"], runner: true }, STORE)).toBe("runner must be an object, e.g. {}, got true");
+    expect(runtimeProblem({ command: ["docker"], runner: { env: ["NOT A NAME"] } }, STORE)).toBe('runner.env must be a list of environment variable names, got ["NOT A NAME"]');
+    expect(runtimeProblem({ command: ["docker"], runner: { registryLogin: { usernameEnv: "GHCR_USER" } } }, STORE)).toBe(
+      'runner.registryLogin must be { usernameEnv, passwordEnv }, each an environment variable name, got {"usernameEnv":"GHCR_USER"}',
+    );
+    expect(runtimeProblem({ command: ["docker"], runner: { runOptions: [""] } }, STORE)).toBe('runner.runOptions must be a list of non-empty strings, got [""]');
+  });
+
   test("keepPostrunImages is true or false", () => {
     expect(runtimeProblem({ command: ["docker"], keepPostrunImages: true }, STORE)).toBeUndefined();
     expect(runtimeProblem({ command: ["docker"], keepPostrunImages: "yes" }, STORE)).toBe('keepPostrunImages must be true or false, got "yes"');

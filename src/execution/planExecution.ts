@@ -50,7 +50,7 @@ export type PlannedExecution = {
 };
 
 /** The token costs of a harness without `collectTokenCosts`. */
-const NOT_REPORTED: TokenCostCollector = () => ({ outcome: "unavailable", reason: "notReported" });
+export const NOT_REPORTED: TokenCostCollector = () => ({ outcome: "unavailable", reason: "notReported" });
 
 /** What a permutation's harness, harness model pair and initial prompt are, loaded. */
 type Loaded = {

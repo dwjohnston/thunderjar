@@ -54,7 +54,9 @@ EOF
   chmod +x "$DIR/bin/ssh"
 }
 
-connected() { "$REAL_SSH" -F "$CONFIG" -O check "$HOST" >/dev/null 2>&1; }
+# Its input is closed, so it can never read this script's own, which is for the docker command,
+# e.g. what `docker exec --interactive` is sent.
+connected() { "$REAL_SSH" -F "$CONFIG" -O check "$HOST" </dev/null >/dev/null 2>&1; }
 
 # Opens the shared connection in the background, detached from this script's
 # output, so whatever ran this isn't left waiting on it.

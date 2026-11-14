@@ -126,7 +126,7 @@ bun run fixture 0202 plan is-prime-baseline
     - Code state `follow-main` resolves the latest commit of the sandbox repository's `main` with `ctx.exec("git ls-remote --exit-code …")`, and clones it at that commit. Tests put a fake `git` first on the `PATH` with `fakeCommand("git", { stdout })`, so nothing reaches the network.
     - Test case `follow-main`, in place of `example`, names it.
   - `0210_build_secrets`: the shared setup, with build secrets.
-  - `0211_remote_runtime`: `0207`'s image store, plus `runtime: { command: [<THUNDERJAR_DOCKER>, "--context", "cloud"] }`, so `run` runs its containers through the runtime, whose commands the fake Docker records with `--context cloud`. `fakeDocker({ pullDenied: true })` makes the runtime's pulls fail.
+  - `0211_remote_runtime`: `0207`'s image store, plus `runtime: { command: [<THUNDERJAR_DOCKER>, "--context", "cloud"] }`, so `run` runs its containers through the runtime, whose commands the fake Docker records with `--context cloud`. `fakeDocker({ pullDenied: true })` makes the runtime's pulls fail. Tests of a runtime's runner copy it and add `runner: {}`: the fake Docker then really runs the runner, from the runner image's build context.
     - `thunderjar.config.ts` gives `build: { secrets: [{ id: "github", env: "GITHUB_TOKEN" }], ssh: true }`, so `plan`, `build` and `run` stop without `GITHUB_TOKEN`.
     - Code state `private` clones a made-up private repository with `RUN --mount=type=secret,id=github`, reading the token from `/run/secrets/github`. The fake Docker doesn't run it.
     - Test case `example` names `private` in place of `baseline`.

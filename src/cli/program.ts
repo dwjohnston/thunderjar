@@ -1,5 +1,6 @@
 import { Command, Option } from "commander";
 import pkg from "../../package.json" with { type: "json" };
+import { createAttachCommand } from "./commands/attach/attach.ts";
 import { createBuildCommand } from "./commands/build/build.ts";
 import { createDoctorCommand } from "./commands/doctor/doctor.ts";
 import { createExecutionsCommand } from "./commands/executions/executions.ts";
@@ -7,6 +8,7 @@ import { createGenerateCommand } from "./commands/generate/generate.ts";
 import { createInitCommand } from "./commands/init/init.ts";
 import { createPlanCommand } from "./commands/plan/plan.ts";
 import { createRunCommand } from "./commands/run/run.ts";
+import { createRunnerCommand } from "./commands/runner/runner.ts";
 import { createShowCommand } from "./commands/show/show.ts";
 import { createViewCommand } from "./commands/view/view.ts";
 import { ConfigError, findThunderjarRoot } from "../config/loader.ts";
@@ -84,6 +86,9 @@ export function createProgram(): Command {
     .addCommand(createPlanCommand())
     .addCommand(createBuildCommand())
     .addCommand(createRunCommand())
+    .addCommand(createAttachCommand())
+    // What a runtime's runner runs, not a command for a user: left out of --help.
+    .addCommand(createRunnerCommand(), { hidden: true })
     .addCommand(createDoctorCommand())
     .addCommand(createExecutionsCommand())
     .addCommand(createShowCommand())
