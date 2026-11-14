@@ -138,14 +138,27 @@ export async function checkLogin(host: string): Promise<void> {
  * Throws a DockerPushError with Docker's reason.
  */
 export async function pushImage(image: string, reference: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
-  log.info({ image, reference }, "pushing image");
+  log.info({ image, reference, runtime: runtime.command }, "pushing image");
+  const startedAt = Date.now();
   for (const args of [["tag", image, reference], ["push", "--quiet", reference]]) {
     const result = await $`${runtime.command} ${args}`.quiet().nothrow();
     if (result.exitCode !== 0) {
-      log.error({ args, exitCode: result.exitCode, stderr: result.stderr.toString() }, "pushing image failed");
+      log.error({ args, exitCode: result.exitCode, ms: Date.now() - startedAt, stderr: result.stderr.toString() }, "pushing image failed");
       throw new DockerPushError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`, reference);
     }
   }
+  log.info({ reference, ms: Date.now() - startedAt }, "pushed image");
+}
+
+/**
+ * Whether the registry has `reference`, asked with `docker manifest inspect`, which reads only its
+ * manifest. False if it can't tell, e.g. it can't reach the registry: then it's built and pushed as
+ * if it weren't there.
+ */
+export async function inRegistry(reference: string): Promise<boolean> {
+  const result = await $`${dockerBinary()} manifest inspect ${reference}`.quiet().nothrow();
+  log.debug({ reference, exitCode: result.exitCode, stderr: result.stderr.toString() }, "asked the registry for an image");
+  return result.exitCode === 0;
 }
 
 /**
@@ -154,11 +167,13 @@ export async function pushImage(image: string, reference: string, runtime: Docke
  */
 export async function pullImage(reference: string, runtime: DockerRuntime): Promise<void> {
   log.info({ reference, runtime: runtime.command }, "pulling image into the runtime");
+  const startedAt = Date.now();
   const result = await $`${runtime.command} pull --quiet ${reference}`.quiet().nothrow();
   if (result.exitCode !== 0) {
-    log.error({ reference, exitCode: result.exitCode, stderr: result.stderr.toString() }, "pulling image failed");
+    log.error({ reference, exitCode: result.exitCode, ms: Date.now() - startedAt, stderr: result.stderr.toString() }, "pulling image failed");
     throw new DockerPullError(reasonOf(result.stderr) || `${named(runtime, "pull")} exited ${result.exitCode}`, reference);
   }
+  log.info({ reference, ms: Date.now() - startedAt }, "pulled image");
 }
 
 /** Runs `binary args…`, throwing a DockerContainerError with Docker's reason if it fails. */
@@ -209,15 +224,16 @@ export async function runContainer(
     timeoutSeconds === undefined
       ? undefined
       : setTimeout(() => {
-          const killedAt = Date.now();
           log.warn({ container: name, timeoutSeconds }, "container timed out, killing it");
-          // If it finished just as the time ran out, there's nothing to kill: it didn't time out.
-          killing = mustRun(["kill", name], runtime).then(
-            () => killedAt,
-            () => undefined,
-          );
+          killing = killTimedOut(name, child, runtime);
         }, timeoutSeconds * 1000);
-  const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  const reading = new Response(child.stderr).text();
+  const exitCode = await child.exited;
+  // Once it has exited, its stderr is read for at most a few seconds more: when it was killed, a
+  // process it started, such as the ssh that reaches a remote runtime, may still hold it open.
+  let waiting: ReturnType<typeof setTimeout> | undefined;
+  const stderr = await Promise.race([reading, new Promise<string>((resolve) => (waiting = setTimeout(() => resolve(""), 5000)))]);
+  clearTimeout(waiting);
   clearTimeout(timer);
   const killedAt = await killing;
   const ms = Date.now() - startedAt;
@@ -231,6 +247,36 @@ export async function runContainer(
   }
   log.info({ container: name, ms }, "container finished");
   return { timedOut: false };
+}
+
+/** How many times, and how far apart, `docker kill` is tried on a container that timed out. */
+export const KILL_ATTEMPTS = 3;
+const KILL_RETRY_MS = 2000;
+
+/**
+ * Kills the container `name`, which timed out, run by the `docker run` process `child`, and returns
+ * when, or undefined if it had already finished: then it didn't time out. `docker kill` is tried
+ * KILL_ATTEMPTS times: if it never succeeds, e.g. the runtime can't be reached, `child` is killed
+ * instead, so the run doesn't wait on it forever, and the container is left to be removed.
+ */
+async function killTimedOut(name: string, child: { exited: Promise<number>; kill(signal?: number | NodeJS.Signals): void }, runtime: DockerRuntime): Promise<number | undefined> {
+  const killedAt = Date.now();
+  let finished = false;
+  void child.exited.then(() => (finished = true));
+  for (let attempt = 1; attempt <= KILL_ATTEMPTS; attempt++) {
+    try {
+      await mustRun(["kill", name], runtime);
+      return killedAt;
+    } catch (error) {
+      // It finished just as the time ran out: there's nothing to kill.
+      if (finished || (error instanceof Error && /is not running/.test(error.message))) return undefined;
+      log.warn({ container: name, attempt, err: error }, "couldn't kill the timed-out container");
+      if (attempt < KILL_ATTEMPTS) await Bun.sleep(KILL_RETRY_MS);
+    }
+  }
+  log.error({ container: name }, "gave up killing the timed-out container: stopped waiting for it");
+  child.kill("SIGKILL");
+  return killedAt;
 }
 
 /**
@@ -267,7 +313,15 @@ export async function commitContainer(name: string, image: string, like: string,
   const [entrypoint, cmd] = inspected.trim().split("\t");
   // `ENTRYPOINT []` is ignored; `[""]` clears it.
   const changes = [`ENTRYPOINT ${entrypoint === "null" ? '[""]' : entrypoint}`, `CMD ${cmd === "null" ? '["sh"]' : cmd}`];
+  const startedAt = Date.now();
   await mustRun(["commit", ...changes.flatMap((change) => ["--change", change]), name, image], runtime);
+  log.info({ container: name, image, ms: Date.now() - startedAt }, "committed container");
+}
+
+/** Removes the images `references`, tags of images in `runtime`. Throws a DockerContainerError. */
+export async function removeImages(references: string[], runtime: DockerRuntime = localRuntime()): Promise<void> {
+  await mustRun(["image", "rm", ...references], runtime);
+  log.debug({ references }, "removed images");
 }
 
 /** Removes the container `name`, stopped or not. Throws a DockerContainerError. */

@@ -19,7 +19,8 @@
   "ignorePatterns": [
     "node_modules",
     "dist",
-    "fixtures/.tmp"
+    "fixtures/.tmp",
+    "src/gauntlet"
   ],
   "overrides": [
     {

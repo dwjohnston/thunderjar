@@ -90,4 +90,12 @@ flock -u 9
 exec 9>&-
 
 export PATH="$DIR/bin:$PATH"
+# A build on the machine's daemon runs its steps on the host network: on the bridge network they
+# can't resolve any name, because the machine's only DNS server, fdaa::3, is IPv6 and the bridge
+# has no IPv6 ("wget: bad address 'registry.npmjs.org'"). Containers run on the bridge are given
+# public DNS servers instead, so they're fine.
+if [ "${1:-}" = build ]; then
+  shift
+  exec docker -H "ssh://$HOST" build --network host "$@"
+fi
 exec docker -H "ssh://$HOST" "$@"

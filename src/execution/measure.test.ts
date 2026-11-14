@@ -115,6 +115,27 @@ describe("measureContainerRun", () => {
     expect(asked).toEqual([true, false]);
   });
 
+  test("with a concurrency, takes that many at once, each in its own context, and lists them in their order", async () => {
+    const log: string[] = [];
+    const open = opener({ "isPrime.ts": "// @ts-ignore\n" }, log);
+    let atOnce = 0;
+    let most = 0;
+    const slowly = async () => {
+      const ctx = await open();
+      atOnce++;
+      most = Math.max(most, atOnce);
+      await Bun.sleep(20);
+      return { ...ctx, close: async () => (atOnce--, ctx.close()) };
+    };
+
+    const result = await measureContainerRun([IGNORES, EXISTS, SAYS_ELI], slowly, () => NOW, 2);
+
+    expect(most).toBe(2);
+    expect(Object.keys(result)).toEqual(["ignores", "exists", "saysEli"]);
+    expect(result.exists?.outcome).toEqual({ outcome: "measured", data: true });
+    expect(log.filter((line) => line.startsWith("close"))).toHaveLength(3);
+  });
+
   test("with no measurements, nothing is opened", async () => {
     const log: string[] = [];
     expect(await measureContainerRun([], opener({}, log))).toEqual({});
