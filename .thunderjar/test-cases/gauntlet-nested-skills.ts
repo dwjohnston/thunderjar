@@ -18,10 +18,10 @@ import { gauntletHarnessModels } from "../shared/gauntletHarnessModels";
 export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["thunderjar-nested-skills-root", "thunderjar-nested-skills-a"],
-  promptSet: ["none", "nested-skills-reading-files"],
-  harnessModel: ["claude-code-2.1.311/claude-haiku-5-5", "copilot-1.0.105/anthropic/claude-haiku-5.5", "opencode-1.19.5/openrouter/anthropic/claude-haiku-5.5",
+  promptSet: ["none", "nested-skills-reading-files", "nested-skills-analysing-a-ts", "nested-skills-required-format"],
+  harnessModel: ["claude-code-2.1.311/claude-haiku-5-5", "claude-code-2.1.311/claude-sonnet-5-5"
   ],
   task: "gauntlet-nested-skills",
-  initialPrompt: ["plain", "slash-base"],
-  iterations: 1,
+  initialPrompt: ["plain"],
+  iterations: 10,
 });
