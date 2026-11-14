@@ -19,10 +19,12 @@
 /** Somewhere text can be written: stdout, stderr, or a stand-in for them in tests. */
 export type TextOutput = { isTTY?: boolean; columns?: number; write(text: string): unknown };
 
-let text: TextOutput = process.stdout;
+// Read lazily, not at import: the viewer's browser app imports this module, through format.ts and
+// colour.ts, and a browser has no `process`.
+let text: TextOutput | undefined;
 
 /** Where a command's text goes: stdout, unless `textToStderr` was called. */
-export const textOutput = (): TextOutput => text;
+export const textOutput = (): TextOutput => text ?? process.stdout;
 
 /** Sends a command's text to stderr from now on, so stdout holds only what `printJson` writes. For `--json`. */
 export function textToStderr(): void {
