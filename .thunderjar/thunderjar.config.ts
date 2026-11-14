@@ -38,7 +38,7 @@ export default declareConfig(
         // Spread, so it type-checks against thunderjar-published, which doesn't know `runner` yet.
         ...(onRuntime && { runner: { registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" } } }),
       },
-      build: { concurrency: 16 },
+      build: { concurrency: remoteConcurrency },
     }
     : {
       // Images stay in the local Docker daemon.
