@@ -20,7 +20,7 @@ import { declareCodeState } from "thunderjar-published";
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    commit: "b40dcb5b8303956225e18bf093f66bea59bc6ecc",
+    commit: "ee5221cd7b95f517c28dbf049f6ab49edace969b",
   },
   applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\
   && git -C /workspace fetch --quiet origin ${config.commit} \\
