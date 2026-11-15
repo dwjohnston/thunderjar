@@ -8,8 +8,9 @@ Supervising engineer: dwjohnston
 
 Humans: add your notes here
 -->
-<!-- The home page splash: title, jar, an example test case beside the results it produces, and a
-     link to the docs. Dark and light palettes follow the site toggle. -->
+<!-- The home page splash: title, jar, a link to the docs, a real test case beside some of the results it produced,
+     then what went into it (the fixture's file structure, the skill text two prompt sets differ
+     by, the initial prompt, the measurements). Dark and light palettes follow the site toggle. -->
 <script setup lang="ts">
 import { withBase } from "vitepress";
 import Jar from "./Jar.vue";
@@ -17,21 +18,29 @@ import Jar from "./Jar.vue";
 type Row = {
   promptSet: string;
   model: string;
-  wroteTest: string;
-  caughtBug: string;
-  tsIgnore: string;
+  red: string;
+  green: string;
+  blue: string;
   cost: string;
   best: (keyof Omit<Row, "best" | "promptSet" | "model">)[];
 };
 
-// Sample data, to show the shape of a run's results.
+// Ten of the 28 permutations of execution 01m7ea41ft06gpp7bs3fzsjm8t (gauntlet-nested-skills).
+// A good run says red and green, never blue. Runs that hit rate limits are left out, so some
+// rows count 4.
 const rows: Row[] = [
-  { promptSet: "current", model: "opus", wroteTest: "3/5", caughtBug: "4/5", tsIgnore: "0.0", cost: "$0.42", best: ["tsIgnore"] },
-  { promptSet: "current", model: "haiku", wroteTest: "1/5", caughtBug: "1/5", tsIgnore: "1.2", cost: "$0.06", best: ["cost"] },
-  { promptSet: "with-tdd-skill", model: "opus", wroteTest: "5/5", caughtBug: "5/5", tsIgnore: "0.0", cost: "$0.47", best: ["wroteTest", "caughtBug", "tsIgnore"] },
-  { promptSet: "with-tdd-skill", model: "haiku", wroteTest: "5/5", caughtBug: "3/5", tsIgnore: "0.4", cost: "$0.07", best: ["wroteTest"] },
+  { promptSet: "none", model: "claude-haiku-5.5", red: "0/5", green: "0/5", blue: "0/5", cost: "$0.002", best: ["blue"] },
+  { promptSet: "none", model: "claude-sonnet-5.5", red: "5/5", green: "0/5", blue: "0/5", cost: "$0.053", best: ["red", "blue"] },
+  { promptSet: "none", model: "claude-opus-5.5", red: "4/4", green: "4/4", blue: "0/4", cost: "$0.101", best: ["red", "green", "blue"] },
+  { promptSet: "none", model: "gemini-4-hydrogen", red: "4/4", green: "4/4", blue: "0/4", cost: "$0.026", best: ["red", "green", "blue"] },
+  { promptSet: "none", model: "deepseek-v4.1-flash", red: "2/5", green: "0/5", blue: "0/5", cost: "$0.004", best: ["blue"] },
+  { promptSet: "required-format", model: "claude-haiku-5.5", red: "5/5", green: "0/5", blue: "0/5", cost: "$0.003", best: ["red", "blue"] },
+  { promptSet: "required-format", model: "claude-sonnet-5.5", red: "5/5", green: "1/5", blue: "0/5", cost: "$0.054", best: ["red", "blue"] },
+  { promptSet: "required-format", model: "claude-opus-5.5", red: "5/5", green: "5/5", blue: "0/5", cost: "$0.123", best: ["red", "green", "blue"] },
+  { promptSet: "required-format", model: "gemini-4-hydrogen", red: "5/5", green: "5/5", blue: "0/5", cost: "$0.038", best: ["red", "green", "blue"] },
+  { promptSet: "required-format", model: "deepseek-v4.1-flash", red: "5/5", green: "1/5", blue: "0/5", cost: "$0.004", best: ["red", "blue"] },
 ];
-const columns = ["wroteTest", "caughtBug", "tsIgnore", "cost"] as const;
+const columns = ["red", "green", "blue", "cost"] as const;
 </script>
 
 <template>
@@ -45,21 +54,35 @@ const columns = ["wroteTest", "caughtBug", "tsIgnore", "cost"] as const;
         <Jar class="jar" />
       </header>
 
+      <div class="cta-row">
+        <a class="cta" :href="withBase('/getting-started')">Documentation →</a>
+      </div>
+
       <div class="demo">
         <div>
-          <p class="label">.thunderjar/test-cases/prompt-sets.ts</p>
+          <p class="label">.thunderjar/test-cases/gauntlet-nested-skills.ts</p>
           <div class="card code">
             <pre><span class="k">import</span> { <span class="p">declareTestCase</span> } <span class="k">from</span> <span class="s">"thunderjar"</span>;
 
 <span class="k">export default</span> <span class="p">declareTestCase</span>({
   baseImage: [<span class="s">"node20"</span>],
-  codeState: [<span class="s">"main"</span>],
-  promptSet: [<span class="s">"current"</span>, <span class="s">"with-tdd-skill"</span>],
-  harnessModel: [
-    <span class="s">"claude-code/claude-opus-5-5"</span>,
-    <span class="s">"claude-code/claude-haiku-5-5"</span>,
+  codeState: [<span class="s">"thunderjar-nested-skills-root"</span>],
+  promptSet: [
+    <span class="s">"none"</span>,
+    <span class="s">"nested-skills-reading-files"</span>,
+    <span class="s">"nested-skills-analysing-a-ts"</span>,
+    <span class="s">"nested-skills-required-format"</span>,
   ],
-  task: <span class="s">"fix-cart-rounding"</span>,
+  harnessModel: [
+    <span class="s">"opencode-1.19.5/openrouter/anthropic/claude-haiku-5.5"</span>,
+    <span class="s">"opencode-1.19.5/openrouter/anthropic/claude-sonnet-5.5"</span>,
+    <span class="s">"opencode-1.19.5/openrouter/anthropic/claude-opus-5.5"</span>,
+    <span class="s">"opencode-1.19.5/openrouter/openai/gpt-6.1-sol"</span>,
+    <span class="s">"opencode-1.19.5/openrouter/openai/gpt-6-luna"</span>,
+    <span class="s">"opencode-1.19.5/openrouter/google/gemini-4-hydrogen"</span>,
+    <span class="s">"opencode-1.19.5/openrouter/deepseek/deepseek-v4.1-flash"</span>,
+  ],
+  task: <span class="s">"gauntlet-nested-skills"</span>,
   initialPrompt: [<span class="s">"plain"</span>],
   iterations: <span class="n">5</span>,
 });</pre>
@@ -69,16 +92,16 @@ const columns = ["wroteTest", "caughtBug", "tsIgnore", "cost"] as const;
         <div class="arrow" aria-hidden="true">→</div>
 
         <div>
-          <p class="label">thunderjar run prompt-sets</p>
+          <p class="label">thunderjar run gauntlet-nested-skills</p>
           <div class="card">
             <table>
               <thead>
                 <tr>
                   <th>Prompt set</th>
                   <th>Model</th>
-                  <th class="num">Wrote a test</th>
-                  <th class="num">Caught the gnarly bug</th>
-                  <th class="num">@ts&#8209;ignore</th>
+                  <th class="num">Contains 🔴</th>
+                  <th class="num">Contains 🟢</th>
+                  <th class="num">Contains 🔵</th>
                   <th class="num">Cost</th>
                 </tr>
               </thead>
@@ -93,11 +116,98 @@ const columns = ["wroteTest", "caughtBug", "tsIgnore", "cost"] as const;
               </tbody>
             </table>
           </div>
+          <p class="note">
+            10 of 28 permutations.<br />
+            These are real, albeit selected, results.<br />
+            Results with less than five total runs are because there were errors in those runs.
+            Thunderjar is a work in progress.
+          </p>
         </div>
       </div>
 
-      <div class="cta-row">
-        <a class="cta" :href="withBase('/getting-started')">Documentation →</a>
+      <div class="tree">
+        <p class="label">codeState: thunderjar-nested-skills-root</p>
+        <div class="card code">
+          <pre>nested-skills/                     <span class="m">// working directory</span>
+├── .agents/skills/base/SKILL.md   <span class="m">// always include 🔴</span>
+├── a/
+│   ├── .agents/skills/a/SKILL.md  <span class="m">// always include 🟢</span>
+│   └── a.ts
+├── b/
+│   ├── .agents/skills/b/SKILL.md  <span class="m">// always include 🔵</span>
+│   └── b.ts
+└── c.ts</pre>
+        </div>
+      </div>
+
+      <div class="compare">
+        <div class="compare-grid">
+          <div>
+            <p class="label">promptSet: none · a/.agents/skills/a/SKILL.md</p>
+            <div class="card code">
+              <pre><span class="m">---</span>
+name: a
+description: <span class="hl">Always apply this skill.</span>
+<span class="m">---</span>
+
+Always include the green emoji 🟢 in every response you write.</pre>
+            </div>
+          </div>
+          <div>
+            <p class="label">promptSet: required-format · a/.agents/skills/a/SKILL.md</p>
+            <div class="card code">
+              <pre><span class="m">---</span>
+name: a
+description: <span class="hl">REQUIRED. Invoke this skill before your first reply to any request in this folder, e.g. explaining, reading or changing a file. It sets the format every reply must follow.</span>
+<span class="m">---</span>
+
+Always include the green emoji 🟢 in every response you write.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="task">
+        <p class="label">.thunderjar/parameters/tasks/gauntlet-nested-skills/</p>
+        <div class="card code">
+          <pre><span class="m">initial-prompts/plain.ts</span>
+  <span class="p">writePrompt</span>(<span class="s">"tell what @a.ts does"</span>)</pre>
+        </div>
+      </div>
+
+      <div class="measurements">
+        <div class="measurements-grid">
+          <div>
+            <p class="label">measurements/red.ts</p>
+            <div class="card code">
+              <pre><span class="p">declareMeasurement</span>({
+  instrument: <span class="s">"replyMatches"</span>,
+  config: { pattern: <span class="s">"🔴"</span> },
+  metrics: { red: { stat: <span class="s">"rate"</span> } },
+});</pre>
+            </div>
+          </div>
+          <div>
+            <p class="label">measurements/green.ts</p>
+            <div class="card code">
+              <pre><span class="p">declareMeasurement</span>({
+  instrument: <span class="s">"replyMatches"</span>,
+  config: { pattern: <span class="s">"🟢"</span> },
+  metrics: { green: { stat: <span class="s">"rate"</span> } },
+});</pre>
+            </div>
+          </div>
+          <div>
+            <p class="label">measurements/blue.ts</p>
+            <div class="card code">
+              <pre><span class="p">declareMeasurement</span>({
+  instrument: <span class="s">"replyMatches"</span>,
+  config: { pattern: <span class="s">"🔵"</span> },
+  metrics: { blue: { stat: <span class="s">"rate"</span> } },
+});</pre>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -228,6 +338,7 @@ h1 {
   grid-template-columns: minmax(0, 0.85fr) auto minmax(0, 1.15fr);
   gap: 20px;
   align-items: center;
+  padding-bottom: 48px;
 }
 
 .label {
@@ -280,7 +391,7 @@ td {
   text-align: left;
 }
 
-/* Long headers wrap so the table fits its card; cell values stay on one line. */
+/* Headers can wrap so the table fits its card; cell values stay on one line. */
 th {
   vertical-align: bottom;
 }
@@ -304,10 +415,21 @@ td {
   font-variant-numeric: tabular-nums;
 }
 
+/* A number column's header is centred, so a wrapped header stays balanced. */
+th.num {
+  text-align: center;
+}
+
 .best {
   font-weight: 600;
   color: var(--accent);
   text-shadow: 0 0 calc(10px * var(--glow)) rgba(var(--accent-rgb), 0.5);
+}
+
+.note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .arrow {
@@ -315,8 +437,49 @@ td {
   color: var(--accent);
 }
 
+.tree {
+  padding-bottom: 28px;
+}
+
+.compare {
+  padding-bottom: 28px;
+}
+
+.task {
+  padding-bottom: 28px;
+}
+
+.measurements {
+  padding-bottom: 72px;
+}
+
+.measurements-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+/* The skill text and measurements wrap to their panels instead of scrolling. */
+.compare pre,
+.measurements pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.m { color: #4f9c8f; }
+
+.hl {
+  color: #ffd38a;
+}
+
 .cta-row {
-  padding: 44px 0 72px;
+  padding: 0 0 44px;
   text-align: center;
 }
 
@@ -354,7 +517,9 @@ td {
     width: 150px;
   }
 
-  .demo {
+  .demo,
+  .compare-grid,
+  .measurements-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
