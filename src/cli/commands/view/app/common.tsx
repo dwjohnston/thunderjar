@@ -1,3 +1,14 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Session Id: session_01LCLeLghxvZzzr9duMfVbGv
+ * Supervising engineer: David Johnston
+ *
+ * Humans: add your notes here
+ */
+
 // What the viewer's screens share: fetching, the parameter-hash toggle, chips, and totals.
 import { createContext, useContext, useEffect, useState } from "react";
 import { AXES, type Axis } from "../../../../config/permutations.ts";

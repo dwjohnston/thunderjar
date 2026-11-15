@@ -1,3 +1,14 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Session Id: session_01LCLeLghxvZzzr9duMfVbGv
+ * Supervising engineer: David Johnston
+ *
+ * Humans: add your notes here
+ */
+
 // One execution: its permutations, aggregated as `show` does, each expanding to its container
 // runs, and the runs whose agent didn't end cleanly.
 import { useState } from "react";

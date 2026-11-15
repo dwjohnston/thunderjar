@@ -1,3 +1,14 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Session Id: session_01LCLeLghxvZzzr9duMfVbGv
+ * Supervising engineer: David Johnston
+ *
+ * Humans: add your notes here
+ */
+
 // The top of the hierarchy: every task the store has executions of.
 import { minute } from "../../../format.ts";
 import type { TaskSummary } from "../view.ts";

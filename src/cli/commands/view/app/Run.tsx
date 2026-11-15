@@ -1,3 +1,14 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Session Id: session_01LCLeLghxvZzzr9duMfVbGv
+ * Supervising engineer: David Johnston
+ *
+ * Humans: add your notes here
+ */
+
 // One container run: its parameters, by name and hash, its measures, and what its agent left.
 import { runName } from "../../../../execution/executionSummary.ts";
 import type { ContainerRunRecord } from "../../../../store/runDataStore.ts";

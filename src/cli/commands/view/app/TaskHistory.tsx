@@ -1,3 +1,14 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Session Id: session_01LCLeLghxvZzzr9duMfVbGv
+ * Supervising engineer: David Johnston
+ *
+ * Humans: add your notes here
+ */
+
 // One task's history: every execution of it, from any test case, newest first. Parameters differ
 // between executions, and one name can have several hashes, so each row lists its own.
 import { useState } from "react";
