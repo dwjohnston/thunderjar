@@ -120,24 +120,24 @@ How many prerun images `build` and `run` build at once. It defaults to 1, one af
 build: { concurrency: 4 },
 ```
 
-- With more than 1 here, or a runtime `concurrency` above 1, `run` starts each iteration as soon as its own prerun image is built, pushed and pulled, while the rest are still building.
+- With more than 1 here, or a runtime `concurrency` above 1, `run` starts each iteration as soon as its own prerun image is built and pushed, while the rest are still building.
 - If a build fails after some iterations have started, those finish and are recorded, and the execution is recorded as failed.
 
-✅ **Do** size it to the machine that runs `thunderjar`, not to the runtime. Builds and prerun pushes are always local.
+✅ **Do** size it to the machine that builds: the runtime, if there is one, or else the machine that runs `thunderjar`.
 
-**Why:** Each build uses the local CPU, memory and upload bandwidth. Too many at once take longer in total than fewer.
+**Why:** Each build uses that machine's CPU, memory and network. Too many at once take longer in total than fewer.
 
 ## `runtime`
 
-For running containers somewhere other than the local Docker daemon, e.g. a cloud VM. `command` is any command that takes the `docker` CLI's arguments. Thunderjar puts it in front of each container command `run` sends.
+For building images and running containers somewhere other than the local Docker daemon, e.g. a cloud VM. `command` is any command that takes the `docker` CLI's arguments. Thunderjar puts it in front of each Docker command `build` and `run` send.
 
 ```ts
 runtime: { command: ["docker", "--context", "cloud"] },
 // or ["docker", "-H", "ssh://me@build-host"], or ["podman", "--remote"]
 ```
 
-- Prerun images are still built and pushed locally. The runtime pulls them from the image store, then runs, measures and pushes postrun images there.
-- `thunderjar run --local` ignores `runtime` for one run.
+- Prerun images are built on the runtime and pushed from there to the image store. The runtime pulls only those the store already had and it doesn't, then runs, measures and pushes postrun images there.
+- `thunderjar build --local` and `thunderjar run --local` ignore `runtime` for one command.
 
 ✅ **Do** set `imageStore` too. A `runtime` without one is a config error.
 

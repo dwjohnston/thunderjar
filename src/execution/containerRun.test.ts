@@ -38,8 +38,9 @@ describe("the timed run's now_ms", () => {
   test("works with the real date", async () => {
     const before = Date.now();
     const ms = Number(await $`sh -c ${`${NOW_MS_FUNCTION}\nnow_ms`}`.text());
+    // `date`'s clock and Bun's needn't agree to the millisecond: CI once had `date` 253ms ahead.
     expect(ms).toBeGreaterThanOrEqual(before - 1000);
-    expect(ms).toBeLessThanOrEqual(Date.now());
+    expect(ms).toBeLessThanOrEqual(Date.now() + 1000);
   });
 });
 

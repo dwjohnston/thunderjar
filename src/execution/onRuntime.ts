@@ -51,20 +51,25 @@ export const runnerContainer = (executionId: string, prefix: string = DEFAULT_IM
 /**
  * Makes sure `imageStore` has the prerun image of each of `plan`'s permutations, of a test case
  * under `root`, once per image hash, up to `build.concurrency` at once: one the store has is
- * left, one that's only in the local Docker daemon is pushed, and any other is built, then pushed. Throws what building and pushing throw; once one fails, no other starts.
+ * left, one that's only in the runtime's Docker daemon, which `command` reaches, is pushed from
+ * there, and any other is built there, then pushed. Nothing is built here. Throws what building
+ * and pushing throw; once one fails, no other starts.
  */
 export async function storePrerunImages(
   root: string,
   plan: PlannedExecution,
   imagePrefix: string | undefined,
   imageStore: ImageStore,
+  command: string[],
   build: BuildOptions = {},
   hooks: PrerunBuildHooks & PushHooks = {},
   time: Timer = untimed,
 ): Promise<void> {
+  const runtime = remoteRuntime(command);
   const images = await prerunImages(
     plan.permutations.map(({ permutation }) => permutation),
     imagePrefix,
+    runtime,
   );
   let failed = false;
   await inParallel(
@@ -77,8 +82,8 @@ export async function storePrerunImages(
           log.info({ image: image.image, reference }, "prerun image already in the image store: not built or pushed");
           return;
         }
-        if (!exists) await time("build", () => buildPrerunImage(root, image, hooks, build));
-        await time("pushPrerun", () => pushToStore(image.image, reference, hooks));
+        if (!exists) await time("build", () => buildPrerunImage(root, image, hooks, build, runtime));
+        await time("pushPrerun", () => pushToStore(image.image, reference, hooks, runtime));
       } catch (error) {
         failed = true;
         throw error;

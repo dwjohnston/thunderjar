@@ -95,6 +95,12 @@ function existing(added: string[], removed: string[]): string[] {
   return [...new Set(added)].filter((image) => count(added, image) > count(removed, image));
 }
 
+/** The process `pid`, and every process under it. */
+async function processTree(pid: string): Promise<string[]> {
+  const children = (await $`pgrep -P ${pid}`.quiet().nothrow().text()).split("\n").filter(Boolean);
+  return [pid, ...(await Promise.all(children.map(processTree))).flat()];
+}
+
 const lines = (values: string[]) => values.map((value) => `${value}\n`).join("");
 
 /**
@@ -136,6 +142,13 @@ export async function fakeDocker({
   const commandsFile = () => Bun.file(`${dir}/commands`);
   const listOf = async (file: string) => (await Bun.file(file).text()).split("\n").filter(Boolean);
   const remove = async () => {
+    // A container still running, e.g. an agent whose runner was killed, would write into its
+    // folder while it's removed: it's killed first, with everything it started.
+    const pidFiles = await Array.fromAsync(new Glob("containers/*/pid").scan({ cwd: dir })).catch(() => []);
+    for (const pidFile of pidFiles) {
+      const pid = (await Bun.file(`${dir}/${pidFile}`).text().catch(() => "")).trim();
+      if (pid !== "") await $`kill -KILL ${await processTree(pid)}`.quiet().nothrow();
+    }
     await $`rm -rf ${dir}`.quiet();
   };
   return {
@@ -184,12 +197,6 @@ if (import.meta.main) {
   const list = async (name: string) => {
     if (name !== "images") return listed(name);
     return existing(await listed("images"), await listed("removed"));
-  };
-
-  /** The process `pid`, and every process under it. */
-  const processTree = async (pid: string): Promise<string[]> => {
-    const children = (await $`pgrep -P ${pid}`.quiet().nothrow().text()).split("\n").filter(Boolean);
-    return [pid, ...(await Promise.all(children.map(processTree))).flat()];
   };
 
   const filesystemOf = (image: string) => `${dir}/filesystems/${encodeURIComponent(image)}`;

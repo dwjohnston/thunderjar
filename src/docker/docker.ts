@@ -3,8 +3,8 @@
 // `docker` CLI, or the executable THUNDERJAR_DOCKER names in its place: tests point that at
 // src/testing/fakeDocker.ts.
 //
-// Container commands can go to a runtime instead: a command that takes the `docker` CLI's
-// arguments, e.g. `docker --context cloud`. Builds, and pushes of prerun images, are always local.
+// Commands can go to a runtime instead: a command that takes the `docker` CLI's arguments, e.g.
+// `docker --context cloud`. With one, images are built on its daemon too, and pushed from there.
 import { $ } from "bun";
 import type { BuildOptions } from "../api/declarations.ts";
 import { moduleLogger } from "../log/logger.ts";
@@ -109,8 +109,9 @@ export function buildFailureReason(stderr: string): string | undefined {
 
 /**
  * Builds the Dockerfile at the root of the build context `contextDir`, and tags the image `image`,
- * given `options`' secrets, by the variables they're read from, and the SSH agent. Throws a
- * DockerBuildError if the build fails.
+ * in `runtime`, the local daemon by default, given `options`' secrets, by the variables they're
+ * read from, and the SSH agent. The context, secrets and agent are the client's, here: the
+ * runtime's daemon is sent them. Throws a DockerBuildError if the build fails.
  *
  * Plain `docker build`, not `docker buildx build`: with BuildKit, which it uses by default since
  * Docker Engine 23, and with DOCKER_BUILDKIT=1 before, it takes `--secret` and `--ssh`. Where the
@@ -118,20 +119,19 @@ export function buildFailureReason(stderr: string): string | undefined {
  * the local daemon, where `run` finds it. `docker buildx build` would fail without the plugin, and
  * with a `docker-container` builder would leave the image in the builder unless asked to `--load` it.
  */
-export async function buildImage(contextDir: string, image: string, options: BuildOptions = {}): Promise<void> {
-  const binary = dockerBinary();
+export async function buildImage(contextDir: string, image: string, options: BuildOptions = {}, runtime: DockerRuntime = localRuntime()): Promise<void> {
   const secrets = (options.secrets ?? []).flatMap(({ id, env }) => ["--secret", `id=${id},env=${env}`]);
   const ssh = options.ssh ? ["--ssh", "default"] : [];
   // BuildKit, which --secret and --ssh need: the default builder since Docker Engine 23, and
   // asked for here for older engines.
-  log.info({ image, contextDir, secrets: (options.secrets ?? []).map(({ id }) => id), ssh: !!options.ssh }, "building image");
+  log.info({ image, contextDir, runtime: runtime.command, secrets: (options.secrets ?? []).map(({ id }) => id), ssh: !!options.ssh }, "building image");
   const startedAt = Date.now();
-  const result = await $`${binary} build ${secrets} ${ssh} -t ${image} ${contextDir}`.env({ ...Bun.env, DOCKER_BUILDKIT: "1" }).quiet().nothrow();
+  const result = await $`${runtime.command} build ${secrets} ${ssh} -t ${image} ${contextDir}`.env({ ...Bun.env, DOCKER_BUILDKIT: "1" }).quiet().nothrow();
   const ms = Date.now() - startedAt;
   if (result.exitCode !== 0) {
     // The user is told only the last line of Docker's output: the whole of it is here.
     log.error({ image, exitCode: result.exitCode, ms, stderr: result.stderr.toString() }, "image build failed");
-    throw new DockerBuildError(buildFailureReason(result.stderr.toString()) || `\`${binary} build\` exited ${result.exitCode}`, image);
+    throw new DockerBuildError(buildFailureReason(result.stderr.toString()) || `${named(runtime, "build")} exited ${result.exitCode}`, image);
   }
   log.info({ image, ms }, "built image");
 }

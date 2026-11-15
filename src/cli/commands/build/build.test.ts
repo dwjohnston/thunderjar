@@ -431,6 +431,48 @@ Check that your Docker login for ghcr.io can push to ghcr.io/acme/thunderjar-ima
   });
 });
 
+describe("0211 remote runtime", () => {
+  const PRERUN = "ghcr.io/acme/thunderjar-images:prerun-h77e9dd16";
+  const REMOTE = "docker --context cloud";
+
+  test("builds each prerun image on the runtime, and pushes it from there: nothing is built here", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["build", "example"], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Building with \`<REPO>/src/testing/fakeDocker.ts --context cloud\`
+Building thunderjar-prerun:77e9dd16 ... done
+Pushing ${PRERUN} ... done
+1 built, 0 already present, 1 pushed
+`);
+    expect(await commandsOf(docker)).toEqual([
+      "docker login ghcr.io",
+      `${REMOTE} image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun`,
+      `${REMOTE} build -t thunderjar-prerun:77e9dd16 <CONTEXT>`,
+      `${REMOTE} tag thunderjar-prerun:77e9dd16 ${PRERUN}`,
+      `${REMOTE} push --quiet ${PRERUN}`,
+    ]);
+  });
+
+  test("--local builds on the local Docker daemon, and pushes from there", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+
+    const { stdout, exitCode } = await thunderjar(scenario("0211"), ["build", "example", "--local"], { env: docker.env });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toContain("Building with");
+    expect(await commandsOf(docker)).toEqual([
+      "docker login ghcr.io",
+      "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
+      "docker build -t thunderjar-prerun:77e9dd16 <CONTEXT>",
+      `docker tag thunderjar-prerun:77e9dd16 ${PRERUN}`,
+      `docker push --quiet ${PRERUN}`,
+    ]);
+  });
+});
+
 describe("--json", () => {
   test("prints the images built and already present as JSON, with its progress on stderr", async () => {
     await using docker = await fakeDocker();

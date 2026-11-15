@@ -50,22 +50,24 @@ export async function pushToStore(image: string, reference: string, hooks: PushH
 }
 
 /**
- * Pushes the prerun image of each of `permutations` to `imageStore`, once per image hash, whether it was
- * just built or already existed, so the store has every image an execution starts from. Does
- * nothing for `null`. Throws a DockerPushError, after which nothing else is pushed.
+ * Pushes the prerun image of each of `permutations` to `imageStore`, from `runtime`'s daemon, the
+ * local one by default, once per image hash, whether it was just built or already existed, so the
+ * store has every image an execution starts from. Does nothing for `null`. Throws a
+ * DockerPushError, after which nothing else is pushed.
  */
 export async function pushPrerunImages(
   permutations: HashedPermutation[],
   imageStore: ImageStore | null,
   imagePrefix?: string,
   hooks: PushHooks = {},
+  runtime: DockerRuntime = localRuntime(),
 ): Promise<string[]> {
   if (imageStore === null) return [];
   const hashes = [...new Set(permutations.map(({ imageHash }) => imageHash))];
   const pushed: string[] = [];
   for (const hash of hashes) {
     const reference = storedPrerunImage(imageStore.repository, hash);
-    await pushToStore(prerunImage(hash, imagePrefix), reference, hooks);
+    await pushToStore(prerunImage(hash, imagePrefix), reference, hooks, runtime);
     pushed.push(reference);
   }
   return pushed;
