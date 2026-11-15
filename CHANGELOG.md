@@ -1,5 +1,12 @@
 # thunderjar
 
+## 0.3.1
+
+### Patch Changes
+
+- 567e47f: With a `runtime` in `thunderjar.config.ts`, prerun images, and a runner's image, are now built on the runtime's Docker daemon and pushed to the image store from there, instead of being built and pushed on this machine and pulled into the runtime. `build` builds there too. `build --local` and `run --local` build on the local Docker daemon instead.
+- 528228e: Docs: the splash page shows a real execution, gauntlet-nested-skills, instead of a made-up example.
+
 ## 0.3.0
 
 ### Minor Changes
