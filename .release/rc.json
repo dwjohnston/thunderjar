@@ -1,15 +1,15 @@
 {
-  "version": "0.3.0-rc.0",
+  "version": "0.3.1-rc.0",
   "changesets": [
     {
-      "id": "docs-guide-stubs",
+      "id": "build-on-runtime",
       "type": "patch",
-      "summary": "Add stub guide pages for getting started, motivation, how it works, and what Thunderjar is not suitable for."
+      "summary": "With a `runtime` in `thunderjar.config.ts`, prerun images, and a runner's image, are now built on the runtime's Docker daemon and pushed to the image store from there, instead of being built and pushed on this machine and pulled into the runtime. `build` builds there too. `build --local` and `run --local` build on the local Docker daemon instead."
     },
     {
-      "id": "rename-parameters-folder",
-      "type": "minor",
-      "summary": "Rename the default parameters folder from `.thunderjar/test-case-parameters/` to `.thunderjar/parameters/`. Move an existing folder to the new name."
+      "id": "docs-splash-real-execution",
+      "type": "patch",
+      "summary": "Docs: the splash page shows a real execution, gauntlet-nested-skills, instead of a made-up example."
     }
   ]
 }
