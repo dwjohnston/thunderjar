@@ -12,9 +12,10 @@
 # itself: start the machine before working, and stop it when done. Which machine: $FLY_APP and
 # $FLY_MACHINE, see fly-lib.sh.
 #
-#   fly-machine.sh start [cpus]   start it, and wait for its Docker daemon. With cpus, e.g. 8, it's
-#                                 sized performance-<cpus>x with 2 GB a CPU first, which restarts
-#                                 it if it's running
+#   fly-machine.sh start [cpus]   start it, and wait for its Docker daemon. With cpus, e.g. 8, or
+#                                 else FLYIO_INSTANCE_SIZE (from the environment or the repo's
+#                                 .env), it's sized performance-<cpus>x with 2 GB a CPU first,
+#                                 which restarts it if it's running at another size
 #   fly-machine.sh stop           stop it
 #   fly-machine.sh prune          remove its stopped containers, and every image no container uses
 #   fly-machine.sh status         print its state
@@ -44,13 +45,25 @@ wait_ready() {
   die "the Docker daemon on $ID didn't answer after it started"
 }
 
+# Prints its CPU kind, CPUs and memory in MB, e.g. "performance 16 32768".
+machine_size() {
+  fly machine list -a "$APP" --json | jq -r --arg id "$ID" '.[] | select(.id == $id) | .config.guest | "\(.cpu_kind) \(.cpus) \(.memory_mb)"'
+}
+
 resolve_machine
 case "${1:-}" in
   start)
-    cpus="${2:-}"
+    # The repo root's .env, which Bun loads for thunderjar.config.ts, sets it too.
+    if [ -z "${FLYIO_INSTANCE_SIZE:-}" ] && [ -f "$HERE/../.env" ]; then
+      FLYIO_INSTANCE_SIZE=$(sed -n 's/^FLYIO_INSTANCE_SIZE=//p' "$HERE/../.env" | tail -n 1 | tr -d "\"' \r")
+    fi
+    cpus="${2:-${FLYIO_INSTANCE_SIZE:-}}"
     case "$STATE" in stopping | suspending) fly machine wait "$ID" -a "$APP" --state stopped -w 90s >/dev/null 2>&1 || true ;; esac
     if [ -n "$cpus" ]; then
       [[ "$cpus" =~ ^[1-9][0-9]*$ ]] || die "cpus must be a whole number, got '$cpus'"
+    fi
+    # Resizing restarts it, so only when its size differs.
+    if [ -n "$cpus" ] && [ "$(machine_size)" != "performance $cpus $((cpus * 2048))" ]; then
       disconnect
       fly machine update "$ID" -a "$APP" --vm-size "performance-${cpus}x" --vm-memory $((cpus * 2048)) --yes >/dev/null
     elif [ "$STATE" != started ]; then

@@ -46,7 +46,10 @@
     "version": "changeset version",
     "release": "changeset publish",
     "skills:update": "bunx skills update -p -y $(jq -r '.skills | to_entries[] | select(.value.source == \"dwjohnston/agent-skills\") | .key' skills-lock.json)",
-    "skills:add": "bunx skills add dwjohnston/agent-skills"
+    "skills:add": "bunx skills add dwjohnston/agent-skills",
+    "fly": "./.thunderjar/fly-machine.sh",
+    "fly:start": "./.thunderjar/fly-machine.sh start",
+    "fly:stop": "./.thunderjar/fly-machine.sh stop"
   },
   "dependencies": {
     "bun": "1.3.14",
