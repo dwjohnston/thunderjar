@@ -7,7 +7,7 @@ import { sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { scenario } from "../../../testing/scenario.ts";
 import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { loadMeasurements } from "../../../config/measurements.ts";
-import { type ExecutionPage, startViewServer } from "./view.ts";
+import { type ExecutionPage, startViewServer, type TaskExecution, type TaskSummary } from "./view.ts";
 
 const STORE = () => `${scenario("0203")}/.thunderjar/.data`;
 
@@ -68,6 +68,43 @@ describe("0203 recorded executions", () => {
     });
     expect(body.containerRuns).toHaveLength(40);
     expect(body.containerRuns.slice(0, 6).map(({ permutation, iteration }) => `${permutation}-${iteration}`)).toEqual(["1-1", "1-2", "1-3", "1-4", "1-5", "2-1"]);
+  });
+
+  test("/api/executions/:id: each permutation's parameters, by name and parameter hash", async () => {
+    const body = (await (await serve()("/api/executions/01m430hgt00w0g80g80m3g2102")).json()) as ExecutionPage;
+
+    expect(body.parameters.map((p) => p && `${p.harnessModel.name} ${p.harnessModel.parameterHash.slice(0, 8)}`)).toEqual([
+      "fake-harness-alpha@1.0.0/fake-model-small 7cf14b84",
+      "fake-harness-beta@1.0.0/fake-model-large 3a8115a7",
+    ]);
+    expect(body.parameters[0]!.codeState).toEqual({ name: "baseline", parameterHash: "e7d314637bf7f4dcf94c40fedaf7c8c25b166f27d3bee02656b7c325fba19e7e" });
+  });
+
+  test("/api/tasks: every task, newest first by its newest execution, with the test cases that ran it", async () => {
+    const tasks = (await (await serve()("/api/tasks")).json()) as TaskSummary[];
+
+    expect(tasks.map(({ task, testCases, executions, latest }) => ({ task, testCases, executions, latest: latest.executionId }))).toEqual([
+      { task: "is-prime", testCases: ["two-harnesses", "example", "is-prime-baseline"], executions: 4, latest: "01m430hgt00w0g80g80m3g2102" },
+    ]);
+  });
+
+  test("/api/tasks/:task: each execution of the task, newest first, with its permutations' parameters and totals", async () => {
+    const executions = (await (await serve()("/api/tasks/is-prime")).json()) as TaskExecution[];
+
+    expect(executions.map(({ summary, parameters, totals }) => [summary.execution.executionId, parameters.length, totals.runs])).toEqual([
+      ["01m430hgt00w0g80g80m3g2102", 2, 2],
+      ["01m40g5972dza3k7g3d36k55zw", 1, 0],
+      ["01m3ygz4g89aqh8yey8em0twpq", 2, 2],
+      ["01m3vf68s54p5eyn5s3t1ygkdj", 8, 40],
+    ]);
+    expect(executions[3]!.summary.permutations[1]!.measures.isPrimeTsExists!.measured).toBe(5);
+  });
+
+  test("/api/tasks/:task of a task with no execution is a 404", async () => {
+    const res = await serve()("/api/tasks/nope");
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "No execution of task nope recorded." });
   });
 
   test("/api/executions/:id of an execution not recorded is a 404", async () => {

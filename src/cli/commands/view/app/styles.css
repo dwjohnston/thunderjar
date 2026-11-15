@@ -1,25 +1,41 @@
 :root {
   color-scheme: light dark;
-  --fg: #1d1d1f;
-  --muted: #6b6b70;
-  --bg: #ffffff;
-  --line: #e2e2e6;
-  --hover: #f4f4f7;
-  --failed: #c0362c;
-  --complete: #237a3b;
-  --running: #9a6700;
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --fg: #15181c;
+  --fg-2: #4d5560;
+  --muted: #7c8591;
+  --line: #e1e4e8;
+  --accent: #2a78d6;
+  --accent-soft: #e6f0fb;
+  --good: #1f8a4c;
+  --good-soft: #e3f4ea;
+  --warn: #a86800;
+  --warn-soft: #fbf0dc;
+  --bad: #c43d3c;
+  --bad-soft: #fbe6e6;
+  --mono: ui-monospace, Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --fg: #ececf0;
-    --muted: #9a9aa3;
-    --bg: #17171a;
-    --line: #2e2e34;
-    --hover: #222227;
-    --failed: #ff7b72;
-    --complete: #56d364;
-    --running: #e3b341;
+    --bg: #111317;
+    --surface: #1a1d22;
+    --fg: #eef0f3;
+    --fg-2: #b4bbc5;
+    --muted: #868f9b;
+    --line: #2c3139;
+    --accent: #4a92e8;
+    --accent-soft: #1c2b3e;
+    --good: #4cc27d;
+    --good-soft: #17301f;
+    --warn: #e0a640;
+    --warn-soft: #34290f;
+    --bad: #ec6c6b;
+    --bad-soft: #3a1a1a;
   }
+}
+* {
+  box-sizing: border-box;
 }
 body {
   margin: 0;
@@ -27,99 +43,296 @@ body {
   color: var(--fg);
   font: 14px/1.5 system-ui, sans-serif;
 }
-main {
-  padding: 24px 16px;
-}
-h1 {
-  font-size: 20px;
-  margin: 0 0 16px;
+code,
+.mono {
+  font: 12.5px var(--mono);
 }
 a {
-  color: inherit;
+  color: var(--accent);
+}
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+tr.expandable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Layout: the navigation down the left, the screen beside it. */
+.app {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+}
+nav {
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+nav .brand {
+  font-weight: 600;
+  font-size: 15px;
+  padding: 0 10px 14px;
+}
+nav .brand small {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12px;
+}
+nav a {
+  color: var(--fg-2);
+  text-decoration: none;
+  padding: 7px 10px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+nav a:hover {
+  background: var(--bg);
+}
+nav a.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
+}
+nav a.l1 {
+  margin-left: 12px;
+}
+nav a.l2 {
+  margin-left: 24px;
+}
+nav a.l3 {
+  margin-left: 36px;
+}
+nav a small {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-left: 4px;
+}
+nav .lvl {
+  color: var(--muted);
+  font-size: 11px;
+  display: block;
+  line-height: 1.2;
+}
+nav .toggle {
+  margin-top: 16px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--fg-2);
+  font-size: 13px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+}
+main {
+  padding: 24px 28px 48px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+@media (max-width: 760px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  nav .brand {
+    width: 100%;
+    padding-bottom: 6px;
+  }
+  nav a.l1,
+  nav a.l2,
+  nav a.l3 {
+    margin-left: 0;
+  }
+  main {
+    padding: 18px 16px 40px;
+  }
+}
+
+/* Headings and text */
+.crumbs {
+  color: var(--muted);
+  font-size: 13px;
+}
+.crumbs a {
+  text-decoration: none;
+}
+h1 {
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 600;
+  margin: 0;
+}
+h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.sub {
+  color: var(--fg-2);
+  margin: 0;
+}
+p {
+  margin: 0;
 }
 .muted {
   color: var(--muted);
 }
+.small {
+  font-size: 12.5px;
+}
+.error,
+.bad {
+  color: var(--bad);
+}
+.why {
+  color: var(--bad);
+  font: 12px var(--mono);
+}
+.nw {
+  white-space: nowrap;
+}
+.facts {
+  display: flex;
+  gap: 8px 20px;
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+.facts b {
+  color: var(--fg);
+  font-weight: 500;
+}
+.facts .bad {
+  color: var(--bad);
+}
+
+/* Panels */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.panel-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.panel-head .spacer {
+  flex: 1;
+}
+.panel-body {
+  padding: 14px 16px;
+}
+.panel-body.common {
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.scroll {
+  overflow-x: auto;
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+}
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  font-size: 13px;
+  margin: 0;
+}
+.kv dt {
+  color: var(--muted);
+}
+.kv dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+pre.log {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: 6px;
+  font: 12px/1.55 var(--mono);
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+label.inline {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--fg-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+select,
+button {
+  font: inherit;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+/* Tables */
 table {
   border-collapse: collapse;
   width: 100%;
+  font-variant-numeric: tabular-nums;
 }
 th,
 td {
   text-align: left;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--line);
-  /* Wrap at words, and break a word only if it can't fit otherwise. */
-  overflow-wrap: break-word;
   vertical-align: top;
+  white-space: nowrap;
+}
+th {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 12px;
+}
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+td.num,
+th.num {
+  text-align: right;
+}
+td.wrap {
+  white-space: normal;
+  min-width: 240px;
+  max-width: 480px;
 }
 /* Wrap long values, e.g. a measure's JSON, anywhere rather than scroll the table sideways. */
 td.measure {
+  white-space: normal;
   overflow-wrap: anywhere;
+  min-width: 80px;
 }
-th {
-  font-weight: 600;
-  color: var(--muted);
-}
-tbody tr:hover {
-  background: var(--hover);
-}
-code {
-  font: 12px ui-monospace, monospace;
-}
-.status-failed {
-  color: var(--failed);
-}
-.status-complete {
-  color: var(--complete);
-}
-.status-running {
-  color: var(--running);
-}
-.error {
-  color: var(--failed);
-}
-/* A smaller line beneath a value, e.g. the range of a permutation's iterations. */
-.detail {
-  display: block;
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.controls label {
-  cursor: pointer;
-}
-button.link {
-  border: 0;
-  padding: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-.common-value {
-  color: var(--fg);
-  font-weight: 500;
-}
-tr.permutation {
-  cursor: pointer;
-  font-weight: 500;
-}
-.chevron {
-  display: inline-block;
-  font-size: 10px;
-  color: var(--muted);
-  transition: transform 0.15s;
-}
-tr.permutation.open .chevron {
-  transform: rotate(90deg);
-}
-tr.iteration td:first-child {
-  padding-left: 28px;
-}
-tr.iteration {
-  color: var(--muted);
+th.caret-col {
+  width: 28px;
 }
 /* A measurement's name, above a column per metric of it. */
 th.measurement {
@@ -128,6 +341,88 @@ th.measurement {
 }
 th.method {
   font-weight: 400;
+}
+tr.expandable {
+  cursor: pointer;
+}
+tr.expandable:hover td {
+  background: var(--bg);
+}
+.caret {
+  display: inline-block;
+  color: var(--muted);
+  transition: transform 0.12s;
+  font-size: 16px;
+  line-height: 1;
+}
+tr.expandable.open .caret {
+  transform: rotate(90deg);
+}
+tr.subrow td {
+  background: var(--bg);
+  font-size: 13px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+tr.subrow.heading td {
+  font-size: 12px;
+  color: var(--muted);
+}
+/* A smaller line beneath a value, e.g. the range of a permutation's iterations. */
+.detail {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.detail.why {
+  color: var(--bad);
+  white-space: normal;
+}
+.params {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.common-value {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+/* Parameter names, and their hashes beside them. */
+.ph {
+  color: var(--muted);
+  font: 11.5px var(--mono);
+}
+
+/* Chips */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.chip.good {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.chip.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.chip.bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.chip.accent {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .failure pre {
