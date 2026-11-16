@@ -14,7 +14,6 @@
 // deleted afterwards; its lines stay in the log.
 import { $ } from "bun";
 import { afterAll, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { git, logDir, REF_PREFIX } from "./lib.ts";
 
 const SCRIPTS = import.meta.dir;
@@ -40,7 +39,7 @@ describe.skipIf(!Bun.env.THUNDERJAR_AGENT_TESTS)("capture, with a real claude -p
     session = JSON.parse(result.stdout.toString()).session_id;
     expect(session).toMatch(/^[0-9a-f-]{36}$/);
 
-    const log = readFileSync(`${logDir(REPO)}/capture.log`, "utf8");
+    const log = await Bun.file(`${logDir(REPO)}/capture.log`).text();
     expect(log).toContain(`wrote refs/thunderjar/capture/${session}/start`);
     expect(log).toContain(`wrote refs/thunderjar/capture/${session}/turn-1`);
 
