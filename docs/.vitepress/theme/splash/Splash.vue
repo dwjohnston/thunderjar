@@ -76,14 +76,14 @@ const packageManager = ref<keyof typeof installCommands>("npm");
             >
               {{ pm }}
             </button>
-            <a class="cta" :href="withBase('/getting-started')">Documentation →</a>
-      </div>
+          </div>
           <div class="card code install-cmd"><pre><span class="k">$</span> {{ installCommands[packageManager][0] }}
 <span class="k">$</span> {{ installCommands[packageManager][1] }}
 
 <span class="c"># Assumes ANTHROPIC_API_KEY exists</span>
 <span class="k">$</span> {{ installCommands[packageManager][2] }}</pre></div>
         </div>
+        <a class="cta" :href="withBase('/getting-started')">Documentation →</a>
       </div>
 
       <div class="demo">
