@@ -6,7 +6,7 @@
     {
       "name": "thunderjar",
       "source": "./plugins/thunderjar",
-      "description": "/tj-oneshot records a one-shot task as git tags, to replay as a Thunderjar eval."
+      "description": "With THUNDERJAR_CAPTURE=1, records every Claude Code session as git refs, to replay as Thunderjar evals."
     }
   ]
 }

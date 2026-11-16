@@ -15,7 +15,9 @@ Humans: add your notes here
 
 # Thunderjar plugin for Claude Code
 
-`/tj-oneshot <task>` does a task in one go and records it as git tags, so it can be replayed later as a Thunderjar eval.
+Capture records every Claude Code session in a git repository: each prompt, and the code before the first turn and after every turn. Later, you can pick the sessions that would make good Thunderjar evals and replay them.
+
+Nothing changes on your branch, your index or your working tree. The records are git refs outside `refs/heads` and `refs/tags`, so they don't show up in `git branch` or `git tag`.
 
 ## Install
 
@@ -35,13 +37,21 @@ claude plugin marketplace add dwjohnston/thunderjar --scope project
 claude plugin install thunderjar@thunderjar --scope project
 ```
 
-## Use
+## Turn capture on
 
-```text
-/tj-oneshot Add a --verbose flag to the CLI
+Capture is off until `THUNDERJAR_CAPTURE=1` is set. While it's off, both hooks exit straight away.
+
+Set it for one repository, just for you, in `.claude/settings.local.json`:
+
+```json
+{
+  "env": {
+    "THUNDERJAR_CAPTURE": "1"
+  }
+}
 ```
 
-`/thunderjar:tj-oneshot` works too.
+Or in `~/.claude/settings.json` for every repository, or `export THUNDERJAR_CAPTURE=1` before starting `claude`.
 
 ## What gets recorded
 
@@ -50,43 +60,92 @@ sequenceDiagram
     participant U as User
     participant H as Hooks
     participant A as Agent
-    U->>H: /tj-oneshot <task>
-    H->>H: commit everything, tag .../start
-    H->>A: the task
-    A->>A: works, commits or not
+    U->>H: first prompt
+    H->>H: snapshot, ref .../start
+    H->>A: prompt
     A->>H: stops
-    H->>H: commit what's left, tag .../end, push both tags
+    H->>H: snapshot, ref .../turn-1
+    U->>H: next prompt
+    H->>H: keep it for the next turn
+    H->>A: prompt
+    A->>H: stops
+    H->>H: snapshot, ref .../turn-2
 ```
 
-- **Start**, a `UserPromptSubmit` hook, before the agent sees the prompt:
-  - Commits everything in the working tree as `🎯 tj-oneshot start: <session>`, an empty commit when it's clean.
-  - Tags it `thunderjar/oneshot/<session>/start`. The tag message holds the task exactly as typed, the harness and its version, the effort level, the branch and the commit before the start, as JSON.
-  - If it can't record the start, e.g. outside a git repository, it blocks the prompt and says why.
-- **End**, a `Stop` hook, the first time the agent finishes after the start:
-  - Commits whatever the agent left uncommitted as `🏁 tj-oneshot end: <session>`, an empty commit when nothing is left.
-  - Tags it `thunderjar/oneshot/<session>/end`, with the models used, the agent's own commits, the files it left uncommitted and its final message.
-  - Pushes both tags to `origin`. The branch isn't pushed: the tags carry the commits with them.
+```text
+refs/thunderjar/capture/<session>/start    the first prompt, and the tree before any work
+refs/thunderjar/capture/<session>/turn-1   the tree after the 1st turn
+refs/thunderjar/capture/<session>/turn-2   the tree after the 2nd turn, with the prompt that started it
+```
 
-Both commits skip the repository's commit hooks, so a failing lint can't lose the record. Files matched by `.gitignore` aren't recorded.
+- Each ref points at an annotated tag object, whose message is a JSON record.
+- The tag points at a snapshot commit of the whole working tree, untracked files included. The commit is on no branch. Its parent is `HEAD` at the time, so `git diff <ref>^ <ref>` shows what was left uncommitted.
+- Files matched by `.gitignore` aren't recorded.
 
-## Read a recording
+The `start` record holds:
 
-Tags only come with a fetch when you ask for them:
+- the prompt, verbatim
+- `dirty`, whether the tree differed from `HEAD`, the `headAtStart` commit and the branch
+- the harness, its version, the session ID, the transcript path and the permission mode
+
+Each `turn-<n>` record holds:
+
+- the turn number, and the prompt that started it: `null` for turn 1, whose prompt is in `start`
+- `laterPrompts`, sent after the turn began. Claude Code doesn't run the `Stop` hook when you interrupt the agent, so the next prompt joins the same turn.
+- `headAtStop`, the agent's commits since the previous turn, and the files left uncommitted
+- `historyRewritten`, true when `headAtStart`, or the previous turn's head, is no longer an ancestor of `HEAD`, e.g. after a rebase or an amend
+- the models used and the agent's last message
+
+A turn ends whenever the main agent stops. Subagents stopping don't count.
+
+The hooks never block a prompt or stop the agent. Errors go to `.git/thunderjar/capture.log`. The prompts of a later turn wait in `.git/thunderjar/<session>/pending.json` until the turn ends.
+
+## Read the records
+
+List every capture, with a verdict for triage:
 
 ```sh
-git fetch origin 'refs/tags/thunderjar/oneshot/*:refs/tags/thunderjar/oneshot/*'
+bun "<plugin>/scripts/list.ts"
 ```
 
-Then:
+```text
+Started           Verdict   Turns  Session                               Prompt
+2026-11-16 09:03  one-shot  1      0f9c…                                 Add a --verbose flag to the CLI
+```
+
+| Verdict | Rule |
+|---|---|
+| `incomplete` | A `start` ref with no turns |
+| `question` | The last turn's tree is the same as start's tree |
+| `rewritten` | `historyRewritten` on any turn |
+| `one-shot` | 1 turn |
+| `few-shot` | 2–3 turns |
+| `conversation` | More than 3 turns |
+
+The first rule that applies wins. Add `--json` for the full records.
+
+`<plugin>` is the plugin's folder, e.g. `plugins/thunderjar` in a clone of this repository. Run the scripts from inside the repository whose captures you want.
+
+With git alone:
 
 ```sh
-git tag -l 'thunderjar/oneshot/*'                                         # every recording
-git tag -l --format='%(contents)' thunderjar/oneshot/<session>/start      # the prompt and details
-git diff thunderjar/oneshot/<session>/start thunderjar/oneshot/<session>/end   # what the agent did
+git for-each-ref refs/thunderjar/capture/                                   # every ref
+git cat-file tag refs/thunderjar/capture/<session>/start                    # a record
+git diff refs/thunderjar/capture/<session>/start refs/thunderjar/capture/<session>/turn-1   # what turn 1 did
 ```
+
+## Share the records
+
+Refs outside `refs/heads` and `refs/tags` aren't pushed or fetched unless you ask:
+
+```sh
+bun "<plugin>/scripts/push.ts"           # push every capture to origin
+bun "<plugin>/scripts/push.ts" --fetch   # fetch them
+```
+
+These run `git push` or `git fetch` with `refs/thunderjar/capture/*:refs/thunderjar/capture/*`. Refs are only ever added, so neither direction needs `--force`.
 
 ## Limits
 
-- One one-shot per session. Start a new session for the next one.
 - Changes outside the repository, or in ignored files, aren't recorded.
-- The start tag's `model` is only known when the session has had an earlier turn. The end tag always has it.
+- A snapshot copies the index and runs `git add -A` on the copy, on the first prompt and every stop. That's fast with a warm index, but it reads every changed file, so very large untracked files slow it down.

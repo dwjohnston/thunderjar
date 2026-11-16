@@ -1,6 +1,6 @@
 {
   "name": "thunderjar",
-  "description": "Thunderjar for Claude Code: /tj-oneshot records a one-shot task (the prompt, and the code before and after) as git tags, to replay as an eval.",
+  "description": "Thunderjar for Claude Code: with THUNDERJAR_CAPTURE=1, records every session (each prompt, and the code before and after each turn) as git refs, to triage and replay as evals.",
   "author": { "name": "dwjohnston" },
   "homepage": "https://github.com/dwjohnston/thunderjar",
   "repository": "https://github.com/dwjohnston/thunderjar",

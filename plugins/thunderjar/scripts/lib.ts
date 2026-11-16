@@ -8,30 +8,76 @@
  * Humans: add your notes here
  */
 
-// Shared by the start and stop hooks: git calls, tag names, the prompt, and harness details.
+import { $ } from "bun";
 
-export const TAG_PREFIX = "thunderjar/oneshot";
+// Shared by the capture hooks and scripts: git calls, ref names, snapshots, records, and harness details.
 
-export type Kind = "start" | "end";
+export const REF_PREFIX = "refs/thunderjar/capture";
 
-export function tagName(sessionId: string, kind: Kind): string {
-  return `${TAG_PREFIX}/${sessionId}/${kind}`;
+/** Capture runs only when `THUNDERJAR_CAPTURE` is `1` or `true`. */
+export function captureEnabled(env: Record<string, string | undefined>): boolean {
+  const value = env.THUNDERJAR_CAPTURE?.trim().toLowerCase();
+  return value === "1" || value === "true";
 }
 
-// --- prompt ---
+export type RefKind = "start" | `turn-${number}`;
 
-// e.g. "/tj-oneshot Add a flag", or "/thunderjar:tj-oneshot Add a flag" with the plugin's namespace.
-const ONESHOT_COMMAND = /^\s*\/(?:[\w.-]+:)?tj-oneshot(?=\s|$)/;
+// Session IDs are UUIDs. Anything else could make an invalid or surprising ref name.
+const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-/**
- * The task the user gave after `/tj-oneshot`, exactly as typed apart from the whitespace after the command.
- * Null when the prompt isn't a `/tj-oneshot` command.
- */
-export function parseOneshotPrompt(typed: string): string | null {
-  const match = typed.match(ONESHOT_COMMAND);
-  if (!match) return null;
-  return typed.slice(match[0].length).replace(/^\s+/, "");
+export function refName(sessionId: string, kind: RefKind): string {
+  if (!SESSION_ID.test(sessionId) || sessionId.includes("..") || sessionId.endsWith(".lock")) {
+    throw new Error(`can't use session ID ${JSON.stringify(sessionId)} in a ref name`);
+  }
+  return `${REF_PREFIX}/${sessionId}/${kind}`;
 }
+
+// --- records ---
+
+export type Agent = {
+  harness: "Claude Code";
+  harnessVersion: string | null;
+  harnessSurface: string | null;
+  effort: string | null;
+  sessionId: string;
+  transcriptPath: string | null;
+  permissionMode: string | null;
+};
+
+/** The message of the `start` tag. */
+export type StartRecord = {
+  schemaVersion: 1;
+  kind: "start";
+  capturedAt: string;
+  /** The first prompt of the session, verbatim. */
+  prompt: string;
+  agent: Agent;
+  repository: { root: string; branch: string | null; headAtStart: string | null; dirty: boolean };
+};
+
+/** The message of a `turn-<n>` tag. */
+export type TurnRecord = {
+  schemaVersion: 1;
+  kind: "turn";
+  capturedAt: string;
+  turn: number;
+  /** The prompt that started the turn. Null for turn 1, whose prompt is in the start record. */
+  prompt: string | null;
+  /** Prompts submitted after the turn began, e.g. after the user interrupted the agent. */
+  laterPrompts: string[];
+  agent: Agent & { models: string[] };
+  repository: {
+    branch: string | null;
+    headAtStop: string | null;
+    /** `<hash> <subject>` of each commit since the previous turn, oldest first. */
+    agentCommits: string[];
+    /** Files that differ between `headAtStop` and the snapshot. */
+    leftUncommitted: string[];
+    /** Whether `headAtStart`, or the previous turn's head, is no longer an ancestor of `headAtStop`. */
+    historyRewritten: boolean;
+  };
+  lastAssistantMessage: string | null;
+};
 
 // --- harness ---
 
@@ -51,11 +97,24 @@ export function harnessFromEnv(env: Record<string, string | undefined>) {
 // --- git ---
 
 type GitResult = { exitCode: number; stdout: string; stderr: string };
+type GitOptions = { stdin?: string; env?: Record<string, string> };
 
-function runGit(cwd: string, args: string[], stdin?: string): GitResult {
+/**
+ * Snapshot commits and tag objects are written by this identity, so capture works where `user.name` isn't
+ * set, and a record never claims to be the user's own commit.
+ */
+const IDENTITY = {
+  GIT_AUTHOR_NAME: "Thunderjar capture",
+  GIT_AUTHOR_EMAIL: "capture@thunderjar.invalid",
+  GIT_COMMITTER_NAME: "Thunderjar capture",
+  GIT_COMMITTER_EMAIL: "capture@thunderjar.invalid",
+};
+
+function runGit(cwd: string, args: string[], options: GitOptions = {}): GitResult {
   const result = Bun.spawnSync(["git", ...args], {
     cwd,
-    stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin),
+    env: { ...Bun.env, ...options.env },
+    stdin: options.stdin === undefined ? "ignore" : new TextEncoder().encode(options.stdin),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -67,8 +126,8 @@ function runGit(cwd: string, args: string[], stdin?: string): GitResult {
 }
 
 /** Runs git and returns its output. Throws when git fails. */
-export function git(cwd: string, args: string[], stdin?: string): string {
-  const result = runGit(cwd, args, stdin);
+export function git(cwd: string, args: string[], options?: GitOptions): string {
+  const result = runGit(cwd, args, options);
   if (result.exitCode !== 0) {
     throw new Error(`git ${args.join(" ")} failed (exit ${result.exitCode}): ${result.stderr}`);
   }
@@ -81,31 +140,140 @@ export function tryGit(cwd: string, args: string[]): string | null {
   return result.exitCode === 0 ? result.stdout : null;
 }
 
-export function tagExists(cwd: string, tag: string): boolean {
-  return runGit(cwd, ["show-ref", "--verify", "--quiet", `refs/tags/${tag}`]).exitCode === 0;
+/** Whether git exits 0, e.g. for `merge-base --is-ancestor`. */
+export function gitSucceeds(cwd: string, args: string[]): boolean {
+  return runGit(cwd, args).exitCode === 0;
+}
+
+export function refExists(cwd: string, ref: string): boolean {
+  return gitSucceeds(cwd, ["show-ref", "--verify", "--quiet", ref]);
+}
+
+/** The repository's shared git directory, absolute. The same for every worktree. */
+export function gitDir(root: string): string {
+  return git(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+}
+
+/** Where capture keeps its own files, inside the git directory, so they're never committed. */
+export function captureDir(root: string): string {
+  return `${gitDir(root)}/thunderjar`;
+}
+
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/**
+ * Commits everything in the working tree, tracked or not, as a commit on no branch. Leaves the branch, the
+ * index and the working tree as they are.
+ *
+ * It stages into a copy of the index: git reuses the copy's cached file details, so `add -A` stays fast on a
+ * large repository. `dirty` says whether the tree differs from the parent's, or from an empty tree without one.
+ */
+export async function snapshot(
+  root: string,
+  parent: string | null,
+  message: string,
+): Promise<{ commit: string; tree: string; dirty: boolean }> {
+  const dir = captureDir(root);
+  const index = `${dir}/index-${crypto.randomUUID()}`;
+  const realIndex = git(root, ["rev-parse", "--path-format=absolute", "--git-path", "index"]);
+  try {
+    await $`mkdir -p ${dir}`.quiet();
+    if (await Bun.file(realIndex).exists()) await Bun.write(index, Bun.file(realIndex));
+    const env = { ...IDENTITY, GIT_INDEX_FILE: index };
+    git(root, ["add", "-A"], { env });
+    const tree = git(root, ["write-tree"], { env });
+    const parentArgs = parent ? ["-p", parent] : [];
+    const commit = git(root, ["commit-tree", tree, ...parentArgs], { env, stdin: message });
+    const parentTree = parent ? git(root, ["rev-parse", `${parent}^{tree}`]) : EMPTY_TREE;
+    return { commit, tree, dirty: tree !== parentTree };
+  } finally {
+    await Bun.file(index).delete().catch(() => {});
+  }
 }
 
 /**
- * Commits everything in the working tree, tracked or not, and returns the new commit.
- * The commit is empty when there is nothing to commit.
- * `--no-verify` skips the repo's commit hooks, so a lint failure can't lose the record.
+ * Points `ref` at a new annotated tag object for `commit`, whose message is `record` as JSON.
+ * Refuses to overwrite a ref that already exists.
  */
-export function commitEverything(cwd: string, message: string): string {
-  git(cwd, ["add", "-A"]);
-  git(cwd, ["commit", "--allow-empty", "--no-verify", "-m", message]);
-  return git(cwd, ["rev-parse", "HEAD"]);
+export function writeRecord(root: string, ref: string, commit: string, record: unknown): string {
+  const tagger = git(root, ["var", "GIT_COMMITTER_IDENT"], { env: IDENTITY });
+  const tagName = ref.slice("refs/".length);
+  const tag = [
+    `object ${commit}`,
+    "type commit",
+    `tag ${tagName}`,
+    `tagger ${tagger}`,
+    "",
+    JSON.stringify(record, null, 2),
+    "",
+  ].join("\n");
+  const object = git(root, ["mktag"], { stdin: tag });
+  // An empty old value makes update-ref fail when the ref already exists.
+  git(root, ["update-ref", "-m", "thunderjar capture", ref, object, ""]);
+  return object;
 }
 
-/** Creates an annotated tag whose message is a title line, a blank line, then the record as JSON. */
-export function writeTag(cwd: string, tag: string, commit: string, title: string, record: unknown) {
-  const message = `${title}\n\n${JSON.stringify(record, null, 2)}\n`;
-  git(cwd, ["tag", "--annotate", "--cleanup=verbatim", tag, commit, "--file", "-"], message);
+/** Reads the JSON record back out of a ref written by `writeRecord`. */
+export function readRecord<T = Record<string, unknown>>(root: string, ref: string): T {
+  const tag = git(root, ["cat-file", "tag", ref]);
+  return JSON.parse(tag.slice(tag.indexOf("\n\n") + 2)) as T;
 }
 
-/** Reads the JSON record back out of a tag written by `writeTag`. */
-export function readTag(cwd: string, tag: string): unknown {
-  const message = git(cwd, ["tag", "--list", "--format=%(contents)", tag]);
-  return JSON.parse(message.slice(message.indexOf("{")));
+/** The number of the session's next turn: one more than the highest `turn-<n>` ref. */
+export function nextTurn(root: string, sessionId: string): number {
+  const prefix = `${refName(sessionId, "start").slice(0, -"start".length)}turn-`;
+  const refs = git(root, ["for-each-ref", "--format=%(refname)", `${prefix}*`]).split("\n").filter(Boolean);
+  const numbers = refs.map((ref) => Number(ref.slice(prefix.length))).filter(Number.isInteger);
+  return Math.max(0, ...numbers) + 1;
+}
+
+// --- pending prompts ---
+
+/** Where `start.ts` leaves the prompts of a later turn for `stop.ts`. */
+export function pendingPath(root: string, sessionId: string): string {
+  return `${captureDir(root)}/${sessionId}/pending.json`;
+}
+
+export type Pending = { prompts: { text: string; submittedAt: string }[] };
+
+export async function readPending(root: string, sessionId: string): Promise<Pending> {
+  const file = Bun.file(pendingPath(root, sessionId));
+  if (!(await file.exists())) return { prompts: [] };
+  return (await file.json()) as Pending;
+}
+
+/**
+ * Adds a prompt to the pending file. A turn can have more than one, e.g. when the user interrupts the agent:
+ * Claude Code doesn't run the Stop hook then, so the next prompt joins the same turn.
+ */
+export async function addPending(root: string, sessionId: string, text: string) {
+  const pending = await readPending(root, sessionId);
+  pending.prompts.push({ text, submittedAt: new Date().toISOString() });
+  await Bun.write(pendingPath(root, sessionId), JSON.stringify(pending, null, 2) + "\n", { createPath: true });
+}
+
+/** Deletes the pending file, once the turn that holds its prompts is recorded. */
+export async function clearPending(root: string, sessionId: string) {
+  await Bun.file(pendingPath(root, sessionId)).delete().catch(() => {});
+}
+
+// --- errors ---
+
+/**
+ * Appends a failure to `<git-dir>/thunderjar/capture.log`. The hooks never fail the session, so this is
+ * where their errors go. Outside a git repository there's nowhere to write, and the error is dropped.
+ */
+export async function logError(cwd: string, hook: string, error: unknown) {
+  try {
+    const root = tryGit(cwd, ["rev-parse", "--show-toplevel"]);
+    if (!root) return;
+    const file = Bun.file(`${captureDir(root)}/capture.log`);
+    const before = (await file.exists()) ? await file.text() : "";
+    const reason = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    await Bun.write(file, `${before}${new Date().toISOString()} ${hook}: ${reason}\n`, { createPath: true });
+  } catch {
+    // Nothing more to do: a hook must never fail the session.
+  }
 }
 
 // --- transcript ---
