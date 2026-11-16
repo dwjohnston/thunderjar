@@ -44,9 +44,9 @@ const rows: Row[] = [
 const columns = ["red", "green", "blue", "cost"] as const;
 
 const installCommands = {
-  npm: "npm i thunderjar@latest",
-  pnpm: "pnpm add thunderjar@latest",
-  bun: "bun add thunderjar@latest",
+  npm: ["npm i thunderjar@latest", "npx thunderjar init", "npx thunderjar run compare-models"],
+  pnpm: ["pnpm add thunderjar@latest", "pnpm exec thunderjar init", "pnpm exec thunderjar run compare-models"],
+  bun: ["bun add thunderjar@latest", "bunx thunderjar init", "bunx thunderjar run compare-models"],
 } as const;
 const packageManager = ref<keyof typeof installCommands>("npm");
 </script>
@@ -63,7 +63,6 @@ const packageManager = ref<keyof typeof installCommands>("npm");
       </header>
 
       <div class="cta-row">
-        <a class="cta" :href="withBase('/getting-started')">Documentation →</a>
         <div class="install">
           <div class="pm-tabs" role="tablist" aria-label="Package manager">
             <button
@@ -77,8 +76,13 @@ const packageManager = ref<keyof typeof installCommands>("npm");
             >
               {{ pm }}
             </button>
-          </div>
-          <div class="card code install-cmd"><pre><span class="k">$</span> {{ installCommands[packageManager] }}</pre></div>
+            <a class="cta" :href="withBase('/getting-started')">Documentation →</a>
+      </div>
+          <div class="card code install-cmd"><pre><span class="k">$</span> {{ installCommands[packageManager][0] }}
+<span class="k">$</span> {{ installCommands[packageManager][1] }}
+
+<span class="c"># Assumes ANTHROPIC_API_KEY exists</span>
+<span class="k">$</span> {{ installCommands[packageManager][2] }}</pre></div>
         </div>
       </div>
 
@@ -402,6 +406,7 @@ pre {
 .s { color: #3dffc5; }
 .p { color: #b4a6ff; }
 .n { color: #ff9ad5; }
+.c { color: #5f8f88; font-style: italic; }
 
 table {
   width: 100%;
@@ -521,8 +526,8 @@ th.num {
 }
 
 .install {
-  width: fit-content;
-  margin: 28px auto 0;
+  width: min(100%, 640px);
+  margin: 0 auto 40px;
   text-align: left;
 }
 
