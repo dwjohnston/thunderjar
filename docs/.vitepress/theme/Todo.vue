@@ -10,11 +10,13 @@ Humans: add your notes here
 <!-- A road-hurdle "TODO" sign, with the slot content below it as normal text. -->
 <template>
   <div class="todo">
+    <hr />
     <div class="hurdle" role="img" aria-label="Under construction: todo">
       <div class="board"><span class="sign"><span class="small">UNDER CONSTRUCTION</span>TODO</span></div>
       <div class="legs"><span></span><span></span></div>
     </div>
     <div class="text"><slot /></div>
+    <hr />
   </div>
 </template>
 
