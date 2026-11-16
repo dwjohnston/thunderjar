@@ -10,3 +10,4 @@ docs/.vitepress/cache
 fixtures/.tmp/
 CLAUDE.local.md
 .env 
+.claude/settings.local.json
