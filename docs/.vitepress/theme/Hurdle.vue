@@ -28,11 +28,10 @@ defineProps<{ label: string }>();
 }
 
 .board {
-  padding: 0 10px;
+  padding: 3px 4px;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
   background: repeating-linear-gradient(-45deg, #ffd200 0 8px, #111 8px 16px);
   border: 2px solid #111;
   border-radius: 3px;
