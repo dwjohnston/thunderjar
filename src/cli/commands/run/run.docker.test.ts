@@ -32,18 +32,19 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("run, against real Docker", ()
   afterAll(async () => {
     const containers = lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${PREFIX}-`}`.text());
     if (containers.length > 0) await $`docker rm --force ${containers}`.quiet();
-    for (const repository of [`${PREFIX}-prerun`, `${PREFIX}-postrun`]) {
-      const images = lines(await $`docker image ls --format ${"{{.Repository}}:{{.Tag}}"} ${repository}`.text());
-      if (images.length > 0) await $`docker image rm --force ${images}`.quiet();
-    }
+    // Each test has its own prefix under PREFIX, so tests can run concurrently.
+    const images = lines(await $`docker image ls --format ${"{{.Repository}}:{{.Tag}}"} --filter ${`reference=${PREFIX}-*`}`.text());
+    if (images.length > 0) await $`docker image rm --force ${images}`.quiet();
     await $`rm -rf ${DATA_DIR}`.quiet();
   });
 
   test("0202 two-harnesses: each fake agent's changes are in its postrun image, and recorded", async () => {
+    const prefix = `${PREFIX}-harnesses`;
+    const data = `${DATA_DIR}/harnesses`;
     const { stdout, stderr, exitCode } = await thunderjar(
       scenario("0202"),
-      ["run", "two-harnesses", "--image-prefix", PREFIX, "--data-dir", DATA_DIR],
-      { docker: "real", env: { FAKE_HARNESS_KEY: "fake-key" }, paths: { "<PREFIX>": PREFIX, "<DATA>": DATA_DIR } },
+      ["run", "two-harnesses", "--image-prefix", prefix, "--data-dir", data],
+      { docker: "real", env: { FAKE_HARNESS_KEY: "fake-key" }, paths: { "<PREFIX>": prefix, "<DATA>": data } },
     );
 
     expect(stderr).toBe("");
@@ -58,13 +59,13 @@ Building <PREFIX>-prerun:577ed2bd ... done
 Recorded in <DATA>/runs.sqlite
 `);
 
-    const { execution, containerRuns } = await storedRuns(DATA_DIR);
+    const { execution, containerRuns } = await storedRuns(data);
     const id = execution.executionId;
     expect(execution).toMatchObject({ testCase: "two-harnesses", status: "complete", matrix: { permutations: 2, iterations: 1 } });
     const [alpha, beta] = containerRuns as [ContainerRunRecord, ContainerRunRecord];
 
     // Each record names its postrun image, which holds what its agent did and how it ran.
-    expect([alpha.postrunImage, beta.postrunImage]).toEqual([`${PREFIX}-postrun:${id}-1-1`, `${PREFIX}-postrun:${id}-2-1`]);
+    expect([alpha.postrunImage, beta.postrunImage]).toEqual([`${prefix}-postrun:${id}-1-1`, `${prefix}-postrun:${id}-2-1`]);
     for (const record of [alpha, beta]) {
       expect(record.execution.exitCode).toBe(0);
       expect(record.execution).toMatchObject(JSON.parse(await inImage(record.postrunImage, "cat /thunderjar/run.json")));
@@ -115,18 +116,19 @@ Recorded in <DATA>/runs.sqlite
     // A postrun image starts as its prerun image does, rather than running the agent again.
     const config = "{{json .Config.Entrypoint}} {{json .Config.Cmd}}";
     expect(await $`docker image inspect --format ${config} ${alpha.postrunImage}`.text()).toBe(
-      await $`docker image inspect --format ${config} ${PREFIX}-prerun:32a1d048`.text(),
+      await $`docker image inspect --format ${config} ${prefix}-prerun:32a1d048`.text(),
     );
 
     // Every container was removed.
-    expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${PREFIX}-`}`.text())).toEqual([]);
+    expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${prefix}-`}`.text())).toEqual([]);
   }, 600_000);
 
   test("0204 misbehaving: an agent that times out is killed, and each is committed and measured however it ended", async () => {
+    const prefix = `${PREFIX}-misbehaving`;
     const data = `${DATA_DIR}/misbehaving`;
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--image-prefix", PREFIX, "--data-dir", data], {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--image-prefix", prefix, "--data-dir", data], {
       docker: "real",
-      paths: { "<PREFIX>": PREFIX, "<DATA>": data },
+      paths: { "<PREFIX>": prefix, "<DATA>": data },
     });
 
     expect(stderr).toBe("");
@@ -143,14 +145,15 @@ Recorded in <DATA>/runs.sqlite
     expect(sleeper.execution).toMatchObject({ exitCode: null, timedOut: true, timeoutSeconds: 2 });
     // Its postrun image holds the wrapper's start, all it wrote before it was killed.
     expect(Object.keys(JSON.parse(await inImage(sleeper.postrunImage, "cat /thunderjar/run.json")))).toEqual(["startedAt"]);
-    expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${PREFIX}-`}`.text())).toEqual([]);
+    expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${prefix}-`}`.text())).toEqual([]);
   }, 600_000);
 
   test("0206 sandboxed: an agent can make a user namespace, as a sandbox does, only with its base image's run options", async () => {
+    const prefix = `${PREFIX}-sandboxed`;
     const data = `${DATA_DIR}/sandboxed`;
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "sandboxed", "--image-prefix", PREFIX, "--data-dir", data], {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "sandboxed", "--image-prefix", prefix, "--data-dir", data], {
       docker: "real",
-      paths: { "<PREFIX>": PREFIX, "<DATA>": data },
+      paths: { "<PREFIX>": prefix, "<DATA>": data },
     });
 
     expect(stderr).toBe("");
@@ -164,8 +167,9 @@ Recorded in <DATA>/runs.sqlite
   }, 600_000);
 
   test("0202 quoting: the prompt reaches the agent byte for byte, through a file", async () => {
+    const prefix = `${PREFIX}-quoting`;
     const data = `${DATA_DIR}/quoting`;
-    const { stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "quoting", "--image-prefix", PREFIX, "--data-dir", data], {
+    const { stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "quoting", "--image-prefix", prefix, "--data-dir", data], {
       docker: "real",
     });
 
