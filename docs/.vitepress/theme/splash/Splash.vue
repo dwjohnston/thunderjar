@@ -256,6 +256,16 @@ Always include the green emoji 🟢 in every response you write.</pre>
   --row: #e3f4ef;
   --text: #0b2b2a;
   --cta-text: #fff;
+  --code-bg: #f7fdfb;
+  --code-border: #bfe6dc;
+  --code-text: #0b2b2a;
+  --code-k: #0369a1;
+  --code-s: #047857;
+  --code-p: #6d28d9;
+  --code-n: #be185d;
+  --code-c: #5a8f86;
+  --code-m: #4f7f77;
+  --code-hl: #a15c00;
   --title-glow: 0px;
   --glow: 0;
 }
@@ -274,6 +284,16 @@ Always include the green emoji 🟢 in every response you write.</pre>
   --row: #0a2a2c;
   --text: #d8fff4;
   --cta-text: #020c10;
+  --code-bg: #03141a;
+  --code-border: #0f4747;
+  --code-text: #c4f5ea;
+  --code-k: #7af0ff;
+  --code-s: #3dffc5;
+  --code-p: #b4a6ff;
+  --code-n: #ff9ad5;
+  --code-c: #5f8f88;
+  --code-m: #4f9c8f;
+  --code-hl: #ffd38a;
   --title-glow: 18px;
   --glow: 1;
 }
@@ -388,10 +408,9 @@ h1 {
     0 0 40px rgba(var(--accent-rgb), calc(0.06 * var(--glow)));
 }
 
-/* The code block stays dark in both palettes */
 .card.code {
-  border-color: #0f4747;
-  background: #03141a;
+  border-color: var(--code-border);
+  background: var(--code-bg);
 }
 
 pre {
@@ -399,14 +418,14 @@ pre {
   font-family: var(--vp-font-family-mono);
   font-size: 13px;
   line-height: 1.6;
-  color: #c4f5ea;
+  color: var(--code-text);
 }
 
-.k { color: #7af0ff; }
-.s { color: #3dffc5; }
-.p { color: #b4a6ff; }
-.n { color: #ff9ad5; }
-.c { color: #5f8f88; font-style: italic; }
+.k { color: var(--code-k); }
+.s { color: var(--code-s); }
+.p { color: var(--code-p); }
+.n { color: var(--code-n); }
+.c { color: var(--code-c); font-style: italic; }
 
 table {
   width: 100%;
@@ -501,10 +520,10 @@ th.num {
   gap: 20px;
 }
 
-.m { color: #4f9c8f; }
+.m { color: var(--code-m); }
 
 .hl {
-  color: #ffd38a;
+  color: var(--code-hl);
 }
 
 .cta-row {
