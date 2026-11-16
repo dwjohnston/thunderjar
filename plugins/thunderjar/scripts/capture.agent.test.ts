@@ -8,53 +8,47 @@
  * Humans: add your notes here
  */
 
-// Session capture with a real Claude Code: `claude -p` on Haiku 5.5, in a throwaway repository whose
-// hooks are these scripts. Skipped by `bun test`; run with `bun run test:agent`, which needs `claude`
-// on the PATH and signed in. Costs a fraction of a cent.
+// Session capture with a real Claude Code: `claude -p` on Haiku 5.5, run in this repository, whose
+// .claude/settings.json wires up the capture hooks. Skipped by `bun test`; run with `bun run test:agent`,
+// which needs `claude` on the PATH and signed in. Costs a fraction of a cent. The session's refs are
+// deleted afterwards; its lines stay in the log.
 import { $ } from "bun";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { logDir } from "./lib.ts";
+import { afterAll, describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { git, logDir, REF_PREFIX } from "./lib.ts";
 
 const SCRIPTS = import.meta.dir;
+const REPO = git(SCRIPTS, ["rev-parse", "--show-toplevel"]).trim();
 const PROMPT = "say hi";
 
 describe.skipIf(!Bun.env.THUNDERJAR_AGENT_TESTS)("capture, with a real claude -p", () => {
-  let repo: string;
+  let session: string | undefined;
 
-  beforeAll(async () => {
-    repo = mkdtempSync(`${tmpdir()}/tj-capture-`);
-    await $`git init -q -b main && git commit -q --allow-empty -m init`.cwd(repo).env({ ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" });
-    mkdirSync(`${repo}/.claude`);
-    const hook = (script: string, timeout: number) => [{ hooks: [{ type: "command", command: `bun "${SCRIPTS}/${script}"`, timeout }] }];
-    writeFileSync(
-      `${repo}/.claude/settings.json`,
-      JSON.stringify({ hooks: { UserPromptSubmit: hook("start.ts", 60), Stop: hook("stop.ts", 120) } }, null, 2),
-    );
+  afterAll(() => {
+    if (!session) return;
+    const refs = git(REPO, ["for-each-ref", "--format=%(refname)", `${REF_PREFIX}/${session}/`]).split("\n").filter(Boolean);
+    for (const ref of refs) git(REPO, ["update-ref", "-d", ref]);
   });
-
-  afterAll(() => rmSync(repo, { recursive: true, force: true }));
 
   test("captures the session, lists it, and push --dry-run shows the git command", async () => {
     const result = await $`claude -p --model claude-haiku-5-5 --output-format json ${PROMPT}`
-      .cwd(repo)
+      .cwd(REPO)
       .env({ ...process.env, THUNDERJAR_CAPTURE: "1" })
       .nothrow()
       .quiet();
     expect(result.exitCode).toBe(0);
-    const session: string = JSON.parse(result.stdout.toString()).session_id;
+    session = JSON.parse(result.stdout.toString()).session_id;
     expect(session).toMatch(/^[0-9a-f-]{36}$/);
 
-    const log = readFileSync(`${logDir(repo)}/capture.log`, "utf8");
+    const log = readFileSync(`${logDir(REPO)}/capture.log`, "utf8");
     expect(log).toContain(`wrote refs/thunderjar/capture/${session}/start`);
     expect(log).toContain(`wrote refs/thunderjar/capture/${session}/turn-1`);
 
-    const list = JSON.parse(await $`bun ${SCRIPTS}/list.ts --json`.cwd(repo).text());
+    const list = JSON.parse(await $`bun ${SCRIPTS}/list.ts --json`.cwd(REPO).text());
     const capture = list.find((entry: { session: string }) => entry.session === session);
     expect(capture).toMatchObject({ session, turns: 1, prompt: PROMPT });
 
-    const push = await $`bun ${SCRIPTS}/push.ts --dry-run`.cwd(repo).text();
+    const push = await $`bun ${SCRIPTS}/push.ts --dry-run`.cwd(REPO).text();
     expect(push.trim()).toBe("git push --no-verify origin refs/thunderjar/capture/*:refs/thunderjar/capture/*");
   }, 180_000);
 });
