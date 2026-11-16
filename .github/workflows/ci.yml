@@ -58,6 +58,23 @@ jobs:
           git rev-parse -q --verify "refs/tags/$tag" > /dev/null || git tag "$tag" HEAD
       - run: bun run docs:build:versions
 
+  # The docs' quick start, for real: install the packed package, `init`, and
+  # `run compare-models` on a real model. Only on the changesets release PR, so a
+  # release whose quick start doesn't work can't be merged. Costs a few cents.
+  quickstart:
+    if: github.event_name == 'pull_request' && github.head_ref == 'changeset-release/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Let containers make user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Quick start (GitHub's Ubuntu runners have Docker)
+        run: bun run test:package --quickstart
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
   build:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
