@@ -13,14 +13,6 @@
     <text x="469" y="19.5" textLength="190" lengthAdjust="spacingAndGlyphs">UNDER CONSTRUCTION</text>
     <text x="700" y="19.5" textLength="190" lengthAdjust="spacingAndGlyphs">UNDER CONSTRUCTION</text>
   </g>
-  </defs>
-  <rect width="924" height="28" fill="#ffd200"/>
-  <g font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-size="15" font-weight="900" fill="#111">
-    <text x="7" y="19.5" textLength="190" lengthAdjust="spacingAndGlyphs">UNDER CONSTRUCTION</text>
-    <text x="238" y="19.5" textLength="190" lengthAdjust="spacingAndGlyphs">UNDER CONSTRUCTION</text>
-    <text x="469" y="19.5" textLength="190" lengthAdjust="spacingAndGlyphs">UNDER CONSTRUCTION</text>
-    <text x="700" y="19.5" textLength="190" lengthAdjust="spacingAndGlyphs">UNDER CONSTRUCTION</text>
-  </g>
   <use href="#warn" x="214"/>
   <use href="#warn" x="445"/>
   <use href="#warn" x="676"/>
