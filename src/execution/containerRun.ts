@@ -69,10 +69,13 @@ export function parseExecution(text: string | undefined, timeoutSeconds: number,
   const invalid = () =>
     new DockerContainerError(`The run script left no valid ${RUN_PATH}: ${text === undefined ? "there is none" : text.trim()}`);
   if (!isEpochMs(startedAt)) throw invalid();
-  if (killedAt !== undefined) return { startedAt, finishedAt: killedAt, exitCode: null, timedOut: true, timeoutSeconds };
+  // The times are wall-clock times, so a clock stepped back mid-run, e.g. by time sync on a VM
+  // that has just booted, can put the finish before the start. A run never takes less than nothing.
+  const notBeforeStart = (at: number) => Math.max(at, startedAt);
+  if (killedAt !== undefined) return { startedAt, finishedAt: notBeforeStart(killedAt), exitCode: null, timedOut: true, timeoutSeconds };
   if (!isEpochMs(finishedAt) || typeof exitCode !== "number") throw invalid();
   if (turns !== undefined && (!Array.isArray(turns) || !turns.every(isTurn))) throw invalid();
-  return { startedAt, finishedAt, exitCode, timedOut: false, timeoutSeconds, ...(turns && { turns }) };
+  return { startedAt, finishedAt: notBeforeStart(finishedAt), exitCode, timedOut: false, timeoutSeconds, ...(turns && { turns }) };
 }
 
 /**
