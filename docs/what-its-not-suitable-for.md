@@ -25,6 +25,17 @@ Humans: add your notes here
 
 - Multi turn tasks 
 
+## MCP
+
+I haven't really thought about MCP. 
+
+In my current role, MCP is blocked, so I really don't have much experience with it. 
+
+Thinking is, that MCP could be considered 'interaction with the wider internet' - so just not supported. 
+
+But there's an opportunity here - so for example, if you're doing GitHub interactions via MCP - actually MCP becomes a really nice dependency injection testing mechansim - where you can say 'It called the 'create PR' MCP interaction with X payload'. 
+
+Out of scope for now. 
 
 ## Things it could probably work for, but I haven't specifically tested
 
