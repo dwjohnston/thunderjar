@@ -65,6 +65,17 @@ describe("parseExecution", () => {
     });
   });
 
+  test("a finish before the start, from a clock stepped back mid-run, is taken as the start", () => {
+    expect(parseExecution('{"startedAt":1793499264123,"finishedAt":1793499264100,"exitCode":0}\n', 600)).toMatchObject({
+      startedAt: 1793499264123,
+      finishedAt: 1793499264123,
+    });
+    expect(parseExecution('{"startedAt":1793499264123}\n', 5, 1793499264100)).toMatchObject({
+      startedAt: 1793499264123,
+      finishedAt: 1793499264123,
+    });
+  });
+
   test("a run that wasn't killed must have finished", () => {
     expect(() => parseExecution('{"startedAt":1793499264123}\n', 5)).toThrow(DockerContainerError);
   });
