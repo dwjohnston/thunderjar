@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 // The installed package's smoke test: builds and packs Thunderjar, installs the tarball into an
 // empty JavaScript project in a temporary folder, the way a user would, and runs `init`,
-// `generate`, `plan` of both its test cases, and `build` and `run --dry-run` of one, there with its own `thunderjar`. Then it
+// `generate`, `plan` of both its test cases, `build` and `run --dry-run` of one, and `capture install`
+// and `capture list`, there with its own `thunderjar`. Then it
 // starts `view`, and fetches its page and the page's script. Every
 // other test runs Thunderjar from source; this one runs only what's published.
 //
@@ -51,6 +52,9 @@ const STEPS: { args: string[]; expect: string[] }[] = [
     expect: ["npm install --global bun@1.3.14", "@anthropic-ai/claude-code@2.1.311", "/thunderjar/thunderjar-run.sh", "claude -p", "/thunderjar/prompt.txt"],
   },
   { args: ["run", "compare-models", "--dry-run"], expect: ["sh /thunderjar/thunderjar-run.sh"] },
+  // Capture keeps its records in the project's git repository, made by `git init` before the steps.
+  { args: ["capture", "install", "--harness", "claude-code"], expect: [".claude/settings.local.json"] },
+  { args: ["capture", "list"], expect: ["No captures."] },
 ];
 
 /** A step that failed, with its output. */
@@ -107,6 +111,7 @@ try {
   console.log(`packed ${packed}`);
 
   await mustRun("npm init", $`npm init --yes`.cwd(PROJECT));
+  await mustRun("git init", $`git init -q`.cwd(PROJECT));
   await mustRun("install", $`npm install --no-audit --no-fund ${`${TEMP}/${packed}`}`.cwd(PROJECT));
   console.log("installed into <temp>");
 
