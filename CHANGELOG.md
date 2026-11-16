@@ -1,5 +1,11 @@
 # thunderjar
 
+## 0.3.2
+
+### Patch Changes
+
+- 70ff02b: Docs: code blocks on the splash page follow light mode instead of staying dark.
+
 ## 0.3.1
 
 ### Patch Changes
