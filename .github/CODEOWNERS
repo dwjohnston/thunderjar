@@ -1,0 +1,19 @@
+# 🤖
+# This file was created with AI
+#
+# Harness: Claude Code
+# Session Id: session_01LCLeLkq5RSjSuTgWr25sHA
+# Supervising engineer: David Johnston (@dwjohnston)
+#
+#
+# Humans: add your notes here
+#
+#
+
+# Files that need a manual review from a human.
+# Approval is only required once the "Require review from Code Owners" rule is on for the branch.
+
+docs/*.md                         @dwjohnston
+project-md/human-safe-space/**/*  @dwjohnston
+CONTRIBUTORS.md                   @dwjohnston
+**/*.humans.*                     @dwjohnston
