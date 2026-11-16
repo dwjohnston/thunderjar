@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 /*
  * 🤖 This file was created with AI
  *
@@ -9,29 +8,17 @@
  * Humans: add your notes here
  */
 
-import { git, readRecord, REF_PREFIX, tryGit, type StartRecord, type TurnRecord } from "./lib.ts";
-
-function help() {
-  console.log(`
-List the captured sessions in the current repository, with a verdict for each,
-to triage which would make good evals.
-
-Verdicts, the first that applies:
-  incomplete     a start ref with no turns
-  question       the last turn's tree is the same as start's tree
-  rewritten      historyRewritten on any turn
-  one-shot       1 turn
-  few-shot       2-3 turns
-  conversation   more than 3 turns
-
-Usage:
-  bun list.ts [--json]
-
-Options:
-  --json       Print the captures as JSON
-  -h, --help   Show this message
-`);
-}
+// The captures in a repository, each with a verdict, to triage which would make good evals.
+//
+// Verdicts, the first that applies:
+//   incomplete     a start ref with no turns
+//   question       the last turn's tree is the same as start's tree
+//   rewritten      historyRewritten on any turn
+//   one-shot       1 turn
+//   few-shot       2-3 turns
+//   conversation   more than 3 turns
+import { git, REF_PREFIX, readRecord } from "./git.ts";
+import type { StartRecord, TurnRecord } from "./records.ts";
 
 export type Verdict = "incomplete" | "question" | "rewritten" | "one-shot" | "few-shot" | "conversation";
 
@@ -103,34 +90,16 @@ function firstLine(text: string, width: number): string {
 }
 
 export function formatTable(captures: Capture[]): string {
-  if (captures.length === 0) return "No captures. Turn capture on with THUNDERJAR_CAPTURE=1.";
+  if (captures.length === 0) return "No captures. Turn capture on with `thunderjar capture install --harness <harness>`.";
   const rows = captures.map((capture) => [
     capture.startedAt.slice(0, 16).replace("T", " "),
+    capture.start.agent.harness,
     capture.verdict,
     String(capture.turns),
     capture.session,
     firstLine(capture.prompt, 60),
   ]);
-  const header = ["Started", "Verdict", "Turns", "Session", "Prompt"];
+  const header = ["Started", "Harness", "Verdict", "Turns", "Session", "Prompt"];
   const widths = header.map((title, column) => Math.max(title.length, ...rows.map((row) => row[column]!.length)));
   return [header, ...rows].map((row) => row.map((cell, column) => cell.padEnd(widths[column]!)).join("  ").trimEnd()).join("\n");
-}
-
-if (import.meta.main) {
-  const argv = Bun.argv.slice(2);
-  if (argv.includes("-h") || argv.includes("--help")) {
-    help();
-    process.exit(0);
-  }
-  const root = tryGit(process.cwd(), ["rev-parse", "--show-toplevel"]);
-  if (!root) {
-    console.error("Not in a git repository.");
-    process.exit(1);
-  }
-  const captures = listCaptures(root);
-  if (argv.includes("--json")) {
-    console.log(JSON.stringify(captures, null, 2));
-  } else {
-    console.log(formatTable(captures));
-  }
 }

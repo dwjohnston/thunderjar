@@ -10,31 +10,18 @@
 
 import { $ } from "bun";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  logDir,
-  captureEnabled,
-  git,
-  harnessFromEnv,
-  nextTurn,
-  pendingPath,
-  readRecord,
-  refExists,
-  refName,
-  snapshot,
-  writeRecord,
-  type StartRecord,
-  type TranscriptEntry,
-  type TurnRecord,
-} from "./lib.ts";
+import { ADAPTERS } from "./adapters.ts";
+import { captureEnabled, capturePrompt, captureStop } from "./capture.ts";
+import { logDir, pendingPath, type TranscriptEntry } from "./files.ts";
+import { git, nextTurn, readRecord, refExists, refName, snapshot, writeRecord } from "./git.ts";
 import { listCaptures } from "./list.ts";
-import { main as push } from "./push.ts";
-import { main as start, type PromptInput } from "./start.ts";
-import { main as stop, type StopInput } from "./stop.ts";
+import { push } from "./push.ts";
+import type { StartRecord, TurnRecord } from "./records.ts";
 
 const SESSION = "11111111-2222-3333-4444-555555555555";
 const PROMPT = 'fix the "quoted" thing & <b>tags</b>\nsecond line';
 const ENV = {
-  THUNDERJAR_CAPTURE: "1",
+  CLAUDECODE: "1",
   AI_AGENT: "claude-code_2-1-322_harness",
   CLAUDE_CODE_ENTRYPOINT: "sdk-cli",
   CLAUDE_EFFORT: "high",
@@ -48,20 +35,21 @@ function assistant(model: string): TranscriptEntry {
   return { type: "assistant", version: "2.1.322", message: { model } };
 }
 
-function promptInput(prompt = PROMPT, session = SESSION): PromptInput {
-  return { session_id: session, transcript_path: transcript, cwd: repo, permission_mode: "auto", prompt };
+/** Claude Code's UserPromptSubmit input, through its adapter. */
+function promptInput(prompt = PROMPT, session = SESSION) {
+  return ADAPTERS["claude-code"].toEvent({ session_id: session, transcript_path: transcript, cwd: repo, permission_mode: "auto", prompt }, ENV);
 }
 
-function stopInput(session = SESSION): StopInput {
-  return {
-    session_id: session,
-    transcript_path: transcript,
-    cwd: repo,
-    permission_mode: "auto",
-    effort: { level: "high" },
-    last_assistant_message: "Done.",
-  };
+/** Claude Code's Stop input, through its adapter. */
+function stopInput(session = SESSION) {
+  return ADAPTERS["claude-code"].toEvent(
+    { session_id: session, transcript_path: transcript, cwd: repo, permission_mode: "auto", effort: { level: "high" }, last_assistant_message: "Done." },
+    ENV,
+  );
 }
+
+const start = capturePrompt;
+const stop = captureStop;
 
 /** Everything a capture must leave alone: HEAD, the branch, the index and the status. */
 function repoState() {
@@ -94,15 +82,15 @@ afterEach(async () => {
 });
 
 describe("captureEnabled", () => {
-  test("is on for 1 and true", () => {
+  test("is on unless switched off", () => {
+    expect(captureEnabled({})).toBe(true);
     expect(captureEnabled({ THUNDERJAR_CAPTURE: "1" })).toBe(true);
-    expect(captureEnabled({ THUNDERJAR_CAPTURE: "true" })).toBe(true);
+    expect(captureEnabled({ THUNDERJAR_CAPTURE: "" })).toBe(true);
   });
 
-  test("is off otherwise", () => {
-    expect(captureEnabled({})).toBe(false);
+  test("is off for 0 and false", () => {
     expect(captureEnabled({ THUNDERJAR_CAPTURE: "0" })).toBe(false);
-    expect(captureEnabled({ THUNDERJAR_CAPTURE: "" })).toBe(false);
+    expect(captureEnabled({ THUNDERJAR_CAPTURE: "false" })).toBe(false);
   });
 });
 
@@ -120,7 +108,7 @@ describe("verbose logging", () => {
     await start(promptInput(), env);
     await stop(stopInput(), env);
     const log = await logFile().text();
-    expect(log).toContain(`start: wrote ${refName(SESSION, "start")}`);
+    expect(log).toContain(`prompt: wrote ${refName(SESSION, "start")}`);
     expect(log).toContain(`stop: wrote ${refName(SESSION, "turn-1")}`);
   });
 });
@@ -137,16 +125,10 @@ describe("refName", () => {
   });
 });
 
-describe("harnessFromEnv", () => {
-  test("reads the version, surface and effort", () => {
-    expect(harnessFromEnv(ENV)).toEqual({ harnessVersion: "2.1.322", harnessSurface: "sdk-cli", effort: "high" });
-  });
-});
-
 describe("capture off", () => {
   test("writes nothing", async () => {
     const before = repoState();
-    const env = { ...ENV, THUNDERJAR_CAPTURE: undefined };
+    const env = { ...ENV, THUNDERJAR_CAPTURE: "0" };
 
     expect(await start(promptInput(), env)).toEqual({ captured: "nothing" });
     expect(await stop(stopInput(), env)).toEqual({ captured: false });
@@ -174,7 +156,7 @@ describe("start", () => {
       kind: "start",
       prompt: PROMPT,
       agent: {
-        harness: "Claude Code",
+        harness: "claude-code",
         harnessVersion: "2.1.322",
         harnessSurface: "sdk-cli",
         effort: "high",
@@ -253,7 +235,7 @@ describe("stop", () => {
       turn: 1,
       prompt: null,
       laterPrompts: [],
-      agent: { models: ["claude-opus-5-5"], effort: "high", permissionMode: "auto", harnessVersion: "2.1.322" },
+      agent: { harness: "claude-code", model: null, models: ["claude-opus-5-5"], effort: "high", permissionMode: "auto", harnessVersion: "2.1.322" },
       repository: {
         branch: "main",
         headAtStop: before.head,
