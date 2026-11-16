@@ -27,6 +27,17 @@ jobs:
       - run: bun run test
         env:
           THUNDERJAR_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+      - name: Installed package smoke test
+        run: bun run test:package
+
+  # Its own job, so it runs alongside check rather than after it.
+  docker:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
       # Ubuntu 24.04's AppArmor stops unconfined processes making user namespaces, whatever
       # docker run is told. Scenario 0206's sandboxing agent needs them, as Claude Code's
       # bubblewrap sandbox does.
@@ -34,8 +45,6 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Docker image tests (GitHub's Ubuntu runners have Docker)
         run: bun run test:docker
-      - name: Installed package smoke test
-        run: bun run test:package
 
   # Builds the versioned docs site, as the deploy after a release does, so a release
   # PR whose docs won't build can't be merged.
