@@ -6,6 +6,11 @@
 // other test runs Thunderjar from source; this one runs only what's published.
 //
 //   bun run test:package
+//   bun run test:package --quickstart
+//
+// --quickstart then follows the docs' quick start for real: `thunderjar run compare-models`, with
+// the real ANTHROPIC_API_KEY, Docker and a real model. It costs a few cents, so CI runs it only on
+// the release PR.
 //
 // Exits 1, printing the failing command's output, if a step fails. The temporary folder is removed
 // either way.
@@ -14,6 +19,7 @@ import { $ } from "bun";
 const ROOT = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const TEMP = `${Bun.env.TMPDIR || "/tmp"}/thunderjar-package-${crypto.randomUUID()}`;
 const PROJECT = `${TEMP}/project`;
+const QUICKSTART = Bun.argv.includes("--quickstart");
 
 /** The keys of the harnesses init's test cases use. Placeholders: nothing here reaches an agent. */
 const KEYS = { ANTHROPIC_API_KEY: "smoke-test", COPILOT_GITHUB_TOKEN: "smoke-test", OPENCODE_API_KEY: "smoke-test" };
@@ -116,6 +122,14 @@ try {
   const step = "thunderjar view".padEnd(width);
   await checkView(step);
   console.log(`${step}  ok`);
+
+  if (QUICKSTART) {
+    const step = "thunderjar run compare-models".padEnd(width);
+    if (!Bun.env.ANTHROPIC_API_KEY) fail(step, "--quickstart needs ANTHROPIC_API_KEY");
+    // The quick start's command as the docs give it, with the real environment: no placeholder keys.
+    await mustRun(step, $`npx --no-install thunderjar run compare-models`.cwd(PROJECT));
+    console.log(`${step}  ok`);
+  }
 } catch (error) {
   if (!(error instanceof StepFailed)) throw error;
   console.log(`${error.step}  FAILED`);
