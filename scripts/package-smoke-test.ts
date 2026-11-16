@@ -16,8 +16,8 @@
 // Exits 1, printing the failing command's output, if a step fails. The temporary folder is removed
 // either way.
 import { $ } from "bun";
+import { packThunderjar } from "../src/cli/commands/capture/sampleRepoImage.ts";
 
-const ROOT = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const TEMP = `${Bun.env.TMPDIR || "/tmp"}/thunderjar-package-${crypto.randomUUID()}`;
 const PROJECT = `${TEMP}/project`;
 const QUICKSTART = Bun.argv.includes("--quickstart");
@@ -105,14 +105,12 @@ async function checkView(step: string): Promise<void> {
 
 try {
   await $`mkdir -p ${PROJECT}`.quiet();
-  await mustRun("build", $`bun run build`.cwd(ROOT));
-  // npm pack prints the tarball's name last on stdout, and its notices on stderr.
-  const packed = (await mustRun("pack", $`npm pack --pack-destination ${TEMP}`.cwd(ROOT))).stdout.trim().split("\n").at(-1) as string;
-  console.log(`packed ${packed}`);
+  const tarball = await packThunderjar(TEMP).catch((error: unknown) => fail("build and pack", error instanceof Error ? error.message : String(error)));
+  console.log(`packed ${tarball.slice(TEMP.length + 1)}`);
 
   await mustRun("npm init", $`npm init --yes`.cwd(PROJECT));
   await mustRun("git init", $`git init -q`.cwd(PROJECT));
-  await mustRun("install", $`npm install --no-audit --no-fund ${`${TEMP}/${packed}`}`.cwd(PROJECT));
+  await mustRun("install", $`npm install --no-audit --no-fund ${tarball}`.cwd(PROJECT));
   console.log("installed into <temp>");
 
   const width = Math.max(...STEPS.map(({ args }) => `thunderjar ${args.join(" ")}`.length));
