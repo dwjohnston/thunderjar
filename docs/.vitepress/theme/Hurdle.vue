@@ -38,7 +38,7 @@ defineProps<{ label: string }>();
 }
 
 .sign {
-  padding: 0 5px;
+  padding: 4px 10px;
   background: #ffd200;
   color: #111;
   font-size: 11px;
