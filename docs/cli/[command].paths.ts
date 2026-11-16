@@ -10,6 +10,8 @@ function commandPage(cmd: Command, parent: Command): string {
   return [
     `# ${parent.name()} ${cmd.name()}`,
     "",
+    "<AiPlaceholder />",
+    "",
     cmd.description(),
     "",
     "```text",
@@ -21,6 +23,8 @@ function commandPage(cmd: Command, parent: Command): string {
 function overviewPage(program: Command): string {
   return [
     "# CLI reference",
+    "",
+    "<AiPlaceholder />",
     "",
     program.description(),
     "",

@@ -21,9 +21,9 @@ Humans: add your notes here
 
 # Quick capture
 
-The user has seen an agent, usually you, get something wrong. Write down the facts of the session, so the failure can be reproduced later as a Thunderjar eval.
+Write down the facts of the session.
 
-The argument is the user's complaint, e.g. `"Agent did not invoke /x skill, /y skill"`.
+The argument is the a user note, e.g. `"Agent did not invoke /x skill, /y skill"` or `"nailed it"`.
 
 The user may instead ask you to capture another session, by its ID. Then follow [Capturing another session](#capturing-another-session) as well.
 
@@ -60,7 +60,7 @@ git log --oneline -10
 
 ❌ **Don't do that**
 
-- Don't fix the problem, apologise at length, or retry the task.
+- Don't fix the problem, apologise, or retry the task.
 - Don't change any file other than the capture.
 
 **Rationale:** the capture is a snapshot of the broken state. Fixing things first changes the state, and the fix belongs in a later, separate turn.

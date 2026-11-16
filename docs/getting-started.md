@@ -21,3 +21,5 @@ This will create and populate a `.thunderjar` folder.
 
 The folder comes preconfigured with an example test case. 
 
+
+<Todo>[Add skills provisioning]</Todo>

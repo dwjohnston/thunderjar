@@ -1,6 +1,8 @@
 <!-- Mockup: AI-generated draft of the configuration section. -->
 # Project structure
 
+<AiPlaceholder />
+
 Everything Thunderjar reads lives in `.thunderjar/`. Each `.ts` file default-exports one `declareX()` call. The folder a file sits in decides what it declares.
 
 ```txt

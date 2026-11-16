@@ -7,6 +7,8 @@ const source = new URL("../../src/api/declarations.ts", import.meta.url);
 
 const INTRO = `# Declaration reference
 
+<AiPlaceholder />
+
 Every file in \`.thunderjar/\` default-exports one of these functions. Each returns its argument
 unchanged: its only job is to type-check the declaration. See [Project structure](./) for which
 file declares what.

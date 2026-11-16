@@ -20,6 +20,7 @@ export default defineConfig({
   appearance: "dark",
   themeConfig: {
     nav: [{ text: "Docs", link: "/getting-started" }],
+    socialLinks: [{ icon: "github", link: "https://github.com/dwjohnston/thunderjar" }],
     sidebar: [
       {
         text: "Guide",

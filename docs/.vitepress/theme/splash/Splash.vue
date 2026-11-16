@@ -12,6 +12,7 @@ Humans: add your notes here
      then what went into it (the fixture's file structure, the skill text two prompt sets differ
      by, the initial prompt, the measurements). Dark and light palettes follow the site toggle. -->
 <script setup lang="ts">
+import { ref } from "vue";
 import { withBase } from "vitepress";
 import Jar from "./Jar.vue";
 
@@ -41,6 +42,13 @@ const rows: Row[] = [
   { promptSet: "required-format", model: "deepseek-v4.1-flash", red: "5/5", green: "1/5", blue: "0/5", cost: "$0.004", best: ["red", "blue"] },
 ];
 const columns = ["red", "green", "blue", "cost"] as const;
+
+const installCommands = {
+  npm: ["npm i thunderjar@latest", "npx thunderjar init", "npx thunderjar run compare-models"],
+  pnpm: ["pnpm add thunderjar@latest", "pnpm exec thunderjar init", "pnpm exec thunderjar run compare-models"],
+  bun: ["bun add thunderjar@latest", "bunx thunderjar init", "bunx thunderjar run compare-models"],
+} as const;
+const packageManager = ref<keyof typeof installCommands>("npm");
 </script>
 
 <template>
@@ -55,6 +63,26 @@ const columns = ["red", "green", "blue", "cost"] as const;
       </header>
 
       <div class="cta-row">
+        <div class="install">
+          <div class="pm-tabs" role="tablist" aria-label="Package manager">
+            <button
+              v-for="(_, pm) in installCommands"
+              :key="pm"
+              type="button"
+              role="tab"
+              :aria-selected="packageManager === pm"
+              :class="{ active: packageManager === pm }"
+              @click="packageManager = pm"
+            >
+              {{ pm }}
+            </button>
+          </div>
+          <div class="card code install-cmd"><pre><span class="k">$</span> {{ installCommands[packageManager][0] }}
+<span class="k">$</span> {{ installCommands[packageManager][1] }}
+
+<span class="c"># Assumes ANTHROPIC_API_KEY exists</span>
+<span class="k">$</span> {{ installCommands[packageManager][2] }}</pre></div>
+        </div>
         <a class="cta" :href="withBase('/getting-started')">Documentation →</a>
       </div>
 
@@ -378,6 +406,7 @@ pre {
 .s { color: #3dffc5; }
 .p { color: #b4a6ff; }
 .n { color: #ff9ad5; }
+.c { color: #5f8f88; font-style: italic; }
 
 table {
   width: 100%;
@@ -494,6 +523,38 @@ th.num {
   color: var(--cta-text);
   box-shadow: 0 6px calc(20px + 10px * var(--glow)) rgba(var(--accent-rgb), 0.4);
   transition: box-shadow 0.2s;
+}
+
+.install {
+  width: min(100%, 640px);
+  margin: 0 auto 40px;
+  text-align: left;
+}
+
+.pm-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.pm-tabs button {
+  padding: 4px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.pm-tabs button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.install-cmd {
+  padding: 12px 18px;
 }
 
 .cta:hover {
