@@ -27,6 +27,7 @@ import {
   tryGit,
   versionOf,
   writeRecord,
+  verboseLogger,
   type StartRecord,
   type TurnRecord,
 } from "./lib.ts";
@@ -44,7 +45,8 @@ message holds the turn's prompt, the agent's commits, the files left
 uncommitted and more, as JSON.
 
 The branch, the index and the working tree are left as they are. It doesn't
-push, and always exits 0: errors go to <git-dir>/thunderjar/capture.log.
+push, and always exits 0: errors go to <git-dir>/thunderjar/capture.log, and
+so does each step with THUNDERJAR_CAPTURE_LOG_LEVEL=verbose (default: none).
 
 Usage:
   echo '<hook input>' | bun stop.ts
@@ -83,11 +85,16 @@ export type StopResult = { captured: false } | { captured: true; ref: string; co
 
 export async function main(input: StopInput, env: Record<string, string | undefined>): Promise<StopResult> {
   if (!captureEnabled(env)) return { captured: false };
+  const log = verboseLogger(input.cwd, "stop", env);
+  log(`session ${input.session_id}, cwd ${input.cwd}`);
   const root = tryGit(input.cwd, ["rev-parse", "--show-toplevel"]);
   if (!root) return { captured: false };
   const sessionId = input.session_id;
   const startRef = refName(sessionId, "start");
-  if (!refExists(root, startRef)) return { captured: false };
+  if (!refExists(root, startRef)) {
+    log(`no ${startRef}: nothing to capture`);
+    return { captured: false };
+  }
 
   const start = readRecord<StartRecord>(root, startRef);
   const turn = nextTurn(root, sessionId);
@@ -97,7 +104,9 @@ export async function main(input: StopInput, env: Record<string, string | undefi
       : readRecord<TurnRecord>(root, refName(sessionId, `turn-${turn - 1}`)).repository.headAtStop;
 
   const headAtStop = tryGit(root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+  log(`turn ${turn}: previous HEAD ${previousHead ?? "(none)"}, HEAD ${headAtStop ?? "(none)"}`);
   const { commit } = await snapshot(root, headAtStop, `thunderjar capture: ${sessionId} turn-${turn}\n`);
+  log(`snapshot ${commit}`);
 
   const agentCommits = headAtStop
     ? git(root, ["log", "--reverse", "--format=%H %s", previousHead ? `${previousHead}..HEAD` : "HEAD"])
@@ -148,7 +157,12 @@ export async function main(input: StopInput, env: Record<string, string | undefi
     lastAssistantMessage: input.last_assistant_message ?? null,
   };
   const ref = refName(sessionId, `turn-${turn}`);
-  writeRecord(root, ref, commit, record);
+  log(
+    `${agentCommits.length} agent commits, ${leftUncommitted.length} files uncommitted, ` +
+      `${prompts.length} pending prompts, historyRewritten ${historyRewritten}`,
+  );
+  const tag = writeRecord(root, ref, commit, record);
+  log(`wrote ${ref} -> tag ${tag}`);
   await clearPending(root, sessionId);
   return { captured: true, ref, commit, record };
 }
