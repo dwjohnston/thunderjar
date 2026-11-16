@@ -40,7 +40,7 @@ Then, before the agent sees the prompt:
     for the Stop hook.
 
 The branch, the index and the working tree are left as they are. It never
-blocks the prompt: errors go to <git-dir>/thunderjar/capture.log, and so does
+blocks the prompt: errors go to .thunderjar/logs/capture.log, and so does
 each step with THUNDERJAR_CAPTURE_LOG_LEVEL=verbose (default: none). It prints
 nothing on stdout, which Claude Code would add to the agent's context.
 

@@ -45,7 +45,7 @@ message holds the turn's prompt, the agent's commits, the files left
 uncommitted and more, as JSON.
 
 The branch, the index and the working tree are left as they are. It doesn't
-push, and always exits 0: errors go to <git-dir>/thunderjar/capture.log, and
+push, and always exits 0: errors go to .thunderjar/logs/capture.log, and
 so does each step with THUNDERJAR_CAPTURE_LOG_LEVEL=verbose (default: none).
 
 Usage:

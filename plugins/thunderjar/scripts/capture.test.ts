@@ -11,7 +11,7 @@
 import { $ } from "bun";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
-  captureDir,
+  logDir,
   captureEnabled,
   git,
   harnessFromEnv,
@@ -107,7 +107,7 @@ describe("captureEnabled", () => {
 });
 
 describe("verbose logging", () => {
-  const logFile = () => Bun.file(`${captureDir(repo)}/capture.log`);
+  const logFile = () => Bun.file(`${logDir(repo)}/capture.log`);
 
   test("is off by default", async () => {
     await start(promptInput(), ENV);
