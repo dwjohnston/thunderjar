@@ -98,7 +98,7 @@ Each `turn-<n>` record holds:
 
 A turn ends whenever the main agent stops. Subagents stopping don't count.
 
-The hooks never block a prompt or stop the agent. Errors go to `.git/thunderjar/capture.log`. Set `THUNDERJAR_CAPTURE_LOG_LEVEL=verbose` (default `none`) to also log each step there. The prompts of a later turn wait in `.git/thunderjar/<session>/pending.json` until the turn ends.
+The hooks never block a prompt or stop the agent. Errors go to `.thunderjar/logs/capture.log`. Set `THUNDERJAR_CAPTURE_LOG_LEVEL=verbose` (default `none`) to also log each step there. The prompts of a later turn wait in `.git/thunderjar/<session>/pending.json` until the turn ends.
 
 ## Read the records
 

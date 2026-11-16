@@ -267,11 +267,16 @@ export async function clearPending(root: string, sessionId: string) {
 
 // --- logging ---
 
+/** Where the hooks log: `.thunderjar/logs/` in the repository, which thunderjar gitignores. */
+export function logDir(root: string): string {
+  return `${root}/.thunderjar/logs`;
+}
+
 function appendLog(cwd: string, hook: string, message: string) {
   try {
     const root = tryGit(cwd, ["rev-parse", "--show-toplevel"]);
     if (!root) return;
-    const dir = captureDir(root);
+    const dir = logDir(root);
     mkdirSync(dir, { recursive: true });
     appendFileSync(`${dir}/capture.log`, `${new Date().toISOString()} ${hook}: ${message}\n`);
   } catch {
@@ -280,7 +285,7 @@ function appendLog(cwd: string, hook: string, message: string) {
 }
 
 /**
- * Appends a failure to `<git-dir>/thunderjar/capture.log`. The hooks never fail the session, so this is
+ * Appends a failure to `.thunderjar/logs/capture.log`. The hooks never fail the session, so this is
  * where their errors go. Outside a git repository there's nowhere to write, and the error is dropped.
  */
 export async function logError(cwd: string, hook: string, error: unknown) {
@@ -291,7 +296,7 @@ export type Log = (message: string) => void;
 
 /**
  * A logger for one hook run. With `THUNDERJAR_CAPTURE_LOG_LEVEL=verbose` it appends each message to
- * `<git-dir>/thunderjar/capture.log`; otherwise it does nothing. Never stdout: Claude Code would add
+ * `.thunderjar/logs/capture.log`; otherwise it does nothing. Never stdout: Claude Code would add
  * that to the agent's context.
  */
 export function verboseLogger(cwd: string, hook: string, env: Record<string, string | undefined>): Log {
