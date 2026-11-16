@@ -10,37 +10,46 @@
  */
 
 import {
-  commitEverything,
+  captureEnabled,
+  clearPending,
   git,
+  gitSucceeds,
   harnessFromEnv,
+  logError,
   modelsOf,
+  nextTurn,
+  readPending,
+  readRecord,
   readTranscript,
-  tagExists,
-  tagName,
+  refExists,
+  refName,
+  snapshot,
   tryGit,
   versionOf,
-  writeTag,
+  writeRecord,
+  type StartRecord,
+  type TurnRecord,
 } from "./lib.ts";
 
 function help() {
   console.log(`
-Record the end of a one-shot task. Runs as the plugin's Stop hook, which
-passes the hook input as JSON on stdin.
+Capture the end of a turn. Runs as the plugin's Stop hook, which passes the
+hook input as JSON on stdin.
 
-Does nothing unless the session's start tag exists and its end tag doesn't, so
-only the first stop after /tj-oneshot is recorded. Then:
-  1. Commits whatever the agent left uncommitted, including untracked files, as
-     "🏁 tj-oneshot end: <session>". The commit is empty when nothing is left.
-  2. Tags it with the annotated tag thunderjar/oneshot/<session>/end.
-  3. Pushes the start and end tags to origin, if there is one.
+Does nothing unless THUNDERJAR_CAPTURE=1 and the session has a start ref.
+Then it snapshots the working tree, untracked files included, as a commit on
+no branch whose parent is the current HEAD, and points
+refs/thunderjar/capture/<session>/turn-<n> at an annotated tag for it, whose
+message holds the turn's prompt, the agent's commits, the files left
+uncommitted and more, as JSON.
 
-It exits 1 on failure, never 2: exit code 2 would stop the agent from finishing.
+The branch, the index and the working tree are left as they are. It doesn't
+push, and always exits 0: errors go to <git-dir>/thunderjar/capture.log.
 
 Usage:
-  echo '<hook input>' | bun stop.ts [--no-push]
+  echo '<hook input>' | bun stop.ts
 
 Options:
-  --no-push    Don't push the tags
   -h, --help   Show this message
 `);
 }
@@ -55,42 +64,70 @@ export type StopInput = {
 };
 
 if (import.meta.main) {
-  const argv = Bun.argv.slice(2);
-  if (argv.includes("-h") || argv.includes("--help")) {
+  if (Bun.argv.includes("-h") || Bun.argv.includes("--help")) {
     help();
     process.exit(0);
   }
-  try {
-    const input = JSON.parse(await Bun.stdin.text()) as StopInput;
-    const result = await main(input, Bun.env, { push: !argv.includes("--no-push") });
-    if (result.message) console.error(result.message);
-  } catch (error) {
-    console.error(`tj-oneshot: ${error instanceof Error ? error.message : error}`);
-    process.exit(1);
+  if (captureEnabled(Bun.env)) {
+    let input: StopInput | undefined;
+    try {
+      input = JSON.parse(await Bun.stdin.text()) as StopInput;
+      await main(input, Bun.env);
+    } catch (error) {
+      await logError(input?.cwd ?? process.cwd(), "stop", error);
+    }
   }
 }
 
-export async function main(input: StopInput, env: Record<string, string | undefined>, options: { push: boolean }) {
-  const sessionId = input.session_id;
-  const root = tryGit(input.cwd, ["rev-parse", "--show-toplevel"]);
-  if (!root) return { recorded: false };
-  const startTag = tagName(sessionId, "start");
-  const endTag = tagName(sessionId, "end");
-  if (!tagExists(root, startTag) || tagExists(root, endTag)) return { recorded: false };
+export type StopResult = { captured: false } | { captured: true; ref: string; commit: string; record: TurnRecord };
 
-  const entries = await readTranscript(input.transcript_path);
-  const harness = harnessFromEnv(env);
-  const startCommit = git(root, ["rev-parse", `${startTag}^{commit}`]);
-  const agentCommits = git(root, ["log", "--reverse", "--format=%H %s", `${startCommit}..HEAD`])
+export async function main(input: StopInput, env: Record<string, string | undefined>): Promise<StopResult> {
+  if (!captureEnabled(env)) return { captured: false };
+  const root = tryGit(input.cwd, ["rev-parse", "--show-toplevel"]);
+  if (!root) return { captured: false };
+  const sessionId = input.session_id;
+  const startRef = refName(sessionId, "start");
+  if (!refExists(root, startRef)) return { captured: false };
+
+  const start = readRecord<StartRecord>(root, startRef);
+  const turn = nextTurn(root, sessionId);
+  const previousHead =
+    turn === 1
+      ? start.repository.headAtStart
+      : readRecord<TurnRecord>(root, refName(sessionId, `turn-${turn - 1}`)).repository.headAtStop;
+
+  const headAtStop = tryGit(root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
+  const { commit } = await snapshot(root, headAtStop, `thunderjar capture: ${sessionId} turn-${turn}\n`);
+
+  const agentCommits = headAtStop
+    ? git(root, ["log", "--reverse", "--format=%H %s", previousHead ? `${previousHead}..HEAD` : "HEAD"])
+        .split("\n")
+        .filter(Boolean)
+    : [];
+  const leftUncommitted = (
+    headAtStop
+      ? git(root, ["diff", "--name-only", "--no-renames", headAtStop, commit])
+      : git(root, ["ls-tree", "-r", "--name-only", commit])
+  )
     .split("\n")
     .filter(Boolean);
-  const endCommit = commitEverything(root, `🏁 tj-oneshot end: ${sessionId}`);
-  const leftUncommitted = git(root, ["diff", "--name-only", `${endCommit}^`, endCommit]).split("\n").filter(Boolean);
 
-  const record = {
+  const isAncestor = (base: string | null) =>
+    base === null || (headAtStop !== null && gitSucceeds(root, ["merge-base", "--is-ancestor", base, headAtStop]));
+  const historyRewritten = !isAncestor(start.repository.headAtStart) || !isAncestor(previousHead);
+
+  const pending = await readPending(root, sessionId);
+  const prompts = pending.prompts.map((prompt) => prompt.text);
+  const entries = await readTranscript(input.transcript_path);
+  const harness = harnessFromEnv(env);
+
+  const record: TurnRecord = {
     schemaVersion: 1,
-    kind: "end",
+    kind: "turn",
     capturedAt: new Date().toISOString(),
+    turn,
+    prompt: turn === 1 ? null : (prompts[0] ?? null),
+    laterPrompts: turn === 1 ? prompts : prompts.slice(1),
     agent: {
       harness: "Claude Code",
       harnessVersion: harness.harnessVersion ?? versionOf(entries),
@@ -102,28 +139,16 @@ export async function main(input: StopInput, env: Record<string, string | undefi
       permissionMode: input.permission_mode ?? null,
     },
     repository: {
-      root,
       branch: tryGit(root, ["branch", "--show-current"]) || null,
-      startCommit,
-      endCommit,
+      headAtStop,
       agentCommits,
       leftUncommitted,
+      historyRewritten,
     },
     lastAssistantMessage: input.last_assistant_message ?? null,
   };
-  writeTag(root, endTag, endCommit, `tj-oneshot end: ${sessionId}`, record);
-
-  if (!options.push) return { recorded: true, pushed: false };
-  if (tryGit(root, ["remote", "get-url", "origin"]) === null) {
-    return { recorded: true, pushed: false, message: "tj-oneshot: no origin remote. Tags not pushed." };
-  }
-  const refs = [`refs/tags/${startTag}`, `refs/tags/${endTag}`];
-  try {
-    // --no-verify: the repo's pre-push hooks shouldn't stop the record being shared.
-    git(root, ["push", "--no-verify", "origin", ...refs]);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`recorded the one-shot, but couldn't push its tags. Push them with:\n  git push origin ${refs.join(" ")}\n${reason}`);
-  }
-  return { recorded: true, pushed: true };
+  const ref = refName(sessionId, `turn-${turn}`);
+  writeRecord(root, ref, commit, record);
+  await clearPending(root, sessionId);
+  return { captured: true, ref, commit, record };
 }

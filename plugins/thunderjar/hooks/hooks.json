@@ -1,16 +1,25 @@
 {
+  "description": "Thunderjar capture: with THUNDERJAR_CAPTURE=1, records each session's prompts and code as git refs under refs/thunderjar/capture/.",
   "hooks": {
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "bun \"${CLAUDE_PLUGIN_ROOT}\"/scripts/start.ts", "timeout": 60 }
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}\"/scripts/start.ts",
+            "timeout": 60
+          }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "bun \"${CLAUDE_PLUGIN_ROOT}\"/scripts/stop.ts", "timeout": 120 }
+          {
+            "type": "command",
+            "command": "bun \"${CLAUDE_PLUGIN_ROOT}\"/scripts/stop.ts",
+            "timeout": 120
+          }
         ]
       }
     ]

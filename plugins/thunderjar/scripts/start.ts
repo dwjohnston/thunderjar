@@ -10,35 +10,37 @@
  */
 
 import {
-  commitEverything,
+  addPending,
+  captureEnabled,
   harnessFromEnv,
-  modelsOf,
-  parseOneshotPrompt,
+  logError,
   readTranscript,
-  tagExists,
-  tagName,
+  refExists,
+  refName,
+  snapshot,
   tryGit,
   versionOf,
-  writeTag,
+  writeRecord,
+  type StartRecord,
 } from "./lib.ts";
 
 function help() {
   console.log(`
-Record the start of a one-shot task. Runs as the plugin's UserPromptSubmit
-hook, which passes the hook input as JSON on stdin.
+Capture a prompt. Runs as the plugin's UserPromptSubmit hook, which passes the
+hook input as JSON on stdin.
 
-Does nothing unless the prompt is a /tj-oneshot command. Otherwise, before the
-agent sees the prompt:
-  1. Commits everything in the working tree, including untracked files, as
-     "🎯 tj-oneshot start: <session>". The commit is empty when the tree is clean.
-  2. Tags it with the annotated tag thunderjar/oneshot/<session>/start, whose
-     message holds the prompt and the agent and repository details as JSON.
+Does nothing unless THUNDERJAR_CAPTURE=1 and the folder is in a git repository.
+Then, before the agent sees the prompt:
+  - On the session's first prompt, snapshots the working tree, untracked files
+    included, as a commit on no branch, and points
+    refs/thunderjar/capture/<session>/start at an annotated tag for it, whose
+    message holds the prompt and details as JSON.
+  - On a later prompt, leaves it in <git-dir>/thunderjar/<session>/pending.json
+    for the Stop hook.
 
-If it can't record the start, it blocks the prompt and tells the user why, so
-an unrecorded one-shot never runs.
-
-Nothing is printed on stdout on success: Claude Code would add it to the
-agent's context.
+The branch, the index and the working tree are left as they are. It never
+blocks the prompt: errors go to <git-dir>/thunderjar/capture.log. It prints
+nothing on stdout, which Claude Code would add to the agent's context.
 
 Usage:
   echo '<hook input>' | bun start.ts
@@ -61,54 +63,56 @@ if (import.meta.main) {
     help();
     process.exit(0);
   }
-  const input = JSON.parse(await Bun.stdin.text()) as PromptInput;
-  try {
-    await main(input, Bun.env);
-  } catch (error) {
-    const reason = `tj-oneshot: ${error instanceof Error ? error.message : error}`;
-    console.log(JSON.stringify({ decision: "block", reason }));
+  if (captureEnabled(Bun.env)) {
+    let input: PromptInput | undefined;
+    try {
+      input = JSON.parse(await Bun.stdin.text()) as PromptInput;
+      await main(input, Bun.env);
+    } catch (error) {
+      await logError(input?.cwd ?? process.cwd(), "start", error);
+    }
   }
 }
 
-export async function main(input: PromptInput, env: Record<string, string | undefined>) {
-  const task = parseOneshotPrompt(input.prompt);
-  if (task === null) return { started: false as const };
-  if (!task.trim()) {
-    throw new Error("Give the task after the command, e.g. /tj-oneshot Add a --verbose flag to the CLI.");
-  }
+export type StartResult =
+  | { captured: "nothing" }
+  | { captured: "start"; ref: string; commit: string; record: StartRecord }
+  | { captured: "pending" };
+
+export async function main(input: PromptInput, env: Record<string, string | undefined>): Promise<StartResult> {
+  if (!captureEnabled(env)) return { captured: "nothing" };
+  const root = tryGit(input.cwd, ["rev-parse", "--show-toplevel"]);
+  if (!root) return { captured: "nothing" };
 
   const sessionId = input.session_id;
-  const root = tryGit(input.cwd, ["rev-parse", "--show-toplevel"]);
-  if (!root) throw new Error(`${input.cwd} isn't in a git repository, so the one-shot can't be recorded.`);
-  const tag = tagName(sessionId, "start");
-  if (tagExists(root, tag)) {
-    throw new Error("This session already has a one-shot. Start a new session for another.");
+  const ref = refName(sessionId, "start");
+  if (refExists(root, ref)) {
+    await addPending(root, sessionId, input.prompt);
+    return { captured: "pending" };
   }
 
   const entries = await readTranscript(input.transcript_path);
   const harness = harnessFromEnv(env);
-  const headBeforeStart = tryGit(root, ["rev-parse", "HEAD"]);
+  const headAtStart = tryGit(root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
   const branch = tryGit(root, ["branch", "--show-current"]) || null;
-  const commit = commitEverything(root, `🎯 tj-oneshot start: ${sessionId}`);
+  const { commit, dirty } = await snapshot(root, headAtStart, `thunderjar capture: ${sessionId} start\n`);
 
-  const record = {
+  const record: StartRecord = {
     schemaVersion: 1,
     kind: "start",
     capturedAt: new Date().toISOString(),
-    prompt: { text: task, typed: input.prompt, verbatim: true },
+    prompt: input.prompt,
     agent: {
       harness: "Claude Code",
       harnessVersion: harness.harnessVersion ?? versionOf(entries),
       harnessSurface: harness.harnessSurface,
-      // Only known when the session has had an earlier turn. The end tag always has it.
-      model: modelsOf(entries).at(-1) ?? null,
       effort: harness.effort,
       sessionId,
       transcriptPath: input.transcript_path ?? null,
       permissionMode: input.permission_mode ?? null,
     },
-    repository: { root, branch, headBeforeStart, startCommit: commit },
+    repository: { root, branch, headAtStart, dirty },
   };
-  writeTag(root, tag, commit, `tj-oneshot start: ${sessionId}`, record);
-  return { started: true as const, tag, commit, record };
+  writeRecord(root, ref, commit, record);
+  return { captured: "start", ref, commit, record };
 }
