@@ -16,6 +16,26 @@
             "timeout": 60
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR\"/plugins/thunderjar/scripts/stop.ts",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR\"/plugins/thunderjar/scripts/start.ts",
+            "timeout": 60
+          }
+        ]
       }
     ]
   }
