@@ -11,6 +11,7 @@ fixtures/
   02_regular/                  initialised projects that work
   04_unhappy/                  projects broken on purpose
   05_real_agents/              projects that run a real agent
+  06_capture/                  codebases for `thunderjar capture`, in Docker
     <NNNN>_<what it is>/       a scenario, e.g. 0201_minimal_existing_setup
       project/                 the user's project: the CLI runs here
       tsconfig.json            optional: type-checks the scenario, see below
@@ -146,6 +147,11 @@ bun run fixture 0202 plan is-prime-baseline
 - **05_real_agents**: projects that run a real agent against a real model, for `bun run test:agent`.
   - `0501_claude_code`: exactly what `init` scaffolds in an empty project.
     - Test cases, init's: `compare-models`, Claude Code on Haiku 4.5 and Haiku 5.5, which needs `ANTHROPIC_API_KEY`, and `compare-harnesses`, Haiku 5.5 in Claude Code, Copilot CLI and OpenCode, which also needs `COPILOT_GITHUB_TOKEN` and `OPENCODE_API_KEY`. The real agent test runs only `compare-models`.
+
+- **06_capture**: codebases that `thunderjar capture` is installed into, inside a Docker image, for `bun run test:docker`.
+  - `0601_sample_repo`: a tiny JavaScript project that has never had Thunderjar, and, beside `project/`, the `Dockerfile` of the sample repo image: Node, Bun, git, and each starter harness's CLI at its starter version, with `project/` committed at `/work`. Thunderjar isn't in the image: the test installs it from the packed package.
+    - The image's tag is a hash of this folder and the versions, so editing either needs a new image: `bun run di:build:sample-repo`. The test fails, saying so, until there is one.
+    - Used by `src/cli/commands/capture/capture.docker.test.ts`. No `tsconfig.json`: nothing here is TypeScript.
 
 Keep it in this format:
 
