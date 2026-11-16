@@ -44,7 +44,7 @@ jobs:
       - name: Let containers make user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Docker image tests (GitHub's Ubuntu runners have Docker)
-        run: bun run test:docker
+        run: bun run test:docker:parallel
 
   # Builds the versioned docs site, as the deploy after a release does, so a release
   # PR whose docs won't build can't be merged.
