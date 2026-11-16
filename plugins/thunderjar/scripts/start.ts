@@ -21,6 +21,7 @@ import {
   tryGit,
   versionOf,
   writeRecord,
+  verboseLogger,
   type StartRecord,
 } from "./lib.ts";
 
@@ -39,7 +40,8 @@ Then, before the agent sees the prompt:
     for the Stop hook.
 
 The branch, the index and the working tree are left as they are. It never
-blocks the prompt: errors go to <git-dir>/thunderjar/capture.log. It prints
+blocks the prompt: errors go to <git-dir>/thunderjar/capture.log, and so does
+each step with THUNDERJAR_CAPTURE_LOG_LEVEL=verbose (default: none). It prints
 nothing on stdout, which Claude Code would add to the agent's context.
 
 Usage:
@@ -81,6 +83,8 @@ export type StartResult =
 
 export async function main(input: PromptInput, env: Record<string, string | undefined>): Promise<StartResult> {
   if (!captureEnabled(env)) return { captured: "nothing" };
+  const log = verboseLogger(input.cwd, "start", env);
+  log(`session ${input.session_id}, cwd ${input.cwd}`);
   const root = tryGit(input.cwd, ["rev-parse", "--show-toplevel"]);
   if (!root) return { captured: "nothing" };
 
@@ -88,6 +92,7 @@ export async function main(input: PromptInput, env: Record<string, string | unde
   const ref = refName(sessionId, "start");
   if (refExists(root, ref)) {
     await addPending(root, sessionId, input.prompt);
+    log(`${ref} exists: prompt (${input.prompt.length} chars) added to pending`);
     return { captured: "pending" };
   }
 
@@ -95,7 +100,9 @@ export async function main(input: PromptInput, env: Record<string, string | unde
   const harness = harnessFromEnv(env);
   const headAtStart = tryGit(root, ["rev-parse", "--verify", "--quiet", "HEAD"]);
   const branch = tryGit(root, ["branch", "--show-current"]) || null;
+  log(`first prompt: branch ${branch ?? "(detached)"}, HEAD ${headAtStart ?? "(none)"}, ${entries.length} transcript entries`);
   const { commit, dirty } = await snapshot(root, headAtStart, `thunderjar capture: ${sessionId} start\n`);
+  log(`snapshot ${commit}${dirty ? " (dirty)" : ""}`);
 
   const record: StartRecord = {
     schemaVersion: 1,
@@ -113,6 +120,7 @@ export async function main(input: PromptInput, env: Record<string, string | unde
     },
     repository: { root, branch, headAtStart, dirty },
   };
-  writeRecord(root, ref, commit, record);
+  const tag = writeRecord(root, ref, commit, record);
+  log(`wrote ${ref} -> tag ${tag}`);
   return { captured: "start", ref, commit, record };
 }

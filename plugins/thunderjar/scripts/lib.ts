@@ -9,6 +9,7 @@
  */
 
 import { $ } from "bun";
+import { appendFileSync, mkdirSync } from "node:fs";
 
 // Shared by the capture hooks and scripts: git calls, ref names, snapshots, records, and harness details.
 
@@ -18,6 +19,13 @@ export const REF_PREFIX = "refs/thunderjar/capture";
 export function captureEnabled(env: Record<string, string | undefined>): boolean {
   const value = env.THUNDERJAR_CAPTURE?.trim().toLowerCase();
   return value === "1" || value === "true";
+}
+
+export type LogLevel = "none" | "verbose";
+
+/** `THUNDERJAR_CAPTURE_LOG_LEVEL`: `verbose` logs each step to capture.log. Anything else means `none`. */
+export function logLevel(env: Record<string, string | undefined>): LogLevel {
+  return env.THUNDERJAR_CAPTURE_LOG_LEVEL?.trim().toLowerCase() === "verbose" ? "verbose" : "none";
 }
 
 export type RefKind = "start" | `turn-${number}`;
@@ -257,23 +265,38 @@ export async function clearPending(root: string, sessionId: string) {
   await Bun.file(pendingPath(root, sessionId)).delete().catch(() => {});
 }
 
-// --- errors ---
+// --- logging ---
+
+function appendLog(cwd: string, hook: string, message: string) {
+  try {
+    const root = tryGit(cwd, ["rev-parse", "--show-toplevel"]);
+    if (!root) return;
+    const dir = captureDir(root);
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(`${dir}/capture.log`, `${new Date().toISOString()} ${hook}: ${message}\n`);
+  } catch {
+    // Nothing more to do: a hook must never fail the session.
+  }
+}
 
 /**
  * Appends a failure to `<git-dir>/thunderjar/capture.log`. The hooks never fail the session, so this is
  * where their errors go. Outside a git repository there's nowhere to write, and the error is dropped.
  */
 export async function logError(cwd: string, hook: string, error: unknown) {
-  try {
-    const root = tryGit(cwd, ["rev-parse", "--show-toplevel"]);
-    if (!root) return;
-    const file = Bun.file(`${captureDir(root)}/capture.log`);
-    const before = (await file.exists()) ? await file.text() : "";
-    const reason = error instanceof Error ? (error.stack ?? error.message) : String(error);
-    await Bun.write(file, `${before}${new Date().toISOString()} ${hook}: ${reason}\n`, { createPath: true });
-  } catch {
-    // Nothing more to do: a hook must never fail the session.
-  }
+  appendLog(cwd, hook, error instanceof Error ? (error.stack ?? error.message) : String(error));
+}
+
+export type Log = (message: string) => void;
+
+/**
+ * A logger for one hook run. With `THUNDERJAR_CAPTURE_LOG_LEVEL=verbose` it appends each message to
+ * `<git-dir>/thunderjar/capture.log`; otherwise it does nothing. Never stdout: Claude Code would add
+ * that to the agent's context.
+ */
+export function verboseLogger(cwd: string, hook: string, env: Record<string, string | undefined>): Log {
+  if (logLevel(env) !== "verbose") return () => {};
+  return (message) => appendLog(cwd, hook, message);
 }
 
 // --- transcript ---

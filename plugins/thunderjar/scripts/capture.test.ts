@@ -11,6 +11,7 @@
 import { $ } from "bun";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  captureDir,
   captureEnabled,
   git,
   harnessFromEnv,
@@ -102,6 +103,25 @@ describe("captureEnabled", () => {
     expect(captureEnabled({})).toBe(false);
     expect(captureEnabled({ THUNDERJAR_CAPTURE: "0" })).toBe(false);
     expect(captureEnabled({ THUNDERJAR_CAPTURE: "" })).toBe(false);
+  });
+});
+
+describe("verbose logging", () => {
+  const logFile = () => Bun.file(`${captureDir(repo)}/capture.log`);
+
+  test("is off by default", async () => {
+    await start(promptInput(), ENV);
+    await stop(stopInput(), ENV);
+    expect(await logFile().exists()).toBe(false);
+  });
+
+  test("logs each step to capture.log with verbose", async () => {
+    const env = { ...ENV, THUNDERJAR_CAPTURE_LOG_LEVEL: "verbose" };
+    await start(promptInput(), env);
+    await stop(stopInput(), env);
+    const log = await logFile().text();
+    expect(log).toContain(`start: wrote ${refName(SESSION, "start")}`);
+    expect(log).toContain(`stop: wrote ${refName(SESSION, "turn-1")}`);
   });
 });
 
