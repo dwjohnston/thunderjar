@@ -9,7 +9,6 @@
  */
 
 import { $ } from "bun";
-import { appendFileSync, mkdirSync } from "node:fs";
 
 // Shared by the capture hooks and scripts: git calls, ref names, snapshots, records, and harness details.
 
@@ -277,8 +276,13 @@ function appendLog(cwd: string, hook: string, message: string) {
     const root = tryGit(cwd, ["rev-parse", "--show-toplevel"]);
     if (!root) return;
     const dir = logDir(root);
-    mkdirSync(dir, { recursive: true });
-    appendFileSync(`${dir}/capture.log`, `${new Date().toISOString()} ${hook}: ${message}\n`);
+    // Synchronous, so a hook's last lines are written before it exits. Bun has no append API, and
+    // `node:fs` is banned, so `sh` appends. Only runs with verbose logging or on an error.
+    Bun.spawnSync(["sh", "-c", 'mkdir -p "$1" && cat >> "$1/capture.log"', "sh", dir], {
+      stdin: new TextEncoder().encode(`${new Date().toISOString()} ${hook}: ${message}\n`),
+      stdout: "ignore",
+      stderr: "ignore",
+    });
   } catch {
     // Nothing more to do: a hook must never fail the session.
   }
