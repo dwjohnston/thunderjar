@@ -1,0 +1,41 @@
+name: Dogfood
+
+# Runs .thunderjar/'s compare-models test case with the installed thunderjar-published, on the
+# local Docker daemon, as `bun run dogfood:local` does. It runs real agents on real models, so each
+# run spends a few cents. Needs the ANTHROPIC_API_KEY repository secret.
+#
+# On every pull request, whatever its base, so stacked PRs run it too. Not on PRs from forks,
+# which get no secrets.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  dogfood:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # As in CI: Ubuntu 24.04's AppArmor stops containers making user namespaces, which Claude
+      # Code's sandbox needs.
+      - name: Let containers make user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Run compare-models (GitHub's Ubuntu runners have Docker)
+        run: bun run dogfood:local
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Show the execution
+        if: always()
+        run: bunx thunderjar executions
+      - name: Keep the run data and log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dogfood-run-data
+          path: |
+            .thunderjar/.data/
+            .thunderjar/logs/
+          if-no-files-found: ignore
+          retention-days: 14
