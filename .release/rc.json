@@ -1,0 +1,15 @@
+{
+  "version": "0.3.0-rc.0",
+  "changesets": [
+    {
+      "id": "docs-guide-stubs",
+      "type": "patch",
+      "summary": "Add stub guide pages for getting started, motivation, how it works, and what Thunderjar is not suitable for."
+    },
+    {
+      "id": "rename-parameters-folder",
+      "type": "minor",
+      "summary": "Rename the default parameters folder from `.thunderjar/test-case-parameters/` to `.thunderjar/parameters/`. Move an existing folder to the new name."
+    }
+  ]
+}

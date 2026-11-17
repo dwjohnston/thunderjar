@@ -1,0 +1,99 @@
+import { $ } from "bun";
+import { FAKE_DOCKER } from "./fakeDocker.ts";
+import { applyPlaceholders, type PathPlaceholders } from "./placeholders.ts";
+import { FIXTURES_DIR, REPO_ROOT, scenario } from "./scenario.ts";
+
+export { applyPlaceholders, type PathPlaceholders } from "./placeholders.ts";
+
+const CLI = `${REPO_ROOT}/src/cli/index.ts`;
+// Copies of scenario projects and other temporary files. Inside fixtures/, so copies resolve
+// `thunderjar` through fixtures/node_modules, as scenarios do.
+export const TMP_DIR = `${FIXTURES_DIR}/.tmp`;
+
+export type CliResult = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  /** The diagnostic log it wrote, or "" if none: only if `log` was asked for. */
+  log?: string;
+};
+
+export type CliOptions = {
+  /**
+   * The fake Docker, by default, with no images unless `env` says otherwise (see `fakeDocker`),
+   * or real Docker, for `*.docker.test.ts` tests only.
+   */
+  docker?: "fake" | "real";
+  /** More environment variables. */
+  env?: Record<string, string>;
+  /** Return its diagnostic log too, as `log`. */
+  log?: boolean;
+  /** More paths to replace, e.g. `{ "<TMP>": dataDir }`. `<PROJECT>` (the cwd) and `<REPO>` are always replaced. */
+  paths?: PathPlaceholders;
+};
+
+/**
+ * Runs `thunderjar <args…>` in `cwd`, usually `scenario("0201")` or a copy of it, as a user would.
+ * Its output has placeholders for what changes between runs: see `applyPlaceholders`. Its
+ * temporary files, such as build contexts, go under fixtures/.tmp/.
+ */
+export async function thunderjar(cwd: string, args: string[], options: CliOptions = {}): Promise<CliResult> {
+  await $`mkdir -p ${TMP_DIR}`.quiet();
+  const docker = options.docker === "real" ? { THUNDERJAR_DOCKER: "docker" } : { THUNDERJAR_DOCKER: FAKE_DOCKER, FAKE_DOCKER_DIR: "" };
+  // Its log goes under fixtures/.tmp/, never into the scenario's .thunderjar/logs/, and is removed after.
+  const logFile = `${TMP_DIR}/logs/${crypto.randomUUID()}.log`;
+  const result = await $`bun ${CLI} ${args}`
+    .cwd(cwd)
+    .env({ ...Bun.env, TMPDIR: TMP_DIR, THUNDERJAR_LOG_FILE: logFile, ...docker, ...options.env })
+    .quiet()
+    .nothrow();
+  const log = Bun.file(logFile);
+  const logText = (await log.exists()) ? await log.text() : "";
+  if (await log.exists()) await log.delete();
+  const paths = { "<PROJECT>": cwd, "<REPO>": REPO_ROOT, ...options.paths };
+  return {
+    stdout: applyPlaceholders(result.stdout.toString(), paths),
+    stderr: applyPlaceholders(result.stderr.toString(), paths),
+    exitCode: result.exitCode,
+    ...(options.log && { log: applyPlaceholders(logText, paths) }),
+  };
+}
+
+export type ProjectCopy = AsyncDisposable & {
+  /** The copy of the project: run commands that write files here. */
+  dir: string;
+  /** Deletes the copy. */
+  remove: () => Promise<void>;
+};
+
+export type CopyOptions = {
+  /**
+   * Copy into the system's temporary folder instead of fixtures/.tmp/, so that no folder above
+   * the copy is this repo. For tests that need no `.thunderjar/` anywhere above the project: the
+   * repo has its own, which `findThunderjarRoot` would otherwise find. The copy can't resolve
+   * `thunderjar` through fixtures/node_modules.
+   */
+  outsideRepo?: boolean;
+};
+
+// The system's temporary folder, outside the repo. Read before `thunderjar()` points TMPDIR at fixtures/.tmp.
+const SYSTEM_TMP_DIR = (Bun.env.TMPDIR ?? "/tmp").replace(/(.)\/+$/, "$1");
+
+/**
+ * A fresh copy of scenario `id`'s `project/`, for commands that write files.
+ * Remove it when done, or declare it with `await using`.
+ */
+export async function copyScenarioProject(id: string, options: CopyOptions = {}): Promise<ProjectCopy> {
+  const source = scenario(id);
+  const parent = options.outsideRepo ? SYSTEM_TMP_DIR : TMP_DIR;
+  if (options.outsideRepo && `${parent}/`.startsWith(`${REPO_ROOT}/`)) {
+    throw new Error(`The system's temporary folder, ${parent}, is inside the repo, so the copy can't be outside it.`);
+  }
+  const dir = options.outsideRepo ? `${parent}/thunderjar-${id}-${crypto.randomUUID()}` : `${parent}/${id}-${crypto.randomUUID()}`;
+  await $`mkdir -p ${dir}`.quiet();
+  await $`cp -R ${source}/. ${dir}`.quiet();
+  const remove = async () => {
+    await $`rm -rf ${dir}`.quiet();
+  };
+  return { dir, remove, [Symbol.asyncDispose]: remove };
+}

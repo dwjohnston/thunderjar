@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  # Every pull request, whatever its base, so stacked PRs are checked too.
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    # For postgresStore's tests, which are skipped without THUNDERJAR_POSTGRES_URL.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test
+        env:
+          THUNDERJAR_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+      - name: Installed package smoke test
+        run: bun run test:package
+
+  # Its own job, so it runs alongside check rather than after it.
+  docker:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # Ubuntu 24.04's AppArmor stops unconfined processes making user namespaces, whatever
+      # docker run is told. Scenario 0206's sandboxing agent needs them, as Claude Code's
+      # bubblewrap sandbox does.
+      - name: Let containers make user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Docker image tests (GitHub's Ubuntu runners have Docker)
+        run: bun run test:docker:parallel
+
+  # Builds the versioned docs site, as the deploy after a release does, so a release
+  # PR whose docs won't build can't be merged.
+  docs:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Every release tag is needed to build its docs.
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # The release's tag is only pushed on merge. Tag this commit with the version it
+      # would release, so its docs are built too. On other PRs that tag already exists.
+      - name: Tag the version this PR would release
+        run: |
+          tag="v$(jq -r .version package.json)"
+          git rev-parse -q --verify "refs/tags/$tag" > /dev/null || git tag "$tag" HEAD
+      - run: bun run docs:build:versions
+
+  # The docs' quick start, for real: install the packed package, `init`, and
+  # `run compare-models` on a real model. Only on the changesets release PR, so a
+  # release whose quick start doesn't work can't be merged. Costs a few cents.
+  quickstart:
+    if: github.event_name == 'pull_request' && github.head_ref == 'changeset-release/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Let containers make user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Quick start (GitHub's Ubuntu runners have Docker)
+        run: bun run test:package --quickstart
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  build:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run build
