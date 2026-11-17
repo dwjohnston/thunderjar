@@ -36,7 +36,7 @@ export function duration(ms: number): string {
 }
 
 /** Dollars to three places, e.g. `$0.061`, and anything above nothing but below a tenth of a cent as `<$0.001`. */
-export const dollars = (usd: number) => (usd > 0 && usd < 0.0005 ? "<$0.001" : `$${usd.toFixed(3)}`);
+export const dollars = (usd: number) => (usd > 0 && usd < 0.001 ? "<$0.001" : `$${usd.toFixed(3)}`);
 
 /** `n` and `noun`, plural unless `n` is 1, e.g. `2 permutations`. */
 export const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
