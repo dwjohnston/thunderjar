@@ -225,7 +225,8 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
    - Run a real agent, against a real model, through `run`, e.g. scenario `0501` running Claude Code.
    - Tests of this type should have the extension `.agent.test.ts`
    - `bun test` skips them. Run them with `bun run test:agent`, with Docker and `ANTHROPIC_API_KEY` set. Each run costs a few cents.
-   - Not run in CI yet: an on-demand workflow is still to be added.
+   - In CI, on demand: the "Real agent tests" workflow (`agent.yml`).
+   - Real models also run in `slow-tests.yml`, only on a `/slow-tests` PR comment, on the release candidate and release PRs, or by hand: the dogfood run, and step 4 of `src/cli/commands/capture/capture.docker.test.ts`, a real job in each harness. Claude Code uses `ANTHROPIC_API_KEY`; the other harnesses use OpenRouter, with the `OPENROUTER_TOKEN` secret.
 8. The installed package's smoke test
    - `bun run test:package` packs Thunderjar, installs the tarball into an empty project in a temporary folder, and runs `init`, `generate`, `plan example` and `run example --dry-run` there with the installed `thunderjar`.
    - Every other test runs Thunderjar from source. This one catches what only the package gets wrong, such as a file left out of `files`.

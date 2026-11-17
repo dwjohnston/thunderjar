@@ -18,9 +18,12 @@
 //
 // Skipped by `bun test`; run with `bun run test:docker`, which CI runs too. The image must exist:
 // `bun run di:build:sample-repo` builds it, and the tests fail, saying so, when it's missing or stale.
-// Step 4 spends a fraction of a cent per harness:
+// Step 4 spends a fraction of a cent per harness. Claude Code uses ANTHROPIC_API_KEY; Codex,
+// Copilot and OpenCode use OpenRouter, with OPENROUTER_API_KEY. A harness without its key skips it.
+// slow-tests.yml runs it on `/slow-tests` and on release PRs. Locally:
 //
-//   THUNDERJAR_AGENT_TESTS=1 ANTHROPIC_API_KEY=… bun run test:docker -- capture.docker
+//   THUNDERJAR_DOCKER_TESTS=1 THUNDERJAR_AGENT_TESTS=1 ANTHROPIC_API_KEY=… OPENROUTER_API_KEY=… \
+//     bun test --concurrent --timeout 900000 src/cli/commands/capture/capture.docker.test.ts
 import { $ } from "bun";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import pkg from "../../../../package.json" with { type: "json" };
@@ -43,13 +46,28 @@ type Harness = {
   installed: string[];
   /** What the harness puts in a hook's environment, that its adapter checks for. */
   hookEnv: Record<string, string>;
-  /** The key a real job needs. */
-  key: string;
+  /** The variable whose key a real job needs: ANTHROPIC_API_KEY for Claude Code, OPENROUTER_API_KEY for the rest. */
+  key: "ANTHROPIC_API_KEY" | "OPENROUTER_API_KEY";
+  /** The environment a real job runs with, given the key. */
+  jobEnv: (key: string) => Record<string, string>;
   /** The two turns of a real job, as shell scripts run in /work; turn 2 resumes turn 1's session. */
   turns: (turn1Stdout?: string) => [string, (turn1Stdout: string) => string];
   /** Why step 4 is skipped for this harness, if it is. */
   skipJob?: string;
 };
+
+/** The model Copilot and OpenCode run on, by its OpenRouter ID. */
+const OPENROUTER_MODEL = "anthropic/claude-haiku-5.5";
+
+/** Codex on OpenRouter: a model provider set on the command line, reading OPENROUTER_API_KEY. */
+const CODEX_OPENROUTER = [
+  "-c model_provider=openrouter",
+  "-c model_providers.openrouter.name=OpenRouter",
+  "-c model_providers.openrouter.base_url=https://openrouter.ai/api/v1",
+  "-c model_providers.openrouter.env_key=OPENROUTER_API_KEY",
+  "-c model_providers.openrouter.wire_api=responses",
+  "-m openai/gpt-5.5",
+].join(" ");
 
 const HARNESSES: Harness[] = [
   {
@@ -59,6 +77,7 @@ const HARNESSES: Harness[] = [
     installed: ["thunderjar capture prompt --harness claude-code", "thunderjar capture stop --harness claude-code"],
     hookEnv: { CLAUDECODE: "1" },
     key: "ANTHROPIC_API_KEY",
+    jobEnv: (key) => ({ ANTHROPIC_API_KEY: key }),
     turns: () => [
       `claude -p --model claude-haiku-5-5 --output-format json "say hi"`,
       (out) => `claude -p --model claude-haiku-5-5 --resume ${JSON.parse(out).session_id} "now say bye"`,
@@ -70,10 +89,11 @@ const HARNESSES: Harness[] = [
     config: ".codex/hooks.json",
     installed: ["thunderjar capture prompt --harness codex", "thunderjar capture stop --harness codex"],
     hookEnv: {},
-    key: "OPENAI_API_KEY",
+    key: "OPENROUTER_API_KEY",
+    jobEnv: (key) => ({ OPENROUTER_API_KEY: key }),
     turns: () => [
-      `codex exec --dangerously-bypass-hook-trust "say hi"`,
-      () => `codex exec resume --last --dangerously-bypass-hook-trust "now say bye"`,
+      `codex exec ${CODEX_OPENROUTER} --dangerously-bypass-hook-trust "say hi"`,
+      () => `codex exec resume --last ${CODEX_OPENROUTER} --dangerously-bypass-hook-trust "now say bye"`,
     ],
   },
   {
@@ -82,8 +102,17 @@ const HARNESSES: Harness[] = [
     config: ".github/hooks/thunderjar-capture.json",
     installed: ["thunderjar capture prompt --harness copilot", "thunderjar capture stop --harness copilot"],
     hookEnv: {},
-    key: "COPILOT_GITHUB_TOKEN",
-    turns: () => [`copilot -p "say hi" --allow-all-tools`, () => `copilot --continue -p "now say bye" --allow-all-tools`],
+    key: "OPENROUTER_API_KEY",
+    // As .thunderjar's copilot-1.0.105 harness: Copilot's own provider settings, pointed at OpenRouter.
+    jobEnv: (key) => ({
+      COPILOT_PROVIDER_BASE_URL: "https://openrouter.ai/api/v1",
+      COPILOT_PROVIDER_API_KEY: key,
+      COPILOT_PROVIDER_MODEL_ID: OPENROUTER_MODEL.split("/").pop() as string,
+    }),
+    turns: () => [
+      `copilot -p "say hi" --model ${OPENROUTER_MODEL} --allow-all-tools`,
+      () => `copilot --continue -p "now say bye" --model ${OPENROUTER_MODEL} --allow-all-tools`,
+    ],
   },
   {
     id: "opencode",
@@ -91,8 +120,13 @@ const HARNESSES: Harness[] = [
     config: ".opencode/plugins/thunderjar-capture.ts",
     installed: ['const COMMAND = "thunderjar";', "capture ${hook} --harness opencode"],
     hookEnv: {},
-    key: "OPENCODE_API_KEY",
-    turns: () => [`opencode run --model opencode/claude-haiku-5-5 "say hi"`, () => `opencode run --model opencode/claude-haiku-5-5 --continue "now say bye"`],
+    key: "OPENROUTER_API_KEY",
+    // As .thunderjar's opencode-1.19.5 harness: its built-in openrouter provider reads OPENROUTER_API_KEY.
+    jobEnv: (key) => ({ OPENROUTER_API_KEY: key }),
+    turns: () => [
+      `opencode run --model openrouter/${OPENROUTER_MODEL} "say hi"`,
+      () => `opencode run --model openrouter/${OPENROUTER_MODEL} --continue "now say bye"`,
+    ],
   },
 ];
 
@@ -205,7 +239,7 @@ describe.skipIf(!ENABLED)("capture, in the sample repo", () => {
 
       const key = Bun.env[harness.key];
       test.serial.skipIf(!AGENTS || !key || !!harness.skipJob)(`4. a real two-turn ${harness.id} job is captured`, async () => {
-        const env = { [harness.key]: key as string };
+        const env = harness.jobEnv(key as string);
         const [turn1, turn2] = harness.turns();
         const before = await repoState();
         const first = await run(turn1, env);
