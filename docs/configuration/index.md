@@ -63,3 +63,5 @@ export default declareTestCase({
 ```
 
 See the [declaration reference](./reference) for every option.
+
+<!-- CODEOWNERS test: this line should trigger a review request from @dwjohnston. Do not merge. -->

@@ -96,3 +96,5 @@ With `THUNDERJAR_ON_RUNTIME=1` as well, the whole execution runs on the Fly mach
 - It also needs `GHCR_USER` and `GHCR_TOKEN`: the runner logs in to ghcr with them.
 
 In CI, comment `/slow-tests` on a PR to run `compare-models` this way, or `/slow-tests <test case>` for another one. The outcome comes back as a PR comment. See [`.github/workflows/slow-tests.yml`](./.github/workflows/slow-tests.yml) for the secrets it needs.
+
+<!-- CODEOWNERS test: this line should trigger a review request from @dwjohnston. Do not merge. -->

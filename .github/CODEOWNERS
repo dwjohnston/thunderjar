@@ -20,3 +20,5 @@ project-md/human-safe-space/**/*  @dwjohnston
 
 # Protect these rules too
 /.github/CODEOWNERS               @dwjohnston
+
+# CODEOWNERS test: do not merge.

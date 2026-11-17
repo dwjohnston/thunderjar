@@ -34,3 +34,5 @@ OR
 ---
 
 Thunderjar seeks to give you better control by fixing the variables and modifying just what you are interested in. 
+
+<!-- CODEOWNERS test: this line should trigger a review request from @dwjohnston. Do not merge. -->
