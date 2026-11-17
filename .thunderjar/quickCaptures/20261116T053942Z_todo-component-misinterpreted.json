@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-16T05:39:42Z",
+  "complaint": "misinterpreted what I meant",
+  "capturedBy": null,
+  "agent": {
+    "harness": "Claude Code",
+    "harnessVersion": "2.1.322",
+    "harnessSurface": "VS Code extension",
+    "model": "claude-opus-5-5",
+    "sessionId": "cfd9afc6-4ad8-429f-94f0-7faa6a4f31f0",
+    "transcriptPath": "~/.claude/projects/-workspace-thunderjar/cfd9afc6-4ad8-429f-94f0-7faa6a4f31f0.jsonl",
+    "permissionMode": "auto"
+  },
+  "repository": {
+    "root": "/workspace/thunderjar",
+    "branch": "main",
+    "headCommit": "eb6d755e97f344d02c0ea2f86046f4171c03dda6",
+    "commitAtSessionStart": "cff880b",
+    "hasUncommittedChanges": false,
+    "uncommittedFiles": [],
+    "diffStat": "",
+    "commitsMadeThisSession": ["eb6d755 Add <Todo /> docs component and use it in Getting started"]
+  },
+  "conversation": {
+    "initialTask": {
+      "text": "Add a `<Todo />` component to the documentation. \n\nIt is a little todo label (is block sized, but is only about 100 px wide visually) \n\nIt has the yellow and black banding. \n\nAdd one of the blocks to the bottom of 'Getting started'. \n\nThe text is \n\n\"[Add skills provisioning]\"",
+      "verbatim": true
+    },
+    "subsequentUserTurns": []
+  },
+  "context": {
+    "instructionFiles": ["CLAUDE.md", "AGENTS.md"],
+    "skillsAvailable": ["ai-generated-content-header", "concise-output", "git-always-commit", "tj-config", "tj-eval", "tj-quick-capture", "write-for-the-human", "run"],
+    "skillsInvoked": [],
+    "filesChanged": ["docs/.vitepress/theme/Todo.vue", "docs/.vitepress/theme/index.ts", "docs/getting-started.md"],
+    "keyActions": [
+      "Read docs/.vitepress/theme/StripeBanner.vue for the stripe colours",
+      "Wrote Todo.vue: fit-content width (min 100px), striped border around a solid yellow label with small bold text in a slot",
+      "Registered Todo globally in theme/index.ts",
+      "Appended <Todo>[Add skills provisioning]</Todo> to getting-started.md",
+      "Did not run or view the docs site"
+    ]
+  },
+  "agentAnalysis": {
+    "expected": "Unclear; likely a visual layout where the label is ~100px wide inside a block that takes the full row (e.g. a full-width banded strip with a small label), or a different use of the banding, or text passed as a prop.",
+    "actual": "Built a fit-content box with min-width 100px, stripes only as a thin border, text as slot content.",
+    "suspectedCause": "Ambiguous spec ('block sized, but only about 100px wide visually'); agent picked one reading without asking or rendering to check."
+  }
+}
