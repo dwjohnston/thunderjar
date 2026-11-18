@@ -40,6 +40,28 @@ const tsconfig = json({
   exclude: ["node_modules", ".data", "**/*.test.ts"],
 });
 
+// Notes for agents writing parameters and test cases. Its defaults are read when a test case is
+// written, e.g. by the tj-test-case skill, never when it runs: a test case names every parameter.
+const agentsMd = `# .thunderjar
+
+Thunderjar's configuration for this project: parameters in \`parameters/\`, and the test cases that combine them in \`test-cases/\`.
+
+## Defaults for new test cases
+
+Use these when writing a new test case, unless the user asks for something else. Write each value into the test case: they're never applied at run time.
+
+- baseImage: node20
+- promptSet: snerk
+- harnessModel, for a first run: claude-code / claude-haiku-5-5
+- harnessModel, to compare harnesses: claude-code / claude-haiku-5-5, copilot / claude-haiku-5.5, opencode / opencode/claude-haiku-5-5
+- iterations, for a first run: 1
+- iterations, to compare: 5
+
+A harness is named without its version: use the newest version of it in \`parameters/harnessModels/\`, e.g. \`${STARTER_FOLDERS.claudeCode}/claude-haiku-5-5\`.
+
+There's no default code state. A test case starts where the task needs it to, so choose one each time.
+`;
+
 // Two experiments on the is-prime task. Each varies one thing, so a difference in the measurements
 // is down to it.
 //
@@ -260,6 +282,7 @@ export function scaffold({ nestedPackage, repository }: { nestedPackage: boolean
     "tsconfig.json": tsconfig,
     ".gitignore": ["_generated/", ".data/", "logs/", ...(nestedPackage ? ["node_modules/"] : [])].join("\n") + "\n",
     "thunderjar.config.ts": config,
+    "AGENTS.md": agentsMd,
     "test-cases/compare-models.ts": compareModels,
     "test-cases/compare-harnesses.ts": compareHarnesses,
     [`${P}/baseImages/node20/index.ts`]: baseImage,

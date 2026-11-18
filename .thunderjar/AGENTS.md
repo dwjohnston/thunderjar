@@ -13,6 +13,21 @@ Humans: add your notes here
 
 This folder dogfoods thunderjar on its own repo.
 
+## Defaults for new test cases
+
+Use these when writing a new test case, unless the user asks for something else. Write each value into the test case: they're never applied at run time.
+
+- baseImage: node20
+- promptSet: none
+- harnessModel, for a first run: claude-code / claude-haiku-5-5
+- harnessModel, to compare harnesses: claude-code / claude-haiku-5-5, codex / openai/gpt-6-luna, copilot / anthropic/claude-haiku-5.5, opencode / openrouter/anthropic/claude-haiku-5.5
+- iterations, for a first run: 1
+- iterations, to compare: 5
+
+A harness is named without its version: use the newest version of it in `parameters/harnessModels/`, e.g. `claude-code-2.1.311/claude-haiku-5-5`.
+
+There's no default code state. A test case starts where the task needs it to, so choose one each time.
+
 ## Import from `thunderjar-published`, not `thunderjar`
 
 ✅ Do:
