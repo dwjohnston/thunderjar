@@ -236,8 +236,13 @@ jobs:
       - run: bun install --frozen-lockfile
       - name: Let containers make user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Build the sample repo image
-        run: bun run di:build:sample-repo
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull or build the sample repo image
+        run: bun run di:build:sample-repo --registry ghcr.io/${{ github.repository_owner }}/thunderjar-sample-repo --push
       # Not `bun run test:docker`: its pattern matches every Docker test.
       - name: Capture, with real harnesses
         run: bun test --concurrent --timeout 900000 src/cli/commands/capture/capture.docker.test.ts
