@@ -56,26 +56,9 @@ WORKDIR /workspace`,
 It lives at `.thunderjar/parameters/codeStates/<name>/index.ts`.
 
 
-## ‼️ Important! The one rule! ‼️ 
+## ‼️ Important! The one rule! ‼️
 
-`applyParameter` must be deterministic: the same text must always build the same image.
-
-If you need to have content that is dynamic (a 'floating parameter') make use of the `resolve` function to resolve the dynamic parts. 
-
-
-
-e.g.
-
-```ts
-// 👍 Good
-resolve: (config, ctx) => ctx.exec(`git ls-remote --exit-code ${config.repo} refs/tags/${config.tag} | cut -f1`),
-applyParameter: (config, ctx) => `RUN … checkout --detach ${ctx.resolved}`,
-
-// 👎 Bad
-applyParameter: (config) => `RUN git clone --branch ${config.tag} …`,
-```
-
-**Why:** images are cached by the hash of the text `applyParameter` returns. If the tag moves, the text stays the same, so a stale image is reused, and runs can't say which commit they started from. `resolve` runs once per `plan`, `run` or `build`, and each run records what it returned.
+`applyParameter` must be deterministic. Look up a tag or branch in `resolve`, never in `applyParameter`. See tj-general.
 
 ## Scenarios
 
