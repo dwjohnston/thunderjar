@@ -36,21 +36,14 @@ export default declareTestCase({
 
 It lives at `.thunderjar/test-cases/<name>.ts`. Each array is a dimension: every combination of its values is run.
 
-## Steps
-
-1. Fill each field
-2. Write the task
-3. Write the test case
-4. Dry-run it
-
 ### 1. Fill each field
 
 | Field | Use an existing one if | New one through |
 |---|---|---|
-| `codeState` | it starts where the task needs, e.g. the right tag and folder | tj-codestate |
+| `codeState` | The task is a 'floating' one| tj-codestate |
 | `promptSet` | the user isn't comparing instructions, e.g. `none` | tj-promptset |
 | `task` | the user names one, or one has the same prompt | step 2 |
-| `baseImage`, `harnessModel` | always, unless the user asks for another | defaults |
+| `baseImage`, `harnessModel` | always, unless the user asks for another | tj-harness-model |
 
 ❌ **Don't** add harnesses, models or promptsets the user didn't ask for.
 
