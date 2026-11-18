@@ -75,29 +75,66 @@ applyParameter: (config) => `RUN git clone --branch ${config.tag} …`,
 
 **Why:** images are cached by the hash of the text `applyParameter` returns. If the tag moves, the text stays the same, so a stale image is reused, and runs can't say which commit they started from. `resolve` runs once per `plan`, `run` or `build`, and each run records what it returned.
 
-## Steps
+## Scenarios
 
-1. **Choose what's on disk**
-   - A commit: tag it, resolve the tag, check out the SHA.
-   - Uncommitted changes: as for a commit, plus a patch in the code state's `files/`, e.g. `git add -N . && git diff HEAD --binary > files/changes.patch`, applied with `COPY ${ctx.dir}/changes.patch /tmp/` and `git apply`.
-   - A subfolder: as for a commit, then `WORKDIR` into it, or check out only that folder.
-   - A small scenario: write the files inline, e.g. `RUN cat > … <<'EOF'`.
-   - A generated project: run the generator, then `git init` and commit.
-   - Always end with everything committed at `/workspace`, tagged `thunderjar-start`, so measurements can diff against it.
-2. **Tag it**
-   - Tag the starting commit `eval/<task>`, push it, and look it up in `resolve` (see the one rule).
-   - Tag, not SHA: it says what it is, and survives a squash-merge.
-   - ⚠️ Never move a pushed tag. Make a new one.
-3. **Seal it**
-   - Remove `origin`.
-   - Tag a commit from before the task's measurements existed, or check out only the folder the agent needs.
-4. **Choose where the agent starts**
-   - Set `WORKDIR`, e.g. `/workspace/packages/cli`. Default: `/workspace`.
-5. **Make it ready to measure**
-   - Install what measurements need, e.g. `bun install --frozen-lockfile`. A missing dependency reads as an agent failure.
-6. **Check the starting state, before any paid run**
-   - The task's checks fail, and the typecheck and tests pass.
-   - e.g. `thunderjar build <test case>`, then `docker run --rm -it <image> bash`.
+Pick the one that matches where the agent should start.
+
+### 1. A codebase at a commit
+
+Tag the commit, push the tag, and resolve it to a SHA, as in the example at the top.
+
+- Name the tag after what it's for, e.g. `eval/<task>`.
+- ⚠️ Never move a pushed tag. Make a new one.
+
+### 2. A floating parameter
+
+e.g. the latest commit of a branch, looked up on each `plan`, `run` or `build`.
+
+```ts
+config: { repo: "https://github.com/acme/cli.git", branch: "main" },
+resolve: async (config, ctx) =>
+  (await ctx.exec(`git ls-remote --exit-code ${config.repo} refs/heads/${config.branch}`)).split("\t")[0]!,
+applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
+  && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
+  && git -C /workspace remote remove origin`,
+```
+
+### 3. A sandbox task
+
+A few files written inline, with no repository behind them.
+
+```ts
+applyParameter: () => `RUN mkdir -p /workspace && cd /workspace && git init --quiet \\
+  && cat > isPrime.ts <<'EOF'
+export function isPrime(n: number): boolean { return false; }
+EOF
+RUN cd /workspace && git add -A && git commit --quiet -m start`,
+```
+
+### 4. Uncommitted changes
+
+As for a commit, then cat the changed files on top, as for a sandbox task.
+
+### 5. The output of a generator
+
+Run the generator, then commit what it made.
+
+```ts
+applyParameter: () => `RUN bunx create-vite@6.0.1 /workspace --template react-ts \\
+  && cd /workspace && git init --quiet && git add -A && git commit --quiet -m start`,
+```
+
+✅ **Do** pin the generator's version.
+
+**Why:** an unpinned generator makes different files from the same text, which breaks the one rule.
+
+## Every code state
+
+1. Ends with everything committed at `/workspace`, tagged `thunderjar-start`, so measurements can diff against it.
+2. Is sealed: no `origin`, and no measurements in the tree.
+3. Sets `WORKDIR` to where the agent starts. Default: `/workspace`.
+4. Installs what measurements need, e.g. `bun install --frozen-lockfile`.
+5. Is checked before any paid run: the task's checks fail, and the typecheck and tests pass.
 
 ## Explain it in a comment
 
