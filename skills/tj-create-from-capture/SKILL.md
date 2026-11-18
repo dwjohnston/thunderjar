@@ -1,6 +1,6 @@
 ---
 name: tj-create-from-capture
-description: Turn a captured coding-agent session into a Thunderjar test case that reproduces it, i.e. the same starting code, prompt, harness and model, with a measurement for what went wrong. Use when the user wants an eval from a past session, e.g. "make a test case from that session", "turn this quick capture into an eval", "reproduce session c0599495".
+description: Turn a captured coding-agent session into a Thunderjar test case that reproduces it, i.e. the same starting code, prompt, harness and model, with a measurement for what went wrong. Use when the user wants an eval from a past session, e.g. "make a test case from that session", "reproduce session c0599495-7c21-4b7f-9899-d16f3412b9c2".
 ---
 
 <!--
@@ -29,11 +29,14 @@ This skill finds the values. tj-test-case writes the test case with them.
 
 ### 1. Find the session
 
-| The user gives | Find it with |
+Captures are read only through the CLI. Quick captures in `.thunderjar/quickCaptures/` aren't supported yet.
+
+| The user gives | Do |
 |---|---|
-| A session ID | use it |
-| A quick capture | `agent.sessionId` in its file in `.thunderjar/quickCaptures/` |
-| Nothing | `thunderjar capture list`, and ask which one |
+| A session ID | use it. It must be the full ID, not a prefix. |
+| Nothing | run `thunderjar capture list`, and ask which one |
+
+Not found: run `thunderjar capture push --fetch`, then try again. The capture may have been made on another machine.
 
 `capture list` gives each session a verdict. A `one-shot` reproduces best.
 
@@ -43,7 +46,7 @@ This skill finds the values. tj-test-case writes the test case with them.
 thunderjar capture list --json
 ```
 
-Take the session's entry. It holds:
+Take the entry whose `session` is the ID. It holds:
 
 | Field | Becomes |
 |---|---|
@@ -51,12 +54,9 @@ Take the session's entry. It holds:
 | `start.agent.harness`, `start.agent.harnessVersion` | the harness |
 | `turnRecords[0].agent.models` | the model: usually one. If several, ask which. |
 | `startTree` | the code state's tree, see step 3 |
-| `start.repository.dirty` | whether it had uncommitted changes. The snapshot holds them either way. |
+| `turnRecords[].lastAssistantMessage` | what the agent said, to help find what went wrong |
 
-From a quick capture, also take:
-
-- `complaint`: what went wrong. This is the trap tj-measurements should measure.
-- `context.skillsInvoked`, `context.skillsAvailable`: for behaviour checks, e.g. "didn't invoke the skill".
+Ask the user what went wrong, unless they've said. That's the trap tj-measurements measures.
 
 ⚠️ A session of several turns is reproduced from its first prompt only. Say so to the user.
 
@@ -90,7 +90,7 @@ Give it:
   - If no folder in `parameters/harnessModels/` has that version, make one with tj-harness-model.
 - `promptSet: none`
   - The repo's own AGENTS.md and skills are already in the snapshot.
-- What went wrong, for tj-measurements
+- What went wrong, from the user, for tj-measurements
 
 ✅ **Do** reproduce the session first, before trying a fix.
 
