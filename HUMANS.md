@@ -23,6 +23,14 @@ Feel free to modify AGENTS.md as will be helpful to yourself or future agents.
 If instructions or details already exist in HUMANS.md - you can expand on them in the AGENTS.md.  
 
 
+## Top level instructions 
+
+Always invoke: 
+
+/write-for-the-human
+/concise-output 
+
+
 ## Thunderjar 
 
 Thunderjar is a coding harness eval framework. 
@@ -48,4 +56,13 @@ The following environment variables should be available to you:
 - THUNDERJAR_DB_URL
 - GITHUB_TOKEN
 
+## Canonical documentation 
 
+
+Maintained by humans only, in [project-md/human-safe-space/](project-md/human-safe-space/).
+
+- [Tag and ref conventions](project-md/human-safe-space/conventions/tags-and-refs.md)
+- [Parameter apply order](project-md/human-safe-space/parameters/apply_order.md)
+- [Measurements philosophy](project-md/human-safe-space/measurements-philosophy/index.md)
+- [Not supported: parameter behaviour](project-md/human-safe-space/not-supported/parameter-behaviour.md)
+- [Things that are a bit messy: skills](project-md/human-safe-space/things-that-are-a-bit-messy/skills.md)

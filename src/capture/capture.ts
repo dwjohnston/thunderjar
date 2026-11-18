@@ -12,7 +12,7 @@
 // prompt for the turn; at the end of a turn, snapshot it as `turn-<n>`. The records go into one of two
 // stores (store.ts): by default, under refs/thunderjar/capture/<session>/, each a commit on no branch
 // under an annotated tag whose message is the record as JSON; or, with THUNDERJAR_CAPTURE_STORE=branch,
-// as commits on refs/heads/thunderjar-capture/<session>. The branch, the index and the working tree are
+// as commits on refs/heads/thunderjar/capture/<session>. The branch, the index and the working tree are
 // left as they are.
 import { ADAPTERS, type CaptureEvent, type HarnessId } from "./adapters.ts";
 import { addPending, clearPending, type Env, logError, modelsOf, readPending, readTranscript, verboseLogger, versionOf } from "./files.ts";

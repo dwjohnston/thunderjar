@@ -25,6 +25,7 @@ const SCAFFOLD = [
   "tsconfig.json",
   ".gitignore",
   "thunderjar.config.ts",
+  "AGENTS.md",
   "test-cases/compare-models.ts",
   "test-cases/compare-harnesses.ts",
   `${P}/baseImages/node20/index.ts`,

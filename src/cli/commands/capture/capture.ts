@@ -10,7 +10,7 @@
 
 // `thunderjar capture`: record every coding-agent session in a repository as git refs, under
 // refs/thunderjar/capture/<session>/ or, with THUNDERJAR_CAPTURE_STORE=branch, on the branch
-// thunderjar-capture/<session>, to triage and replay as evals. `install` and `uninstall` turn it on and
+// thunderjar/capture/<session>, to triage and replay as evals. `install` and `uninstall` turn it on and
 // off for a harness, `list` shows the captures, `show` prints one, `push` shares them, and `import` copies branches into
 // refs. `prompt` and `stop` are what the hooks run, left out of --help.
 import { Command, Option } from "commander";
@@ -72,7 +72,7 @@ function hookCommand(hook: (typeof HOOKS)[number]): Command {
 
 export function createCaptureCommand(): Command {
   const capture = new Command("capture").description(
-    "Record every coding-agent session in this repository as git refs under refs/thunderjar/capture/, for Claude Code, Codex, Copilot CLI and OpenCode: each prompt's starting code, and each turn's result. With THUNDERJAR_CAPTURE_STORE=branch, the default in Claude Code cloud sessions (CLAUDE_CODE_REMOTE=true), each session is a branch instead, thunderjar-capture/<session>, one commit per record, for remotes that take only branches.",
+    "Record every coding-agent session in this repository as git refs under refs/thunderjar/capture/, for Claude Code, Codex, Copilot CLI and OpenCode: each prompt's starting code, and each turn's result. With THUNDERJAR_CAPTURE_STORE=branch, the default in Claude Code cloud sessions (CLAUDE_CODE_REMOTE=true), each session is a branch instead, thunderjar/capture/<session>, one commit per record, for remotes that take only branches.",
   );
   capture
     .command("install")
@@ -108,40 +108,48 @@ export function createCaptureCommand(): Command {
       if (dir === undefined) return;
       const shown = showCapture(dir, session);
       if (shown === null) {
-        printError(`No capture of session ${session}. \`thunderjar capture list\` shows the captures, and \`thunderjar capture push --fetch\` fetches them.`);
+        printError(`No capture of session ${session}. \`thunderjar capture list\` shows the captures, and \`thunderjar capture pull\` fetches them.`);
         process.exitCode = 1;
         return;
       }
       if (options.json) printJson(shown);
       else print(formatCapture(shown));
     });
+  /** Pushes the captures to `remote`, or with `fetch`, fetches them from it. */
+  const transfer = (remote: string, fetch: boolean, dryRun: boolean | undefined) => {
+    const dir = root();
+    if (dir === undefined) return;
+    const args = pushArgs({ fetch, remote }, localStores(dir));
+    if (args === null) return print("No captures to push.");
+    if (dryRun) return print(["git", ...args].join(" "));
+    try {
+      git(dir, args);
+      print(fetch ? `Fetched the captures from ${remote}.` : `Pushed the captures to ${remote}.`);
+    } catch (error) {
+      printError(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    }
+  };
   capture
     .command("push")
     .description(
-      "Push every capture to a remote, refs and branches alike, or fetch both from it with --fetch. Captures are never moved, and capture branches only grow, so neither needs --force.",
+      "Push every capture to a remote, refs and branches alike. Captures are never moved, and capture branches only grow, so it never needs --force. `capture pull` fetches them.",
     )
     .argument("[remote]", "the remote", "origin")
-    .option("--fetch", "fetch the captures instead of pushing them")
+    // Kept for scripts written before `capture pull`.
+    .addOption(new Option("--fetch", "fetch the captures instead of pushing them: use `capture pull`").hideHelp())
     .option("--dry-run", "print the git command instead of running it")
-    .action((remote: string, options: { fetch?: boolean; dryRun?: boolean }) => {
-      const pushOptions = { fetch: options.fetch ?? false, remote };
-      const dir = root();
-      if (dir === undefined) return;
-      const args = pushArgs(pushOptions, localStores(dir));
-      if (args === null) return print("No captures to push.");
-      if (options.dryRun) return print(["git", ...args].join(" "));
-      try {
-        git(dir, args);
-        print(pushOptions.fetch ? `Fetched the captures from ${remote}.` : `Pushed the captures to ${remote}.`);
-      } catch (error) {
-        printError(error instanceof Error ? error.message : String(error));
-        process.exitCode = 1;
-      }
-    });
+    .action((remote: string, options: { fetch?: boolean; dryRun?: boolean }) => transfer(remote, options.fetch ?? false, options.dryRun));
+  capture
+    .command("pull")
+    .description("Fetch every capture from a remote, refs and branches alike, e.g. ones pushed from another machine or a cloud session.")
+    .argument("[remote]", "the remote", "origin")
+    .option("--dry-run", "print the git command instead of running it")
+    .action((remote: string, options: { dryRun?: boolean }) => transfer(remote, true, options.dryRun));
   capture
     .command("import")
     .description(
-      "Copy the captures on thunderjar-capture/<session> branches into refs/thunderjar/capture/<session>/, as the hooks write them by default. Skips refs that exist, so it can run again, and leaves the branches alone.",
+      "Copy the captures on thunderjar/capture/<session> branches into refs/thunderjar/capture/<session>/, as the hooks write them by default. Skips refs that exist, so it can run again, and leaves the branches alone.",
     )
     .addOption(jsonOption())
     .action((options: { json?: boolean }) => {

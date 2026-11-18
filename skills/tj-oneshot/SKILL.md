@@ -57,7 +57,15 @@ You are the orchestrator. You don't do the task yourself.
    - Not installed: stop, and suggest `thunderjar capture install --harness <id>`.
 3. For Codex, remind the user that Codex runs the hooks only once they're trusted in `/hooks`.
 
-## 2. Resolve external context
+## 2. Anticipate what external interactions the subagent may need to do
+
+The agents tasks may involve interacting with external system. 
+
+It is important that they don't actually do this, and have this information provided as part of their context. 
+
+So act as if you might be performing the task yourself, particularly to read the skill or agent files that you might be using. You do not need to comprehensively perform the task. 
+
+## 3. Resolve external context
 
 1. Find the references in the prompt that need outside data: issues, pull requests, URLs.
 2. Fetch each one, e.g. `gh issue view 42 --comments`.
@@ -84,7 +92,7 @@ fix issue #42
 
 **Rationale:** with a bare reference the subprocess may fetch it itself, and a replay would then depend on the internet. The rest stays verbatim because it is the eval's prompt.
 
-## 3. Create a worktree
+## 4. Create a worktree
 
 ```sh
 git fetch origin
@@ -104,13 +112,13 @@ git worktree add -b oneshot/<slug> .claude/worktrees/oneshot-<slug> origin/main
 
 **Rationale:** a fresh branch from the base gives the run a clean, known starting point, and keeps your own working tree out of it.
 
-## 4. Snapshot the sessions
+## 5. Snapshot the sessions
 
 ```sh
 thunderjar capture list --json | jq -r '.[].session' > <scratch>/sessions-before.txt
 ```
 
-## 5. Spawn the subprocess
+## 6. Spawn the subprocess
 
 Run it in the worktree, with `THUNDERJAR_CAPTURE=1`, and the prompt from [Subprocess prompt](#subprocess-prompt):
 
@@ -127,7 +135,7 @@ Run it in the worktree, with `THUNDERJAR_CAPTURE=1`, and the prompt from [Subpro
 
 **Rationale:** `THUNDERJAR_CAPTURE=1` overrides a `0` inherited from your own session.
 
-## 6. Identify the session
+## 7. Identify the session
 
 Run `thunderjar capture list --json` again, and compare with the snapshot.
 
@@ -136,13 +144,13 @@ Run `thunderjar capture list --json` again, and compare with the snapshot.
 
 **Rationale:** guessing the wrong session would attach someone else's run to the pull request.
 
-## 7. Push the capture
+## 8. Push the capture
 
 ```sh
 thunderjar capture push
 ```
 
-## 8. Choose the path
+## 9. Choose the path
 
 Count the commits on the worktree branch since the base: `git -C <worktree> rev-list --count origin/main..HEAD`.
 

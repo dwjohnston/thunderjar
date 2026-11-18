@@ -45,7 +45,7 @@ Describe each one: what it is for, and what changed. Link to its `SKILL.md`. The
 ```markdown
 - **Published skills**
   - New: [tj-config](skills/tj-config/SKILL.md) edits `thunderjar.config.ts`.
-  - Changed: [tj-eval](skills/tj-eval/SKILL.md) now uses a generic example task.
+  - Changed: [tj-config](skills/tj-config/SKILL.md) now uses a generic example.
 ```
 
 ### Finding which is which

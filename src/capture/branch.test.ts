@@ -147,7 +147,7 @@ describe("the branch store", () => {
     const env = { ...BASE_ENV, THUNDERJAR_CAPTURE_STORE: "nope" };
     await expect(capturePrompt(event({ prompt: "x" }), env)).rejects.toThrow(/THUNDERJAR_CAPTURE_STORE/);
     await runHook("prompt", "claude-code", JSON.stringify({ session_id: SESSION, cwd: repo, prompt: "x" }), env);
-    expect(git(repo, ["for-each-ref", "refs/thunderjar", "refs/heads/thunderjar-capture"])).toBe("");
+    expect(git(repo, ["for-each-ref", "refs/thunderjar", "refs/heads/thunderjar/capture"])).toBe("");
     expect(await Bun.file(`${logDir(repo)}/capture.log`).text()).toContain('THUNDERJAR_CAPTURE_STORE is "nope"');
   });
 });
@@ -180,7 +180,7 @@ describe("push", () => {
   test("names the refspecs of the stores that have captures, and fetches both", async () => {
     expect(REFSPECS).toEqual({
       refs: "refs/thunderjar/capture/*:refs/thunderjar/capture/*",
-      branch: "refs/heads/thunderjar-capture/*:refs/heads/thunderjar-capture/*",
+      branch: "refs/heads/thunderjar/capture/*:refs/heads/thunderjar/capture/*",
     });
     expect(pushArgs({ fetch: false, remote: "origin" }, [])).toBeNull();
     expect(pushArgs({ fetch: false, remote: "origin" }, ["branch"])).toEqual(["push", "--no-verify", "origin", REFSPECS.branch]);
