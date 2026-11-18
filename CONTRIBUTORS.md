@@ -1,4 +1,11 @@
 
+## This project contains HUMANS.md
+
+HUMANS.md are intended for you - the human reader to read. 
+
+They're like AGENTS.md in that they contain instructions for the agent, but agents should never touch them, whereas agents are allowed to modify their AGENTS.md.
+
+
 ## Versioning
 
 Project uses changeset and standard semantic versioning. 

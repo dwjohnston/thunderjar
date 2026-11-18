@@ -1,3 +1,5 @@
+@HUMANS.md
+
 # Thunderjar 
 
 Thunderjar is a TypeScript/Bun CLI for

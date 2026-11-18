@@ -11,12 +11,12 @@
 #
 
 # Files that need a manual review from a human.
-# Approval is only required once the "Require review from Code Owners" rule is on for the branch.
 
 docs/**/*.md                      @dwjohnston
 project-md/human-safe-space/**/*  @dwjohnston
 /CONTRIBUTORS.md                  @dwjohnston
 **/*.humans.*                     @dwjohnston
+HUMANS.md                         @dwjohnston
 
 # Protect these rules too
 /.github/CODEOWNERS               @dwjohnston
