@@ -49,7 +49,7 @@ Take the session's entry. It holds:
 |---|---|
 | `start.prompt` | the initial prompt, word for word |
 | `start.agent.harness`, `start.agent.harnessVersion` | the harness |
-| `turnRecords[0].agent.model` | the model |
+| `turnRecords[0].agent.models` | the model: usually one. If several, ask which. |
 | `startTree` | the code state's tree, see step 3 |
 | `start.repository.dirty` | whether it had uncommitted changes. The snapshot holds them either way. |
 
