@@ -1,6 +1,6 @@
 ---
 name: tj-base-image
-description: Add a Thunderjar base image, i.e. the FROM line and system tools every experiment's image starts with. Use when a code state or measurement needs a toolchain the existing base image lacks, e.g. "use Python 3.13", "add Go to the image".
+description: Add a Thunderjar base image, i.e. the FROM line and system tools every experiment's image starts with. Use when a code state or measurement needs a toolchain or service the existing base image lacks, e.g. "use Python 3.13", "add Go to the image", "it needs a database".
 ---
 
 <!--
@@ -16,7 +16,7 @@ Humans: add your notes here
 
 # Add a base image
 
-A base image is the first fragment of every experiment's image, in `.thunderjar/parameters/baseImages/<name>/index.ts`. Its `applyParameter` must start with `FROM`, pin the image's version, and install the system tools the later fragments need: bun for `bunTestFile`, and a git identity so the agent and prompt sets can commit. Reuse the existing one, e.g. `node20`, unless the code state needs a toolchain it lacks.
+A base image is the first fragment of every experiment's image, in `.thunderjar/parameters/baseImages/<name>/index.ts`. Its `applyParameter` must start with `FROM`, pin the image's version, and install the system tools the later fragments need: bun for `bunTestFile`, and a git identity so the agent and prompt sets can commit. Reuse the existing one, e.g. `node20`, unless the code state needs a toolchain or service it lacks, e.g. a database.
 
 ```ts
 import { declareBaseImage } from "thunderjar";

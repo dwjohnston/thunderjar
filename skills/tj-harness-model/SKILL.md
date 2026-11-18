@@ -11,7 +11,12 @@ Harness: Claude Code
 Model: claude-opus-5-5
 Supervising engineer: David Johnston
 
-Humans: add your notes here
+Humans: 
+
+🙋‍♂️
+🙋‍♂️ I haven't paid much attention here. 
+🙋‍♂️
+
 -->
 
 # Add a harness and model
@@ -26,28 +31,6 @@ e.g.
 harnessModel: ["claude-code-2.1.311/claude-haiku-5-5", "codex-0.166.0/openai/gpt-6-luna"],
 ```
 
-✅ **Do** reuse an existing harness folder. A new model needs no new folder, only a new pair in the test case.
-
-## The harnesses
-
-| Harness | Key | Model ID | e.g. |
-|---|---|---|---|
-| Claude Code | `ANTHROPIC_API_KEY` | Anthropic's | `claude-code-2.1.311/claude-haiku-5-5` |
-| Codex | `OPENROUTER_API_KEY` | OpenRouter's | `codex-0.166.0/openai/gpt-6-luna` |
-| Copilot | `OPENROUTER_API_KEY` | OpenRouter's | `copilot-1.0.105/anthropic/claude-haiku-5.5` |
-| OpenCode | `OPENROUTER_API_KEY` | `openrouter/` + OpenRouter's | `opencode-1.19.5/openrouter/anthropic/claude-haiku-5.5` |
-
-Models come and go: check https://docs.claude.com/en/docs/about-claude/models or https://openrouter.ai/models for current IDs.
-
-## Claude Code
-
-Thunderjar has it built in.
-
-```ts
-import { claudeCode } from "thunderjar";
-
-export default claudeCode({ version: "2.1.311" });
-```
 
 ## Any other agent
 
