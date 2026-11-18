@@ -91,10 +91,10 @@ Use the cheapest instrument that answers the question.
 3. One command, several metrics
    - Print JSON, and parse it in each metric's `score`. See step 4.
 4. Compare with the starting point
-   - e.g. `git diff --stat <tag>`, with the code state's tag
+   - e.g. `git diff --stat thunderjar-start`, the tag the code state puts on its starting commit
    - For files touched, lines changed, files that shouldn't have changed.
 5. Check what the agent left behind
-   - e.g. `git log --oneline <tag>..HEAD` for commits it made.
+   - e.g. `git log --oneline thunderjar-start..HEAD` for commits it made.
 
 ❌ **Don't** check the contents of generated files, e.g. a grep on a file that a `generate` command writes.
 

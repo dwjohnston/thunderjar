@@ -28,13 +28,23 @@ e.g.
 import { declareCodeState } from "thunderjar";
 
 // This repository at tag eval/add-json-flag, the commit before the --json flag was added, with
-// dependencies installed.
+// dependencies installed. resolve looks up the tag's commit, so the Dockerfile pins a SHA.
 export default declareCodeState({
   config: {
     repo: "https://github.com/acme/cli.git",
     tag: "eval/add-json-flag",
   },
-  applyParameter: (config) => `RUN git clone --quiet --branch ${config.tag} ${config.repo} /workspace \\
+  resolve: async (config, ctx) => {
+    const tag = `refs/tags/${config.tag}`;
+    const lines = (await ctx.exec(`git ls-remote --exit-code ${config.repo} ${tag} '${tag}^{}'`)).split("\n");
+    // An annotated tag lists its own object, then the commit it points to, with ^{}.
+    const line = lines.find((l) => l.endsWith("^{}")) ?? lines[0]!;
+    return line.split("\t")[0]!;
+  },
+  applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
+  && git -C /workspace fetch --quiet origin ${ctx.resolved} \\
+  && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
+  && git -C /workspace tag thunderjar-start \\
   && git -C /workspace remote remove origin \\
   && cd /workspace && bun install --frozen-lockfile
 WORKDIR /workspace`,
@@ -58,19 +68,21 @@ It lives at `.thunderjar/parameters/codeStates/<name>/index.ts`.
 
 | Starting point | How |
 |---|---|
-| A commit | tag it, then clone the tag |
+| A commit | tag it, resolve the tag, check out the SHA |
 | A commit plus uncommitted changes | commit them on a snapshot branch, and tag that commit |
-| A subfolder of a repo | clone the tag, then `WORKDIR` into the folder, or check out only that folder |
+| A subfolder of a repo | as for a commit, then `WORKDIR` into the folder, or check out only that folder |
 | A small scenario | write the files inline with `RUN cat > … <<'EOF'` |
 | A generated project | run the generator, e.g. `RUN bun create …`, then `git init` and commit |
 
 ✅ **Do** end with a git repository at `/workspace`, with everything committed.
 
+Tag the starting commit `thunderjar-start` inside the image, as the example does, so measurements can compare against it.
+
 **Why:** measurements and prompt sets compare against the starting commit. Without it, the agent's changes can't be told apart from the starting files.
 
 ### 2. Tag it
 
-Tag the starting commit, push the tag, and clone the tag.
+Tag the starting commit, push the tag, and look the tag up in `resolve`.
 
 e.g.
 
@@ -81,15 +93,17 @@ git push origin eval/add-json-flag
 
 ✅ **Do** name the tag after what it's for, e.g. `eval/<task>`.
 
-❌ **Don't** pin a raw commit SHA, a branch, or anything that isn't pushed.
+❌ **Don't** name a tag or a branch in `applyParameter`.
 
-**Why:**
+**Why:** `applyParameter` must be deterministic: the same text must always build the same image. A tag or branch can move, so the text would stay the same while the image changed. `resolve` turns the tag into a SHA once per `plan`, `run` or `build`, records it with each run, and `applyParameter` pins that SHA.
+
+Tags over raw SHAs in `config`:
 - A tag says what the starting point is. A SHA doesn't.
 - A tag survives its branch being squash-merged and deleted. A commit on that branch may not.
-- A branch moves, so the same file would build something different later.
-- Anything unpushed fails the build.
 
-⚠️ **Warning:** never move or delete a pushed tag. Every result recorded against it would no longer match what it builds. For a new starting point, make a new tag.
+`resolve` runs on the host and must only read, e.g. `git ls-remote`. `--exit-code` makes a missing tag fail, rather than resolve to nothing.
+
+⚠️ **Warning:** don't move a pushed tag. Runs before and after would start from different commits under the same name. For a new starting point, make a new tag.
 
 ### 3. Seal it
 
