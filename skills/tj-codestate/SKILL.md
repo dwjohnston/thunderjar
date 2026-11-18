@@ -1,6 +1,6 @@
 ---
 name: tj-codestate
-description: Create a Thunderjar code state, i.e. the workspace an agent starts in: what's on disk (a commit, a patch on top, a subfolder, generated files), the folder it starts in, and what's installed. Use when a test case needs to start somewhere new, e.g. "start from commit abc123", "start in packages/cli", "start from my uncommitted changes".
+description: Create a Thunderjar code state, i.e. the workspace an agent starts in, made of what's on disk (a commit, a patch on top, a subfolder, generated files), the folder it starts in, and what's installed. Use when a test case needs to start somewhere new, e.g. "start from commit abc123", "start in packages/cli", "start from my uncommitted changes".
 ---
 
 <!--
