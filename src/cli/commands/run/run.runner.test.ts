@@ -119,6 +119,8 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(runner.some((command) => command.startsWith("docker build"))).toBe(false);
     // Recorded by the runner, and kept in the project's own file.
     expect(execution.status).toBe("complete");
+    // Recorded as pushed: the local name exists only on the runtime.
+    expect(containerRuns.map((run) => run.postrunImage)).toEqual([postrun]);
     expect(containerRuns.map(({ permutation, iteration, result }) => [permutation, iteration, Object.keys(result)])).toEqual([
       [1, 1, ["isPrimeShape", "isPrimeTests", "isPrimeTsExists", "tsIgnoreCount"]],
     ]);

@@ -335,6 +335,7 @@ Pushing ${PRERUN} ... done
 Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     expect(await docker.pushed()).toEqual([PRERUN, postrun]);
+    expect(((await readStore(data)).containerRuns as ContainerRunRecord[]).map((run) => run.postrunImage)).toEqual([postrun]);
     const commands = await docker.commands();
     expect(commands[0]).toBe("docker login ghcr.io");
     // Pushed before the first measurement container starts.
