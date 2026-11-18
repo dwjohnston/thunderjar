@@ -1,6 +1,6 @@
 ---
 name: tj-create-from-capture
-description: Turn a captured coding-agent session into a Thunderjar test case that reproduces it, i.e. the same starting code, prompt, harness and model, with a measurement for what went wrong. Use when the user wants an eval from a past session, e.g. "make a test case from that session", "reproduce session c0599495-7c21-4b7f-9899-d16f3412b9c2".
+description: Turn a captured coding-agent session into a Thunderjar test case that reproduces it, i.e. the same starting code, prompt, harness and model, with a measurement for what went wrong. Use when the user wants an eval from a past session, e.g. "make a test case from that session where the agent forgot to commit", "reproduce session c0599495-7c21-4b7f-9899-d16f3412b9c2".
 ---
 
 <!--
@@ -34,6 +34,7 @@ Captures are read only through the CLI. Quick captures in `.thunderjar/quickCapt
 | The user gives | Do |
 |---|---|
 | A session ID | use it. It must be the full ID, not a prefix. |
+| A description, e.g. "that session where the agent forgot to commit" | search `capture list --json` for it, in each session's prompts and `lastAssistantMessage`s, newest first. Show the user the few that fit, and ask which. |
 | Nothing | run `thunderjar capture list`, and ask which one |
 
 Not found: run `thunderjar capture push --fetch`, then try again. The capture may have been made on another machine.
