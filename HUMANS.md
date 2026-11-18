@@ -56,4 +56,6 @@ The following environment variables should be available to you:
 - THUNDERJAR_DB_URL
 - GITHUB_TOKEN
 
+## Canonical documentation 
+
 
