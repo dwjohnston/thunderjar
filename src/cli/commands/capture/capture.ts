@@ -11,7 +11,7 @@
 // `thunderjar capture`: record every coding-agent session in a repository as git refs, under
 // refs/thunderjar/capture/<session>/ or, with THUNDERJAR_CAPTURE_STORE=branch, on the branch
 // thunderjar-capture/<session>, to triage and replay as evals. `install` and `uninstall` turn it on and
-// off for a harness, `list` shows the captures, `push` shares them, and `import` copies branches into
+// off for a harness, `list` shows the captures, `show` prints one, `push` shares them, and `import` copies branches into
 // refs. `prompt` and `stop` are what the hooks run, left out of --help.
 import { Command, Option } from "commander";
 import { HARNESSES, type HarnessId } from "../../../capture/adapters.ts";
@@ -19,6 +19,7 @@ import { importBranches } from "../../../capture/branch.ts";
 import { git, repoRoot } from "../../../capture/git.ts";
 import { formatTable, listCaptures } from "../../../capture/list.ts";
 import { localStores, pushArgs } from "../../../capture/push.ts";
+import { formatCapture, showCapture } from "../../../capture/show.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError, printJson, printWarning } from "../../output.ts";
 import { HOOKS, runHookCommand } from "./hook.ts";
@@ -96,6 +97,23 @@ export function createCaptureCommand(): Command {
       const captures = listCaptures(dir);
       if (options.json) printJson(captures);
       else print(formatTable(captures));
+    });
+  capture
+    .command("show")
+    .description("Print one captured session's records, from whichever store holds it: a header, then each record as its subject and JSON. Leaves out the snapshot trees.")
+    .argument("<session>", "the session ID, as `capture list` shows it")
+    .addOption(jsonOption())
+    .action((session: string, options: { json?: boolean }) => {
+      const dir = root();
+      if (dir === undefined) return;
+      const shown = showCapture(dir, session);
+      if (shown === null) {
+        printError(`No capture of session ${session}. \`thunderjar capture list\` shows the captures, and \`thunderjar capture push --fetch\` fetches them.`);
+        process.exitCode = 1;
+        return;
+      }
+      if (options.json) printJson(shown);
+      else print(formatCapture(shown));
     });
   capture
     .command("push")

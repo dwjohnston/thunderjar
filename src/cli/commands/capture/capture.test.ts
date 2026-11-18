@@ -136,6 +136,48 @@ describe("capture prompt and stop", () => {
   });
 });
 
+describe("capture show", () => {
+  const payload = (extra: object) => JSON.stringify({ session_id: "s1", cwd: repo, ...extra });
+  const capture = async (env: Record<string, string> = {}) => {
+    await thunderjar(["capture", "prompt", "--harness", "codex"], { stdin: payload({ prompt: "make b" }), env });
+    await Bun.write(`${repo}/b.txt`, "b");
+    await thunderjar(["capture", "stop", "--harness", "codex"], { stdin: payload({ turn_id: "t1" }), env });
+  };
+
+  test("prints a header, then each record's subject and JSON", async () => {
+    await capture();
+    const result = await thunderjar(["capture", "show", "s1"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toStartWith(
+      "Session: s1\nStore: refs\nFetch: git fetch origin 'refs/thunderjar/capture/s1/*:refs/thunderjar/capture/s1/*'\n\nthunderjar capture: s1 start\n{",
+    );
+    expect(result.stdout).toContain('"prompt": "make b"');
+    expect(result.stdout).toContain("\n\nthunderjar capture: s1 turn-1\n{");
+  });
+
+  test("--json, from the branch store, whatever THUNDERJAR_CAPTURE_STORE says", async () => {
+    await capture({ THUNDERJAR_CAPTURE_STORE: "branch" });
+    const result = await thunderjar(["capture", "show", "s1", "--json"], { env: { THUNDERJAR_CAPTURE_STORE: "refs" } });
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      session: "s1",
+      store: "branch",
+      records: [
+        { subject: "thunderjar capture: s1 start", record: { prompt: "make b" } },
+        { subject: "thunderjar capture: s1 turn-1", record: { agent: { turnId: "t1" } } },
+      ],
+    });
+    expect((await thunderjar(["capture", "show", "s1"])).stdout).toContain("Fetch: git fetch origin refs/heads/thunderjar-capture/s1:refs/heads/thunderjar-capture/s1");
+  });
+
+  test("fails for a session it can't find", async () => {
+    for (const session of ["nope", "../bad"]) {
+      const result = await thunderjar(["capture", "show", session]);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(`No capture of session ${session}`);
+    }
+  });
+});
+
 describe("capture push", () => {
   const payload = (extra: object) => JSON.stringify({ session_id: "cli-session", cwd: repo, ...extra });
   const capture = async (env: Record<string, string> = {}) => {
