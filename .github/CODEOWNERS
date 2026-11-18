@@ -17,6 +17,7 @@ docs/**/*.md                      @dwjohnston
 project-md/human-safe-space/**/*  @dwjohnston
 /CONTRIBUTORS.md                  @dwjohnston
 **/*.humans.*                     @dwjohnston
+**/HUMANS.md                      @dwjohnston
 
 # Protect these rules too
 /.github/CODEOWNERS               @dwjohnston
