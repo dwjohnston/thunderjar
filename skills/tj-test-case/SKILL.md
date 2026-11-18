@@ -41,7 +41,7 @@ It lives at `.thunderjar/test-cases/<name>.ts`. Each array is a dimension: every
 | Field | Create a new one if | New one through |
 |---|---|---|
 | `codeState` | The task is relevant to particular state in the codebase. eg. 'fix this bug, that only makes sense at a particular commit'  AND that codestate doesn't already exist. | tj-codestate |
-| `promptSet` | Tweaking |
+| `promptSet` | The test case relates to tweaking agent instructions and appropriate ones don't already exists | tj-promptset |
 | `task` | The appropriate task does not already eixst.  | step 2 |
 | `baseImage`| It makes sense to  | /tj-base-image |
 | `baseImage`, `harnessModel` | The user specifically asked for it.  | tj-harness-model |
