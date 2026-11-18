@@ -34,7 +34,7 @@ Captures are read only through the CLI. Quick captures in `.thunderjar/quickCapt
 | The user gives | Do |
 |---|---|
 | A session ID | use it. It must be the full ID, not a prefix. |
-| A description, e.g. "that session where the agent forgot to commit" | search `capture list --json` for it, in each session's prompts and `lastAssistantMessage`s, newest first. Show the user the few that fit, and ask which. |
+| A description, of what went wrong, e.g. "that session where the agent forgot to commit", or of the task, e.g. "that session where the agent was implementing isPrime" | search `capture list --json` for it, in each session's prompts and `lastAssistantMessage`s, newest first. Show the user the few that fit, and ask which. |
 | Nothing | run `thunderjar capture list`, and ask which one |
 
 Not found: run `thunderjar capture push --fetch`, then try again. The capture may have been made on another machine.
