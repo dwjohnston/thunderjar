@@ -57,7 +57,7 @@ For each field, in order:
 | `codeState` | tj-codestate |
 | `promptSet` | tj-promptset |
 | `task` | step 2 |
-| `baseImage`, `harnessModel` | ask the user |
+| `baseImage`, `harnessModel` | rarely needed: the defaults, or what the user asked for, cover them |
 
 ✅ **Do** ask for the code state, unless you were given one.
 
