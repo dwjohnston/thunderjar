@@ -9,11 +9,24 @@
     - tweaking skill descriptions
     - comparing models
 
+- ‼️🍳 Local-only quick start: no Fly, no image store, no Postgres
+- ‼️🍳 Which API key each harness needs, and where it goes
+- 👐🍳 Troubleshooting: reading `.thunderjar/logs`, a run that failed or timed out
+- 👐🍳 Worked examples: the gauntlet test cases, end to end
+- 😴🍳 Costs: what a typical execution spends
 
 
 ## Tooling
 
+- 👐🍳 `doctor <test case>`: check only the keys and images that test case needs
+- 😴🍳 Prune `project-md/prd` and `delivery/tasks` to what's still true
+
+
 ## Functionality - Skills, Hooks
+
+- 👐🍳 Promptset helper that installs a skill for all four harnesses (`.claude/skills`, `.agents/skills` etc.)
+- 😴🪖 Hooks in a promptset, per harness
+- 😴🪖 Skills that refer to other skills: a hard composition, not "refer to <skill>"
 
 
 ## Functionality - Measurement instruments
@@ -31,9 +44,12 @@
     - helper function that lists all the commits and allows easy assessment of them
         - For example of a red green tdd check, you could use this instrume to check that commit 1 had 🔴 and only touched the test and commit 2 had 🟢 and only touched the file
 
-
-
-
+- 👐🍳 Files changed: which paths the run touched, e.g. "only touched `src/`"
+- 👐🍳 Typecheck / lint passes, error count
+- 👐🍳 Test suite passes (generic, not just one bun test file)
+- 😴🍳 Duration and token cost as metrics, so they can be compared like any other
+- 😴🪖 LLM-as-judge instrument
+- 😴🪖 Categorical metrics (see measurements philosophy)
 
 
 ## Functionality - Helper functions
@@ -43,11 +59,18 @@
 - promptSetAtTagOrBranch
 - promptSetAtCommit
 
+- ‼️🍳 Ship `codex`, `copilot`, `opencode` helpers like `claudeCode`: reply and token cost parsing currently lives in project files
+- 👐🍳 codeStateFromPatch: uncommitted changes as a code state
+- 👐🍳 promptSetFromFolder: copy a folder of md files over the code state
+- 😴🍳 Declare a task's measurements as an array, less verbose
+- 😴🍳 Task `dependsOn` code states: reject test cases pairing it with any other
+
 ### Prompt Set Application 
 
 - ie. see the philosophy compose md
     - https://github.com/dwjohnston/compose-md
-    - This _could_ but I really don't want to be maintaining it. 
+    - This _could_ but I really don't want to be maintaining it.
+
 
 
 ## Functionality - CLI 
@@ -65,11 +88,21 @@
 - arbitrary test case runs 
     - eg. something like `thunderjar run the-test-case --harness-model="claude-code/haiku,opencode/haiku"
 
-
-
+- ‼️🪖 `compare` - two executions, same measurements side by side (planned, not built)
+- 👐🍳 `remeasure` - apply current measurements to past postrun images (planned, not built)
+- 👐🍳 `restore` - a run's end state as a local branch (planned, not built)
+- ‼️🍳 Retry an iteration on transient API errors (rate limit, overloaded)
+- 👐🍳 `run --resume <execution>` - rerun only the failed iterations
+- 😴🍳 Delete executions from the run data store
+- 😴🍳 `executions --limit`, filter by status
 
 
 ## Functionality - Browser view
+
+- 👐🍳 A run's agent transcript
+- 👐🍳 A run's code diff, from code state to postrun
+- 😴🍳 Chart of a metric across permutations
+
 
 ## Functionality - Remote runs 
 
@@ -82,9 +115,7 @@
 
 - Abiltity to use subscriptions to do run s
 
-- 'batch runs' - Being able to schedule running _multiple_ test cases in one big batch. 
+- 'batch runs' - Being able to schedule running _multiple_ test cases in one big batch.
 
-
-
-
+- 👐🪖 Spend cap: stop an execution past a token cost limit
 
