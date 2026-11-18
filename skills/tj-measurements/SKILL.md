@@ -72,7 +72,7 @@ e.g. one of each, as the object passed to `declareMeasurement`:
 |---|---|
 | Run the project's own checks, rather than a grep that approximates them | `bun run typecheck`, `bun test` |
 | Exercise the behaviour | run the CLI with the new flag, and parse its output |
-| One command, several metrics | print `{"lines":42,"exports":1}`, then read `lines` and `exports` in two metrics' `score` (full example under Metrics) |
+| One command, several metrics | run `list --json` once, then score whether it printed valid JSON, and whether that's an array (full example under Metrics) |
 | Compare with the starting point: files touched, lines changed | `git diff --stat thunderjar-start` |
 | Check what the agent left behind, e.g. commits it made | `git log --oneline thunderjar-start..HEAD` |
 
@@ -109,21 +109,27 @@ Each measurement declares its `metrics`: what to read from the instrument's valu
 - `better`
   - `"higher"`, `"lower"`, or left out when neither is.
 
-e.g. one command feeding several metrics:
+e.g. one command feeding several metrics, for "add a --json flag to the list command":
 
 ```ts
-const counts = (v: { exitCode: number; stdout: string }) =>
-  v.exitCode === 0 ? (JSON.parse(v.stdout) as { lines: number; exports: number }) : undefined;
+// The agent's new --json output, parsed, or undefined if the command failed or printed anything but JSON.
+const parsed = (v: { exitCode: number; stdout: string }) => {
+  if (v.exitCode !== 0) return undefined;
+  try {
+    return JSON.parse(v.stdout) as unknown;
+  } catch {
+    return undefined;
+  }
+};
 
 export default declareMeasurement({
   instrument: "shell",
-  // Prints e.g. {"lines":42,"exports":1}. Exits non-zero when list.ts is missing.
-  config: {
-    command: `test -f src/list.ts && echo "{\\"lines\\":$(wc -l < src/list.ts),\\"exports\\":$(grep -c '^export ' src/list.ts)}"`,
-  },
+  config: { command: "bun run src/cli.ts list --json" },
   metrics: {
-    lines: { score: (v) => counts(v)?.lines, stat: "median", better: "lower" },
-    singleExport: { score: (v) => (counts(v) ? counts(v)!.exports === 1 : undefined), stat: "rate", better: "higher" },
+    // Ran, but printed something other than JSON, e.g. a header line above it.
+    validJson: { score: (v) => (v.exitCode === 0 ? parsed(v) !== undefined : undefined), stat: "rate", better: "higher" },
+    // Doesn't apply when there's no JSON to read.
+    isArray: { score: (v) => (parsed(v) === undefined ? undefined : Array.isArray(parsed(v))), stat: "rate", better: "higher" },
   },
 });
 ```
