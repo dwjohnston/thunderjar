@@ -53,15 +53,14 @@ WORKDIR /workspace`,
 
 It lives at `.thunderjar/parameters/codeStates/<name>/index.ts`.
 
-✅ **Do** reuse an existing code state if one already starts at the right place.
 
-## The canonical rule
+## ‼️ Important! The one rule! ‼️ 
 
 `applyParameter` must be deterministic: the same text must always build the same image.
 
-✅ **Do** look up anything that can change, e.g. a tag or a branch, in `resolve`, and use `ctx.resolved` in `applyParameter`.
+If you need to have content that is dynamic (a 'floating parameter') make use of the `resolve` function to resolve the dynamic parts. 
 
-❌ **Don't** name a tag or a branch in `applyParameter`.
+
 
 e.g.
 
@@ -114,7 +113,7 @@ git push origin eval/add-json-flag
 
 ✅ **Do** name the tag after what it's for, e.g. `eval/<task>`.
 
-Never name the tag in `applyParameter`: see [The canonical rule](#the-canonical-rule).
+Never name the tag in `applyParameter`: see the one rule, above.
 
 Tags over raw SHAs in `config`:
 - A tag says what the starting point is. A SHA doesn't.
