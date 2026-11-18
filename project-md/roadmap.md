@@ -71,6 +71,16 @@
 
 ## Functionality - Browser view
 
+## Functionality - general
+
+- graceful run abort
+    - if a run is aborted with ctrl+c it should still save whatever images it already had
+
+- https://github.com/dwjohnston/thunderjar/issues/112
+
+
+
+
 ## Functionality - Remote runs 
 
 - General optimisation - often the _pushing_ becomes a bottle neck. 
