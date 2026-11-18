@@ -79,7 +79,7 @@ applyParameter: (config) => `RUN git clone --branch ${config.tag} …`,
 
 1. **Choose what's on disk**
    - A commit: tag it, resolve the tag, check out the SHA.
-   - Uncommitted changes: commit them on a snapshot branch, and tag that.
+   - Uncommitted changes: as for a commit, plus a patch in the code state's `files/`, e.g. `git add -N . && git diff HEAD --binary > files/changes.patch`, applied with `COPY ${ctx.dir}/changes.patch /tmp/` and `git apply`.
    - A subfolder: as for a commit, then `WORKDIR` into it, or check out only that folder.
    - A small scenario: write the files inline, e.g. `RUN cat > … <<'EOF'`.
    - A generated project: run the generator, then `git init` and commit.
