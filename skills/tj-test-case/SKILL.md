@@ -45,27 +45,20 @@ It lives at `.thunderjar/test-cases/<name>.ts`. Each array is a dimension: every
 
 ### 1. Fill each field
 
-For each field, in order:
-
-1. The value you were given, e.g. by tj-create-from-capture
-2. An existing parameter in `.thunderjar/parameters/`
-3. The defaults in `.thunderjar/AGENTS.md`
-4. A new parameter
-
-| Field | New one through |
-|---|---|
-| `codeState` | tj-codestate |
-| `promptSet` | tj-promptset |
-| `task` | step 2 |
-| `baseImage`, `harnessModel` | rarely needed: the defaults, or what the user asked for, cover them |
-
-✅ **Do** ask for the code state, unless you were given one.
-
-**Why:** a wrong code state still makes a valid-looking test case, so the mistake goes unnoticed.
-
-Harnesses in the defaults are named without a version, e.g. `claude-code / claude-haiku-5-5`. Write the newest version in `parameters/harnessModels/`, e.g. `claude-code-2.1.311/claude-haiku-5-5`.
+| Field | Use an existing one if | New one through |
+|---|---|---|
+| `codeState` | it starts where the task needs, e.g. the right tag and folder | tj-codestate |
+| `promptSet` | the user isn't comparing instructions, e.g. `none` | tj-promptset |
+| `task` | the user names one, or one has the same prompt | step 2 |
+| `baseImage`, `harnessModel` | always, unless the user asks for another | defaults |
 
 ❌ **Don't** add harnesses, models or promptsets the user didn't ask for.
+
+#### Defaults 
+
+The .thunderjar/AGENTS.md should include instructions about what the default harness model pair should be. 
+
+
 
 ### 2. Write the task
 
