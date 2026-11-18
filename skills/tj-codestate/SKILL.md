@@ -55,6 +55,27 @@ It lives at `.thunderjar/parameters/codeStates/<name>/index.ts`.
 
 ✅ **Do** reuse an existing code state if one already starts at the right place.
 
+## The canonical rule
+
+`applyParameter` must be deterministic: the same text must always build the same image.
+
+✅ **Do** look up anything that can change, e.g. a tag or a branch, in `resolve`, and use `ctx.resolved` in `applyParameter`.
+
+❌ **Don't** name a tag or a branch in `applyParameter`.
+
+e.g.
+
+```ts
+// 👍 Good
+resolve: (config, ctx) => ctx.exec(`git ls-remote --exit-code ${config.repo} refs/tags/${config.tag} | cut -f1`),
+applyParameter: (config, ctx) => `RUN … checkout --detach ${ctx.resolved}`,
+
+// 👎 Bad
+applyParameter: (config) => `RUN git clone --branch ${config.tag} …`,
+```
+
+**Why:** images are cached by the hash of the text `applyParameter` returns. If the tag moves, the text stays the same, so a stale image is reused, and runs can't say which commit they started from. `resolve` runs once per `plan`, `run` or `build`, and each run records what it returned.
+
 ## Steps
 
 1. Choose what's on disk
@@ -93,9 +114,7 @@ git push origin eval/add-json-flag
 
 ✅ **Do** name the tag after what it's for, e.g. `eval/<task>`.
 
-❌ **Don't** name a tag or a branch in `applyParameter`.
-
-**Why:** `applyParameter` must be deterministic: the same text must always build the same image. A tag or branch can move, so the text would stay the same while the image changed. `resolve` turns the tag into a SHA once per `plan`, `run` or `build`, records it with each run, and `applyParameter` pins that SHA.
+Never name the tag in `applyParameter`: see [The canonical rule](#the-canonical-rule).
 
 Tags over raw SHAs in `config`:
 - A tag says what the starting point is. A SHA doesn't.
