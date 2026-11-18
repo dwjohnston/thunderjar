@@ -63,4 +63,3 @@ Maintained by humans only, in [project-md/human-safe-space/](project-md/human-sa
 
 - [Tag conventions](project-md/human-safe-space/conventions/tags.md)
 - [Measurements philosophy](project-md/human-safe-space/measurements-philosophy/index.md)
-- [Sample](project-md/human-safe-space/sample.md)
