@@ -112,7 +112,7 @@ RUN cd /workspace && git add -A && git commit --quiet -m start`,
 
 ### 4. Uncommitted changes
 
-As for a commit, then cat the changed files on top, as for a sandbox task.
+This is not currently supported, but if the user insists you're welcome to think of a workaround.
 
 ### 5. The output of a generator
 
