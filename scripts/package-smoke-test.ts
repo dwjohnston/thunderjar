@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 // The installed package's smoke test: builds and packs Thunderjar, installs the tarball into an
 // empty JavaScript project in a temporary folder, the way a user would, and runs `init`,
-// `generate`, `plan` of both its test cases, and `build` and `run --dry-run` of one, there with its own `thunderjar`. Then it
+// `generate`, `plan` of both its test cases, `build` and `run --dry-run` of one, and `capture install`
+// and `capture list`, there with its own `thunderjar`. Then it
 // starts `view`, and fetches its page and the page's script. Every
 // other test runs Thunderjar from source; this one runs only what's published.
 //
@@ -15,8 +16,8 @@
 // Exits 1, printing the failing command's output, if a step fails. The temporary folder is removed
 // either way.
 import { $ } from "bun";
+import { packThunderjar } from "../src/cli/commands/capture/sampleRepoImage.ts";
 
-const ROOT = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const TEMP = `${Bun.env.TMPDIR || "/tmp"}/thunderjar-package-${crypto.randomUUID()}`;
 const PROJECT = `${TEMP}/project`;
 const QUICKSTART = Bun.argv.includes("--quickstart");
@@ -51,6 +52,9 @@ const STEPS: { args: string[]; expect: string[] }[] = [
     expect: ["npm install --global bun@1.3.14", "@anthropic-ai/claude-code@2.1.311", "/thunderjar/thunderjar-run.sh", "claude -p", "/thunderjar/prompt.txt"],
   },
   { args: ["run", "compare-models", "--dry-run"], expect: ["sh /thunderjar/thunderjar-run.sh"] },
+  // Capture keeps its records in the project's git repository, made by `git init` before the steps.
+  { args: ["capture", "install", "--harness", "claude-code"], expect: [".claude/settings.local.json"] },
+  { args: ["capture", "list"], expect: ["No captures."] },
 ];
 
 /** A step that failed, with its output. */
@@ -101,13 +105,12 @@ async function checkView(step: string): Promise<void> {
 
 try {
   await $`mkdir -p ${PROJECT}`.quiet();
-  await mustRun("build", $`bun run build`.cwd(ROOT));
-  // npm pack prints the tarball's name last on stdout, and its notices on stderr.
-  const packed = (await mustRun("pack", $`npm pack --pack-destination ${TEMP}`.cwd(ROOT))).stdout.trim().split("\n").at(-1) as string;
-  console.log(`packed ${packed}`);
+  const tarball = await packThunderjar(TEMP).catch((error: unknown) => fail("build and pack", error instanceof Error ? error.message : String(error)));
+  console.log(`packed ${tarball.slice(TEMP.length + 1)}`);
 
   await mustRun("npm init", $`npm init --yes`.cwd(PROJECT));
-  await mustRun("install", $`npm install --no-audit --no-fund ${`${TEMP}/${packed}`}`.cwd(PROJECT));
+  await mustRun("git init", $`git init -q`.cwd(PROJECT));
+  await mustRun("install", $`npm install --no-audit --no-fund ${tarball}`.cwd(PROJECT));
   console.log("installed into <temp>");
 
   const width = Math.max(...STEPS.map(({ args }) => `thunderjar ${args.join(" ")}`.length));

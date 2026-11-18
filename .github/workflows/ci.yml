@@ -43,6 +43,9 @@ jobs:
       # bubblewrap sandbox does.
       - name: Let containers make user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      # The capture tests' sample repo image, tagged by a hash of what it's built from.
+      - name: Build the sample repo image
+        run: bun run di:build:sample-repo
       - name: Docker image tests (GitHub's Ubuntu runners have Docker)
         run: bun run test:docker:parallel
 

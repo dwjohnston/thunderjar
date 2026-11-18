@@ -2,6 +2,7 @@ import { Command, Option } from "commander";
 import pkg from "../../package.json" with { type: "json" };
 import { createAttachCommand } from "./commands/attach/attach.ts";
 import { createBuildCommand } from "./commands/build/build.ts";
+import { createCaptureCommand } from "./commands/capture/capture.ts";
 import { createDoctorCommand } from "./commands/doctor/doctor.ts";
 import { createExecutionsCommand } from "./commands/executions/executions.ts";
 import { createGenerateCommand } from "./commands/generate/generate.ts";
@@ -73,6 +74,8 @@ export function createProgram(): Command {
     .addOption(new Option("--log-level <level>", "how much goes in the diagnostic log").choices(LOG_LEVELS).env("THUNDERJAR_LOG_LEVEL"))
     .addOption(new Option("-v, --verbose", "log at the debug level: --log-level debug").conflicts("logLevel"))
     .hook("preAction", async (program, command) => {
+      // A capture hook runs twice a turn, in any repository: it logs to capture.log, never a log file of its own.
+      if (command.parent?.name() === "capture" && (command.name() === "prompt" || command.name() === "stop")) return;
       // With --json, stdout is the JSON alone, so everything else a command writes goes to stderr.
       if (command.opts<{ json?: boolean }>().json) textToStderr();
       const options = program.opts<LogOptions>();
@@ -92,8 +95,9 @@ export function createProgram(): Command {
     .addCommand(createDoctorCommand())
     .addCommand(createExecutionsCommand())
     .addCommand(createShowCommand())
-    .addCommand(createViewCommand());
+    .addCommand(createViewCommand())
+    .addCommand(createCaptureCommand());
   // Commands made on their own and added don't inherit the program's help settings.
-  for (const command of [program, ...program.commands]) command.configureHelp(HELP_STYLES);
+  for (const command of [program, ...program.commands, ...program.commands.flatMap((c) => c.commands)]) command.configureHelp(HELP_STYLES);
   return program;
 }
