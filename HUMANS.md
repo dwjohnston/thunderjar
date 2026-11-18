@@ -23,6 +23,14 @@ Feel free to modify AGENTS.md as will be helpful to yourself or future agents.
 If instructions or details already exist in HUMANS.md - you can expand on them in the AGENTS.md.  
 
 
+## Top level instructions 
+
+Always invoke: 
+
+/write-for-the-human
+/concise-output 
+
+
 ## Thunderjar 
 
 Thunderjar is a coding harness eval framework. 
