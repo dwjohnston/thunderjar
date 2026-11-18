@@ -34,7 +34,7 @@ type GitOptions = { stdin?: string; env?: Record<string, string> };
  * Snapshot commits and tag objects are written by this identity, so capture works where `user.name` isn't
  * set, and a record never claims to be the user's own commit.
  */
-const IDENTITY = {
+export const IDENTITY = {
   GIT_AUTHOR_NAME: "Thunderjar capture",
   GIT_AUTHOR_EMAIL: "capture@thunderjar.invalid",
   GIT_COMMITTER_NAME: "Thunderjar capture",
@@ -87,13 +87,13 @@ export function captureDir(root: string): string {
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 /**
- * Commits everything in the working tree, tracked or not, as a commit on no branch. Leaves the branch, the
+ * Stages everything in the working tree, tracked or not, and writes it as a tree. Leaves the branch, the
  * index and the working tree as they are.
  *
  * It stages into a copy of the index: git reuses the copy's cached file details, so `add -A` stays fast on a
- * large repository. `dirty` says whether the tree differs from the parent's, or from an empty tree without one.
+ * large repository.
  */
-export async function snapshot(root: string, parent: string | null, message: string): Promise<{ commit: string; tree: string; dirty: boolean }> {
+export async function snapshotTree(root: string): Promise<string> {
   const dir = captureDir(root);
   const index = `${dir}/index-${crypto.randomUUID()}`;
   const realIndex = git(root, ["rev-parse", "--path-format=absolute", "--git-path", "index"]);
@@ -102,13 +102,32 @@ export async function snapshot(root: string, parent: string | null, message: str
     if (await Bun.file(realIndex).exists()) await Bun.write(index, Bun.file(realIndex));
     const env = { ...IDENTITY, GIT_INDEX_FILE: index };
     git(root, ["add", "-A"], { env });
-    const tree = git(root, ["write-tree"], { env });
-    const commit = git(root, ["commit-tree", tree, ...(parent ? ["-p", parent] : [])], { env, stdin: message });
-    const parentTree = parent ? git(root, ["rev-parse", `${parent}^{tree}`]) : EMPTY_TREE;
-    return { commit, tree, dirty: tree !== parentTree };
+    return git(root, ["write-tree"], { env });
   } finally {
     await Bun.file(index).delete().catch(() => {});
   }
+}
+
+/** The tree of `commit`, or the empty tree for none. */
+export function treeOf(root: string, commit: string | null): string {
+  return commit ? git(root, ["rev-parse", `${commit}^{tree}`]) : EMPTY_TREE;
+}
+
+/** Writes a commit of `tree` by capture's identity, with `parents` and `message`. `env` can fix its dates. */
+export function commitTree(root: string, tree: string, parents: (string | null)[], message: string, env: Record<string, string> = {}): string {
+  const parentArgs = parents.filter((parent): parent is string => !!parent).flatMap((parent) => ["-p", parent]);
+  return git(root, ["commit-tree", tree, ...parentArgs], { env: { ...IDENTITY, ...env }, stdin: message });
+}
+
+/**
+ * Commits everything in the working tree, tracked or not, as a commit on no branch. Leaves the branch, the
+ * index and the working tree as they are. `dirty` says whether the tree differs from the parent's, or from
+ * an empty tree without one.
+ */
+export async function snapshot(root: string, parent: string | null, message: string): Promise<{ commit: string; tree: string; dirty: boolean }> {
+  const tree = await snapshotTree(root);
+  const commit = commitTree(root, tree, [parent], message);
+  return { commit, tree, dirty: tree !== treeOf(root, parent) };
 }
 
 /**
@@ -124,10 +143,19 @@ export function writeRecord(root: string, ref: string, commit: string, record: u
   return object;
 }
 
+/** The JSON record in a tag or commit message: everything after its first blank line. */
+export function parseRecord<T>(message: string): T {
+  return JSON.parse(message.slice(message.indexOf("\n\n") + 2)) as T;
+}
+
 /** Reads the JSON record back out of a ref written by `writeRecord`. */
 export function readRecord<T = Record<string, unknown>>(root: string, ref: string): T {
-  const tag = git(root, ["cat-file", "tag", ref]);
-  return JSON.parse(tag.slice(tag.indexOf("\n\n") + 2)) as T;
+  return parseRecord<T>(git(root, ["cat-file", "tag", ref]));
+}
+
+/** The first line of a snapshot commit's message, and of a branch-store commit's. */
+export function recordSubject(sessionId: string, kind: RefKind): string {
+  return `thunderjar capture: ${sessionId} ${kind}`;
 }
 
 /** The number of the session's next turn: one more than the highest `turn-<n>` ref. */

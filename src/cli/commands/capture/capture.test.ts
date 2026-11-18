@@ -23,7 +23,7 @@ let home: string;
 
 /** `thunderjar <args…>` in the repository, with `stdin`, and a home folder of its own. */
 async function thunderjar(args: string[], options: { stdin?: string; env?: Record<string, string> } = {}) {
-  const env = { ...Bun.env, HOME: home, CODEX_HOME: "", COPILOT_HOME: "", XDG_CONFIG_HOME: "", CLAUDECODE: "", ...options.env };
+  const env = { ...Bun.env, HOME: home, CODEX_HOME: "", COPILOT_HOME: "", XDG_CONFIG_HOME: "", CLAUDECODE: "", CLAUDE_CODE_REMOTE: "", THUNDERJAR_CAPTURE_STORE: "", ...options.env };
   const command = options.stdin === undefined ? $`bun ${CLI} ${args}` : $`bun ${CLI} ${args} < ${new Response(options.stdin)}`;
   const result = await command.cwd(repo).env(env).quiet().nothrow();
   return { stdout: result.stdout.toString(), stderr: result.stderr.toString(), exitCode: result.exitCode };
@@ -137,10 +137,39 @@ describe("capture prompt and stop", () => {
 });
 
 describe("capture push", () => {
-  test("--dry-run prints the git command", async () => {
-    expect((await thunderjar(["capture", "push", "--dry-run"])).stdout).toBe("git push --no-verify origin refs/thunderjar/capture/*:refs/thunderjar/capture/*\n");
+  const payload = (extra: object) => JSON.stringify({ session_id: "cli-session", cwd: repo, ...extra });
+  const capture = async (env: Record<string, string> = {}) => {
+    await thunderjar(["capture", "prompt", "--harness", "codex"], { stdin: payload({ prompt: "p" }), env });
+    await thunderjar(["capture", "stop", "--harness", "codex"], { stdin: payload({}), env });
+  };
+
+  test("--dry-run prints the git command, for the stores that have captures", async () => {
+    expect((await thunderjar(["capture", "push", "--dry-run"])).stdout).toBe("No captures to push.\n");
     expect((await thunderjar(["capture", "push", "--dry-run", "--fetch", "upstream"])).stdout).toBe(
-      "git fetch upstream refs/thunderjar/capture/*:refs/thunderjar/capture/*\n",
+      "git fetch upstream refs/thunderjar/capture/*:refs/thunderjar/capture/* refs/heads/thunderjar-capture/*:refs/heads/thunderjar-capture/*\n",
     );
+    await capture({ CLAUDE_CODE_REMOTE: "true" });
+    expect((await thunderjar(["capture", "push", "--dry-run"])).stdout).toBe(
+      "git push --no-verify origin refs/heads/thunderjar-capture/*:refs/heads/thunderjar-capture/*\n",
+    );
+  });
+
+  test("THUNDERJAR_CAPTURE_STORE=refs overrides a cloud session", async () => {
+    await capture({ CLAUDE_CODE_REMOTE: "true", THUNDERJAR_CAPTURE_STORE: "refs" });
+    expect((await thunderjar(["capture", "push", "--dry-run"])).stdout).toBe("git push --no-verify origin refs/thunderjar/capture/*:refs/thunderjar/capture/*\n");
+  });
+});
+
+describe("capture import", () => {
+  test("copies branch captures into refs, once", async () => {
+    await thunderjar(["capture", "prompt", "--harness", "codex"], {
+      stdin: JSON.stringify({ session_id: "s1", cwd: repo, prompt: "p" }),
+      env: { THUNDERJAR_CAPTURE_STORE: "branch" },
+    });
+    const first = await thunderjar(["capture", "import"]);
+    expect(first.stdout).toBe("imported refs/thunderjar/capture/s1/start\n1 imported, 0 already there.\n");
+    const again = await thunderjar(["capture", "import", "--json"]);
+    expect(JSON.parse(again.stdout)).toEqual({ imported: [], skipped: ["refs/thunderjar/capture/s1/start"] });
+    expect((await $`git branch --list ${"thunderjar-capture/*"} --format=${"%(refname:short)"}`.cwd(repo).text()).trim()).toBe("thunderjar-capture/s1");
   });
 });

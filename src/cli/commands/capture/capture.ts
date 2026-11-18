@@ -9,14 +9,16 @@
  */
 
 // `thunderjar capture`: record every coding-agent session in a repository as git refs, under
-// refs/thunderjar/capture/<session>/, to triage and replay as evals. `install` and `uninstall` turn it
-// on and off for a harness, `list` shows the captures, and `push` shares them. `prompt` and `stop` are
-// what the hooks run, left out of --help.
+// refs/thunderjar/capture/<session>/ or, with THUNDERJAR_CAPTURE_STORE=branch, on the branch
+// thunderjar-capture/<session>, to triage and replay as evals. `install` and `uninstall` turn it on and
+// off for a harness, `list` shows the captures, `push` shares them, and `import` copies branches into
+// refs. `prompt` and `stop` are what the hooks run, left out of --help.
 import { Command, Option } from "commander";
 import { HARNESSES, type HarnessId } from "../../../capture/adapters.ts";
-import { repoRoot } from "../../../capture/git.ts";
+import { importBranches } from "../../../capture/branch.ts";
+import { git, repoRoot } from "../../../capture/git.ts";
 import { formatTable, listCaptures } from "../../../capture/list.ts";
-import { push, pushArgs } from "../../../capture/push.ts";
+import { localStores, pushArgs } from "../../../capture/push.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError, printJson, printWarning } from "../../output.ts";
 import { HOOKS, runHookCommand } from "./hook.ts";
@@ -69,7 +71,7 @@ function hookCommand(hook: (typeof HOOKS)[number]): Command {
 
 export function createCaptureCommand(): Command {
   const capture = new Command("capture").description(
-    "Record every coding-agent session in this repository as git refs under refs/thunderjar/capture/, for Claude Code, Codex, Copilot CLI and OpenCode: each prompt's starting code, and each turn's result.",
+    "Record every coding-agent session in this repository as git refs under refs/thunderjar/capture/, for Claude Code, Codex, Copilot CLI and OpenCode: each prompt's starting code, and each turn's result. With THUNDERJAR_CAPTURE_STORE=branch, the default in Claude Code cloud sessions (CLAUDE_CODE_REMOTE=true), each session is a branch instead, thunderjar-capture/<session>, one commit per record, for remotes that take only branches.",
   );
   capture
     .command("install")
@@ -86,7 +88,7 @@ export function createCaptureCommand(): Command {
     .action(uninstallCommand);
   capture
     .command("list")
-    .description("List the captured sessions, each with a verdict, to triage which would make good evals.")
+    .description("List the captured sessions, from refs and branches alike, each with a verdict, to triage which would make good evals.")
     .addOption(jsonOption())
     .action((options: { json?: boolean }) => {
       const dir = root();
@@ -97,22 +99,40 @@ export function createCaptureCommand(): Command {
     });
   capture
     .command("push")
-    .description("Push every capture to a remote, or fetch them from it with --fetch. Captures are never moved, so neither needs --force.")
+    .description(
+      "Push every capture to a remote, refs and branches alike, or fetch both from it with --fetch. Captures are never moved, and capture branches only grow, so neither needs --force.",
+    )
     .argument("[remote]", "the remote", "origin")
     .option("--fetch", "fetch the captures instead of pushing them")
     .option("--dry-run", "print the git command instead of running it")
     .action((remote: string, options: { fetch?: boolean; dryRun?: boolean }) => {
       const pushOptions = { fetch: options.fetch ?? false, remote };
-      if (options.dryRun) return print(["git", ...pushArgs(pushOptions)].join(" "));
       const dir = root();
       if (dir === undefined) return;
+      const args = pushArgs(pushOptions, localStores(dir));
+      if (args === null) return print("No captures to push.");
+      if (options.dryRun) return print(["git", ...args].join(" "));
       try {
-        push(dir, pushOptions);
+        git(dir, args);
         print(pushOptions.fetch ? `Fetched the captures from ${remote}.` : `Pushed the captures to ${remote}.`);
       } catch (error) {
         printError(error instanceof Error ? error.message : String(error));
         process.exitCode = 1;
       }
+    });
+  capture
+    .command("import")
+    .description(
+      "Copy the captures on thunderjar-capture/<session> branches into refs/thunderjar/capture/<session>/, as the hooks write them by default. Skips refs that exist, so it can run again, and leaves the branches alone.",
+    )
+    .addOption(jsonOption())
+    .action((options: { json?: boolean }) => {
+      const dir = root();
+      if (dir === undefined) return;
+      const result = importBranches(dir);
+      if (options.json) return printJson(result);
+      for (const ref of result.imported) print(`imported ${ref}`);
+      print(`${result.imported.length} imported, ${result.skipped.length} already there.`);
     });
   for (const hook of HOOKS) capture.addCommand(hookCommand(hook), { hidden: true });
   return capture;

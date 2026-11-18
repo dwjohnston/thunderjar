@@ -8,17 +8,19 @@
  * Humans: add your notes here
  */
 
-// The captures in a repository, each with a verdict, to triage which would make good evals.
+// The captures in a repository, from both stores, each with a verdict, to triage which would make good evals.
 //
 // Verdicts, the first that applies:
-//   incomplete     a start ref with no turns
+//   incomplete     a start with no turns
 //   question       the last turn's tree is the same as start's tree
 //   rewritten      historyRewritten on any turn
 //   one-shot       1 turn
 //   few-shot       2-3 turns
 //   conversation   more than 3 turns
+import { branchSessions, readBranch } from "./branch.ts";
 import { git, REF_PREFIX, readRecord } from "./git.ts";
 import type { StartRecord, TurnRecord } from "./records.ts";
+import { STORES, type StoreKind } from "./store.ts";
 
 export type Verdict = "incomplete" | "question" | "rewritten" | "one-shot" | "few-shot" | "conversation";
 
@@ -31,6 +33,8 @@ export type Capture = {
   turns: number;
   startedAt: string;
   prompt: string;
+  /** The stores holding the session's records: both once `capture import` has copied a branch. */
+  stores: StoreKind[];
   startTree: string;
   lastTree: string | null;
   start: StartRecord;
@@ -47,37 +51,63 @@ export function verdictOf(capture: Pick<Capture, "startTree" | "lastTree" | "tur
   return "conversation";
 }
 
-/** Every capture in the repository, oldest first. */
-export function listCaptures(root: string): Capture[] {
+type Stored<T> = { record: T; tree: string };
+type SessionRecords = { start?: Stored<StartRecord>; turns: Map<number, Stored<TurnRecord>>; stores: Set<StoreKind> };
+
+/** The records in the refs store, by session. */
+function readRefsStore(root: string, into: Map<string, SessionRecords>) {
   const refs = git(root, ["for-each-ref", "--format=%(refname)", `${REF_PREFIX}/`]).split("\n").filter(Boolean);
-  const bySession = new Map<string, { start?: string; turns: Map<number, string> }>();
   for (const ref of refs) {
     const [session, kind] = ref.slice(REF_PREFIX.length + 1).split("/");
     if (!session || !kind) continue;
-    const entry: { start?: string; turns: Map<number, string> } = bySession.get(session) ?? { turns: new Map() };
-    bySession.set(session, entry);
     const turn = kind.match(/^turn-(\d+)$/)?.[1];
-    if (kind === "start") entry.start = ref;
-    else if (turn) entry.turns.set(Number(turn), ref);
+    if (kind !== "start" && !turn) continue;
+    const entry = sessionOf(into, session);
+    entry.stores.add("refs");
+    const stored = { record: readRecord(root, ref), tree: git(root, ["rev-parse", `${ref}^{tree}`]) };
+    if (kind === "start") entry.start = stored as Stored<StartRecord>;
+    else entry.turns.set(Number(turn), stored as Stored<TurnRecord>);
   }
+}
+
+/** The records in the branch store, by session. A record the refs store has too is left as the refs store has it. */
+function readBranchStore(root: string, into: Map<string, SessionRecords>) {
+  for (const session of branchSessions(root)) {
+    const entry = sessionOf(into, session);
+    entry.stores.add("branch");
+    for (const { record, tree } of readBranch(root, session)) {
+      if (record.kind === "start") entry.start ??= { record, tree };
+      else if (!entry.turns.has(record.turn)) entry.turns.set(record.turn, { record, tree });
+    }
+  }
+}
+
+function sessionOf(sessions: Map<string, SessionRecords>, session: string): SessionRecords {
+  const entry = sessions.get(session) ?? { turns: new Map(), stores: new Set<StoreKind>() };
+  sessions.set(session, entry);
+  return entry;
+}
+
+/** Every capture in the repository, from both stores, merged by session, oldest first. */
+export function listCaptures(root: string): Capture[] {
+  const sessions = new Map<string, SessionRecords>();
+  readRefsStore(root, sessions);
+  readBranchStore(root, sessions);
 
   const captures: Capture[] = [];
-  for (const [session, refsOf] of bySession) {
-    if (!refsOf.start) continue;
-    const start = readRecord<StartRecord>(root, refsOf.start);
-    const turnRefs = [...refsOf.turns.entries()].sort(([a], [b]) => a - b).map(([, ref]) => ref);
-    const turnRecords = turnRefs.map((ref) => readRecord<TurnRecord>(root, ref));
-    const startTree = git(root, ["rev-parse", `${refsOf.start}^{tree}`]);
-    const lastRef = turnRefs.at(-1);
-    const lastTree = lastRef ? git(root, ["rev-parse", `${lastRef}^{tree}`]) : null;
-    const capture = { startTree, lastTree, turnRecords };
+  for (const [session, { start, turns, stores }] of sessions) {
+    if (!start) continue;
+    const ordered = [...turns.entries()].sort(([a], [b]) => a - b).map(([, turn]) => turn);
+    const turnRecords = ordered.map((turn) => turn.record);
+    const capture = { startTree: start.tree, lastTree: ordered.at(-1)?.tree ?? null, turnRecords };
     captures.push({
       session,
       verdict: verdictOf(capture),
       turns: turnRecords.length,
-      startedAt: start.capturedAt,
-      prompt: start.prompt,
-      start,
+      startedAt: start.record.capturedAt,
+      prompt: start.record.prompt,
+      stores: STORES.filter((store) => stores.has(store)),
+      start: start.record,
       ...capture,
     });
   }
