@@ -21,6 +21,8 @@ Humans:
 
 # Add a harness and model
 
+First, read the tj-general skill: the order parameters are applied in, and the one rule all of them follow.
+
 A harness is one agent at one version, in `.thunderjar/parameters/harnessModels/<agent>-<version>/index.ts`.
 
 A test case pairs it with a model: `<folder>/<model ID>`.

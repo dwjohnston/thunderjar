@@ -16,6 +16,8 @@ Humans: add your notes here
 
 # Create a promptset
 
+First, read the tj-general skill: the order parameters are applied in, and the one rule all of them follow.
+
 A promptset is the instructions put over the code state, before the agent starts. It's what a test case varies to compare instructions.
 
 It lives in `.thunderjar/parameters/promptSets/<name>/index.ts`.
@@ -48,7 +50,7 @@ RUN cd /workspace && git add -A && git commit --quiet -m "Thunderjar: apply prom
 
 ## Files from a tag
 
-For instructions that already live in the repo, at another commit. Look the tag up in `resolve`: see the one rule in tj-codestate.
+For instructions that already live in the repo, at another commit. Look the tag up in `resolve`: see the one rule in tj-general.
 
 ```ts
 import { declarePromptSet } from "thunderjar";

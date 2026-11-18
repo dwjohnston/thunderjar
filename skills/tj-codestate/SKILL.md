@@ -16,6 +16,8 @@ Humans: add your notes here
 
 # Create a code state
 
+First, read the tj-general skill: the order parameters are applied in, and the one rule all of them follow.
+
 A code state is the workspace the agent wakes up in:
 
 1. What's on disk

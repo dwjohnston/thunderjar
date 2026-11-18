@@ -35,3 +35,25 @@ Then each iteration runs `sh /thunderjar/thunderjar-run.sh`, and nothing else.
 - The last `WORKDIR` is where the agent works. An initial prompt's overrides a code state's.
 - The run script runs as the image's last `USER`, usually set by the harness. Earlier fragments run as root, so whatever they create in `/workspace` must be usable by that user.
 - A fragment may only use its own `files/` folder, through `ctx.dir`. Naming another parameter's folder is a config error.
+
+
+## ‼️ Important! The one rule! ‼️ 
+
+For all parameters - `applyParameter` must be deterministic: the same text must always build the same image.
+
+If you need to have content that is dynamic (a 'floating parameter') make use of the `resolve` function to resolve the dynamic parts. 
+
+
+
+e.g.
+
+```ts
+// 👍 Good
+resolve: (config, ctx) => ctx.exec(`git ls-remote --exit-code ${config.repo} refs/tags/${config.tag} | cut -f1`),
+applyParameter: (config, ctx) => `RUN … checkout --detach ${ctx.resolved}`,
+
+// 👎 Bad
+applyParameter: (config) => `RUN git clone --branch ${config.tag} …`,
+```
+
+**Why:** images are cached by the hash of the text `applyParameter` returns. If the tag moves, the text stays the same, so a stale image is reused, and runs can't say which commit they started from. `resolve` runs once per `plan`, `run` or `build`, and each run records what it returned.

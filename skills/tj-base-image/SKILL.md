@@ -16,6 +16,8 @@ Humans: add your notes here
 
 # Add a base image
 
+First, read the tj-general skill: the order parameters are applied in, and the one rule all of them follow.
+
 A base image is the first fragment of every experiment's image, in `.thunderjar/parameters/baseImages/<name>/index.ts`. Its `applyParameter` must start with `FROM`, pin the image's version, and install the system tools the later fragments need: bun for `bunTestFile`, and a git identity so the agent and prompt sets can commit. 
 
 You might add things like a database or other tools to a base image.
