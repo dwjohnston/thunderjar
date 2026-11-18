@@ -64,7 +64,15 @@ export default declarePromptSet({
 });
 ```
 
-// 
+❌ **Don't** check out the tag directly in `applyParameter`.
+
+```ts
+// 👎 Bad
+applyParameter: (config) => `RUN git -C /workspace fetch --quiet ${config.repo} tag ${config.tag} \\
+  && git -C /workspace checkout ${config.tag} -- ${config.path}`,
+```
+
+**Why:** if the tag moves, the fragment's text stays the same, so a stale image is reused, and runs can't say which commit their instructions came from.
 
 ## Every promptset
 
