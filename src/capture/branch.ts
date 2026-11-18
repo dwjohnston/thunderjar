@@ -7,7 +7,7 @@
  * Humans: add your notes here
  */
 
-// The branch store: each session's records as commits on one branch, `refs/heads/thunderjar-capture/<session>`,
+// The branch store: each session's records as commits on one branch, `refs/heads/thunderjar/capture/<session>`,
 // for remotes that take only branches, e.g. Claude Code's cloud sessions, whose GitHub proxy pushes
 // nothing outside refs/heads/. Git won't point a branch at a tag object, so the record is in the commit.
 //
@@ -33,7 +33,7 @@ import {
 } from "./git.ts";
 import type { StartRecord, TurnRecord } from "./records.ts";
 
-export const BRANCH_PREFIX = "refs/heads/thunderjar-capture";
+export const BRANCH_PREFIX = "refs/heads/thunderjar/capture";
 
 /** The session's branch. Checks the session ID as `refName` does. */
 export function branchName(sessionId: string): string {

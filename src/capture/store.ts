@@ -9,7 +9,7 @@
 
 // Where the hooks write a session's records: the refs store, one annotated tag per record under
 // refs/thunderjar/capture/<session>/, or the branch store, one commit per record on
-// refs/heads/thunderjar-capture/<session> (see branch.ts). `THUNDERJAR_CAPTURE_STORE` picks one for new
+// refs/heads/thunderjar/capture/<session> (see branch.ts). `THUNDERJAR_CAPTURE_STORE` picks one for new
 // sessions; a session stays in the store its start is in. Readers read both, whatever it says.
 import { appendBranchRecord, branchHasStart, branchName, branchNextTurn, readBranch } from "./branch.ts";
 import type { Env } from "./files.ts";

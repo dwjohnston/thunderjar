@@ -50,14 +50,14 @@ RUN cd /workspace && git add -A && git commit --quiet -m "Thunderjar: apply prom
 
 ## Files from a tag
 
-For instructions that already live in the repo, at another commit. Look the tag up in `resolve`: see the one rule in tj-general.
+For instructions that already live in the repo, at another commit. Name the tag `thunderjar/promptset/<promptset-name>`. Look the tag up in `resolve`: see the one rule in tj-general.
 
 ```ts
 import { declarePromptSet } from "thunderjar";
 
-// src/skills as they are at tag tj-skills-v2, checked out over the code state's and committed.
+// src/skills as they are at tag thunderjar/promptset/skills-v2, checked out over the code state's and committed.
 export default declarePromptSet({
-  config: { repo: "https://github.com/acme/cli.git", tag: "tj-skills-v2", path: "src/skills" },
+  config: { repo: "https://github.com/acme/cli.git", tag: "thunderjar/promptset/skills-v2", path: "src/skills" },
   resolve: async (config, ctx) =>
     (await ctx.exec(`git ls-remote --exit-code ${config.repo} refs/tags/${config.tag}`)).split("\t")[0]!,
   applyParameter: (config, ctx) => `RUN git -C /workspace fetch --quiet ${config.repo} ${ctx.resolved} \\

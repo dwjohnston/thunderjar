@@ -67,14 +67,14 @@ The capture's `start` ref points to a snapshot commit of the working tree as it 
 
 ```sh
 SNAPSHOT=$(git rev-parse "refs/thunderjar/capture/<session>/start^{commit}")
-git tag tj-<code-state-name> $SNAPSHOT
-git push origin tj-<code-state-name>
+git tag thunderjar/codestate/<code-state-name> $SNAPSHOT
+git push origin thunderjar/codestate/<code-state-name>
 ```
 
-If the session is in the branch store instead, the snapshot is the commit on `thunderjar-capture/<session>` whose tree is `startTree`:
+If the session is in the branch store instead, the snapshot is the commit on `thunderjar/capture/<session>` whose tree is `startTree`:
 
 ```sh
-git log --format='%H %T' thunderjar-capture/<session> | grep <startTree> | cut -d' ' -f1
+git log --format='%H %T' thunderjar/capture/<session> | grep <startTree> | cut -d' ' -f1
 ```
 
 ✅ **Do** tag the snapshot, not `headAtStart`.

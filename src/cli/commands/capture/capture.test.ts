@@ -166,7 +166,7 @@ describe("capture show", () => {
         { subject: "thunderjar capture: s1 turn-1", record: { agent: { turnId: "t1" } } },
       ],
     });
-    expect((await thunderjar(["capture", "show", "s1"])).stdout).toContain("Fetch: git fetch origin refs/heads/thunderjar-capture/s1:refs/heads/thunderjar-capture/s1");
+    expect((await thunderjar(["capture", "show", "s1"])).stdout).toContain("Fetch: git fetch origin refs/heads/thunderjar/capture/s1:refs/heads/thunderjar/capture/s1");
   });
 
   test("fails for a session it can't find", async () => {
@@ -188,15 +188,15 @@ describe("capture push", () => {
   test("--dry-run prints the git command, for the stores that have captures", async () => {
     expect((await thunderjar(["capture", "push", "--dry-run"])).stdout).toBe("No captures to push.\n");
     expect((await thunderjar(["capture", "pull", "--dry-run", "upstream"])).stdout).toBe(
-      "git fetch upstream refs/thunderjar/capture/*:refs/thunderjar/capture/* refs/heads/thunderjar-capture/*:refs/heads/thunderjar-capture/*\n",
+      "git fetch upstream refs/thunderjar/capture/*:refs/thunderjar/capture/* refs/heads/thunderjar/capture/*:refs/heads/thunderjar/capture/*\n",
     );
     // The old spelling still works.
     expect((await thunderjar(["capture", "push", "--dry-run", "--fetch", "upstream"])).stdout).toBe(
-      "git fetch upstream refs/thunderjar/capture/*:refs/thunderjar/capture/* refs/heads/thunderjar-capture/*:refs/heads/thunderjar-capture/*\n",
+      "git fetch upstream refs/thunderjar/capture/*:refs/thunderjar/capture/* refs/heads/thunderjar/capture/*:refs/heads/thunderjar/capture/*\n",
     );
     await capture({ CLAUDE_CODE_REMOTE: "true" });
     expect((await thunderjar(["capture", "push", "--dry-run"])).stdout).toBe(
-      "git push --no-verify origin refs/heads/thunderjar-capture/*:refs/heads/thunderjar-capture/*\n",
+      "git push --no-verify origin refs/heads/thunderjar/capture/*:refs/heads/thunderjar/capture/*\n",
     );
   });
 
@@ -216,6 +216,6 @@ describe("capture import", () => {
     expect(first.stdout).toBe("imported refs/thunderjar/capture/s1/start\n1 imported, 0 already there.\n");
     const again = await thunderjar(["capture", "import", "--json"]);
     expect(JSON.parse(again.stdout)).toEqual({ imported: [], skipped: ["refs/thunderjar/capture/s1/start"] });
-    expect((await $`git branch --list ${"thunderjar-capture/*"} --format=${"%(refname:short)"}`.cwd(repo).text()).trim()).toBe("thunderjar-capture/s1");
+    expect((await $`git branch --list ${"thunderjar/capture/*"} --format=${"%(refname:short)"}`.cwd(repo).text()).trim()).toBe("thunderjar/capture/s1");
   });
 });

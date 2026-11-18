@@ -61,7 +61,7 @@ The following environment variables should be available to you:
 
 Maintained by humans only, in [project-md/human-safe-space/](project-md/human-safe-space/).
 
-- [Tag conventions](project-md/human-safe-space/conventions/tags.md)
+- [Tag and ref conventions](project-md/human-safe-space/conventions/tags-and-refs.md)
 - [Parameter apply order](project-md/human-safe-space/parameters/apply_order.md)
 - [Measurements philosophy](project-md/human-safe-space/measurements-philosophy/index.md)
 - [Not supported: parameter behaviour](project-md/human-safe-space/not-supported/parameter-behaviour.md)

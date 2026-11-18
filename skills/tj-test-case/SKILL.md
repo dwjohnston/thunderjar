@@ -25,7 +25,7 @@ import { declareTestCase } from "thunderjar";
 
 export default declareTestCase({
   baseImage: ["node20"],
-  codeState: ["tj-add-json-flag"],
+  codeState: ["add-json-flag"],
   promptSet: ["none"],
   harnessModel: ["claude-code-2.1.311/claude-haiku-5-5"],
   task: "add-json-flag",

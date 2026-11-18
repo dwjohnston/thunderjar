@@ -10,7 +10,7 @@
 
 // `thunderjar capture`: record every coding-agent session in a repository as git refs, under
 // refs/thunderjar/capture/<session>/ or, with THUNDERJAR_CAPTURE_STORE=branch, on the branch
-// thunderjar-capture/<session>, to triage and replay as evals. `install` and `uninstall` turn it on and
+// thunderjar/capture/<session>, to triage and replay as evals. `install` and `uninstall` turn it on and
 // off for a harness, `list` shows the captures, `show` prints one, `push` shares them, and `import` copies branches into
 // refs. `prompt` and `stop` are what the hooks run, left out of --help.
 import { Command, Option } from "commander";
@@ -72,7 +72,7 @@ function hookCommand(hook: (typeof HOOKS)[number]): Command {
 
 export function createCaptureCommand(): Command {
   const capture = new Command("capture").description(
-    "Record every coding-agent session in this repository as git refs under refs/thunderjar/capture/, for Claude Code, Codex, Copilot CLI and OpenCode: each prompt's starting code, and each turn's result. With THUNDERJAR_CAPTURE_STORE=branch, the default in Claude Code cloud sessions (CLAUDE_CODE_REMOTE=true), each session is a branch instead, thunderjar-capture/<session>, one commit per record, for remotes that take only branches.",
+    "Record every coding-agent session in this repository as git refs under refs/thunderjar/capture/, for Claude Code, Codex, Copilot CLI and OpenCode: each prompt's starting code, and each turn's result. With THUNDERJAR_CAPTURE_STORE=branch, the default in Claude Code cloud sessions (CLAUDE_CODE_REMOTE=true), each session is a branch instead, thunderjar/capture/<session>, one commit per record, for remotes that take only branches.",
   );
   capture
     .command("install")
@@ -149,7 +149,7 @@ export function createCaptureCommand(): Command {
   capture
     .command("import")
     .description(
-      "Copy the captures on thunderjar-capture/<session> branches into refs/thunderjar/capture/<session>/, as the hooks write them by default. Skips refs that exist, so it can run again, and leaves the branches alone.",
+      "Copy the captures on thunderjar/capture/<session> branches into refs/thunderjar/capture/<session>/, as the hooks write them by default. Skips refs that exist, so it can run again, and leaves the branches alone.",
     )
     .addOption(jsonOption())
     .action((options: { json?: boolean }) => {
