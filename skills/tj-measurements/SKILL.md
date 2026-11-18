@@ -32,44 +32,10 @@ export default declareMeasurement({
 
 They live at `.thunderjar/parameters/tasks/<task>/measurements/<name>.ts`, one file per check.
 
-## Steps
 
-1. List what "done" means
-2. Find the trap
-3. Pick an instrument for each check
-4. Declare its metrics
-5. Check it against the starting state
+### Precanned instruments
 
-### 1. List what "done" means
-
-Write each part of "done" as something you can check after the run.
-
-e.g. for "add a --json flag to the list command":
-
-1. The command accepts the flag.
-2. Its output with the flag is valid JSON.
-3. A test covers the flag.
-4. The typecheck and test suite still pass.
-
-✅ **Do** measure each part separately.
-
-❌ **Don't** fold everything into one pass/fail check.
-
-**Why:** separate checks show where agents fail. One combined check only says that they did.
-
-### 2. Find the trap
-
-Ask: what could the agent skip, or get wrong, and still look done? Measure that directly.
-
-e.g. the agent adds the flag, but still prints a header line above the JSON. A grep for the flag passes, and so does the test suite if no test parses the output. So: run the command and parse what it prints.
-
-When the task comes from a capture, the trap is usually what went wrong in it, e.g. "didn't invoke the skill".
-
-**Why:** checks that pass by accident make an agent look better than it is. The trap is usually what tells agents apart.
-
-### 3. Pick an instrument for each check
-
-Use the cheapest instrument that answers the question.
+Thunderjar comes with these instruments
 
 | Question | Instrument | Config |
 |---|---|---|
@@ -80,6 +46,25 @@ Use the cheapest instrument that answers the question.
 | Anything else | `shell` | `{ command }` |
 
 `shell` runs in the agent's container after it finishes, in the folder it started in. Its value is the exit code and stdout.
+
+e.g. one of each, as the object passed to `declareMeasurement`:
+
+```ts
+// fileCreated: did it create isPrime.ts?
+{ instrument: "fileCreated", config: { glob: "**/isPrime.ts" }, metrics: { exists: { stat: "rate", better: "higher" } } }
+
+// grep: how many @ts-ignore lines did it leave?
+{ instrument: "grep", config: { glob: "**/*.ts", pattern: "@ts-ignore" }, metrics: { count: { stat: "mean", better: "lower" } } }
+
+// bunTestFile: how many of our tests pass against its isPrime.ts? The test sits beside the measurement.
+{ instrument: "bunTestFile", config: { subject: "**/isPrime.ts", test: "./isPrime.test.ts" }, metrics: { passRate: { stat: "mean", better: "higher" } } }
+
+// replyMatches: did its last reply include ☝️?
+{ instrument: "replyMatches", config: { pattern: "☝️" }, metrics: { followedHumansMd: { stat: "rate", better: "higher" } } }
+
+// shell: does the project still typecheck?
+{ instrument: "shell", config: { command: "bun run typecheck" }, metrics: { typeChecks: { stat: "rate", better: "higher" } } }
+```
 
 #### `shell` techniques
 
