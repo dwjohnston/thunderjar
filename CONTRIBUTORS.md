@@ -71,7 +71,19 @@ bun run dogfood:remote
 
 It needs `fly`, `docker login ghcr.io`, `FLYIO_TOKEN`, `THUNDERJAR_DB_URL` and `ANTHROPIC_API_KEY`.
 
-Thunderjar doesn't start, stop or clear down the Fly machine. You do, with `.thunderjar/fly-machine.sh`:
+Thunderjar doesn't create, start, stop or clear down the Fly machine. You do.
+
+Create one, with an 80 GB volume for its Docker data, and destroy it with its volume:
+
+```sh
+.thunderjar/fly-create.sh dev          # options: --region iad, --volume-gb 80, --cpus 2
+```
+
+```sh
+.thunderjar/fly-destroy.sh dev
+```
+
+Then use it with `.thunderjar/fly-machine.sh`:
 
 ```sh
 .thunderjar/fly-machine.sh start      # before working; `start 8` sizes it performance-8x first

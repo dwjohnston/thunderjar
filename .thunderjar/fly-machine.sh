@@ -9,7 +9,8 @@
 # Humans: add your notes here
 
 # Starts, stops and clears down the Fly machine that remote runs use. Thunderjar does none of this
-# itself: start the machine before working, and stop it when done. Which machine: $FLY_APP and
+# itself: start the machine before working, and stop it when done. Create or remove one with
+# fly-create.sh and fly-destroy.sh. Which machine: $FLY_APP and
 # $FLY_MACHINE, see fly-lib.sh.
 #
 #   fly-machine.sh start [cpus]   start it, and wait for its Docker daemon. With cpus, e.g. 8, or
