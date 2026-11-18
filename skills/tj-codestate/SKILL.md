@@ -27,12 +27,12 @@ e.g.
 ```ts
 import { declareCodeState } from "thunderjar";
 
-// This repository at tag eval/add-json-flag, the commit before the --json flag was added, with
+// This repository at tag tj-add-json-flag, the commit before the --json flag was added, with
 // dependencies installed. resolve looks up the tag's commit, so the Dockerfile pins a SHA.
 export default declareCodeState({
   config: {
     repo: "https://github.com/acme/cli.git",
-    tag: "eval/add-json-flag",
+    tag: "tj-add-json-flag",
   },
   resolve: async (config, ctx) => {
     const tag = `refs/tags/${config.tag}`;
@@ -83,7 +83,7 @@ Pick the one that matches where the agent should start.
 
 Tag the commit, push the tag, and resolve it to a SHA, as in the example at the top.
 
-- Name the tag after what it's for, e.g. `eval/<task>`.
+- Name the tag `tj-<code-state-name>`, e.g. `tj-add-json-flag`.
 - ⚠️ Never move a pushed tag. Make a new one.
 
 ### 2. A floating parameter
