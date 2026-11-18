@@ -104,7 +104,7 @@ git log --oneline -10
 
   "context": {
     "instructionFiles": ["CLAUDE.md", "AGENTS.md"],
-    "skillsAvailable": ["tj-config", "tj-eval", "x", "y"],
+    "skillsAvailable": ["tj-config", "tj-test-case", "x", "y"],
     "skillsInvoked": ["tj-config"],
     "filesChanged": ["skills/tj-quick-capture/SKILL.md"],
     "keyActions": [
