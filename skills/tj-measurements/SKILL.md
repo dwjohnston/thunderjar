@@ -68,18 +68,15 @@ e.g. one of each, as the object passed to `declareMeasurement`:
 
 #### `shell` techniques
 
-1. Run the project's own checks
-   - e.g. `bun run typecheck`, `bun test`
-   - ✅ **Do** prefer these over a grep that approximates them.
-2. Exercise the behaviour
-   - e.g. run the CLI with the new flag, and parse its output.
-3. One command, several metrics
-   - Print JSON, and parse it in each metric's `score`. See step 4.
-4. Compare with the starting point
-   - e.g. `git diff --stat thunderjar-start`, the tag the code state puts on its starting commit
-   - For files touched, lines changed, files that shouldn't have changed.
-5. Check what the agent left behind
-   - e.g. `git log --oneline thunderjar-start..HEAD` for commits it made.
+| Technique | e.g. |
+|---|---|
+| Run the project's own checks, rather than a grep that approximates them | `bun run typecheck`, `bun test` |
+| Exercise the behaviour | run the CLI with the new flag, and parse its output |
+| One command, several metrics | print JSON, and parse it in each metric's `score` (see Metrics) |
+| Compare with the starting point: files touched, lines changed | `git diff --stat thunderjar-start` |
+| Check what the agent left behind, e.g. commits it made | `git log --oneline thunderjar-start..HEAD` |
+
+`thunderjar-start` is the tag the code state puts on its starting commit.
 
 ⚠️ **Warning:** `shell` stores stdout as it is, up to 64 KiB. A command that prints secrets will store them.
 
