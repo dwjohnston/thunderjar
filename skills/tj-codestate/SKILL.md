@@ -84,7 +84,6 @@ Pick the one that matches where the agent should start.
 Tag the commit, push the tag, and resolve it to a SHA, as in the example at the top.
 
 - Name the tag `tj-<code-state-name>`, e.g. `tj-add-json-flag`.
-- ⚠️ Never move a pushed tag. Make a new one.
 
 ### 2. A floating parameter
 
