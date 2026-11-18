@@ -18,5 +18,5 @@ export default declareHarness({
   // costs, read them from what the run script wrote to /thunderjar/result.json:
   // collectReply: (raw) => …,
   // collectTokenCosts: (raw, ctx) => ({ outcome: "collected", models: [{ model: ctx.modelId, … }] }),
-  requiredEnv: ["OPENAI_API_KEY"],
+  requiredEnv: ["OPENROUTER_TOKEN"],
 });
