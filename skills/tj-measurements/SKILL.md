@@ -72,7 +72,7 @@ e.g. one of each, as the object passed to `declareMeasurement`:
 |---|---|
 | Run the project's own checks, rather than a grep that approximates them | `bun run typecheck`, `bun test` |
 | Exercise the behaviour | run the CLI with the new flag, and parse its output |
-| One command, several metrics | print JSON, and parse it in each metric's `score` (see Metrics) |
+| One command, several metrics | print `{"lines":42,"exports":1}`, then read `lines` and `exports` in two metrics' `score` (full example under Metrics) |
 | Compare with the starting point: files touched, lines changed | `git diff --stat thunderjar-start` |
 | Check what the agent left behind, e.g. commits it made | `git log --oneline thunderjar-start..HEAD` |
 
@@ -117,7 +117,10 @@ const counts = (v: { exitCode: number; stdout: string }) =>
 
 export default declareMeasurement({
   instrument: "shell",
-  config: { command: "node scripts/count.js src/list.ts" },
+  // Prints e.g. {"lines":42,"exports":1}. Exits non-zero when list.ts is missing.
+  config: {
+    command: `test -f src/list.ts && echo "{\\"lines\\":$(wc -l < src/list.ts),\\"exports\\":$(grep -c '^export ' src/list.ts)}"`,
+  },
   metrics: {
     lines: { score: (v) => counts(v)?.lines, stat: "median", better: "lower" },
     singleExport: { score: (v) => (counts(v) ? counts(v)!.exports === 1 : undefined), stat: "rate", better: "higher" },
