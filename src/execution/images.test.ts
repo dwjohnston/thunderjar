@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { containerName, imagePrefixProblem, postrunImage, prerunImage, storedPostrunImage, storedPrerunImage } from "./images.ts";
+import { containerName, imagePrefixProblem, postrunImage, prerunImage, recordedPostrunImage, storedPostrunImage, storedPrerunImage } from "./images.ts";
 
 test("a prerun image is tagged with the permutation's abbreviated hash", () => {
   expect(prerunImage("e943919c".padEnd(64, "0"))).toBe("thunderjar-prerun:e943919c");
@@ -41,4 +41,11 @@ test("a postrun image is pushed tagged with the execution, hash and zero-padded 
   expect(storedPostrunImage("ghcr.io/acme/images", "01aryz6s410000000000000000", hash, 12)).toBe(
     "ghcr.io/acme/images:postrun-e01aryz6s410000000000000000-he943919c-i11",
   );
+});
+
+test("a container run records its pushed postrun image given an image store, else its local name", () => {
+  const local = postrunImage("01aryz6s410000000000000000", 1, 1);
+  const stored = storedPostrunImage("ghcr.io/acme/images", "01aryz6s410000000000000000", "e943919c".padEnd(64, "0"), 1);
+  expect(recordedPostrunImage(local, stored)).toBe("ghcr.io/acme/images:postrun-e01aryz6s410000000000000000-he943919c-i00");
+  expect(recordedPostrunImage(local, undefined)).toBe("thunderjar-postrun:01aryz6s410000000000000000-1-1");
 });

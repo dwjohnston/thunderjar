@@ -55,3 +55,9 @@ export const storedPrerunImage = (repository: string, hash: string) => `${reposi
  */
 export const storedPostrunImage = (repository: string, executionId: string, hash: string, iteration: number) =>
   `${repository}:postrun-e${executionId}-h${abbreviateHash(hash)}-i${String(iteration - 1).padStart(2, "0")}`;
+
+/**
+ * The postrun image a container run's record names: where it was pushed, given an image store, as
+ * the local name may exist only on a runtime that's gone. Without one, its local name.
+ */
+export const recordedPostrunImage = (local: string, stored: string | undefined) => stored ?? local;
