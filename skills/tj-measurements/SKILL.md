@@ -91,10 +91,10 @@ Use the cheapest instrument that answers the question.
 3. One command, several metrics
    - Print JSON, and parse it in each metric's `score`. See step 4.
 4. Compare with the starting point
-   - e.g. `git diff --stat <commit>`, with the code state's pinned commit
+   - e.g. `git diff --stat <tag>`, with the code state's tag
    - For files touched, lines changed, files that shouldn't have changed.
 5. Check what the agent left behind
-   - e.g. `git log --oneline <commit>..HEAD` for commits it made.
+   - e.g. `git log --oneline <tag>..HEAD` for commits it made.
 
 ❌ **Don't** check the contents of generated files, e.g. a grep on a file that a `generate` command writes.
 

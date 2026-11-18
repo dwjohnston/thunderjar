@@ -27,15 +27,14 @@ e.g.
 ```ts
 import { declareCodeState } from "thunderjar";
 
-// This repository at the commit before the --json flag was added, with dependencies installed.
+// This repository at tag eval/add-json-flag, the commit before the --json flag was added, with
+// dependencies installed.
 export default declareCodeState({
   config: {
     repo: "https://github.com/acme/cli.git",
-    commit: "3e614b510673f25596579be65c41cab611becd32",
+    tag: "eval/add-json-flag",
   },
-  applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\
-  && git -C /workspace fetch --quiet origin ${config.commit} \\
-  && git -C /workspace checkout --quiet --detach ${config.commit} \\
+  applyParameter: (config) => `RUN git clone --quiet --branch ${config.tag} ${config.repo} /workspace \\
   && git -C /workspace remote remove origin \\
   && cd /workspace && bun install --frozen-lockfile
 WORKDIR /workspace`,
@@ -49,7 +48,7 @@ It lives at `.thunderjar/parameters/codeStates/<name>/index.ts`.
 ## Steps
 
 1. Choose what's on disk
-2. Pin it
+2. Tag it
 3. Seal it
 4. Choose where the agent starts
 5. Make it ready to measure
@@ -59,9 +58,9 @@ It lives at `.thunderjar/parameters/codeStates/<name>/index.ts`.
 
 | Starting point | How |
 |---|---|
-| A commit | clone, fetch the SHA, check it out |
-| A commit plus uncommitted changes | push them to a snapshot branch, and pin that commit |
-| A subfolder of a repo | clone, then `git checkout <commit> -- <folder>`, or `WORKDIR` into it |
+| A commit | tag it, then clone the tag |
+| A commit plus uncommitted changes | commit them on a snapshot branch, and tag that commit |
+| A subfolder of a repo | clone the tag, then `WORKDIR` into the folder, or check out only that folder |
 | A small scenario | write the files inline with `RUN cat > … <<'EOF'` |
 | A generated project | run the generator, e.g. `RUN bun create …`, then `git init` and commit |
 
@@ -69,24 +68,35 @@ It lives at `.thunderjar/parameters/codeStates/<name>/index.ts`.
 
 **Why:** measurements and prompt sets compare against the starting commit. Without it, the agent's changes can't be told apart from the starting files.
 
-### 2. Pin it
+### 2. Tag it
 
-Pin a commit SHA, never a branch or a tag name.
+Tag the starting commit, push the tag, and clone the tag.
 
-✅ **Do** push the commit before building, and fetch it by SHA.
+e.g.
 
-❌ **Don't** pin a commit that exists only on your machine.
+```sh
+git tag eval/add-json-flag <commit>
+git push origin eval/add-json-flag
+```
 
-**Why:** the same file must always build the same thing. A branch moves. An unpushed commit fails the build. Fetching by SHA still works after a branch is squash-merged and deleted, because GitHub keeps the commit under the pull request's ref.
+✅ **Do** name the tag after what it's for, e.g. `eval/<task>`.
 
-For a commit worth naming, also tag it, e.g. `eval/<name>`, and push the tag. The tag is for people to find it, the SHA is what the code state uses.
+❌ **Don't** pin a raw commit SHA, a branch, or anything that isn't pushed.
+
+**Why:**
+- A tag says what the starting point is. A SHA doesn't.
+- A tag survives its branch being squash-merged and deleted. A commit on that branch may not.
+- A branch moves, so the same file would build something different later.
+- Anything unpushed fails the build.
+
+⚠️ **Warning:** never move or delete a pushed tag. Every result recorded against it would no longer match what it builds. For a new starting point, make a new tag.
 
 ### 3. Seal it
 
 The agent mustn't be able to see the answers.
 
 - Remove `origin`, so it can't fetch anything newer.
-- Pin a commit from before the task's measurements were added to `.thunderjar/`.
+- Tag a commit from before the task's measurements were added to `.thunderjar/`.
   - Or check out only the folder the agent needs.
 
 **Why:** an agent that can read the measurements, or the fix, isn't doing the task.
@@ -101,7 +111,7 @@ e.g. one package of a monorepo:
 WORKDIR /workspace/packages/cli
 ```
 
-The same commit can make two code states, e.g. `nested-skills-root` and `nested-skills-a`, if where the agent starts is what's being compared.
+The same tag can make two code states, e.g. `nested-skills-root` and `nested-skills-a`, if where the agent starts is what's being compared.
 
 ### 5. Make it ready to measure
 
@@ -137,6 +147,6 @@ docker run --rm -it <image> bash
 
 Say in a comment above `declareCodeState`:
 
-- What's on disk, and why that commit
+- What's on disk, and why that starting point
 - How it's sealed
-- Anything a later reader must keep true, e.g. "keep this commit before the measurements were added"
+- Anything a later reader must keep true, e.g. "keep this tag on a commit from before the measurements were added"
