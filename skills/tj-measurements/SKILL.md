@@ -81,12 +81,6 @@ e.g. one of each, as the object passed to `declareMeasurement`:
 5. Check what the agent left behind
    - e.g. `git log --oneline thunderjar-start..HEAD` for commits it made.
 
-❌ **Don't** check the contents of generated files, e.g. a grep on a file that a `generate` command writes.
-
-Exception: the task is about changing the generator.
-
-**Why:** if the generated file is wrong, the generator is at fault, not the agent.
-
 ⚠️ **Warning:** `shell` stores stdout as it is, up to 64 KiB. A command that prints secrets will store them.
 
 #### Measuring behaviour
@@ -105,7 +99,7 @@ No instrument reads the agent's transcript. Only its replies and its files can b
 
 **Why:** a marker an agent might produce anyway measures nothing.
 
-### 4. Declare its metrics
+### Metrics
 
 Each measurement declares its `metrics`: what to read from the instrument's value, and how to combine it across runs.
 
@@ -135,15 +129,3 @@ export default declareMeasurement({
 ```
 
 ✅ **Do** return `undefined` when the metric doesn't apply, e.g. the file it reads is missing.
-
-❌ **Don't** return 0 or `false` to mean "doesn't apply".
-
-**Why:** a 0 is counted, and drags the statistic down. `undefined` leaves the run out, and `show` says why.
-
-### 5. Check it against the starting state
-
-Each check for the task's own changes should fail on the code state before any agent runs. The typecheck and test suite should pass.
-
-See tj-codestate, step 6.
-
-**Why:** a check that already passes measures nothing.
