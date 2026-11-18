@@ -65,3 +65,4 @@ Maintained by humans only, in [project-md/human-safe-space/](project-md/human-sa
 - [Parameter apply order](project-md/human-safe-space/parameters/apply_order.md)
 - [Measurements philosophy](project-md/human-safe-space/measurements-philosophy/index.md)
 - [Not supported: parameter behaviour](project-md/human-safe-space/not-supported/parameter-behaviour.md)
+- [Things that are a bit messy: skills](project-md/human-safe-space/things-that-are-a-bit-messy/skills.md)
