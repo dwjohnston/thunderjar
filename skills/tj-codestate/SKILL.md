@@ -77,103 +77,27 @@ applyParameter: (config) => `RUN git clone --branch ${config.tag} …`,
 
 ## Steps
 
-1. Choose what's on disk
-2. Tag it
-3. Seal it
-4. Choose where the agent starts
-5. Make it ready to measure
-6. Check the starting state
-
-### 1. Choose what's on disk
-
-| Starting point | How |
-|---|---|
-| A commit | tag it, resolve the tag, check out the SHA |
-| A commit plus uncommitted changes | commit them on a snapshot branch, and tag that commit |
-| A subfolder of a repo | as for a commit, then `WORKDIR` into the folder, or check out only that folder |
-| A small scenario | write the files inline with `RUN cat > … <<'EOF'` |
-| A generated project | run the generator, e.g. `RUN bun create …`, then `git init` and commit |
-
-✅ **Do** end with a git repository at `/workspace`, with everything committed.
-
-Tag the starting commit `thunderjar-start` inside the image, as the example does, so measurements can compare against it.
-
-**Why:** measurements and prompt sets compare against the starting commit. Without it, the agent's changes can't be told apart from the starting files.
-
-### 2. Tag it
-
-Tag the starting commit, push the tag, and look the tag up in `resolve`.
-
-e.g.
-
-```sh
-git tag eval/add-json-flag <commit>
-git push origin eval/add-json-flag
-```
-
-✅ **Do** name the tag after what it's for, e.g. `eval/<task>`.
-
-Never name the tag in `applyParameter`: see the one rule, above.
-
-Tags over raw SHAs in `config`:
-- A tag says what the starting point is. A SHA doesn't.
-- A tag survives its branch being squash-merged and deleted. A commit on that branch may not.
-
-`resolve` runs on the host and must only read, e.g. `git ls-remote`. `--exit-code` makes a missing tag fail, rather than resolve to nothing.
-
-⚠️ **Warning:** don't move a pushed tag. Runs before and after would start from different commits under the same name. For a new starting point, make a new tag.
-
-### 3. Seal it
-
-The agent mustn't be able to see the answers.
-
-- Remove `origin`, so it can't fetch anything newer.
-- Tag a commit from before the task's measurements were added to `.thunderjar/`.
-  - Or check out only the folder the agent needs.
-
-**Why:** an agent that can read the measurements, or the fix, isn't doing the task.
-
-### 4. Choose where the agent starts
-
-Set `WORKDIR` to the folder the agent starts in. The default is `/workspace`.
-
-e.g. one package of a monorepo:
-
-```
-WORKDIR /workspace/packages/cli
-```
-
-The same tag can make two code states, e.g. `nested-skills-root` and `nested-skills-a`, if where the agent starts is what's being compared.
-
-### 5. Make it ready to measure
-
-Measurements run in the agent's container after it finishes. Whatever they need must be in the image.
-
-- Dependencies installed, e.g. `bun install --frozen-lockfile`
-- Tools on the path, e.g. bun, in the base image
-- Anything the measurements build on, e.g. a first build
-
-**Why:** a check that fails because a dependency is missing reads as an agent failure.
-
-### 6. Check the starting state
-
-Before any agent runs, check the code state by hand:
-
-- The checks for the task's own changes fail
-- The typecheck and test suite pass
-
-e.g.
-
-```sh
-thunderjar build <test case>
-docker run --rm -it <image> bash
-```
-
-✅ **Do** fix the code state, or drop the check, if a check already passes or the suite already fails.
-
-❌ **Don't** start a paid run before checking.
-
-**Why:** a check that already passes measures nothing. If the suite already fails, every run looks like the agent broke it.
+1. **Choose what's on disk**
+   - A commit: tag it, resolve the tag, check out the SHA.
+   - Uncommitted changes: commit them on a snapshot branch, and tag that.
+   - A subfolder: as for a commit, then `WORKDIR` into it, or check out only that folder.
+   - A small scenario: write the files inline, e.g. `RUN cat > … <<'EOF'`.
+   - A generated project: run the generator, then `git init` and commit.
+   - Always end with everything committed at `/workspace`, tagged `thunderjar-start`, so measurements can diff against it.
+2. **Tag it**
+   - Tag the starting commit `eval/<task>`, push it, and look it up in `resolve` (see the one rule).
+   - Tag, not SHA: it says what it is, and survives a squash-merge.
+   - ⚠️ Never move a pushed tag. Make a new one.
+3. **Seal it**
+   - Remove `origin`.
+   - Tag a commit from before the task's measurements existed, or check out only the folder the agent needs.
+4. **Choose where the agent starts**
+   - Set `WORKDIR`, e.g. `/workspace/packages/cli`. Default: `/workspace`.
+5. **Make it ready to measure**
+   - Install what measurements need, e.g. `bun install --frozen-lockfile`. A missing dependency reads as an agent failure.
+6. **Check the starting state, before any paid run**
+   - The task's checks fail, and the typecheck and tests pass.
+   - e.g. `thunderjar build <test case>`, then `docker run --rm -it <image> bash`.
 
 ## Explain it in a comment
 
