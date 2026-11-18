@@ -187,6 +187,10 @@ describe("capture push", () => {
 
   test("--dry-run prints the git command, for the stores that have captures", async () => {
     expect((await thunderjar(["capture", "push", "--dry-run"])).stdout).toBe("No captures to push.\n");
+    expect((await thunderjar(["capture", "pull", "--dry-run", "upstream"])).stdout).toBe(
+      "git fetch upstream refs/thunderjar/capture/*:refs/thunderjar/capture/* refs/heads/thunderjar-capture/*:refs/heads/thunderjar-capture/*\n",
+    );
+    // The old spelling still works.
     expect((await thunderjar(["capture", "push", "--dry-run", "--fetch", "upstream"])).stdout).toBe(
       "git fetch upstream refs/thunderjar/capture/*:refs/thunderjar/capture/* refs/heads/thunderjar-capture/*:refs/heads/thunderjar-capture/*\n",
     );
