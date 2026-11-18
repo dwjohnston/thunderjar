@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-05T22:02:03Z",
+  "complaint": "Did not invoke /write-for-the-human or /concise-output",
+
+  "agent": {
+    "harness": "Claude Code",
+    "harnessVersion": "2.1.316",
+    "harnessSurface": "VS Code extension",
+    "model": "claude-opus-5-5",
+    "sessionId": "09203808-4422-4924-9ab7-99fc465f136c",
+    "transcriptPath": "/home/vscode/.claude/projects/-workspace-thunderjar/09203808-4422-4924-9ab7-99fc465f136c.jsonl",
+    "permissionMode": "auto"
+  },
+
+  "repository": {
+    "root": "/workspace/thunderjar",
+    "branch": "start-dog-fooding-thunderjar",
+    "headCommit": "a3ec6a54389c0185fbe6a745da7ac54e4f12565f",
+    "commitAtSessionStart": "9839823292ef9397c546c42d69f1c2cdceba6941",
+    "hasUncommittedChanges": false,
+    "uncommittedFiles": [],
+    "diffStat": "",
+    "commitsMadeThisSession": [
+      "f47d418 🤖 Claude: Session Start: 09203808-4422-4924-9ab7-99fc465f136c",
+      "a3ec6a5 🤖 Claude: Add tj-quick-capture skill"
+    ]
+  },
+
+  "conversation": {
+    "initialTask": {
+      "text": "Help me populate this skill \n(tj-quick-capture)\n\nThe concept here is that the user invokes this when something has gone wrong. \n\neg \n\n```\n/tj-quick-capture \"Agent did not invoke /x skill, /y skill\"\n```\n\nThen what happens is that the agent is instructed to write out to .thunderjar/quickCaptures a json file that captures\n\n- model name\n- harness name, harness version\n- current commit, branch, and if there are uncommited changes. \n- User task as verbatim as possible. \n- Subsequent user turns \n\n(anything else you can think of?)",
+      "verbatim": true
+    },
+    "subsequentUserTurns": [
+      { "text": "Additional instruction. Commit it, and commit it with the \"Lightning emoji quick capture: <problem description>", "verbatim": true },
+      { "text": "*thunderjar quick capture", "verbatim": true },
+      { "text": "Commit", "verbatim": true },
+      { "text": "Rebase - squash the commits", "verbatim": true }
+    ]
+  },
+
+  "context": {
+    "instructionFiles": ["/workspace/CLAUDE.md", "/workspace/thunderjar/AGENTS.md"],
+    "skillsAvailable": [
+      "ai-generated-content-header",
+      "concise-output",
+      "git-always-commit",
+      "markdown-general",
+      "markdown-writing-markdown-blocks",
+      "markdown-writing-prompts",
+      "tj-config",
+      "tj-eval",
+      "tj-meta-pull-request-description",
+      "ts-write-script",
+      "user-get-attention",
+      "write-for-the-human"
+    ],
+    "skillsInvoked": [
+      "ai-generated-content-header",
+      "markdown-writing-prompts",
+      "git-always-commit"
+    ],
+    "filesChanged": [
+      "skills/tj-quick-capture/SKILL.md",
+      ".agents/skills/tj-quick-capture"
+    ],
+    "keyActions": [
+      "Read AGENTS.md, skills/tj-config/SKILL.md and skills/tj-eval/SKILL.md for conventions",
+      "Invoked ai-generated-content-header, markdown-writing-prompts and git-always-commit",
+      "Wrote skills/tj-quick-capture/SKILL.md and symlinked it into .agents/skills",
+      "Added the commit step with the '⚡ thunderjar quick capture: <problem>' message",
+      "Committed the user's own edit to SKILL.md, then squashed it into the skill commit",
+      "Wrote every chat reply without invoking write-for-the-human or concise-output"
+    ]
+  },
+
+  "agentAnalysis": {
+    "expected": "Invoke write-for-the-human and concise-output before writing SKILL.md and the chat replies, as their descriptions cover SKILL.md files and chat output.",
+    "actual": "Invoked only the skills whose descriptions matched a specific action (creating a file, writing a prompt, committing). The general writing-style skills were never loaded.",
+    "suspectedCause": "Their descriptions apply to almost every turn, so they read as background rather than a trigger. The harness's built-in output-style instructions may have seemed to cover the same ground, so loading them felt redundant."
+  }
+}

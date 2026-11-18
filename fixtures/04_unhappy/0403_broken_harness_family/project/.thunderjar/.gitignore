@@ -1,0 +1,4 @@
+_generated/
+.data/
+logs/
+node_modules/
