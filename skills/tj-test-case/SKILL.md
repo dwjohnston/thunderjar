@@ -38,12 +38,13 @@ It lives at `.thunderjar/test-cases/<name>.ts`. Each array is a dimension: every
 
 ### 1. Fill each field
 
-| Field | Use an existing one if | New one through |
+| Field | Create a new one if | New one through |
 |---|---|---|
-| `codeState` | The task is a 'floating' one| tj-codestate |
-| `promptSet` | the user isn't comparing instructions, e.g. `none` | tj-promptset |
-| `task` | the user names one, or one has the same prompt | step 2 |
-| `baseImage`, `harnessModel` | always, unless the user asks for another | tj-harness-model |
+| `codeState` | The task is relevant to particular state in the codebase. eg. 'fix this bug, that only makes sense at a particular commit'  AND that codestate doesn't already exist. | tj-codestate |
+| `promptSet` | Tweaking |
+| `task` | The appropriate task does not already eixst.  | step 2 |
+| `baseImage`| It makes sense to  | /tj-base-image |
+| `baseImage`, `harnessModel` | The user specifically asked for it.  | tj-harness-model |
 
 ❌ **Don't** add harnesses, models or promptsets the user didn't ask for.
 
