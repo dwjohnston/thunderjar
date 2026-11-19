@@ -15,7 +15,8 @@
 // `thunderjar purge image` against real Docker, and a real registry: a throwaway `registry:2`
 // container on 127.0.0.1, started here and removed after, never anyone else's registry. Skipped by
 // `bun test`; run with `bun run test:docker`. Its images are pushed to that registry and removed
-// after, and its logins go to a Docker config folder of its own.
+// after. Each test has its own registry, under a name of its own, and its own Docker config folder
+// for its login, so the tests can run at once, as CI runs them, with `--concurrent`.
 import { $ } from "bun";
 import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -28,21 +29,28 @@ const BASE_IMAGE = `${PREFIX}-base:latest`;
 /** Two-harnesses in 0203: 2 container runs, 1-1 and 2-1. */
 const TWO_HARNESSES = "01m3ygz4g89aqh8yey8em0twpq";
 
-type Registry = { name: string; host: string };
+/** A throwaway registry: its container's name, its `localhost:<port>`, and the Docker config folder holding its login. */
+type Registry = { name: string; host: string; dockerConfig: string };
 const registries: Registry[] = [];
 const copies: ProjectCopy[] = [];
 const pushed: string[] = [];
-const DOCKER_CONFIG = `${TMP_DIR}/docker-config-${RUN}`;
 
-/** A registry:2 container on a free port of 127.0.0.1, deletes enabled if `deletes`, removed after the tests. */
+/**
+ * A registry:2 container on a free port of 127.0.0.1, deletes enabled if `deletes`, removed after
+ * the tests. Its name and config folder are its own: a count of those started so far isn't, as
+ * tests running at once would read the same count before either had started one.
+ */
 async function startRegistry(deletes: boolean): Promise<Registry> {
-  const name = `${PREFIX}-registry-${registries.length + 1}`;
+  const id = crypto.randomUUID().slice(0, 8);
+  const name = `${PREFIX}-registry-${id}`;
+  // Pushed before it's started, so it's removed even if starting it fails part way.
+  registries.push({ name, host: "", dockerConfig: `${TMP_DIR}/docker-config-${PREFIX}-${id}` });
+  const registry = registries.at(-1)!;
   await $`docker run --detach --name ${name} -p 127.0.0.1::5000 -e REGISTRY_STORAGE_DELETE_ENABLED=${String(deletes)} registry:2`.quiet();
-  const registry = { name, host: `localhost:${(await $`docker port ${name} 5000/tcp`.text()).trim().split(":").at(-1)}` };
-  registries.push(registry);
+  registry.host = `localhost:${(await $`docker port ${name} 5000/tcp`.text()).trim().split(":").at(-1)}`;
   for (let i = 0; i < 50 && (await fetch(`http://${registry.host}/v2/`).catch(() => undefined))?.status !== 200; i++) await Bun.sleep(100);
-  // Docker keeps no login for a registry without auth until asked: this one only in DOCKER_CONFIG.
-  await $`docker --config ${DOCKER_CONFIG} login ${registry.host} --username test --password-stdin < ${new Response("test")}`.quiet();
+  // Docker keeps no login for a registry without auth until asked: this one only in its own config folder.
+  await $`docker --config ${registry.dockerConfig} login ${registry.host} --username test --password-stdin < ${new Response("test")}`.quiet();
   return registry;
 }
 
@@ -75,8 +83,8 @@ async function project(repository: string, deleteCommand?: string[]): Promise<Pr
   return copy;
 }
 
-const purge = (copy: ProjectCopy, args: string[]) =>
-  thunderjar(copy.dir, ["purge", "image", TWO_HARNESSES, "--yes", "--image-prefix", PREFIX, ...args], { docker: "real", env: { DOCKER_CONFIG } });
+const purge = (copy: ProjectCopy, registry: Registry, args: string[]) =>
+  thunderjar(copy.dir, ["purge", "image", TWO_HARNESSES, "--yes", "--image-prefix", PREFIX, ...args], { docker: "real", env: { DOCKER_CONFIG: registry.dockerConfig } });
 
 /** The status of `reference`'s manifest in its registry: 200 if it's there, 404 if not. */
 const manifestStatus = async (reference: string) => {
@@ -108,11 +116,13 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("purge image, against real Doc
   });
 
   afterAll(async () => {
-    for (const { name } of registries) await $`docker rm --force ${name}`.quiet().nothrow();
+    for (const { name, dockerConfig } of registries) {
+      await $`docker rm --force ${name}`.quiet().nothrow();
+      await $`rm -rf ${dockerConfig}`.quiet();
+    }
     const images = [...pushed, BASE_IMAGE];
     await $`docker image rm ${images}`.quiet().nothrow();
     for (const copy of copies) await copy.remove();
-    await $`rm -rf ${DOCKER_CONFIG}`.quiet();
   });
 
   test("deletes the postrun images from the registry, through its API, and their tags from the daemon; marks the runs purged from both", async () => {
@@ -120,7 +130,7 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("purge image, against real Doc
     const repository = await pushRuns(registry);
     const copy = await project(repository);
 
-    const { stdout, stderr, exitCode } = await purge(copy, ["--reason", "test"]);
+    const { stdout, stderr, exitCode } = await purge(copy, registry, ["--reason", "test"]);
 
     expect(stderr).toBe("");
     expect(stdout).toEndWith("Purged 2 postrun images.\n");
@@ -138,7 +148,7 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("purge image, against real Doc
     const repository = await pushRuns(registry);
     const copy = await project(repository, ["sh", "-c", 'echo "$1" >> deleted.txt', "delete-image"]);
 
-    const { stdout, stderr, exitCode } = await purge(copy, ["--from", "store", "--json"]);
+    const { stdout, stderr, exitCode } = await purge(copy, registry, ["--from", "store", "--json"]);
 
     expect(stderr).toContain("Purged 2 postrun images.\n");
     expect(exitCode).toBe(0);
@@ -157,7 +167,7 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("purge image, against real Doc
     const repository = await pushRuns(registry);
     const copy = await project(repository);
 
-    const { stderr, exitCode } = await purge(copy, ["--from", "store"]);
+    const { stderr, exitCode } = await purge(copy, registry, ["--from", "store"]);
 
     expect(stderr).toStartWith(`Error: ${registry.host} refused to delete images (405 UNSUPPORTED`);
     expect(exitCode).toBe(1);
