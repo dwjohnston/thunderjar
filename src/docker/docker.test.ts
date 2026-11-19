@@ -19,6 +19,7 @@ import {
   reasonOf,
   removeContainer,
   runContainer,
+  scrubbedEnvChanges,
 } from "./docker.ts";
 
 const saved = { THUNDERJAR_DOCKER: Bun.env.THUNDERJAR_DOCKER, FAKE_DOCKER_DIR: Bun.env.FAKE_DOCKER_DIR };
@@ -144,6 +145,18 @@ test("a prerun image's value with quotes, `$` and a backslash comes back byte fo
 
   expect(await docker.envOf("tj-postrun:x-1-1")).toEqual([`ODD=${AWKWARD_VALUE}`]);
   await removeContainer("tj-run-1");
+});
+
+test("scrubbedEnvChanges refuses a value with a newline, naming its variable and never the value", () => {
+  const error = (() => {
+    try {
+      return scrubbedEnvChanges(["MULTI=secret-line-1\nsecret-line-2"], ["MULTI"]);
+    } catch (e) {
+      return e;
+    }
+  })();
+  expect(error).toBeInstanceOf(DockerContainerError);
+  expect((error as Error).message).toBe(`the environment variable "MULTI" can't be written in an ENV instruction: it has a newline`);
 });
 
 test("runContainer throws a DockerContainerError with the reason when its script fails", async () => {
