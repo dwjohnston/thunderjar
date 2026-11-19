@@ -265,6 +265,26 @@ export default declareMeasurement({
     }
   });
 
+  test("the runner searches each postrun image for the run's secrets, on the runtime, and run warns of one found; no value leaves the runtime", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWithRunner({ agent: 'echo "key=$FAKE_HARNESS_KEY" > /workspace/leak.log' });
+    const harness = `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`;
+    await Bun.write(harness, (await Bun.file(harness).text()).replace('version: "1.0.0",', 'version: "1.0.0",\n  requiredEnv: ["FAKE_HARNESS_KEY"],'));
+    const key = "made-up-runner-key-value";
+
+    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: { ...docker.env, FAKE_HARNESS_KEY: key } });
+
+    expect(exitCode).toBe(0);
+    const { execution, containerRuns } = await readProjectStore(copy.dir);
+    expect(containerRuns[0]?.secretsFound).toEqual([{ name: "FAKE_HARNESS_KEY", files: 1, paths: ["/workspace/leak.log"] }]);
+    expect(stdout).toContain("1 of 1 postrun images hold a secret's value in their files:\n  1-1  FAKE_HARNESS_KEY  1 file: /workspace/leak.log\n");
+    // By the runner, to the runtime's own Docker.
+    const { runner } = await commandsOf(docker);
+    expect(runner.filter((command) => command.startsWith("docker run --name ") && command.includes("-secrets "))).toHaveLength(1);
+    const runnerLog = await Bun.file(`${copy.dir}/.thunderjar/logs/${execution.executionId}-runner.log`).text();
+    for (const text of [(await docker.commands()).join("\n"), runnerLog, JSON.stringify(containerRuns), stdout]) expect(text).not.toContain(key);
+  });
+
   test("a test case's secretEnv that's unset stops run with a runner before anything is built", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithRunner();

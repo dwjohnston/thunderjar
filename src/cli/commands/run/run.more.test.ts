@@ -405,6 +405,45 @@ Couldn't search 1 of 1 postrun images for secrets' values, so they may hold one:
   1-1  it took longer than <duration>
 Recorded in `);
   });
+
+  test("no secret's value is in a command, the log, the record or the output; the search is given each by name", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, log } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", data, "--log-level", "trace"], {
+      env: { ...docker.env, ...secrets },
+      log: true,
+    });
+
+    const commands = await docker.commands();
+    const [search] = commands.filter((command) => command.startsWith("docker run --name ") && command.includes("-secrets ")) as [string];
+    expect(search).toContain(" -e FAKE_HARNESS_KEY -e FAKE_TEST_CASE_SECRET --user 0 --network none --entrypoint sh thunderjar-postrun:");
+    expect(log).toContain("secrets found in the postrun image's files");
+    const store = JSON.stringify(await readStore(data));
+    for (const value of Object.values(secrets)) {
+      for (const text of [commands.join("\n"), log, store, stdout, stderr]) expect(text).not.toContain(value);
+    }
+  });
+
+  test("a clean run, and one whose secrets are too short to search for, record nothing, and run says nothing", async () => {
+    await using docker = await fakeDocker();
+    const [cleanData, shortData] = [dataDir(), dataDir()];
+
+    const clean = await thunderjar(scenario("0206"), ["run", "test-case-env", "--data-dir", cleanData], { env: { ...docker.env, ...TEST_CASE_SECRET } });
+    const short = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", shortData], {
+      env: { ...docker.env, FAKE_HARNESS_KEY: "short-key", FAKE_TEST_CASE_SECRET: "short" },
+    });
+
+    for (const { stdout } of [clean, short]) expect(stdout).not.toContain("secret");
+    const runs = [...(await readStore(cleanData)).containerRuns, ...(await readStore(shortData)).containerRuns];
+    expect(runs).toHaveLength(2);
+    for (const run of runs) {
+      expect(run).not.toHaveProperty("secretsFound");
+      expect(run).not.toHaveProperty("secretSearchFailed");
+    }
+    // Searched once: test-case-env's secret, not leaked-secret's short ones.
+    expect((await docker.commands()).filter((command) => command.includes("-secrets "))).toHaveLength(1);
+  });
 });
 
 describe("0201 minimal existing setup", () => {

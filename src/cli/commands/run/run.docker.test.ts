@@ -234,6 +234,30 @@ Recorded in <DATA>/runs.sqlite
     for (const value of Object.values(secrets)) expect(JSON.stringify(postrunEnv)).not.toContain(value);
   }, 600_000);
 
+  test("0206 leaked-secret: the secrets the agent wrote into files are found in its postrun image, by name and path, and the search container is removed", async () => {
+    const prefix = `${PREFIX}-leaked`;
+    const data = `${DATA_DIR}/leaked`;
+    const secrets = { FAKE_HARNESS_KEY: "secret-harness-key", FAKE_TEST_CASE_SECRET: "secret-test-case-value" };
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--image-prefix", prefix, "--data-dir", data], {
+      docker: "real",
+      env: secrets,
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [record] = (await storedRuns(data)).containerRuns as [ContainerRunRecord];
+    expect(record.secretsFound).toEqual([
+      { name: "FAKE_HARNESS_KEY", files: 2, paths: ["/workspace/.env", "/workspace/agent.log"] },
+      { name: "FAKE_TEST_CASE_SECRET", files: 1, paths: ["/workspace/.env"] },
+    ]);
+    expect(record.secretSearchFailed).toBeUndefined();
+    expect(stdout).toContain("1 of 1 postrun images hold a secret's value in their files:\n");
+    for (const value of Object.values(secrets)) expect(stdout + JSON.stringify(record)).not.toContain(value);
+    // It really is in the image, as found.
+    expect(await inImage(record.postrunImage, "cat /workspace/.env")).toBe(`KEY=${secrets.FAKE_HARNESS_KEY}\nSECRET=${secrets.FAKE_TEST_CASE_SECRET}`);
+    expect(lines(await $`docker ps --all --format ${"{{.Names}}"} --filter ${`name=^${prefix}-`}`.text())).toEqual([]);
+  }, 600_000);
+
   test("0202 quoting: the prompt reaches the agent byte for byte, through a file", async () => {
     const prefix = `${PREFIX}-quoting`;
     const data = `${DATA_DIR}/quoting`;

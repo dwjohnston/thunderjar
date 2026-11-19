@@ -479,6 +479,22 @@ Harness      fake-harness-beta 1.0.0
     expect(without.stdout).not.toContain("Secrets");
   });
 
+  test("<container run> whose postrun image couldn't be searched for secrets says so, and why", async () => {
+    const data = await copyOfStore();
+    changeStore(data, "UPDATE container_runs SET record = json_set(record, '$.secretSearchFailed', 'it took longer than 120s') WHERE execution_id = $id AND permutation = 2", {
+      id: TWO_HARNESSES,
+    });
+
+    const { stdout } = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "2-1", "--data-dir", data]);
+
+    expect(stdout).toContain(`
+Secrets in its postrun image
+  not searched  (it took longer than <duration>): it may hold one
+
+Harness      fake-harness-beta 1.0.0
+`);
+  });
+
   test("<execution> with secrets found in a postrun image says which, in which run, and --json carries them", async () => {
     const data = await copyOfStore();
     const found = [{ name: "OPENROUTER_API_KEY", files: 1, paths: ["/workspace/.env"] }];
