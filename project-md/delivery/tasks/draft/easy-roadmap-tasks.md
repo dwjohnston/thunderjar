@@ -106,7 +106,7 @@ export type FileChanges = {
       });
       ```
     1. Only committed work. Uncommitted changes are `filesChanged`'s job.
-    2. The count is `v.length`, which is why `commitCount` (13) was dropped.
+    2. The count is `v.length`.
     3. The author is left out: in a run it's always the agent.
 14. `filesChanged`
     - Everything changed since the start, committed or not, as one `FileChanges`.
@@ -200,12 +200,3 @@ These need configuring per harness, so they're harder:
 28. `checkout <run>`
     - Opens a shell in a run's postrun image.
     - Overlaps somewhat with `attach`, which follows a running execution.
-
-## Dropped
-
-- `writeSkill`
-- Measurements 6–10: `fileDeleted`, `jsonValue`, `replyLength`, `replyEndsWithQuestion`, `workingTreeClean`.
-- `commitCount` (13): it's `v.length` of `commits`.
-- `linesChanged` (15).
-- `run --max-cost` (20): out of scope for now.
-- `run --rerun-failed` (21).
