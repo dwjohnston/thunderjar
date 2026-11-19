@@ -120,3 +120,35 @@ export function addedTestCount(diff: string): number {
   }
   return count;
 }
+
+/** The tests of one commit. */
+export type TestResult = {
+  failing: TestCase[];
+  /** Failures not tied to a test: files that didn't load, errors between tests. */
+  unattributed: number;
+};
+
+/** What's known about one commit. */
+export type Facts = {
+  kind: CommitKind;
+  /** Test files the commit adds, changes, renames or deletes. */
+  testFilesChanged: string[];
+  /** The next commit's kind, null for the last commit, or "unknown" before it's made. */
+  nextKind: CommitKind | null | "unknown";
+  /** Null when the tests weren't run. */
+  result: TestResult | null;
+  /** Ids of the failing tests the commit added or changed. */
+  changedFailing: string[];
+  /** Whether the commit adds `test(` calls. */
+  addsTests: boolean;
+  multiRedApproved: boolean;
+};
+
+/** The rules the commit breaks. */
+export function judge(facts: Facts): string[] {
+  return ["not implemented"];
+}
+
+function list(items: string[]): string {
+  return items.map((item) => `    - ${item}`).join("\n");
+}

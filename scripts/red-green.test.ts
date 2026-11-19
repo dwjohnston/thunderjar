@@ -12,7 +12,19 @@
  *
  */
 import { describe, expect, test } from "bun:test";
-import { addedTestCount, blockStarts, changedLines, commitKind, isTestFile, summaryFailCount, type TestCase, testCases, wasChanged } from "./red-green.ts";
+import {
+  addedTestCount,
+  blockStarts,
+  changedLines,
+  commitKind,
+  type Facts,
+  isTestFile,
+  judge,
+  summaryFailCount,
+  type TestCase,
+  testCases,
+  wasChanged,
+} from "./red-green.ts";
 
 describe("commitKind", () => {
   test("reads the marker after a prefix", () => {
@@ -135,5 +147,23 @@ describe("addedTestCount", () => {
   test("counts added test calls, less removed ones", () => {
     expect(addedTestCount(DIFF)).toBe(0);
     expect(addedTestCount(`+++ b/a.test.ts\n+  test("one", () => {});\n+  test.each([1])("two", () => {});`)).toBe(2);
+  });
+});
+
+describe("judge", () => {
+  const failing = (...ids: string[]): TestCase[] => ids.map((id) => ({ id, file: "a.test.ts", line: 1, failing: true }));
+  const facts = (overrides: Partial<Facts>): Facts => ({
+    kind: "other",
+    testFilesChanged: [],
+    nextKind: "green",
+    result: { failing: [], unattributed: 0 },
+    changedFailing: [],
+    addsTests: false,
+    multiRedApproved: false,
+    ...overrides,
+  });
+
+  test("a 🔴 commit passes with one failing test it changed", () => {
+    expect(judge(facts({ kind: "red", testFilesChanged: ["a.test.ts"], result: { failing: failing("new"), unattributed: 0 }, changedFailing: ["new"] }))).toEqual([]);
   });
 });
