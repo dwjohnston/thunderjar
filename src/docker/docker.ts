@@ -468,7 +468,7 @@ export const ENV_NAMES_FORMAT = '[{{range $i, $e := .Config.Env}}{{if $i}},{{end
  * The `ENV` changes that leave a committed container's environment holding nothing from the time
  * it ran, given its image's environment, `imageEnv`, as `NAME=value` entries, and the names of the
  * container's variables, `containerNames`. Every variable the image doesn't have, e.g. one passed
- * with `-e`, is blanked.
+ * with `-e`, is blanked; every one it has gets the image's value back, whatever it was run with.
  *
  * By rule, not by list: so it covers a harness's `requiredEnv`, `-e` and `--env-file` in a base
  * image's `runOptions`, and whatever else gave the container a variable. Docker can't remove a
@@ -481,7 +481,10 @@ export function scrubbedEnvChanges(imageEnv: string[], containerNames: string[])
   });
   const imageNames = new Set(image.map(([variable]) => variable));
   const blanked = [...new Set(containerNames)].filter((variable) => variable !== "" && !imageNames.has(variable));
-  return blanked.map((variable) => `ENV "${variable}"=`);
+  return [
+    ...blanked.map((variable) => `ENV "${variable}"=`),
+    ...image.map(([variable, value]) => `ENV "${variable}"="${value}"`),
+  ];
 }
 
 /**
@@ -489,10 +492,10 @@ export function scrubbedEnvChanges(imageEnv: string[], containerNames: string[])
  * the image `like`, the one it ran from, so starting the new image doesn't run the container's
  * script again.
  *
- * Every variable `like` doesn't set is blanked in it: `docker commit` would otherwise save every
- * variable the container was given, e.g. an agent's API key, into the image's config, which is
- * pushed with it. See scrubbedEnvChanges. Only the variables' names are read from the container:
- * their values never leave Docker.
+ * Its environment is `like`'s, so it holds nothing from the time the container ran: `docker
+ * commit` would otherwise save every variable the container was given, e.g. an agent's API key,
+ * into the image's config, which is pushed with it. See scrubbedEnvChanges. Only the variables'
+ * names are read from the container: their values never leave Docker.
  *
  * Throws a DockerContainerError.
  */
@@ -510,7 +513,7 @@ export async function commitContainer(name: string, image: string, like: string,
   ];
   const startedAt = Date.now();
   await mustRun(["commit", ...changes.flatMap((change) => ["--change", change]), name, image], runtime);
-  // Only the names.
+  // Only the names: the values of the image's variables are in the command, logged at debug.
   log.info({ container: name, image, variables: containerNames, ms: Date.now() - startedAt }, "committed container");
 }
 
