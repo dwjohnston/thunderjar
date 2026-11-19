@@ -12,7 +12,7 @@
  *
  */
 import { describe, expect, test } from "bun:test";
-import { commitKind, isTestFile } from "./red-green.ts";
+import { commitKind, isTestFile, testCases } from "./red-green.ts";
 
 describe("commitKind", () => {
   test("reads the marker after a prefix", () => {
@@ -44,5 +44,33 @@ describe("isTestFile", () => {
 
   test("leaves out the gauntlet's challenges", () => {
     expect(isTestFile("src/gauntlet/wrong-failing-test/test/retail/money.test.js")).toBe(false);
+  });
+});
+
+// As `bun test --reporter=junit` writes it.
+const JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="3" assertions="2" failures="1" skipped="0" time="0.005">
+  <testsuite name="a.test.ts" file="a.test.ts" tests="3" assertions="2" failures="1" skipped="0" time="0.001" hostname="vm">
+    <testsuite name="outer" file="a.test.ts" line="3" tests="3" assertions="2" failures="1" skipped="0" time="0" hostname="vm">
+      <testsuite name="inner" file="a.test.ts" line="4" tests="1" assertions="1" failures="1" skipped="0" time="0" hostname="vm">
+        <testcase name="keeps &quot;quotes&quot; &amp; ampersands" classname="inner &gt; outer" time="0.0002" file="a.test.ts" line="5" assertions="1">
+          <failure type="AssertionError" message="expect(received).toBe(expected)">AssertionError</failure>
+        </testcase>
+      </testsuite>
+      <testcase name="passes" classname="outer" time="0.000006" file="a.test.ts" line="10" assertions="0" />
+      <testcase name="is skipped" classname="outer" time="0" file="a.test.ts" line="14" assertions="0">
+        <skipped />
+      </testcase>
+    </testsuite>
+  </testsuite>
+</testsuites>`;
+
+describe("testCases", () => {
+  test("names each test by file, describes outermost first, and name", () => {
+    expect(testCases(JUNIT)).toEqual([
+      { id: `a.test.ts: outer > inner > keeps "quotes" & ampersands`, file: "a.test.ts", line: 5, failing: true },
+      { id: "a.test.ts: outer > passes", file: "a.test.ts", line: 10, failing: false },
+      { id: "a.test.ts: outer > is skipped", file: "a.test.ts", line: 14, failing: false },
+    ]);
   });
 });

@@ -30,3 +30,17 @@ export function isTestFile(path: string): boolean {
   if (path.startsWith("src/gauntlet/")) return false;
   return /\.test\.[cm]?[jt]sx?$/.test(path) || path.endsWith(".result.json");
 }
+
+/** One test in a `bun test --reporter=junit` report. */
+export type TestCase = {
+  /** `file: describe > test`. */
+  id: string;
+  file: string;
+  line: number;
+  failing: boolean;
+};
+
+/** The tests in a JUnit report. */
+export function testCases(_junit: string): TestCase[] {
+  return [];
+}
