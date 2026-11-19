@@ -154,6 +154,10 @@ export function judge(facts: Facts): string[] {
   if (failing.length > 1) {
     problems.push(`expected exactly one failing test, but ${failing.length} failed. Split them into 🔴/🟢 cycles:\n${list(failing)}`);
   }
+  const unchanged = failing.filter((id) => !facts.changedFailing.includes(id));
+  if (unchanged.length > 0) {
+    problems.push(`these failing tests weren't added or changed by this commit:\n${list(unchanged)}`);
+  }
   return problems;
 }
 
