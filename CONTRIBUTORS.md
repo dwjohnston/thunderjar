@@ -73,17 +73,17 @@ It needs `fly`, `docker login ghcr.io`, `FLYIO_TOKEN`, `THUNDERJAR_DB_URL` and `
 
 Thunderjar doesn't create, start, stop or clear down the Fly machine. You do.
 
-Create one, with an 80 GB volume for its Docker data, and destroy it with its volume:
+Create one with `.thunderjar/fly-machine.sh`, with an 80 GB volume for its Docker data, and destroy it with its volume:
 
 ```sh
-.thunderjar/fly-create.sh dev          # options: --region iad, --volume-gb 80, --cpus 2
+.thunderjar/fly-machine.sh create dev   # options: --region iad, --volume-gb 80, --cpus 2
 ```
 
 ```sh
-.thunderjar/fly-destroy.sh dev
+.thunderjar/fly-machine.sh destroy dev
 ```
 
-Then use it with `.thunderjar/fly-machine.sh`:
+Then:
 
 ```sh
 .thunderjar/fly-machine.sh start      # before working; `start 8` sizes it performance-8x first
