@@ -58,7 +58,6 @@ The following environment variables should be available to you:
 
 ## Canonical documentation 
 
-
 Maintained by humans only, in [project-md/human-safe-space/](project-md/human-safe-space/).
 
 - [Tag and ref conventions](project-md/human-safe-space/conventions/tags-and-refs.md)
@@ -66,3 +65,6 @@ Maintained by humans only, in [project-md/human-safe-space/](project-md/human-sa
 - [Measurements philosophy](project-md/human-safe-space/measurements-philosophy/index.md)
 - [Not supported: parameter behaviour](project-md/human-safe-space/not-supported/parameter-behaviour.md)
 - [Things that are a bit messy: skills](project-md/human-safe-space/things-that-are-a-bit-messy/skills.md)
+
+
+## Working style 
