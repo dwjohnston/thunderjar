@@ -596,6 +596,31 @@ export type TestCaseDeclaration<T extends TaskNames = TaskNames> = {
   initialPrompt: (T extends keyof InitialPromptNamesByTask ? InitialPromptNamesByTask[T] : never)[];
   /** @docs @name iterations @type {number} @description How many times to run each combination. */
   iterations: number;
+  /**
+   * @docs
+   * @name env
+   * @type {Record<string, string>}
+   * @default {}
+   * @description
+   * Environment variables the agent's containers are given, with their values, e.g.
+   * `{ NODE_ENV: "test" }`. Not secret: each run records them, and its postrun image keeps them.
+   * They don't change any hash, so changing one doesn't rebuild a prerun image. For a secret, use
+   * `secretEnv`.
+   */
+  env?: Record<string, string>;
+  /**
+   * @docs
+   * @name secretEnv
+   * @type {string[]}
+   * @default []
+   * @description
+   * The names of more environment variables the agent's containers are given, e.g.
+   * `["DATABASE_URL"]`, each passed as `docker run -e NAME`, so its value comes from the shell
+   * that runs Thunderjar, as a harness's `requiredEnv` does. The value is never on a command line,
+   * in a log, in a run's record or in its postrun image: only the name is recorded. `plan` and `run`
+   * stop if one is unset. A runner on a runtime is sent them without listing them in `runner.env`.
+   */
+  secretEnv?: string[];
 };
 
 export function declareTestCase<T extends TaskNames>(declaration: TestCaseDeclaration<T>): TestCaseDeclaration<T> {

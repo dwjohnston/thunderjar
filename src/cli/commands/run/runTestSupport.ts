@@ -9,6 +9,9 @@ import type { FakeDocker } from "../../../testing/fakeDocker.ts";
 /** What 0202's fake-harness-alpha needs: `plan` and `run` stop without it. */
 export const KEY = { FAKE_HARNESS_KEY: "fake-key" };
 
+/** The value of 0206's test-case-env's secretEnv: never in a command, a log, a record or a postrun image. */
+export const TEST_CASE_SECRET = { FAKE_TEST_CASE_SECRET: "secret-test-case-value" };
+
 export const PLAIN = "Create a file isPrime.ts exporting a function that tests for primality.";
 export const TERSE = "isPrime.ts: export a primality test.";
 /** 0202's `awkward` initial prompt, full of shell syntax. */

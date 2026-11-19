@@ -23,6 +23,10 @@ export type ContainerRun = {
   env: string[];
   /** More `docker run` options, from its base image. */
   runOptions: string[];
+  /** Variables set with these values, from its test case's `env`: its postrun image keeps them. */
+  testCaseEnv?: Record<string, string>;
+  /** The names of more variables passed in, from its test case's `secretEnv`, as `env`'s are. */
+  secretEnv?: string[];
   /** How long its run script may run before it's killed. */
   timeoutSeconds: number;
   /** The container's name. */
@@ -92,6 +96,8 @@ export async function runInContainer(run: ContainerRun): Promise<ContainerRunOut
       runContainer(run.prerunImage, run.container, timedRun(), {
         env: run.env,
         runOptions: run.runOptions,
+        setEnv: run.testCaseEnv,
+        secretEnv: run.secretEnv,
         timeoutSeconds: run.timeoutSeconds,
         startMarker: START_MARKER,
         runtime,
@@ -114,7 +120,7 @@ export async function runInContainer(run: ContainerRun): Promise<ContainerRunOut
       (await readContainerFile(run.container, RESULT_PATH, runtime)) ?? null,
       (await readContainerFile(run.container, STDERR_PATH, runtime)) ?? null,
     ] as const);
-    await time("commit", () => commitContainer(run.container, run.postrunImage, run.prerunImage, runtime));
+    await time("commit", () => commitContainer(run.container, run.postrunImage, run.prerunImage, runtime, run.testCaseEnv));
     return { execution, harnessResult, stderr, committed: true };
   } finally {
     await removeContainer(run.container, runtime).catch(() => {});

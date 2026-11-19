@@ -193,6 +193,29 @@ Recorded in <DATA>/runs.sqlite
     expect(postrunEnv.toSorted()).toEqual([...prerunEnv, "FAKE_HARNESS_KEY=", "FAKE_RUN_OPTION_KEY="].toSorted());
   }, 600_000);
 
+  test("0206 test-case-env: the postrun image keeps the test case's env, and blanks its secretEnv", async () => {
+    const prefix = `${PREFIX}-test-case-env`;
+    const data = `${DATA_DIR}/test-case-env`;
+    const secret = "secret-test-case-value";
+    const { stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "test-case-env", "--image-prefix", prefix, "--data-dir", data], {
+      docker: "real",
+      env: { FAKE_TEST_CASE_SECRET: secret },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [record] = (await storedRuns(data)).containerRuns as [ContainerRunRecord];
+    // The agent saw the env's value, and both of the others.
+    expect(record.reply).toEqual({ outcome: "collected", text: "setting test, awkward set, secret set" });
+    expect(record.secretEnv).toEqual(["FAKE_TEST_CASE_SECRET"]);
+
+    const postrunEnv = JSON.parse(await $`docker image inspect --format ${"{{json .Config.Env}}"} ${record.postrunImage}`.text()) as string[];
+    expect(postrunEnv).toContain("FAKE_TEST_CASE_SETTING=test");
+    expect(postrunEnv).toContain('FAKE_TEST_CASE_AWKWARD=kept: "quoted", $HOME, a \\ backslash and 100%');
+    expect(postrunEnv).toContain("FAKE_TEST_CASE_SECRET=");
+    expect(JSON.stringify(postrunEnv)).not.toContain(secret);
+  }, 600_000);
+
   test("0202 quoting: the prompt reaches the agent byte for byte, through a file", async () => {
     const prefix = `${PREFIX}-quoting`;
     const data = `${DATA_DIR}/quoting`;

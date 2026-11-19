@@ -97,7 +97,8 @@ export async function storePrerunImages(
 const PASSED_SETTINGS = ["THUNDERJAR_START_TIMEOUT_SECONDS"];
 
 /**
- * The variables a runner is given for `plan`: those its harnesses need, the run data store's
+ * The variables a runner is given for `plan`: those its harnesses need, its test case's
+ * `secretEnv`, the run data store's
  * URL, the registry login's, and `runner.env`, with their values from `env`, and those of
  * PASSED_SETTINGS that are set. Throws a ConfigError
  * naming each that's unset: an empty value counts as unset.
@@ -109,7 +110,7 @@ export function submissionEnv(
   env: Record<string, string | undefined> = Bun.env,
 ): Record<string, string> {
   const names = new Set([
-    ...plan.permutations.flatMap((permutation) => permutation.env),
+    ...plan.permutations.flatMap((permutation) => [...permutation.env, ...permutation.secretEnv]),
     ...(runDataStore.kind === "postgres" ? [runDataStore.urlEnv] : []),
     ...(runner.registryLogin ? [runner.registryLogin.usernameEnv, runner.registryLogin.passwordEnv] : []),
     ...runner.env,

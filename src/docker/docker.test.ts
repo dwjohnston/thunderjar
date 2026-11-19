@@ -174,6 +174,40 @@ test("scrubbedEnvChanges refuses a value with a newline, naming its variable and
   expect((error as Error).message).toBe(`the environment variable "MULTI" can't be written in an ENV instruction: it has a newline`);
 });
 
+test("scrubbedEnvChanges sets each kept variable last, over the image's, and doesn't blank it first", () => {
+  expect(scrubbedEnvChanges(["PATH=/bin", "NODE_ENV=production"], ["PATH", "NODE_ENV", "SETTING", "SECRET"], { NODE_ENV: "test", SETTING: `${AWKWARD_VALUE}` })).toEqual([
+    'ENV "SECRET"=',
+    'ENV "PATH"="/bin"',
+    'ENV "NODE_ENV"="production"',
+    'ENV "NODE_ENV"="test"',
+    `ENV "SETTING"="he said \\"hi\\" to \\$HOME and \\\${USER:-x}, 'quoted', a \\\\ backslash, \`ls\`, 100% and\ta tab"`,
+  ]);
+});
+
+test("runContainer gives setEnv with its values, after the run options, and secretEnv by name; the commit keeps setEnv only", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"], env: { "tj-prerun:aaaaaaaa": ["NODE_ENV=production"] } });
+  Object.assign(Bun.env, docker.env, { TJ_TEST_SECRET: "secret-from-env" });
+  const setEnv = { NODE_ENV: "test", ODD: AWKWARD_VALUE };
+
+  try {
+    await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", 'echo "$NODE_ENV $TJ_TEST_SECRET" > /workspace/seen', {
+      runOptions: ["--env", "NODE_ENV=from-run-options"],
+      setEnv,
+      secretEnv: ["TJ_TEST_SECRET"],
+    });
+    await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa", undefined, setEnv);
+  } finally {
+    delete Bun.env.TJ_TEST_SECRET;
+  }
+
+  expect(await docker.fileIn("tj-postrun:x-1-1", "/workspace/seen")).toBe("test secret-from-env\n");
+  const [run] = (await docker.commands()).filter((command) => command.startsWith("docker run")) as [string];
+  expect(run).toContain(` --env NODE_ENV=from-run-options -e NODE_ENV=test -e ODD=${AWKWARD_VALUE} -e TJ_TEST_SECRET --entrypoint sh `);
+  expect((await docker.commands()).join("\n")).not.toContain("secret-from-env");
+  expect(await docker.envOf("tj-postrun:x-1-1")).toEqual(["NODE_ENV=test", `ODD=${AWKWARD_VALUE}`, "TJ_TEST_SECRET="]);
+  await removeContainer("tj-run-1");
+});
+
 test("runContainer throws a DockerContainerError with the reason when its script fails", async () => {
   await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
   Object.assign(Bun.env, docker.env);

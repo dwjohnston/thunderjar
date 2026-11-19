@@ -208,6 +208,42 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(runnerLog).toContain("FAKE_HARNESS_KEY");
   });
 
+  test("a test case's secretEnv reaches the runner without runner.env, and its env with the plan: the agent sees both, and only names are recorded", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWithRunner({ agent: "echo $TC_SETTING-$TC_SECRET > env.txt" });
+    const testCase = `${copy.dir}/.thunderjar/test-cases/example.ts`;
+    await Bun.write(testCase, (await Bun.file(testCase).text()).replace("iterations: 1,", 'iterations: 1,\n  env: { TC_SETTING: "test" },\n  secretEnv: ["TC_SECRET"],'));
+    const env = { ...docker.env, TC_SECRET: "s3cret-test-case" };
+
+    const { stderr, exitCode, log } = await thunderjar(copy.dir, ["run", "example", "--log-level", "debug"], { env, log: true });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const { execution, containerRuns } = await readProjectStore(copy.dir);
+    // The fake runs the runner with none of this process's variables: the secret came in the submission.
+    expect(await docker.fileIn(`thunderjar-postrun:${execution.executionId}-1-1`, "/workspace/env.txt")).toBe("test-s3cret-test-case\n");
+    expect(containerRuns[0]).toMatchObject({ env: { TC_SETTING: "test" }, secretEnv: ["TC_SECRET"] });
+    const runnerLog = await Bun.file(`${copy.dir}/.thunderjar/logs/${execution.executionId}-runner.log`).text();
+    for (const text of [(await docker.commands()).join("\n"), log as string, runnerLog, JSON.stringify(containerRuns)]) {
+      expect(text).not.toContain("s3cret-test-case");
+    }
+    expect(await docker.envOf(`thunderjar-postrun:${execution.executionId}-1-1`)).toEqual(expect.arrayContaining(["TC_SETTING=test", "TC_SECRET="]));
+  });
+
+  test("a test case's secretEnv that's unset stops run with a runner before anything is built", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWithRunner();
+    const testCase = `${copy.dir}/.thunderjar/test-cases/example.ts`;
+    await Bun.write(testCase, (await Bun.file(testCase).text()).replace("iterations: 1,", 'iterations: 1,\n  secretEnv: ["TC_SECRET"],'));
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: docker.env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe("Error: The test case needs TC_SECRET, in its secretEnv, which is not set.\nExport it in the shell that runs thunderjar.\n");
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
+  });
+
   test("a container that never starts is its run's outcome on the runner too, timed by the start timeout set here", async () => {
     // The agent's container would take a minute to appear: the runner gives up on it after 3s.
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], slowStart: { "-1-1": 60 } });

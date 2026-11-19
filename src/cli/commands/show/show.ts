@@ -264,6 +264,19 @@ function metricLines(record: ContainerRunRecord, measurements: Measurement[], pa
 }
 
 /**
+ * The variables its test case gave its agent container, a line each: `env`'s with their values,
+ * then `secretEnv`'s names, as only they were recorded. Nothing if it was given none, or was
+ * recorded before test cases could give any.
+ */
+function environmentLines({ env = {}, secretEnv = [] }: ContainerRunRecord, paint: Paint): string[] {
+  const rows = [
+    ...Object.entries(env).map(([name, value]) => [paint.dim(name), value]),
+    ...secretEnv.map((name) => [paint.dim(name), paint.dim("secret, from the shell: not recorded")]),
+  ];
+  return rows.length === 0 ? [] : [paint.bold("Environment"), ...columns(rows), ""];
+}
+
+/**
  * One container run: where it sits, its parameters, how the agent ran, its reply if it was
  * recorded with one, each measure's stored value, and, given the task's measurements, each
  * metric's score.
@@ -302,6 +315,7 @@ export function renderContainerRun(record: ContainerRunRecord, paint: Paint = pl
       }),
     ),
     "",
+    ...environmentLines(record, paint),
     ...labelled(
       [
         ["Harness", `${harnessModel.harness} ${harnessModel.version}`],
