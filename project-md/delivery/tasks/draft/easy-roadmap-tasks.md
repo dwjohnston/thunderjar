@@ -190,8 +190,20 @@ These need configuring per harness, so they're harder:
     4. Open question: should it also run `git gc --prune=now`, so the objects go too? Default no: refs only.
 25. `compare <a> <b>`
     - In the planned command table, but not built.
-26. `remeasure`
-    - Planned, not built.
+26. `remeasure <test case | execution>`
+    - Applies the measurements on disk now to past container runs, without rerunning the agent.
+    - e.g.
+      ```sh
+      thunderjar remeasure compare-models
+      thunderjar remeasure 01K4X9J2E8MQZ3V7R5T0WABCDE
+      ```
+    - An execution remeasures its container runs; a test case, every past execution of it.
+    - Each run is measured in a new measurement container from its postrun image, the same path as the original measurement.
+    1. New measures are a new version, beside the old ones, not a replacement.
+       - `show` uses the latest version.
+    2. Runs whose postrun image was purged are skipped, and listed as skipped.
+    3. Always runs every measurement. No selecting a subset.
+    - Spec: `project-md/prd/100-cli-reference.md#remeasure`.
 27. `checkout <run>`
     - Brings a container run's end state back, to inspect what happened.
     - Replaces the planned `restore` command.
