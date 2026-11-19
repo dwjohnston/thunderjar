@@ -49,6 +49,20 @@
       "skillPath": "skills/markdown-writing-prompts/SKILL.md",
       "computedHash": "6844c4acf875727f53d01434d7eb087c46bc1db0e61996ffcc935359b97e9126"
     },
+    "red-green-tdd": {
+      "source": "dwjohnston/agent-skills",
+      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71",
+      "sourceType": "github",
+      "skillPath": "skills/red-green-tdd/SKILL.md",
+      "computedHash": "25c02a9daaa320b2dfbcec0575c5854a01b8ed4cf181dbb718dc86d66d7ac886"
+    },
+    "subagents-general": {
+      "source": "dwjohnston/agent-skills",
+      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71",
+      "sourceType": "github",
+      "skillPath": "skills/subagents-general/SKILL.md",
+      "computedHash": "d4748e4cfae98b3a77f5f174e114c533e0485052f7b437d4be40df93c40db595"
+    },
     "test-driven-development": {
       "source": "addyosmani/agent-skills",
       "commit": "8c99fa36d90068c82d547f7c12a9d67a3e95f4ee",
