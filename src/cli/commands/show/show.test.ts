@@ -453,6 +453,32 @@ Harness      fake-harness-beta 1.0.0
     });
   });
 
+  test("<container run> recorded with secrets found in its postrun image says which, where, and that they're exposed if it was pushed; one without says nothing", async () => {
+    const data = await copyOfStore();
+    const found = [
+      { name: "OPENROUTER_API_KEY", files: 4, paths: ["/root/.bash_history", "/workspace/.env", "/workspace/agent.log", "/workspace/notes.md"] },
+      { name: "DATABASE_URL", files: 1, paths: ["/workspace/.env"] },
+    ];
+    changeStore(data, "UPDATE container_runs SET record = json_set(record, '$.secretsFound', json($found)) WHERE execution_id = $id AND permutation = 2", {
+      id: TWO_HARNESSES,
+      found: JSON.stringify(found),
+    });
+
+    const withSecrets = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "2-1", "--data-dir", data]);
+    const without = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "1-1", "--data-dir", data]);
+
+    expect(withSecrets.stdout).toContain(`  initialPrompt  plain                                     18bd401a
+
+Secrets in its postrun image
+  OPENROUTER_API_KEY  4 files: /root/.bash_history, /workspace/.env, /workspace/agent.log, …
+  DATABASE_URL        1 file: /workspace/.env
+  Its postrun image holds these secrets' values in its files. If it was pushed, treat them as exposed, and rotate them.
+
+Harness      fake-harness-beta 1.0.0
+`);
+    expect(without.stdout).not.toContain("Secrets");
+  });
+
   test("--data-dir reads a container run outside any project", async () => {
     const store = `${scenario("0203")}/.thunderjar/.data`;
 
