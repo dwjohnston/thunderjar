@@ -12,6 +12,27 @@
  *
  *
  */
+// Enforces the red/green TDD commit workflow of the red-green-tdd skill, commit by commit.
+//
+//   bun scripts/red-green.ts --base origin/main --head HEAD [--docker] [--multi-red-approved]
+//
+// The marker starts a commit's subject, or follows a `prefix: ` such as `🤖 Claude: `.
+//
+// - 🔴: exactly one test fails, on an assertion, and the commit added or changed it.
+// - 🔴🔴: at least one test fails, and the commit changed every failing test. It adds no tests,
+//   and needs --multi-red-approved (CI passes it for a PR with the `multi-red-approved` label).
+// - A 🔴 or 🔴🔴 commit is followed by a 🟢 commit.
+// - 🟢: touches no test file, and every test passes.
+// - ♻️: may change test files, and every test passes.
+// - No marker: touches no test file. Its tests aren't run: the CI check job runs them at the head.
+// - A failure not tied to a test, e.g. a file that doesn't load, fails any commit.
+//
+// Tests run in a temporary git worktree, so this checkout is never touched. --docker also runs the
+// `.docker.test.ts` files the branch changes. Merge commits are skipped.
+//
+// Exits 1 if any commit breaks a rule.
+import { $ } from "bun";
+
 export type CommitKind = "red" | "multi-red" | "green" | "refactor" | "other";
 
 const MARKERS: Record<string, CommitKind> = { "🔴🔴": "multi-red", "🔴": "red", "🟢": "green", "♻️": "refactor", "♻": "refactor" };
@@ -65,9 +86,18 @@ export function testCases(junit: string): TestCase[] {
   return cases;
 }
 
-/** The failure count in `bun test`'s summary, which also counts files that didn't load. */
-export function summaryFailCount(output: string): number {
-  return Number(/^\s*(\d+) fail$/m.exec(output)?.[1] ?? 0);
+/** The lines where each test or describe starts, per file. A test runs until the next one starts. */
+export function blockStarts(junit: string): Map<string, number[]> {
+  const starts = new Map<string, number[]>();
+  for (const match of junit.matchAll(/<(?:testcase|testsuite)\b([^>]*?)\/?>/g)) {
+    const attributes = match[1] ?? "";
+    const line = Number(attribute(attributes, "line"));
+    if (!line) continue;
+    const file = attribute(attributes, "file").replace(/^\.\//, "");
+    starts.set(file, [...(starts.get(file) ?? []), line]);
+  }
+  for (const lines of starts.values()) lines.sort((a, b) => a - b);
+  return starts;
 }
 
 /** The lines a `git diff -U0` adds or changes, per file, in the new version, as [first, last]. */
@@ -88,20 +118,6 @@ export function changedLines(diff: string): Map<string, [number, number][]> {
     changed.set(file, [...(changed.get(file) ?? []), [start, Math.max(start, start + count - 1)]]);
   }
   return changed;
-}
-
-/** The lines where each test or describe starts, per file. A test runs until the next one starts. */
-export function blockStarts(junit: string): Map<string, number[]> {
-  const starts = new Map<string, number[]>();
-  for (const match of junit.matchAll(/<(?:testcase|testsuite)\b([^>]*?)\/?>/g)) {
-    const attributes = match[1] ?? "";
-    const line = Number(attribute(attributes, "line"));
-    if (!line) continue;
-    const file = attribute(attributes, "file").replace(/^\.\//, "");
-    starts.set(file, [...(starts.get(file) ?? []), line]);
-  }
-  for (const lines of starts.values()) lines.sort((a, b) => a - b);
-  return starts;
 }
 
 /** Whether the diff changed a line of the test, from its first line to where the next test or describe starts. */
@@ -181,3 +197,143 @@ export function judge(facts: Facts): string[] {
 function list(items: string[]): string {
   return items.map((item) => `    - ${item}`).join("\n");
 }
+
+function option(name: string, fallback: string): string {
+  const index = Bun.argv.indexOf(name);
+  return index === -1 ? fallback : (Bun.argv[index + 1] ?? fallback);
+}
+
+/** The failure count in `bun test`'s summary, which also counts files that didn't load. */
+export function summaryFailCount(output: string): number {
+  return Number(/^\s*(\d+) fail$/m.exec(output)?.[1] ?? 0);
+}
+
+/** Runs `bun test` in `dir`. Returns its tests, and their failures not tied to a test. */
+async function runTests(dir: string, report: string, args: string[], env: Record<string, string> = {}) {
+  const output = await $`bun test ${args} --reporter=junit --reporter-outfile=${report}`.cwd(dir).env({ ...Bun.env, ...env }).nothrow().quiet();
+  const junit = (await Bun.file(report).exists()) ? await Bun.file(report).text() : "";
+  const cases = testCases(junit);
+  const failing = cases.filter((test) => test.failing);
+  // A non-zero exit with nothing in the summary, e.g. bun itself failed, is a failure too.
+  const failCount = Math.max(summaryFailCount(output.stdout.toString() + output.stderr.toString()), output.exitCode === 0 ? 0 : 1);
+  return { junit, failing, unattributed: Math.max(0, failCount - failing.length) };
+}
+
+async function lines(command: ReturnType<typeof $>): Promise<string[]> {
+  return (await command.text()).split("\n").filter(Boolean);
+}
+
+/** What running a commit's tests shows. */
+type Examined = Pick<Facts, "result" | "changedFailing" | "addsTests">;
+
+/**
+ * Runs the tests in `dir`, a copy of the commit, and works out which failing tests the commit
+ * changed. `diff` gives the commit's `git diff` of the files it's passed, with the extra args.
+ */
+async function examine(
+  dir: string,
+  report: string,
+  kind: CommitKind,
+  testFilesChanged: string[],
+  dockerFiles: string[],
+  diff: (args: string[]) => Promise<string>,
+): Promise<Examined> {
+  const runs = [await runTests(dir, `${report}.xml`, ["--parallel"])];
+  const present: string[] = [];
+  for (const file of dockerFiles) {
+    if (await Bun.file(`${dir}/${file}`).exists()) present.push(`./${file}`);
+  }
+  if (present.length > 0) {
+    runs.push(await runTests(dir, `${report}.docker.xml`, ["--timeout", "600000", ...present], { THUNDERJAR_DOCKER_TESTS: "1" }));
+  }
+  const result = { failing: runs.flatMap((run) => run.failing), unattributed: runs.reduce((sum, run) => sum + run.unattributed, 0) };
+  if ((kind !== "red" && kind !== "multi-red") || testFilesChanged.length === 0) return { result, changedFailing: [], addsTests: false };
+
+  const changes = await diff(["-U0", "--no-color", "--", ...testFilesChanged]);
+  const starts = blockStarts(runs.map((run) => run.junit).join("\n"));
+  const changed = changedLines(changes);
+  return {
+    result,
+    changedFailing: result.failing.filter((test) => wasChanged(test, starts, changed)).map((test) => test.id),
+    addsTests: addedTestCount(changes) > 0,
+  };
+}
+
+/** Prints a commit's outcome. Returns its problems, labelled, or null if it has none. */
+function report(label: string, problems: string[], result: TestResult | null): string | null {
+  if (problems.length === 0) {
+    const outcome = result === null ? "no test files changed" : result.failing.length === 0 ? "all pass" : `failing: ${result.failing.map((test) => test.id).join(", ")}`;
+    console.log(`  ✅ ${outcome}`);
+    return null;
+  }
+  for (const problem of problems) console.log(`  ❌ ${problem}`);
+  return `${label}\n${problems.map((problem) => `  ${problem}`).join("\n")}`;
+}
+
+function tempDir(): string {
+  return `${Bun.env.TMPDIR || "/tmp"}/thunderjar-red-green-${crypto.randomUUID()}`;
+}
+
+/** Checks each commit of base..head. */
+async function checkBranch(): Promise<string[]> {
+  const base = option("--base", "origin/main");
+  const head = option("--head", "HEAD");
+  const docker = Bun.argv.includes("--docker");
+  const multiRedApproved = Bun.argv.includes("--multi-red-approved");
+
+  const commits = await Promise.all(
+    (await lines($`git rev-list --reverse --first-parent ${base}..${head}`)).map(async (sha) => {
+      const subject = (await $`git log -1 --format=%s ${sha}`.text()).trim();
+      const isMerge = (await $`git rev-list --parents -n 1 ${sha}`.text()).trim().split(" ").length > 2;
+      return { sha, subject, kind: commitKind(subject), isMerge };
+    }),
+  );
+  const checked = commits.filter((commit) => !commit.isMerge);
+  const dockerFiles = docker ? (await lines($`git diff --name-only ${base}...${head}`)).filter((file) => file.endsWith(".docker.test.ts")) : [];
+
+  const temp = tempDir();
+  const worktree = `${temp}/worktree`;
+  let hasWorktree = false;
+  const problems: string[] = [];
+  try {
+    for (const [index, commit] of checked.entries()) {
+      const label = `${commit.sha.slice(0, 7)} ${commit.subject}`;
+      console.log(`\n${label}`);
+      const testFilesChanged = (await lines($`git diff --name-only --no-renames ${commit.sha}^ ${commit.sha}`)).filter(isTestFile);
+
+      let examined: Examined = { result: null, changedFailing: [], addsTests: false };
+      if (commit.kind !== "other") {
+        if (!hasWorktree) {
+          await $`git worktree add --detach ${worktree} ${commit.sha}`.quiet();
+          hasWorktree = true;
+        }
+        await $`git checkout --detach --force --quiet ${commit.sha}`.cwd(worktree);
+        await $`git clean -fdq`.cwd(worktree);
+        await $`bun install --frozen-lockfile`.cwd(worktree).quiet();
+        examined = await examine(worktree, `${temp}/${commit.sha}`, commit.kind, testFilesChanged, dockerFiles, (args) =>
+          $`git diff ${commit.sha}^ ${commit.sha} ${args}`.text(),
+        );
+      }
+
+      const next = checked[index + 1];
+      const nextKind = next === undefined ? null : next.kind;
+      const problem = report(label, judge({ kind: commit.kind, testFilesChanged, nextKind, multiRedApproved, ...examined }), examined.result);
+      if (problem !== null) problems.push(problem);
+    }
+  } finally {
+    if (hasWorktree) await $`git worktree remove --force ${worktree}`.nothrow().quiet();
+    await $`rm -rf ${temp}`.nothrow().quiet();
+  }
+  if (problems.length === 0) console.log(`\nAll ${checked.length} commits follow the red/green rules.`);
+  return problems;
+}
+
+async function main(): Promise<void> {
+  const problems = await checkBranch();
+  if (problems.length > 0) {
+    console.error(`\n${problems.length} commit(s) break the red/green rules:\n\n${problems.join("\n\n")}`);
+    process.exit(1);
+  }
+}
+
+if (import.meta.main) await main();
