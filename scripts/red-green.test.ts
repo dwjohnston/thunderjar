@@ -22,4 +22,9 @@ describe("commitKind", () => {
     expect(commitKind("♻️ Refactor format handling into a reporters map")).toBe("refactor");
     expect(commitKind("Test support: the fake Docker models environments")).toBe("other");
   });
+
+  test("ignores a marker the subject only mentions", () => {
+    expect(commitKind("🤖 Claude: Let a 🔴🔴 commit fail several tests")).toBe("other");
+    expect(commitKind("Explain 🟢 commits in AGENTS.md")).toBe("other");
+  });
 });
