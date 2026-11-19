@@ -3,7 +3,16 @@ import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { TMP_DIR } from "../testing/cli.ts";
 import { SQL } from "bun";
-import { type ContainerRunRecord, type ExecutionRecord, postgresStore, RunDataStoreError, sqliteStore, storeFileIn } from "./runDataStore.ts";
+import {
+  type ContainerRunRecord,
+  type ExecutionRecord,
+  mergePurge,
+  type PostrunPurge,
+  postgresStore,
+  RunDataStoreError,
+  sqliteStore,
+  storeFileIn,
+} from "./runDataStore.ts";
 
 const dirs: string[] = [];
 const dataDir = () => {
@@ -46,6 +55,22 @@ const containerRun = (executionId: string, permutation: number, iteration: numbe
   execution: { startedAt: 1793498400000, finishedAt: 1793498400250, exitCode: 0 },
   harnessResult: '{"model":"fake-model-small-001"}\n',
   result: {},
+});
+
+const PURGE: PostrunPurge = { purgedAt: "2026-11-19T09:00:00.000Z", from: "imageStore", reason: "held leaked keys" };
+
+describe("mergePurge", () => {
+  test("a run not purged before takes the purge as it is", () => {
+    expect(mergePurge(undefined, PURGE)).toEqual(PURGE);
+  });
+
+  test("a run purged before keeps the earlier time, every place, and the newer reason, or else the older", () => {
+    const later = { purgedAt: "2026-11-20T00:00:00.000Z", from: "daemon" } as const;
+    expect(mergePurge(PURGE, later)).toEqual({ purgedAt: PURGE.purgedAt, from: "both", reason: "held leaked keys" });
+    expect(mergePurge(later, PURGE)).toEqual({ ...PURGE, from: "both" });
+    expect(mergePurge(PURGE, { ...PURGE, reason: "again" })).toEqual({ ...PURGE, reason: "again" });
+    expect(mergePurge({ ...PURGE, from: "both" }, PURGE)).toEqual({ ...PURGE, from: "both" });
+  });
 });
 
 const errorOf = (error: unknown) => (error instanceof RunDataStoreError ? { path: error.path, message: error.message } : error);
@@ -132,6 +157,43 @@ describe("sqliteStore", () => {
     expect(await sqliteStore(file).containerRunsOf(id).catch(errorOf)).toEqual({ path: file, message: expect.stringMatching(new RegExp(`^container run ${id} 1-1: `)) });
   });
 
+  test("marks an execution's postrun images purged, all or only some, leaving other executions and the rest of each record as they were", async () => {
+    const file = storeFileIn(dataDir());
+    const store = sqliteStore(file);
+    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+    const other = "01kfa1bgz0bbbbbbbbbbbbbbbb";
+    for (const [p, i] of [[1, 1], [1, 2], [2, 1]] as const) await store.recordContainerRun(containerRun(id, p, i));
+    await store.recordContainerRun(containerRun(other, 1, 1));
+
+    const some = await store.markPostrunsPurged(id, PURGE, [{ permutation: 1, iteration: 2 }, { permutation: 9, iteration: 9 }]);
+    expect(some).toEqual([{ ...containerRun(id, 1, 2), postrunPurge: PURGE }]);
+    expect((await sqliteStore(file).containerRunsOf(id)).map((run) => run.postrunPurge)).toEqual([undefined, PURGE, undefined]);
+
+    expect(await store.markPostrunsPurged(id, PURGE)).toHaveLength(3);
+    expect(await sqliteStore(file).containerRunsOf(id)).toEqual([[1, 1], [1, 2], [2, 1]].map(([p, i]) => ({ ...containerRun(id, p!, i!), postrunPurge: PURGE })));
+    expect(await store.containerRunsOf(other)).toEqual([containerRun(other, 1, 1)]);
+  });
+
+  test("marking runs purged again is harmless: the purges merge", async () => {
+    const store = sqliteStore(storeFileIn(dataDir()));
+    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+    await store.recordContainerRun(containerRun(id, 1, 1));
+
+    await store.markPostrunsPurged(id, PURGE);
+    await store.markPostrunsPurged(id, PURGE);
+    expect((await store.containerRunsOf(id))[0]!.postrunPurge).toEqual(PURGE);
+
+    await store.markPostrunsPurged(id, { purgedAt: "2026-11-20T00:00:00.000Z", from: "daemon" });
+    expect((await store.containerRunsOf(id))[0]!.postrunPurge).toEqual({ ...PURGE, from: "both" });
+  });
+
+  test("marking runs purged in a missing file marks none, and doesn't create it", async () => {
+    const file = storeFileIn(dataDir());
+
+    expect(await sqliteStore(file).markPostrunsPurged("01kfa1bgz0aaaaaaaaaaaaaaaa", PURGE)).toEqual([]);
+    expect(await Bun.file(file).exists()).toBe(false);
+  });
+
   test("a file that isn't a store is a RunDataStoreError naming it", async () => {
     const file = storeFileIn(dataDir());
     await Bun.write(file, "not a database, just some text that is long enough to be a header and more");
@@ -191,6 +253,27 @@ describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
     const runs = await reopened.containerRunsOf(id);
     expect(runs.map((record) => [record.permutation, record.iteration])).toEqual([[1, 2], [1, 10], [2, 1], [10, 1]]);
     expect(runs[2]).toEqual({ ...containerRun(id, 2, 1), postrunImage: "again" });
+  });
+
+  test("marks an execution's postrun images purged, all or only some; marking again merges", async () => {
+    const url = await freshDatabase();
+    const store = postgresStore(url, "test db");
+    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+    const other = "01kfa1bgz1aaaaaaaaaaaaaaaa";
+    for (const [p, i] of [[1, 1], [1, 2], [2, 1]] as const) await store.recordContainerRun(containerRun(id, p, i));
+    await store.recordContainerRun(containerRun(other, 1, 1));
+
+    expect(await store.markPostrunsPurged(id, PURGE, [{ permutation: 1, iteration: 2 }])).toEqual([{ ...containerRun(id, 1, 2), postrunPurge: PURGE }]);
+    expect((await store.containerRunsOf(id)).map((run) => run.postrunPurge)).toEqual([undefined, PURGE, undefined]);
+
+    expect(await store.markPostrunsPurged(id, { purgedAt: "2026-11-20T00:00:00.000Z", from: "daemon" })).toHaveLength(3);
+    const reopened = postgresStore(url, "test db");
+    expect((await reopened.containerRunsOf(id)).map((run) => run.postrunPurge)).toEqual([
+      { purgedAt: "2026-11-20T00:00:00.000Z", from: "daemon" },
+      { ...PURGE, from: "both" },
+      { purgedAt: "2026-11-20T00:00:00.000Z", from: "daemon" },
+    ]);
+    expect(await reopened.containerRunsOf(other)).toEqual([containerRun(other, 1, 1)]);
   });
 });
 
