@@ -26,6 +26,7 @@ import type {
 } from "../store/runDataStore.ts";
 import { agentOutput, head, storedStderr } from "./agentOutput.ts";
 import { runInContainer } from "./containerRun.ts";
+import type { SecretSearch } from "./secretSearch.ts";
 import { containerName, executionContainerPrefix, recordedPostrunImage, storedPostrunImage, storedPrerunImage } from "./images.ts";
 import { type PullHooks, pullIntoRuntime, type PushHooks, pushToStore } from "./imageStore.ts";
 import { inParallel } from "./inParallel.ts";
@@ -118,6 +119,7 @@ function containerRunRecord(
   last: RecordedTurn,
   tokenCosts: TokenCosts,
   postrunImage: string,
+  secrets?: SecretSearch,
 ): ContainerRunRecord {
   const { harness } = parsePair(permutation.harnessModel);
   return {
@@ -149,6 +151,8 @@ function containerRunRecord(
     reply: last.reply,
     tokenCosts,
     result: {},
+    // Only when one was found: a clean run's record is as it was before secrets were looked for.
+    ...(secrets !== undefined && "found" in secrets && secrets.found.length > 0 && { secretsFound: secrets.found }),
   };
 }
 
@@ -313,7 +317,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     const at = { executionId, permutation: permutation.number, iteration: iteration.number };
     log.info({ ...at, permutationHash: permutation.permutation.hash }, "container run starting");
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-    const { execution, harnessResult: resultFile, stderr, committed } = await runInContainer({
+    const { execution, harnessResult: resultFile, stderr, committed, secrets } = await runInContainer({
       prerunImage: prerunImageOf(permutation),
       postrunImage: iteration.postrunImage,
       env: permutation.env,
@@ -332,7 +336,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     });
     // Where the postrun image is kept: the image store's reference, as the local name lives only on the runtime.
     const stored = imageStore === null ? undefined : storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);
-    const record = containerRunRecord(run, permutation, iteration, execution, ran, tokenCosts, recordedPostrunImage(iteration.postrunImage, stored));
+    const record = containerRunRecord(run, permutation, iteration, execution, ran, tokenCosts, recordedPostrunImage(iteration.postrunImage, stored), secrets);
     const { harnessResult, reply } = record;
     await store.recordContainerRun(record);
     // Timed out, its exit code is null.

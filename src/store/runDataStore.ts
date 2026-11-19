@@ -144,6 +144,11 @@ export type ContainerRunRecord = {
    * Its measures stay valid; they just can't be retaken. Absent if it never was.
    */
   postrunPurge?: PostrunPurge;
+  /**
+   * The run's secret variables whose values were found in files of its postrun image, by name,
+   * never value. Absent if none was, and from runs recorded before they were looked for.
+   */
+  secretsFound?: FoundSecret[];
 };
 
 /** Where a postrun image was deleted from: the local Docker daemon, the image store's registry, or both. */
@@ -177,6 +182,9 @@ function markedRuns(runs: ContainerRunRecord[], purge: PostrunPurge, only?: read
   const chosen = only === undefined ? runs : runs.filter((run) => only.some((key) => key.permutation === run.permutation && key.iteration === run.iteration));
   return chosen.map((run) => ({ ...run, postrunPurge: mergePurge(run.postrunPurge, purge) }));
 }
+
+/** A secret found in a postrun image's files: its variable's name, how many files hold it, and the first of their paths. */
+export type FoundSecret = { name: string; files: number; paths: string[] };
 
 export interface RunDataStore {
   /** Records `record`, replacing any recorded for the same execution. */

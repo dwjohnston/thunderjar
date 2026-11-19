@@ -110,6 +110,7 @@ const PHASE_LABELS: Record<string, string> = {
   agent: "running agents",
   collect: "reading what agents left",
   commit: "committing postrun images",
+  secretSearch: "searching postrun images for secrets",
   pushPostrun: "pushing postrun images",
   measure: "measuring",
 };

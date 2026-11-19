@@ -12,6 +12,7 @@ import {
 } from "../docker/docker.ts";
 import type { Execution } from "../store/runDataStore.ts";
 import { RESULT_PATH, RUN_PATH, START_MARKER, STDERR_PATH, timedRun } from "./runScript.ts";
+import { type SecretSearch, searchableSecrets, searchForSecrets } from "./secretSearch.ts";
 import { type Timer, untimed } from "./timings.ts";
 
 export { NOW_MS_FUNCTION, RUN_PATH, STDERR_PATH } from "./runScript.ts";
@@ -45,6 +46,8 @@ export type ContainerRunOutcome = {
   stderr: string | null;
   /** Whether its container was committed into its postrun image: not if it never started. */
   committed: boolean;
+  /** What searching its postrun image's files for its secret values came to. Absent if it had none to search for. */
+  secrets?: SecretSearch;
 };
 
 /** Whether `value` is plausibly ms since the epoch: from 2001-09-09 (13 digits) up to 2286. */
@@ -121,7 +124,12 @@ export async function runInContainer(run: ContainerRun): Promise<ContainerRunOut
       (await readContainerFile(run.container, STDERR_PATH, runtime)) ?? null,
     ] as const);
     await time("commit", () => commitContainer(run.container, run.postrunImage, run.prerunImage, runtime, run.testCaseEnv));
-    return { execution, harnessResult, stderr, committed: true };
+    // Before the postrun image is pushed: in the files it would push, for the values of the
+    // variables the agent was given by name. Not at all, and not timed, if there are none.
+    const secretNames = searchableSecrets([...run.env, ...(run.secretEnv ?? [])]);
+    const secrets =
+      secretNames.length === 0 ? undefined : await time("secretSearch", () => searchForSecrets(run.postrunImage, `${run.container}-secrets`, secretNames, runtime));
+    return { execution, harnessResult, stderr, committed: true, ...(secrets !== undefined && { secrets }) };
   } finally {
     await removeContainer(run.container, runtime).catch(() => {});
   }
