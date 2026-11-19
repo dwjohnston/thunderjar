@@ -163,7 +163,7 @@ These need configuring per harness, so they're harder:
     2. Names are checked as the test case's are, e.g. an unknown code state fails before anything builds.
     3. `plan` and `build` take the same flags, so an override can be previewed.
     4. The execution records the overrides, so `show` and `executions` say it wasn't the test case as written.
-    5. Open question: `--task`. Initial prompts and measurements belong to the task, so changing it changes what the test case is.
+    5. Out of scope: `--task`.
 22. Image build status in the run table
     - https://github.com/dwjohnston/thunderjar/issues/157
 23. `doctor` checks that each harness's API key is set.
