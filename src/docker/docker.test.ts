@@ -101,6 +101,26 @@ test("a container runs its script, its files can be read, and it can be committe
   expect(await docker.containers()).toEqual([]);
 });
 
+test("a variable a container was run with is blank in its postrun image, and its value on no command line but `docker run`", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
+  Object.assign(Bun.env, docker.env, { TJ_TEST_SECRET: "secret-from-env" });
+
+  try {
+    await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "true", {
+      env: ["TJ_TEST_SECRET"],
+      runOptions: ["-e", "RUN_OPTION_SECRET=secret-from-run-options"],
+    });
+    await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa");
+  } finally {
+    delete Bun.env.TJ_TEST_SECRET;
+  }
+
+  expect(await docker.envOf("tj-postrun:x-1-1")).toEqual(["TJ_TEST_SECRET=", "RUN_OPTION_SECRET="]);
+  const commands = (await docker.commands()).filter((command) => !command.startsWith("docker run"));
+  expect(commands.join("\n")).not.toContain("secret");
+  await removeContainer("tj-run-1");
+});
+
 test("runContainer throws a DockerContainerError with the reason when its script fails", async () => {
   await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
   Object.assign(Bun.env, docker.env);
