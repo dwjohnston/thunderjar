@@ -17,7 +17,7 @@ import { declareTestCase } from "thunderjar-published";
 export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["thunderjar-nested-skills-root"],
-  promptSet: ["none", "nested-skills-reading-files", "nested-skills-analysing-a-ts", "nested-skills-required-format"],
+  promptSet: ["none", "nested-skills-reading-files", "nested-skills-analysing-a-ts", "nested-skills-required-format", "nested-skills-read-tool"],
   harnessModel: [
     "opencode-1.19.5/openrouter/anthropic/claude-haiku-5.5",
     "opencode-1.19.5/openrouter/anthropic/claude-sonnet-5.5",
