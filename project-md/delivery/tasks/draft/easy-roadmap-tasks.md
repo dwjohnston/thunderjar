@@ -13,7 +13,7 @@ Humans: add your notes here
 
 Small, independent tasks from `project-md/roadmap.md`, easiest first in each group.
 
-Quick wins: 19, 23. Prerequisites that unblock the most later work: 11, 1, 3–5.
+Quick wins: 19. Prerequisites that unblock the most later work: 11, 1, 3–5.
 
 ## Helper functions
 
@@ -166,7 +166,6 @@ These need configuring per harness, so they're harder:
     5. Out of scope: `--task`.
 22. Image build status in the run table
     - https://github.com/dwjohnston/thunderjar/issues/157
-23. `doctor` checks that each harness's API key is set.
 24. `purge capture`
     - Deletes captured sessions, in both stores: `refs/thunderjar/capture/<session>/*` and the `thunderjar/capture/<session>` branches.
     - A second command in the `purge` group, beside `purge image`, with the same shape.
