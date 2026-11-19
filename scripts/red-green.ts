@@ -156,7 +156,7 @@ export function judge(facts: Facts): string[] {
   if (kind === "green" && testFilesChanged.length > 0) {
     problems.push(`only 🔴, 🔴🔴 and ♻️ commits may change test files, but this one changes:\n${list(testFilesChanged)}`);
   }
-  if (kind === "green" && failing.length > 0) {
+  if ((kind === "green" || kind === "refactor") && failing.length > 0) {
     problems.push(`expected every test to pass, but ${failing.length} failed:\n${list(failing)}`);
   }
   if (kind !== "red" && kind !== "multi-red") return problems;
