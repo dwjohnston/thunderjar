@@ -14,7 +14,10 @@
  */
 export type CommitKind = "red" | "multi-red" | "green" | "refactor" | "other";
 
+const MARKERS: Record<string, CommitKind> = { "🔴🔴": "multi-red", "🔴": "red", "🟢": "green", "♻️": "refactor", "♻": "refactor" };
+
 /** What a commit's subject says it is. */
-export function commitKind(_subject: string): CommitKind {
-  return "other";
+export function commitKind(subject: string): CommitKind {
+  const marker = /(🔴🔴|🔴|🟢|♻️|♻)/u.exec(subject)?.[1];
+  return marker === undefined ? "other" : (MARKERS[marker] ?? "other");
 }
