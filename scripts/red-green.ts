@@ -71,6 +71,21 @@ export function summaryFailCount(output: string): number {
 }
 
 /** The lines a `git diff -U0` adds or changes, per file, in the new version, as [first, last]. */
-export function changedLines(_diff: string): Map<string, [number, number][]> {
-  return new Map();
+export function changedLines(diff: string): Map<string, [number, number][]> {
+  const changed = new Map<string, [number, number][]>();
+  let file = "";
+  for (const line of diff.split("\n")) {
+    const path = /^\+\+\+ (?:b\/)?(.*)$/.exec(line)?.[1];
+    if (path !== undefined) {
+      file = path;
+      continue;
+    }
+    const hunk = /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/.exec(line);
+    if (hunk === null || file === "/dev/null") continue;
+    const start = Number(hunk[1]);
+    const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    // A pure deletion touches the line it follows.
+    changed.set(file, [...(changed.get(file) ?? []), [start, Math.max(start, start + count - 1)]]);
+  }
+  return changed;
 }
