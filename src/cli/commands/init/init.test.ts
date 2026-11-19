@@ -94,7 +94,7 @@ export default declareTestCase({
     expect(await read(copy.dir, "test-cases/compare-harnesses.ts")).toBe(`import { declareTestCase } from "thunderjar";
 
 // The same model in three harnesses: Haiku 5.5 in Claude Code, GitHub Copilot CLI and OpenCode.
-// Each harness needs its own key: ANTHROPIC_API_KEY, COPILOT_GITHUB_TOKEN and OPENCODE_API_KEY.
+// Each harness needs its own key: CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY, COPILOT_GITHUB_TOKEN and OPENCODE_API_KEY.
 export default declareTestCase({
   baseImage: ["node20"],
   codeState: ["baseline"],

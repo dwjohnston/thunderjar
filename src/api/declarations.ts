@@ -268,9 +268,11 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
   /**
    * @docs
    * @name requiredEnv
-   * @type {string[]}
+   * @type {(string | { oneOf: string[] })[]}
    * @description
-   * The names of the environment variables the agent needs, e.g. its API key. Each is passed into
+   * The names of the environment variables the agent needs, e.g. its API key. An entry
+   * `{ oneOf: [...] }` needs any one of them, e.g. a subscription token or an API key: the first
+   * that's set is passed, and only that one, and the run's record names it. Each is passed into
    * this harness's agent containers only, as `docker run -e NAME`, so its value comes from the shell
    * that runs Thunderjar, and is never on a command line or in a log. Its postrun image doesn't
    * keep it: when the container is committed, every variable its prerun image doesn't set is
@@ -278,8 +280,11 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * way, by name. `plan` and `run` stop if one is unset. If the agent writes its value into a
    * file, the postrun image's files are searched for it before it's pushed, and `run` warns.
    */
-  requiredEnv?: string[];
+  requiredEnv?: RequiredEnv[];
 };
+
+/** A variable a harness needs, by name, or any one of several, the first that's set. */
+export type RequiredEnv = string | { oneOf: string[] };
 
 export function declareHarness<C = undefined, R extends ResolvedOf = undefined>(declaration: HarnessDeclaration<C, R>): HarnessDeclaration<C, R> {
   return declared("declareHarness", declaration);

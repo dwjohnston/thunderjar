@@ -114,6 +114,12 @@ export type ContainerRunRecord = {
   env?: Record<string, string>;
   /** The names of its test case's `secretEnv`, never their values. Absent if it gave none, and from runs recorded before test cases could. */
   secretEnv?: string[];
+  /**
+   * The names of the variables its harness's `requiredEnv` gave its agent, never their values: of
+   * a `{ oneOf }`, the one that was set, e.g. whether it ran on a subscription token or an API key.
+   * Absent if it gave none, and from runs recorded before they were.
+   */
+  harnessEnv?: string[];
   execution: Execution;
   /** The text of the result file the harness's `cli` left, or null if it left none. */
   harnessResult: string | null;

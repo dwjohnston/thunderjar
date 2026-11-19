@@ -453,6 +453,22 @@ Harness      fake-harness-beta 1.0.0
     });
   });
 
+  test("<container run> recorded with the variables its harness gave its agent shows their names only", async () => {
+    const data = await copyOfStore();
+    changeStore(data, "UPDATE container_runs SET record = json_set(record, '$.harnessEnv', json('[\"CLAUDE_CODE_OAUTH_TOKEN\"]')) WHERE execution_id = $id AND permutation = 2", {
+      id: TWO_HARNESSES,
+    });
+
+    const { stdout } = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "2-1", "--data-dir", data]);
+
+    expect(stdout).toContain(`
+Environment
+  CLAUDE_CODE_OAUTH_TOKEN  the harness's, from the shell: not recorded
+
+Harness      fake-harness-beta 1.0.0
+`);
+  });
+
   test("<container run> recorded with secrets found in its postrun image says which, where, and that they're exposed if it was pushed; one without says nothing", async () => {
     const data = await copyOfStore();
     const found = [

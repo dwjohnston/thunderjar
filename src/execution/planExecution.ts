@@ -29,7 +29,7 @@ export type PlannedPermutation = {
   number: number;
   permutation: HashedPermutation;
   prerunImage: string;
-  /** The names of the environment variables its harness needs, passed into each of its containers. */
+  /** The names of the environment variables its harness needs, of each `oneOf` the one set, passed into each of its containers. */
   env: string[];
   /** The test case's `env`: variables set, with these values, in each of its agent containers. */
   testCaseEnv: Record<string, string>;
