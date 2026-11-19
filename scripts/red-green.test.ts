@@ -121,4 +121,8 @@ describe("wasChanged", () => {
   test("is true when a changed line is between the test's start and the next block's", () => {
     expect(wasChanged(at(10), starts, changedLines(DIFF))).toBe(true);
   });
+
+  test("is false when the changes are in other tests", () => {
+    expect(wasChanged(at(5), starts, changedLines(DIFF))).toBe(false);
+  });
 });
