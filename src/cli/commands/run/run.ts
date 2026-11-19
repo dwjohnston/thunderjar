@@ -25,7 +25,7 @@ import { envEntry } from "../../format.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError as error, printJson, printWarning } from "../../output.ts";
 import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.ts";
-import { runDisplay, showTimings, showUnclean, storeFailure } from "./runDisplay.ts";
+import { runDisplay, showSecrets, showTimings, showUnclean, storeFailure } from "./runDisplay.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
 const FIELD_INDENT = "    ";
@@ -293,6 +293,7 @@ async function run(
     const { execution: record, recordedIn: where, containerRuns } = await executing;
     display.stop();
     for (const line of showUnclean(display.unclean, facts.containers, paint)) print(line);
+    for (const line of showSecrets(display.secrets, facts.containers, paint)) print(line);
     print(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
     if (json) printJson({ execution: record, recordedIn: where, containerRuns });
     if (record.status === "failed") process.exitCode = 1;
