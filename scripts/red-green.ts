@@ -151,6 +151,10 @@ export function judge(facts: Facts): string[] {
   const failing = result?.failing.map((test) => test.id) ?? [];
   if (kind !== "red") return problems;
 
+  if (failing.length === 0) {
+    problems.push("expected a failing test, but none failed. A Docker test needs --docker.");
+    return problems;
+  }
   if (failing.length > 1) {
     problems.push(`expected exactly one failing test, but ${failing.length} failed. Split them into 🔴/🟢 cycles:\n${list(failing)}`);
   }
