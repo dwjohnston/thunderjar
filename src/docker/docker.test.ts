@@ -132,6 +132,20 @@ test("a variable of the prerun image overridden at run time has the prerun image
   await removeContainer("tj-run-1");
 });
 
+/** Values a Dockerfile's ENV would mangle, unless quoted and escaped. */
+const AWKWARD_VALUE = `he said "hi" to $HOME and \${USER:-x}, 'quoted', a \\ backslash, \`ls\`, 100% and\ta tab`;
+
+test("a prerun image's value with quotes, `$` and a backslash comes back byte for byte in the postrun image", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"], env: { "tj-prerun:aaaaaaaa": [`ODD=${AWKWARD_VALUE}`] } });
+  Object.assign(Bun.env, docker.env);
+
+  await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "true");
+  await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa");
+
+  expect(await docker.envOf("tj-postrun:x-1-1")).toEqual([`ODD=${AWKWARD_VALUE}`]);
+  await removeContainer("tj-run-1");
+});
+
 test("runContainer throws a DockerContainerError with the reason when its script fails", async () => {
   await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
   Object.assign(Bun.env, docker.env);
