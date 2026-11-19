@@ -203,4 +203,10 @@ describe("judge", () => {
     expect(judge(facts({ ...multi, multiRedApproved: true, changedFailing: ["one"] })).join("\n")).toContain("- two");
     expect(judge(facts({ ...multi, multiRedApproved: true, addsTests: true })).join("\n")).toContain("adds tests");
   });
+
+  test("a 🟢 commit touches no test file, and passes", () => {
+    expect(judge(facts({ kind: "green" }))).toEqual([]);
+    expect(judge(facts({ kind: "green", testFilesChanged: ["a.test.ts"] })).join("\n")).toContain("only 🔴, 🔴🔴 and ♻️ commits may change test files");
+    expect(judge(facts({ kind: "green", result: { failing: failing("old"), unattributed: 0 } })).join("\n")).toContain("1 failed");
+  });
 });
