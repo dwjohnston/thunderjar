@@ -23,6 +23,7 @@ import {
   summaryFailCount,
   type TestCase,
   testCases,
+  testsToRun,
   wasChanged,
 } from "./red-green.ts";
 
@@ -218,5 +219,16 @@ describe("judge", () => {
   test("an unmarked commit may not change test files", () => {
     expect(judge(facts({ kind: "other", result: null }))).toEqual([]);
     expect(judge(facts({ kind: "other", result: null, testFilesChanged: ["a.test.ts"] })).join("\n")).toContain("only 🔴, 🔴🔴 and ♻️ commits may change test files");
+  });
+});
+
+describe("testsToRun", () => {
+  test("runs only the test files a commit changes, or for a 🟢 commit, those of the 🔴 before it", () => {
+    const red = { kind: "red" as const, testFilesChanged: ["a.test.ts", "a.result.json"] };
+    expect(testsToRun(red, null)).toEqual(["a.test.ts"]);
+    expect(testsToRun({ kind: "refactor", testFilesChanged: ["b.test.ts"] }, red)).toEqual(["b.test.ts"]);
+    expect(testsToRun({ kind: "green", testFilesChanged: [] }, red)).toEqual(["a.test.ts"]);
+    expect(testsToRun({ kind: "green", testFilesChanged: [] }, { kind: "refactor", testFilesChanged: ["b.test.ts"] })).toEqual([]);
+    expect(testsToRun({ kind: "other", testFilesChanged: [] }, red)).toEqual([]);
   });
 });
