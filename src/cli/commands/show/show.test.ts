@@ -479,6 +479,26 @@ Harness      fake-harness-beta 1.0.0
     expect(without.stdout).not.toContain("Secrets");
   });
 
+  test("<execution> with secrets found in a postrun image says which, in which run, and --json carries them", async () => {
+    const data = await copyOfStore();
+    const found = [{ name: "OPENROUTER_API_KEY", files: 1, paths: ["/workspace/.env"] }];
+    changeStore(data, "UPDATE container_runs SET record = json_set(record, '$.secretsFound', json($found)) WHERE execution_id = $id AND permutation = 2", {
+      id: TWO_HARNESSES,
+      found: JSON.stringify(found),
+    });
+
+    const table = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "--data-dir", data]);
+    const json = JSON.parse((await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "--data-dir", data, "--json"])).stdout);
+
+    expect(table.stdout).toContain(`
+! Postrun images that hold a secret's value in their files:
+  2-1  OPENROUTER_API_KEY  1 file: /workspace/.env
+  If one was pushed, treat its secrets as exposed, and rotate them.
+`);
+    expect(json.permutations[1].secretsFound).toEqual([{ run: "2-1", ...found[0] }]);
+    expect(json.permutations[0]).not.toHaveProperty("secretsFound");
+  });
+
   test("--data-dir reads a container run outside any project", async () => {
     const store = `${scenario("0203")}/.thunderjar/.data`;
 
