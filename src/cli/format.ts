@@ -27,6 +27,12 @@ export function runTotals(runs: Pick<ContainerRunRecord, "tokenCosts">[]): RunTo
   return { runs: runs.length, tokens: sum(tokens), withTokens: tokens.length, costUsd: sum(costs), withCost: costs.length };
 }
 
+/**
+ * A variable and its value, `NAME=value`, the value in JSON's quotes if it has anything a list of
+ * them, comma-separated, could misread: a space, a comma, a quote, a backslash or a `$`.
+ */
+export const envEntry = (name: string, value: string) => `${name}=${/^[\w./:@%+=-]*$/.test(value) ? value : JSON.stringify(value)}`;
+
 /** `ms` as minutes and seconds, e.g. `0:31`, or with hours once it's that long, e.g. `1:02:05`. */
 export function duration(ms: number): string {
   const seconds = Math.round(ms / 1000);

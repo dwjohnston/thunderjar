@@ -52,6 +52,21 @@ It lives at `.thunderjar/test-cases/<name>.ts`. Each array is a dimension: every
 
 The .thunderjar/AGENTS.md should include instructions about what the default harness model pair should be. 
 
+#### Environment variables
+
+Two optional fields give the agent's containers environment variables.
+
+```ts
+  env: { NODE_ENV: "test" },     // not secret: the value is written here, and recorded with each run
+  secretEnv: ["DATABASE_URL"],   // name only: the value comes from the shell that runs thunderjar
+```
+
+✅ **Do** put anything secret, e.g. a key or a URL with a password, in `secretEnv`.
+
+❌ **Don't** add them for the harness's own API key: its `requiredEnv` already passes it.
+
+**Why:** `env`'s values are shown by `plan`, recorded with each run and kept in the postrun image. A `secretEnv` value is never written down, and `plan` and `run` stop if it's unset.
+
 
 
 ### 2. Write the task

@@ -13,6 +13,7 @@ import { loadDeclaration, type Problem, problemsError } from "../config/loader.t
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
 import { type HashOptions, hashPermutations } from "./hashPermutations.ts";
 import { requiredEnvOf } from "../config/requiredEnv.ts";
+import { envOf, secretEnvOf } from "../config/testCaseEnv.ts";
 import { DEFAULT_IMAGE_PREFIX, postrunImage, prerunImage } from "./images.ts";
 
 export { PROMPT_PATH, RESULT_PATH } from "./runScript.ts";
@@ -30,6 +31,10 @@ export type PlannedPermutation = {
   prerunImage: string;
   /** The names of the environment variables its harness needs, passed into each of its containers. */
   env: string[];
+  /** The test case's `env`: variables set, with these values, in each of its agent containers. */
+  testCaseEnv: Record<string, string>;
+  /** The test case's `secretEnv`: more names passed into each of its agent containers, as `env` is. */
+  secretEnv: string[];
   /** Its base image's `runOptions`, added to the `docker run` of each of its agent containers. */
   runOptions: string[];
   /** How long its run script may run, from its initial prompt, before it's killed. */
@@ -99,6 +104,8 @@ export async function planExecution(
         permutation,
         prerunImage: prerunImage(permutation.imageHash, imagePrefix),
         env: requiredEnvOf(harnessed.harness),
+        testCaseEnv: envOf(testCase),
+        secretEnv: secretEnvOf(testCase),
         runOptions: harnessed.baseImage.runOptions ?? [],
         timeoutSeconds: harnessed.initialPrompt.timeoutSeconds,
         harness: harnessed.harness,

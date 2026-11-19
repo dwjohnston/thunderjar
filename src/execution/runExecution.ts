@@ -112,7 +112,7 @@ type RecordedTurn = { harnessResult: string | null; harnessStderr: string | null
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
 function containerRunRecord(
   { plan, name, testCase }: ExecutionToRun,
-  { number: permutationNumber, permutation, version }: PlannedPermutation,
+  { number: permutationNumber, permutation, version, testCaseEnv, secretEnv }: PlannedPermutation,
   iteration: PlannedIteration,
   execution: Execution,
   last: RecordedTurn,
@@ -140,6 +140,9 @@ function containerRunRecord(
       ]),
     ) as ContainerRunRecord["parameters"],
     harnessModel: { harness, version, modelId: permutation.modelId },
+    // Only when the test case gives them. A secret's name, never its value.
+    ...(Object.keys(testCaseEnv).length > 0 && { env: testCaseEnv }),
+    ...(secretEnv.length > 0 && { secretEnv }),
     execution,
     harnessResult: last.harnessResult,
     harnessStderr: last.harnessStderr,
@@ -315,6 +318,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       postrunImage: iteration.postrunImage,
       env: permutation.env,
       runOptions: permutation.runOptions,
+      testCaseEnv: permutation.testCaseEnv,
+      secretEnv: permutation.secretEnv,
       timeoutSeconds: permutation.timeoutSeconds,
       container,
       runtime,

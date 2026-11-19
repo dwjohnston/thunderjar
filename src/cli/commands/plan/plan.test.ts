@@ -333,6 +333,21 @@ describe("0402 broken declarations", () => {
       [`${parameter("harnessModels/fake-harness-bad-env/index.ts")}: requiredEnv: "API KEY", 3 are not environment variable names`],
     ],
     [
+      "a test case whose env and secretEnv have bad names, a value that isn't a string, and one with a newline",
+      "bad-env",
+      [
+        `${testCase("bad-env")}: env: "NOT OK" is not an environment variable name`,
+        `${testCase("bad-env")}: env.COUNT: must be a string, got 3`,
+        `${testCase("bad-env")}: env.MULTI: must be on one line: a postrun image can't keep a value with a newline`,
+        `${testCase("bad-env")}: secretEnv: "2FA" is not an environment variable name`,
+      ],
+    ],
+    [
+      "a test case naming a variable in both env and secretEnv",
+      "env-in-both",
+      [`${testCase("env-in-both")}: secretEnv: "DATABASE_URL" is in env too. Give a variable in env, with its value, or in secretEnv, from the shell, not both`],
+    ],
+    [
       "a measurement not wrapped in declareMeasurement",
       "unwrapped-measurement",
       [`${measurement("unwrapped-measurement/measurements/isPrimeTsExists.ts")}: default export is not wrapped in declareMeasurement(...).`],
@@ -434,6 +449,62 @@ describe("0210 build secrets", () => {
 
     expect(one.exitCode).toBe(0);
     expect(one.stdout).toBe(other.stdout);
+  });
+});
+
+describe("0206 test-case-env", () => {
+  const SECRET = { FAKE_TEST_CASE_SECRET: "secret-test-case-value" };
+
+  test("shows the test case's env with its values, an awkward one quoted, and its secretEnv by name only", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["plan", "test-case-env"], { env: { ...docker.env, ...SECRET } });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`baseImage:     alpine
+codeState:     baseline
+promptSet:     snerk
+harnessModel:  fake-env-reader/fake-model-small-001
+task:          sandbox
+initialPrompt: plain
+env:           FAKE_TEST_CASE_SETTING=test, FAKE_TEST_CASE_AWKWARD="kept: \\"quoted\\", $HOME, a \\\\ backslash and 100%"
+secretEnv:     FAKE_TEST_CASE_SECRET
+
+Matrix shape: 1/1/1/1/1 (1 permutation)
+
+ 1  alpine | baseline | snerk | fake-env-reader/fake-model-small-001 | plain   f8149432  missing
+`);
+  });
+
+  test("--json: env with its values, secretEnv by name; the secret's value is nowhere", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, exitCode } = await thunderjar(scenario("0206"), ["plan", "test-case-env", "--json"], { env: { ...docker.env, ...SECRET } });
+
+    expect(exitCode).toBe(0);
+    const plan = JSON.parse(stdout);
+    expect(plan.env).toEqual({ FAKE_TEST_CASE_SETTING: "test", FAKE_TEST_CASE_AWKWARD: 'kept: "quoted", $HOME, a \\ backslash and 100%' });
+    expect(plan.secretEnv).toEqual(["FAKE_TEST_CASE_SECRET"]);
+    expect(stdout).not.toContain(SECRET.FAKE_TEST_CASE_SECRET);
+  });
+
+  test("stops if a secretEnv variable is unset or empty", async () => {
+    for (const env of [{}, { FAKE_TEST_CASE_SECRET: "" }] as Record<string, string>[]) {
+      const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["plan", "test-case-env"], { env });
+
+      expect(stdout).toBe("");
+      expect(stderr).toBe("Error: The test case needs FAKE_TEST_CASE_SECRET, in its secretEnv, which is not set.\nExport it in the shell that runs thunderjar.\n");
+      expect(exitCode).toBe(1);
+    }
+  });
+
+  test("a test case without them has none, in --json too", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout } = await thunderjar(scenario("0201"), ["plan", "example", "--json"], { env: docker.env });
+
+    expect(JSON.parse(stdout)).toMatchObject({ env: {}, secretEnv: [] });
   });
 });
 

@@ -110,6 +110,10 @@ export type ContainerRunRecord = {
    * the model's name in runs recorded before pairs named model IDs, `<harness>@<version>/<model>`.
    */
   harnessModel: { harness: string; version: string; modelId: string; model?: string };
+  /** Its test case's `env`, the variables its agent container was given, with their values. Absent if it gave none, and from runs recorded before test cases could. */
+  env?: Record<string, string>;
+  /** The names of its test case's `secretEnv`, never their values. Absent if it gave none, and from runs recorded before test cases could. */
+  secretEnv?: string[];
   execution: Execution;
   /** The text of the result file the harness's `cli` left, or null if it left none. */
   harnessResult: string | null;

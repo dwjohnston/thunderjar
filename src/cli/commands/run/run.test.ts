@@ -11,7 +11,7 @@ import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 import type { ExecutionSummary } from "../../../execution/executionSummary.ts";
-import { ALPHA_JSON, ALPHA_MEASURES, AWKWARD, BETA_MEASURES, ISO, KEY, SHA, alphaPermutation, containerCommands, dataDir, filesIn, measure, measured, permutation, postgresSchema, readStore, removeDataDirs, usePostgres } from "./runTestSupport.ts";
+import { ALPHA_JSON, ALPHA_MEASURES, AWKWARD, BETA_MEASURES, ISO, KEY, SHA, TEST_CASE_SECRET, alphaPermutation, containerCommands, dataDir, filesIn, measure, measured, permutation, postgresSchema, readStore, removeDataDirs, usePostgres } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
 
@@ -614,10 +614,28 @@ describe("run --json", () => {
         hash: expect.stringMatching(/^[0-9a-f]{64}$/),
         prerunImage: "thunderjar-prerun:32a1d048",
         env: ["FAKE_HARNESS_KEY"],
+        testCaseEnv: {},
+        secretEnv: [],
         runOptions: [],
         timeoutSeconds: expect.any(Number),
         iterations: [{ number: 1, postrunImage: expect.stringContaining("thunderjar-postrun:"), command: "sh /thunderjar/thunderjar-run.sh" }],
       },
     ]);
+  });
+
+  test("0206 test-case-env --dry-run: the test case's env with its values, and its secretEnv by name", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "test-case-env", "--dry-run", "--json"], { env: TEST_CASE_SECRET });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toContain(TEST_CASE_SECRET.FAKE_TEST_CASE_SECRET);
+    const [permutation] = JSON.parse(stdout).permutations;
+    expect(permutation).toEqual(
+      expect.objectContaining({
+        env: [],
+        testCaseEnv: { FAKE_TEST_CASE_SETTING: "test", FAKE_TEST_CASE_AWKWARD: 'kept: "quoted", $HOME, a \\ backslash and 100%' },
+        secretEnv: ["FAKE_TEST_CASE_SECRET"],
+      }),
+    );
   });
 });

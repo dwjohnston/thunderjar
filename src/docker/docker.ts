@@ -286,7 +286,9 @@ async function watchFor(stream: ReadableStream<Uint8Array>, marker: string, onSe
  * the local image `image`, and leaves the container once it stops. Its output is discarded. Each
  * variable named in `env` is passed in with `-e NAME`, so Docker copies its value from Thunderjar's
  * own environment, and the value is never on a command line. `runOptions` are more `docker run`
- * options, before the image.
+ * options, before the image. `setEnv`'s variables, which aren't secret, are passed with their
+ * values, `-e NAME=value`, and `secretEnv`'s by name, as `env`'s are, both after `runOptions`, so
+ * they win over a variable `runOptions` also sets.
  *
  * If it's still running after `timeoutSeconds`, it's killed with `docker kill`, which stops every
  * process in it, whatever the image has installed, and it's left stopped, like one that finished.
@@ -306,15 +308,26 @@ export async function runContainer(
   {
     env = [],
     runOptions = [],
+    setEnv = {},
+    secretEnv = [],
     timeoutSeconds,
     startMarker,
     runtime = localRuntime(),
-  }: { env?: string[]; runOptions?: string[]; timeoutSeconds?: number; startMarker?: string; runtime?: DockerRuntime } = {},
+  }: {
+    env?: string[];
+    runOptions?: string[];
+    setEnv?: Record<string, string>;
+    secretEnv?: string[];
+    timeoutSeconds?: number;
+    startMarker?: string;
+    runtime?: DockerRuntime;
+  } = {},
 ): Promise<ContainerStop> {
-  const passed = env.flatMap((variable) => ["-e", variable]);
-  const args = ["run", "--name", name, "--pull", runtime.pull, ...passed, ...runOptions, "--entrypoint", "sh", image, "-c", script];
-  // Only the variables' names: their values are never logged.
-  log.info({ image, container: name, env, runOptions, timeoutSeconds, runtime: runtime.command }, "running container");
+  const byName = (names: string[]) => names.flatMap((variable) => ["-e", variable]);
+  const set = Object.entries(setEnv).flatMap(([variable, value]) => ["-e", `${variable}=${value}`]);
+  const args = ["run", "--name", name, "--pull", runtime.pull, ...byName(env), ...runOptions, ...set, ...byName(secretEnv), "--entrypoint", "sh", image, "-c", script];
+  // Only the secret variables' names: their values are never logged. setEnv's aren't secret.
+  log.info({ image, container: name, env, secretEnv, setEnv, runOptions, timeoutSeconds, runtime: runtime.command }, "running container");
   log.trace({ container: name, script }, "container script");
   const startedAt = Date.now();
   const child = Bun.spawn([...runtime.command, ...args], {
@@ -480,20 +493,25 @@ function envWord(word: string, variable: string): string {
  * container's variables, `containerNames`. Every variable the image doesn't have, e.g. one passed
  * with `-e`, is blanked; every one it has gets the image's value back, whatever it was run with.
  *
- * By rule, not by list: so it covers a harness's `requiredEnv`, `-e` and `--env-file` in a base
- * image's `runOptions`, and whatever else gave the container a variable. Docker can't remove a
- * variable from a commit's config, only set it, so one blanked is left set to "".
+ * By rule, not by list: so it covers a harness's `requiredEnv`, a test case's `secretEnv`, `-e`
+ * and `--env-file` in a base image's `runOptions`, and whatever else gave the container a
+ * variable. Docker can't remove a variable from a commit's config, only set it, so one blanked is
+ * left set to "".
+ *
+ * Then each of `kept`, variables that aren't secret, e.g. a test case's `env`, is set to its value
+ * there, over the image's.
  */
-export function scrubbedEnvChanges(imageEnv: string[], containerNames: string[]): string[] {
+export function scrubbedEnvChanges(imageEnv: string[], containerNames: string[], kept: Record<string, string> = {}): string[] {
   const image = imageEnv.map((entry) => {
     const at = entry.indexOf("=");
     return at === -1 ? ([entry, ""] as const) : ([entry.slice(0, at), entry.slice(at + 1)] as const);
   });
   const imageNames = new Set(image.map(([variable]) => variable));
-  const blanked = [...new Set(containerNames)].filter((variable) => variable !== "" && !imageNames.has(variable));
+  const blanked = [...new Set(containerNames)].filter((variable) => variable !== "" && !imageNames.has(variable) && !Object.hasOwn(kept, variable));
   return [
     ...blanked.map((variable) => `ENV ${envWord(variable, variable)}=`),
     ...image.map(([variable, value]) => `ENV ${envWord(variable, variable)}=${envWord(value, variable)}`),
+    ...Object.entries(kept).map(([variable, value]) => `ENV ${envWord(variable, variable)}=${envWord(value, variable)}`),
   ];
 }
 
@@ -507,9 +525,18 @@ export function scrubbedEnvChanges(imageEnv: string[], containerNames: string[])
  * into the image's config, which is pushed with it. See scrubbedEnvChanges. Only the variables'
  * names are read from the container: their values never leave Docker.
  *
+ * `kept`'s variables, which aren't secret, e.g. a test case's `env`, are set to their values over
+ * that, so the image keeps them.
+ *
  * Throws a DockerContainerError, also if `like`'s environment can't be written back.
  */
-export async function commitContainer(name: string, image: string, like: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
+export async function commitContainer(
+  name: string,
+  image: string,
+  like: string,
+  runtime: DockerRuntime = localRuntime(),
+  kept: Record<string, string> = {},
+): Promise<void> {
   const inspected = await mustRun(["image", "inspect", "--format", IMAGE_CONFIG_FORMAT, like], runtime);
   const [entrypoint, cmd, env] = inspected.trim().split("\t");
   const containerNames = JSON.parse(await mustRun(["container", "inspect", "--format", ENV_NAMES_FORMAT, name], runtime)) as string[];
@@ -519,7 +546,7 @@ export async function commitContainer(name: string, image: string, like: string,
   const changes = [
     `ENTRYPOINT ${entrypoint === "null" ? '[""]' : entrypoint}`,
     `CMD ${cmd === "null" ? '["sh"]' : cmd}`,
-    ...scrubbedEnvChanges(imageEnv, containerNames),
+    ...scrubbedEnvChanges(imageEnv, containerNames, kept),
   ];
   const startedAt = Date.now();
   await mustRun(["commit", ...changes.flatMap((change) => ["--change", change]), name, image], runtime);

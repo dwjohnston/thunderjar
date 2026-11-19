@@ -426,6 +426,33 @@ Ran at         2026-10-01 10:32
     expect(JSON.parse(stdout).postrunPurge).toBeUndefined();
   });
 
+  test("<container run> recorded with its test case's env and secretEnv shows them, values for env, names only for secretEnv; one recorded before shows neither", async () => {
+    const data = await copyOfStore();
+    changeStore(
+      data,
+      "UPDATE container_runs SET record = json_set(record, '$.env', json($env), '$.secretEnv', json('[\"DATABASE_URL\"]')) WHERE execution_id = $id AND permutation = 2",
+      { id: TWO_HARNESSES, env: JSON.stringify({ NODE_ENV: "test", GREETING: "hello, world" }) },
+    );
+
+    const withEnv = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "2-1", "--data-dir", data]);
+    const before = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "1-1", "--data-dir", data]);
+
+    expect(withEnv.stdout).toContain(`  initialPrompt  plain                                     18bd401a
+
+Environment
+  NODE_ENV      test
+  GREETING      hello, world
+  DATABASE_URL  secret, from the shell: not recorded
+
+Harness      fake-harness-beta 1.0.0
+`);
+    expect(before.stdout).not.toContain("Environment");
+    expect(JSON.parse((await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "2-1", "--data-dir", data, "--json"])).stdout)).toMatchObject({
+      env: { NODE_ENV: "test", GREETING: "hello, world" },
+      secretEnv: ["DATABASE_URL"],
+    });
+  });
+
   test("--data-dir reads a container run outside any project", async () => {
     const store = `${scenario("0203")}/.thunderjar/.data`;
 

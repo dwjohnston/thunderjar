@@ -21,6 +21,7 @@ import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, type OpenStore, openStore } from "../../dataDir.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
+import { envEntry } from "../../format.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError as error, printJson, printWarning } from "../../output.ts";
 import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.ts";
@@ -35,8 +36,18 @@ const field = (label: string, value: string, paint: Paint = plain) =>
   `${FIELD_INDENT}${paint.dim(`${label}:`.padEnd(LABEL_WIDTH))}${value.split("\n").join(`\n${FIELD_INDENT}${" ".repeat(LABEL_WIDTH)}`)}`;
 
 /**
+ * The environment variables a permutation's containers are given: by name, its harness's, then its
+ * test case's `secretEnv`, whose values come from the shell, and, as `NAME=value`, its test case's `env`.
+ */
+const envShown = ({ env, secretEnv, testCaseEnv }: PlannedExecution["permutations"][number]): string[] => [
+  ...new Set([...env, ...secretEnv]),
+  ...Object.entries(testCaseEnv).map(([name, value]) => envEntry(name, value)),
+];
+
+/**
  * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
- * the environment variables its container is given, by name, any more `docker run` options, and
+ * the environment variables its container is given, by name, or with their values for the test
+ * case's `env`, any more `docker run` options, and
  * the command it runs: its prerun image's run script. `build --dry-run` shows what the script is.
  */
 export function renderExecution({ executionId, permutations }: PlannedExecution, paint: Paint = plain): string {
@@ -46,7 +57,7 @@ export function renderExecution({ executionId, permutations }: PlannedExecution,
       `${paint.bold(`Permutation ${permutation.number}`)}: prerun image ${paint.cyan(permutation.prerunImage)}`,
       ...permutation.iterations.flatMap((iteration) => [
         `  ${paint.bold(`Iteration ${iteration.number}`)}: postrun image ${paint.cyan(iteration.postrunImage)}`,
-        ...(permutation.env.length > 0 ? [f("env", permutation.env.join(", "))] : []),
+        ...(envShown(permutation).length > 0 ? [f("env", envShown(permutation).join(", "))] : []),
         ...(permutation.runOptions.length > 0 ? [f("docker", permutation.runOptions.join(" "))] : []),
         f("command", `sh ${RUN_SCRIPT_PATH}`),
       ]),
@@ -55,11 +66,15 @@ export function renderExecution({ executionId, permutations }: PlannedExecution,
   return [`${paint.dim("Execution")} ${paint.bold(executionId)}`, ...blocks].join("\n\n");
 }
 
-/** A dry run as `run --dry-run --json` prints it: what `renderExecution` shows, and each permutation's parameters. */
+/**
+ * A dry run as `run --dry-run --json` prints it: what `renderExecution` shows, and each
+ * permutation's parameters. Each permutation's `env` is its harness's variables' names; its test
+ * case's are `testCaseEnv`, with their values, and `secretEnv`, names only.
+ */
 export function executionPlanJson({ executionId, permutations }: PlannedExecution) {
   return {
     executionId,
-    permutations: permutations.map(({ number, permutation, prerunImage, env, runOptions, timeoutSeconds, version, iterations }) => ({
+    permutations: permutations.map(({ number, permutation, prerunImage, env, testCaseEnv, secretEnv, runOptions, timeoutSeconds, version, iterations }) => ({
       number,
       parameters: Object.fromEntries(AXES.map((axis) => [axis, permutation[axis]])) as Record<(typeof AXES)[number], string>,
       modelId: permutation.modelId,
@@ -67,6 +82,8 @@ export function executionPlanJson({ executionId, permutations }: PlannedExecutio
       hash: permutation.hash,
       prerunImage,
       env,
+      testCaseEnv,
+      secretEnv,
       runOptions,
       timeoutSeconds,
       // Each iteration runs its prerun image's run script. `build --dry-run` shows what the script is.

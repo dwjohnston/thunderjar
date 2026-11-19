@@ -1,5 +1,5 @@
-// The environment variables a test case's harnesses need, from each harness's `requiredEnv`.
-// Names only: their values stay in the shell that runs Thunderjar, and reach a container through
+// The environment variables a test case's harnesses need, from each harness's `requiredEnv`, and
+// those it names itself, in its `secretEnv`. Names only: their values stay in the shell that runs Thunderjar, and reach a container through
 // `docker run -e NAME`.
 import type { HarnessDeclaration, TestCaseDeclaration } from "../api/declarations.ts";
 import { ENV_NAME } from "./envName.ts";
@@ -24,9 +24,9 @@ export const requiredEnvOf = (harness: HarnessDeclaration): string[] => harness.
 
 /**
  * Checks that every variable each harness of `testCase`, a test case of `root` already checked by
- * `loadTestCase`, needs is set in `env`. Throws a ConfigError naming each that isn't, and the
- * harness that needs it, so it can be called before anything is built. An empty value counts as
- * unset: no agent can use an empty key.
+ * `loadTestCase`, needs, and each of the test case's own `secretEnv`, is set in `env`. Throws a
+ * ConfigError naming each that isn't, and the harness or test case that needs it, so it can be
+ * called before anything is built. An empty value counts as unset: no agent can use an empty key.
  */
 export async function checkRequiredEnv(root: string, testCase: TestCaseDeclaration, env: Record<string, string | undefined> = Bun.env): Promise<void> {
   const harnesses = [...new Set(testCase.harnessModel.map((pair) => parsePair(pair).harness))];
@@ -41,6 +41,9 @@ export async function checkRequiredEnv(root: string, testCase: TestCaseDeclarati
     }
   }
   if (problems.length > 0) throw problemsError(problems);
+  for (const variable of new Set(testCase.secretEnv ?? [])) {
+    if (!env[variable]) missing.push(`The test case needs ${variable}, in its secretEnv, which is not set.`);
+  }
   if (missing.length === 0) return;
   const hint = `Export ${missing.length === 1 ? "it" : "them"} in the shell that runs thunderjar.`;
   throw new ConfigError(...missing.slice(0, -1), `${missing.at(-1)}\n${hint}`);

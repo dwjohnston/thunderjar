@@ -8,6 +8,7 @@ import { ConfigError, existsIn, FOLDER, loadDeclaration, type Problem, problemsE
 import { checkMeasurements } from "./measurements.ts";
 import { requiredEnvProblem } from "./requiredEnv.ts";
 import { runOptionsProblem } from "./runOptions.ts";
+import { testCaseEnvProblems } from "./testCaseEnv.ts";
 
 const show = (value: unknown) => JSON.stringify(value) ?? String(value);
 
@@ -195,6 +196,7 @@ class TestCaseChecker {
     await this.checkFolderFields(names);
     await this.checkTask(testCase.task, names.initialPrompt ?? []);
     await this.checkHarnessModels(names.harnessModel ?? []);
+    for (const { field, message } of testCaseEnvProblems(testCase)) this.problem(field, message);
   }
 }
 

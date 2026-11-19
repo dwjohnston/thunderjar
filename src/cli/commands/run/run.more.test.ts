@@ -7,7 +7,7 @@ import { copyScenarioProject, thunderjar, TMP_DIR } from "../../../testing/cli.t
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { FAKE_DOCKER, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
-import { KEY, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
+import { KEY, TEST_CASE_SECRET, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
 
@@ -236,6 +236,89 @@ Permutation 2: prerun image thunderjar-prerun:0d345b7c
       "FAKE_HARNESS_KEY=",
       "FAKE_RUN_OPTION_KEY=",
     ]);
+  });
+});
+
+describe("0206 test-case-env: a test case's own env and secretEnv", () => {
+  const SETTING = "FAKE_TEST_CASE_SETTING=test";
+  const AWKWARD_VALUE = 'kept: "quoted", $HOME, a \\ backslash and 100%';
+  const secret = TEST_CASE_SECRET.FAKE_TEST_CASE_SECRET;
+
+  test("--dry-run: secretEnv by name, env with its values, an awkward one quoted", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "test-case-env", "--dry-run"], { env: TEST_CASE_SECRET });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Execution <ULID>
+
+Permutation 1: prerun image thunderjar-prerun:2bdc0dba
+  Iteration 1: postrun image thunderjar-postrun:<ULID>-1-1
+    env:      FAKE_TEST_CASE_SECRET, ${SETTING}, FAKE_TEST_CASE_AWKWARD=${JSON.stringify(AWKWARD_VALUE)}
+    command:  sh /thunderjar/thunderjar-run.sh
+`);
+  });
+
+  test("an unset or empty secretEnv stops run, and its dry run, before anything is built", async () => {
+    await using docker = await fakeDocker();
+    const MISSING = "Error: The test case needs FAKE_TEST_CASE_SECRET, in its secretEnv, which is not set.\nExport it in the shell that runs thunderjar.\n";
+
+    for (const args of [["--dry-run"], ["--data-dir", dataDir()]]) {
+      for (const value of [undefined, ""]) {
+        const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "test-case-env", ...args], {
+          env: { ...docker.env, ...(value !== undefined && { FAKE_TEST_CASE_SECRET: value }) },
+        });
+        expect(stdout).toBe("");
+        expect(stderr).toBe(MISSING);
+        expect(exitCode).toBe(1);
+      }
+    }
+    expect(await docker.commands()).toEqual([]);
+  });
+
+  test("the agent sees both; the secret's value is in no command, log, record or postrun image, and env's values stay in the postrun image", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stderr, exitCode, log } = await thunderjar(scenario("0206"), ["run", "test-case-env", "--data-dir", data, "-v"], {
+      env: { ...docker.env, ...TEST_CASE_SECRET },
+      log: true,
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const store = await readStore(data);
+    const [record] = store.containerRuns as [ContainerRunRecord];
+    expect(record.reply).toEqual({ outcome: "collected", text: "setting test, awkward set, secret set" });
+    // Recorded: env with its values, secretEnv by name only.
+    expect(record.env).toEqual({ FAKE_TEST_CASE_SETTING: "test", FAKE_TEST_CASE_AWKWARD: AWKWARD_VALUE });
+    expect(record.secretEnv).toEqual(["FAKE_TEST_CASE_SECRET"]);
+
+    const commands = await docker.commands();
+    const [run] = commands.filter((command) => command.startsWith("docker run --name")) as [string];
+    // env's after any run options, so it wins, and is what the postrun image keeps; the secret by name.
+    expect(run).toContain(` -e ${SETTING} -e FAKE_TEST_CASE_AWKWARD=${AWKWARD_VALUE} -e FAKE_TEST_CASE_SECRET --entrypoint sh `);
+    expect(commands.filter((command) => command.includes(secret))).toEqual([]);
+    expect(log).toContain("FAKE_TEST_CASE_SECRET");
+    expect(log).not.toContain(secret);
+    expect(JSON.stringify(store)).not.toContain(secret);
+    expect(await docker.envOf(record.postrunImage)).toEqual([SETTING, `FAKE_TEST_CASE_AWKWARD=${AWKWARD_VALUE}`, "FAKE_TEST_CASE_SECRET="]);
+  });
+
+  test("env and secretEnv change no hash: the prerun image is the same without them", async () => {
+    const withEnv = JSON.parse((await thunderjar(scenario("0206"), ["plan", "test-case-env", "--json"], { env: TEST_CASE_SECRET })).stdout);
+    expect(withEnv.env).toEqual({ FAKE_TEST_CASE_SETTING: "test", FAKE_TEST_CASE_AWKWARD: AWKWARD_VALUE });
+    expect(withEnv.secretEnv).toEqual(["FAKE_TEST_CASE_SECRET"]);
+
+    await using copy = await copyScenarioProject("0206");
+    const file = `${copy.dir}/.thunderjar/test-cases/test-case-env.ts`;
+    const text = await Bun.file(file).text();
+    await Bun.write(file, text.slice(0, text.indexOf("  env: {")) + "});\n");
+    const without = JSON.parse((await thunderjar(copy.dir, ["plan", "test-case-env", "--json"])).stdout);
+
+    expect(without.env).toEqual({});
+    expect(without.secretEnv).toEqual([]);
+    expect(without.permutations[0].hash).toBe(withEnv.permutations[0].hash);
+    expect(without.permutations[0].prerunImage).toBe(withEnv.permutations[0].prerunImage);
   });
 });
 

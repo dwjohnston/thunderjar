@@ -10,12 +10,13 @@ import {
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
+import { envOf, secretEnvOf } from "../../../config/testCaseEnv.ts";
 import { DockerUnavailableError, imagesIn } from "../../../docker/docker.ts";
 import { hashPermutations } from "../../../execution/hashPermutations.ts";
 import { prerunImage, prerunRepository } from "../../../execution/images.ts";
 import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
-import { showResolved } from "../../format.ts";
+import { envEntry, showResolved } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printJson, printWarning } from "../../output.ts";
@@ -34,9 +35,22 @@ const ROWS: [label: string, values: (testCase: TestCaseDeclaration) => string][]
 
 const LABEL_WIDTH = Math.max(...ROWS.map(([label]) => `${label}: `.length));
 
-/** The parameters `testCase` names, one line each. */
+/**
+ * The test case's own environment variables, a line each for those it has: `env`, as `NAME=value`,
+ * and `secretEnv`, by name only, as its values stay in the shell.
+ */
+const ENV_ROWS: [label: string, values: (testCase: TestCaseDeclaration) => string[]][] = [
+  ["env", (t) => Object.entries(t.env ?? {}).map(([name, value]) => envEntry(name, value))],
+  ["secretEnv", (t) => t.secretEnv ?? []],
+];
+
+/** The parameters `testCase` names, one line each, then its own environment variables, if it has any. */
 export function renderSummary(testCase: TestCaseDeclaration, paint: Paint = plain): string {
-  return ROWS.map(([label, values]) => `${paint.dim(`${label}:`.padEnd(LABEL_WIDTH))}${values(testCase)}`).join("\n");
+  const rows = [
+    ...ROWS.map(([label, values]) => [label, values(testCase)] as const),
+    ...ENV_ROWS.flatMap(([label, values]) => (values(testCase).length > 0 ? [[label, values(testCase).join(", ")] as const] : [])),
+  ];
+  return rows.map(([label, value]) => `${paint.dim(`${label}:`.padEnd(LABEL_WIDTH))}${value}`).join("\n");
 }
 
 /** An image status, coloured: built green, missing yellow, unknown dim. */
@@ -100,6 +114,9 @@ export type PlanJson = {
   testCase: string;
   /** The parameters the test case names, by axis, and its task. */
   parameters: Pick<TestCaseDeclaration, (typeof AXES)[number] | "task">;
+  /** The test case's `env`, with its values, and its `secretEnv`, names only: empty if it has none. */
+  env: Record<string, string>;
+  secretEnv: string[];
   /** The size of each axis, in the order of `AXES`. */
   matrixShape: number[];
   permutations: {
@@ -143,6 +160,8 @@ export async function plan(
       task: testCase.task,
       initialPrompt: testCase.initialPrompt,
     },
+    env: envOf(testCase),
+    secretEnv: secretEnvOf(testCase),
     matrixShape: matrixShape(testCase),
     permutations: permutations.map((permutation, i) => ({
       number: i + 1,
