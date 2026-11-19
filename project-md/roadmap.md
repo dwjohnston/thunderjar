@@ -103,6 +103,15 @@
 - 👐🍳 A run's code diff, from code state to postrun
 - 😴🍳 Chart of a metric across permutations
 
+## Functionality - general
+
+- graceful run abort
+    - if a run is aborted with ctrl+c it should still save whatever images it already had
+
+- https://github.com/dwjohnston/thunderjar/issues/112
+
+
+
 
 ## Functionality - Remote runs 
 
