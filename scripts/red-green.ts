@@ -146,12 +146,18 @@ export type Facts = {
 
 /** The rules the commit breaks. */
 export function judge(facts: Facts): string[] {
-  const { kind, result } = facts;
+  const { kind, testFilesChanged, result } = facts;
   const problems: string[] = [];
   const failing = result?.failing.map((test) => test.id) ?? [];
 
   if (result !== null && result.unattributed > 0) {
     problems.push(`${result.unattributed} failure(s) not tied to a test: a file didn't load, or an error was thrown between tests`);
+  }
+  if (kind === "green" && testFilesChanged.length > 0) {
+    problems.push(`only 🔴, 🔴🔴 and ♻️ commits may change test files, but this one changes:\n${list(testFilesChanged)}`);
+  }
+  if (kind === "green" && failing.length > 0) {
+    problems.push(`expected every test to pass, but ${failing.length} failed:\n${list(failing)}`);
   }
   if (kind !== "red" && kind !== "multi-red") return problems;
 
