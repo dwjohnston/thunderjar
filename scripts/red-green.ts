@@ -155,6 +155,7 @@ export function judge(facts: Facts): string[] {
   }
   if (kind !== "red") return problems;
 
+  if (facts.nextKind !== "green") problems.push("a 🔴 commit must be followed by a 🟢 commit");
   if (failing.length === 0) {
     problems.push("expected a failing test, but none failed. A Docker test needs --docker.");
     return problems;
