@@ -55,11 +55,11 @@ describe("selectionProblem", () => {
   });
 });
 
-test("postrunTargets: locally by its name and as recorded, in the store only if it was pushed there", () => {
+test("postrunTargets: locally by its name and as recorded; in the store as recorded there, and nowhere without a store", () => {
   const record = (postrunImage: string) => ({ executionId: "01e", permutation: 2, iteration: 3, postrunImage }) as ContainerRunRecord;
   const store = { repository: "localhost:5000/acme/images" };
 
-  expect(postrunTargets([record("thunderjar-postrun:01e-2-3")], "thunderjar", store)).toEqual([
+  expect(postrunTargets([record("thunderjar-postrun:01e-2-3")], "thunderjar", null)).toEqual([
     { executionId: "01e", run: "2-3", permutation: 2, iteration: 3, local: ["thunderjar-postrun:01e-2-3"] },
   ]);
   expect(postrunTargets([record("localhost:5000/acme/images:postrun-e01e-h1-i02")], "tj", store)).toEqual([
