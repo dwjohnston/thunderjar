@@ -466,9 +466,11 @@ export const ENV_NAMES_FORMAT = '[{{range $i, $e := .Config.Env}}{{if $i}},{{end
 
 /**
  * `word` as a Dockerfile's `ENV` reads it back, byte for byte: in double quotes, with `\`, `"` and
- * `$` escaped, so nothing in it is expanded.
+ * `$` escaped, so nothing in it is expanded. A newline can't be written in one: a `--change` ends
+ * at it. Throws a DockerContainerError for one, naming `variable`, never the value.
  */
-function envWord(word: string): string {
+function envWord(word: string, variable: string): string {
+  if (/[\r\n]/.test(word)) throw new DockerContainerError(`the environment variable ${JSON.stringify(variable)} can't be written in an ENV instruction: it has a newline`);
   return `"${word.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
 }
 
@@ -490,8 +492,8 @@ export function scrubbedEnvChanges(imageEnv: string[], containerNames: string[])
   const imageNames = new Set(image.map(([variable]) => variable));
   const blanked = [...new Set(containerNames)].filter((variable) => variable !== "" && !imageNames.has(variable));
   return [
-    ...blanked.map((variable) => `ENV ${envWord(variable)}=`),
-    ...image.map(([variable, value]) => `ENV ${envWord(variable)}=${envWord(value)}`),
+    ...blanked.map((variable) => `ENV ${envWord(variable, variable)}=`),
+    ...image.map(([variable, value]) => `ENV ${envWord(variable, variable)}=${envWord(value, variable)}`),
   ];
 }
 
@@ -505,7 +507,7 @@ export function scrubbedEnvChanges(imageEnv: string[], containerNames: string[])
  * into the image's config, which is pushed with it. See scrubbedEnvChanges. Only the variables'
  * names are read from the container: their values never leave Docker.
  *
- * Throws a DockerContainerError.
+ * Throws a DockerContainerError, also if `like`'s environment can't be written back.
  */
 export async function commitContainer(name: string, image: string, like: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
   const inspected = await mustRun(["image", "inspect", "--format", IMAGE_CONFIG_FORMAT, like], runtime);
