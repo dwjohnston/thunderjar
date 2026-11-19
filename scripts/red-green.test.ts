@@ -184,4 +184,10 @@ describe("judge", () => {
   test("a 🔴 commit whose failure is a file that didn't load fails", () => {
     expect(judge(facts({ kind: "red", result: { failing: [], unattributed: 1 } })).join("\n")).toContain("not tied to a test");
   });
+
+  test("a 🔴 commit must be followed by 🟢", () => {
+    const red = { kind: "red" as const, result: { failing: failing("new"), unattributed: 0 }, changedFailing: ["new"] };
+    expect(judge(facts({ ...red, nextKind: null })).join("\n")).toContain("followed by a 🟢");
+    expect(judge(facts({ ...red, nextKind: "refactor" })).join("\n")).toContain("followed by a 🟢");
+  });
 });
