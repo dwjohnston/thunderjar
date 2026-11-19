@@ -354,6 +354,27 @@ describe("0206 measured-env: a run's variables reach its measurement containers"
   });
 });
 
+describe("0206 leaked-secret: a run's secret values, written into files, are found in its postrun image", () => {
+  const secrets = { FAKE_HARNESS_KEY: "secret-harness-key", ...TEST_CASE_SECRET };
+
+  test("each secret found is recorded by name, with the paths of the files that hold it", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { exitCode } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", data], { env: { ...docker.env, ...secrets } });
+
+    expect(exitCode).toBe(0);
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    expect(record.reply).toEqual({ outcome: "collected", text: "leaked" });
+    expect(record).toMatchObject({
+      secretsFound: [
+        { name: "FAKE_HARNESS_KEY", files: 2, paths: ["/workspace/.env", "/workspace/agent.log"] },
+        { name: "FAKE_TEST_CASE_SECRET", files: 1, paths: ["/workspace/.env"] },
+      ],
+    });
+  });
+});
+
 describe("0201 minimal existing setup", () => {
   test("example: one permutation, one iteration", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0201"), ["run", "example", "--dry-run"]);
