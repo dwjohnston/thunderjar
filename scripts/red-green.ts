@@ -21,8 +21,6 @@ const MARKERS: Record<string, CommitKind> = { "🔴🔴": "multi-red", "🔴": "
  * e.g. `🤖 Claude: 🔴 ...`. A marker later in the subject is only mentioned, not meant.
  */
 export function commitKind(subject: string): CommitKind {
-  const prefixEnd = subject.lastIndexOf(": ");
-  const rest = prefixEnd === -1 ? subject : subject.slice(prefixEnd + 2);
-  const marker = /^(🔴🔴|🔴|🟢|♻️|♻)/u.exec(rest)?.[1];
+  const marker = /^(?:[^:]*:\s*)?(🔴🔴|🔴|🟢|♻️|♻)/u.exec(subject)?.[1];
   return marker === undefined ? "other" : (MARKERS[marker] ?? "other");
 }
