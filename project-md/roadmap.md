@@ -2,18 +2,45 @@
 
 ## Documentation
 
+- ‼️🍳 README at the repo root
+    - There's none, so the npm and GitHub pages are blank
+
+- ‼️🍳 Getting started, past `init`
+    - Prerequisites: Docker, Bun, an API key
+    - First run, reading the results
+
+- ‼️🍳 Installing the tj skills
+    - The Todo in getting started
+
+    
+
 - helper functions
 - 'how ready is this'
+- remote runs
 - Thunderjar capture  
 - Guide
     - tweaking skill descriptions
     - comparing models
 
+    - ‼️ 🍳 writing measurements
+        - instrument -> metrics -> stat
+
+- Security disclosure
+- 
+
 
 
 ## Tooling
-
+- 👐 🍳 Real agent tests for Codex, Copilot, OpenCode
 ## Functionality - Skills, Hooks
+
+- rework quick-capture to use the same capture mechanism as tj-oneshot 
+- 😴 🍳 `tj-interpret-results`
+    - Reads `show --json`, says which permutation won and what to try next
+- 😴 🍳 `tj-iterate`
+    - Loop: tweak a promptset, run, compare, repeat
+- 👐 🍳 `tj-remote-setup`
+    - Walks through image store, run data store, runtime
 
 
 ## Functionality - Measurement instruments
@@ -43,6 +70,14 @@
 - promptSetAtTagOrBranch
 - promptSetAtCommit
 
+ ‼️🍳 Ship `codex`, `copilot`, `opencode` helpers like `claudeCode`: reply and token cost parsing currently lives in project files
+
+## Functionality - Parameter configuration 
+
+- 😴🍳 Task `dependsOn` code states: reject test cases pairing it with any other
+
+
+
 ### Prompt Set Application 
 
 - ie. see the philosophy compose md
@@ -55,6 +90,11 @@
 - `checkout` - For a given run, get the saved post run image and run it, SSH inside
     - Useful for investigating
 
+- `run`
+    - 😴 🍳 `--max-cost`: stop starting iterations once spent
+    - 😴 🍳 Rerun only the failed iterations of an execution
+    - ‼️ 🍳 Show image build status in the table
+        - https://github.com/dwjohnston/thunderjar/issues/157
 
 - Remove `--local` just use the solution of an env var with multiple configurations. 
 
@@ -65,11 +105,19 @@
 - arbitrary test case runs 
     - eg. something like `thunderjar run the-test-case --harness-model="claude-code/haiku,opencode/haiku"
 
-
-
+- 👐🍳 `remeasure` - apply current measurements to past postrun images (planned, not built)
+- 👐🍳 `restore` - a run's end state as a local branch (planned, not built) (better name that 'restore' though?)
+- 
 
 
 ## Functionality - Browser view
+
+- run agents transcript
+- agents code diff
+- run agents final output 
+
+
+
 
 ## Functionality - general
 
@@ -79,7 +127,12 @@
 - https://github.com/dwjohnston/thunderjar/issues/112
 
 
+- 😴 🪖 Spend cap: stop an execution past a token cost limit
 
+- 😴 🪖 MCP calls
+    - A fake MCP server that records what was called with what
+
+👐 🪖 Network policy for run containers
 
 ## Functionality - Remote runs 
 
@@ -93,8 +146,6 @@
 - Abiltity to use subscriptions to do run s
 
 - 'batch runs' - Being able to schedule running _multiple_ test cases in one big batch. 
-
-
 
 
 
