@@ -218,7 +218,7 @@ These need configuring per harness, so they're harder:
        - Through the configured runtime, so it works on a remote Docker host too.
        - Overlaps somewhat with `attach`, which follows a running execution.
     3. A purged postrun image fails with that reason.
-    4. The branch is `thunderjar/<test case>/<execution>/<run>`.
-       - e.g. `thunderjar/compare-models/01K4X9J2E8MQZ3V7R5T0WABCDE/h4f9a21c8-i00`
+    4. The branch is `thunderjar/run/<test case>/<execution>/<run>`.
+       - e.g. `thunderjar/run/compare-models/01K4X9J2E8MQZ3V7R5T0WABCDE/h4f9a21c8-i00`
        - `<run>` is the permutation hash and iteration, without the execution ID the container run ID repeats.
-       - A test case named `capture` would collide with the capture branches, `thunderjar/capture/<session>`.
+       - `run/` mirrors `thunderjar/capture/<session>`: the second segment is the kind of branch, so they never collide.
