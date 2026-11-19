@@ -180,4 +180,8 @@ describe("judge", () => {
   test("a 🔴 commit with no failing test fails", () => {
     expect(judge(facts({ kind: "red" })).join("\n")).toContain("none failed");
   });
+
+  test("a 🔴 commit whose failure is a file that didn't load fails", () => {
+    expect(judge(facts({ kind: "red", result: { failing: [], unattributed: 1 } })).join("\n")).toContain("not tied to a test");
+  });
 });
