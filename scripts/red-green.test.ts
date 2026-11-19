@@ -195,4 +195,12 @@ describe("judge", () => {
     const red = { kind: "red" as const, result: { failing: failing("new"), unattributed: 0 }, changedFailing: ["new"] };
     expect(judge(facts({ ...red, nextKind: "unknown" }))).toEqual([]);
   });
+
+  test("a 🔴🔴 commit may fail several tests, all of which it changed, with the label", () => {
+    const multi = { kind: "multi-red" as const, result: { failing: failing("one", "two"), unattributed: 0 }, changedFailing: ["one", "two"] };
+    expect(judge(facts({ ...multi, multiRedApproved: true }))).toEqual([]);
+    expect(judge(facts(multi)).join("\n")).toContain("multi-red-approved");
+    expect(judge(facts({ ...multi, multiRedApproved: true, changedFailing: ["one"] })).join("\n")).toContain("- two");
+    expect(judge(facts({ ...multi, multiRedApproved: true, addsTests: true })).join("\n")).toContain("adds tests");
+  });
 });
