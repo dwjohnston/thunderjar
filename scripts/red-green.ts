@@ -146,7 +146,8 @@ export type Facts = {
 
 /** The rules the commit breaks. */
 export function judge(facts: Facts): string[] {
-  return ["not implemented"];
+  const problems: string[] = [];
+  return problems;
 }
 
 function list(items: string[]): string {
