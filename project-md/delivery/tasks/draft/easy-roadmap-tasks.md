@@ -164,8 +164,6 @@ These need configuring per harness, so they're harder:
     3. `plan` and `build` take the same flags, so an override can be previewed.
     4. The execution records the overrides, so `show` and `executions` say it wasn't the test case as written.
     5. Out of scope: `--task`.
-22. Image build status in the run table
-    - https://github.com/dwjohnston/thunderjar/issues/157
 24. `purge capture`
     - Deletes captured sessions, in both stores: `refs/thunderjar/capture/<session>/*` and the `thunderjar/capture/<session>` branches.
     - A second command in the `purge` group, beside `purge image`, with the same shape.
