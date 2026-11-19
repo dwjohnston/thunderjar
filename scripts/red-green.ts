@@ -149,6 +149,10 @@ export function judge(facts: Facts): string[] {
   const { kind, result } = facts;
   const problems: string[] = [];
   const failing = result?.failing.map((test) => test.id) ?? [];
+
+  if (result !== null && result.unattributed > 0) {
+    problems.push(`${result.unattributed} failure(s) not tied to a test: a file didn't load, or an error was thrown between tests`);
+  }
   if (kind !== "red") return problems;
 
   if (failing.length === 0) {
