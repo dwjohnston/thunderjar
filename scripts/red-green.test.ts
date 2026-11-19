@@ -176,4 +176,8 @@ describe("judge", () => {
     const problems = judge(facts({ kind: "red", result: { failing: failing("old"), unattributed: 0 }, changedFailing: [] }));
     expect(problems.join("\n")).toContain("weren't added or changed");
   });
+
+  test("a 🔴 commit with no failing test fails", () => {
+    expect(judge(facts({ kind: "red" })).join("\n")).toContain("none failed");
+  });
 });
