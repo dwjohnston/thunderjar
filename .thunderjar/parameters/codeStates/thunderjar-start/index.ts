@@ -1,14 +1,21 @@
 import { declareCodeState } from "thunderjar-published";
 
-// The project's repository, cloned into /workspace at a commit. The commit must be pushed, so the
-// build can fetch it, and on a branch, so a plain clone has it: not one from a squash-merged branch.
-// Pin a commit, never a branch: the same text must always build the same thing.
+// The project's repository, cloned into /workspace at tag tj-thunderjar-start. resolve looks up the
+// tag's commit, so the Dockerfile pins a SHA: the same text always builds the same thing.
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    commit: "530f47780718b56122d2fce6a8d87011632cf546",
+    tag: "tj-thunderjar-start",
   },
-  applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\
-  && git -C /workspace checkout --quiet --detach ${config.commit} \\
+  resolve: async (config, ctx) => {
+    const tag = `refs/tags/${config.tag}`;
+    const lines = (await ctx.exec(`git ls-remote --exit-code ${config.repo} ${tag} '${tag}^{}'`)).split("\n");
+    // An annotated tag lists its own object, then the commit it points to, with ^{}.
+    const line = lines.find((l) => l.endsWith("^{}")) ?? lines[0]!;
+    return line.split("\t")[0]!;
+  },
+  applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
+  && git -C /workspace fetch --quiet origin ${ctx.resolved} \\
+  && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
   && git -C /workspace remote remove origin`,
 });
