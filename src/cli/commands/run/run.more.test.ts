@@ -387,6 +387,24 @@ describe("0206 leaked-secret: a run's secret values, written into files, are fou
 The images were still committed, measured and pushed, if there's an image store. Treat a secret in one that was pushed as exposed, and rotate it.
 Recorded in `);
   });
+
+  test("a search that times out doesn't fail the run: it's recorded as not done, and run says so", async () => {
+    await using docker = await fakeDocker({ slowStart: { "-secrets": 5 } });
+    const data = dataDir();
+
+    const { stdout, exitCode } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", data], {
+      env: { ...docker.env, ...secrets, THUNDERJAR_SECRET_SEARCH_TIMEOUT_SECONDS: "1" },
+    });
+
+    expect(exitCode).toBe(0);
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    expect(record).toMatchObject({ secretSearchFailed: "it took longer than 1s" });
+    expect(record).not.toHaveProperty("secretsFound");
+    expect(stdout).toContain(`
+Couldn't search 1 of 1 postrun images for secrets' values, so they may hold one:
+  1-1  it took longer than <duration>
+Recorded in `);
+  });
 });
 
 describe("0201 minimal existing setup", () => {
