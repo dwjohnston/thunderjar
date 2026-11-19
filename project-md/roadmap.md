@@ -38,7 +38,7 @@ Labels on suggested items:
 
 ## Functionality - Skills, Hooks
 
-- ‼️ 🍳 Quick capture -> test case
+- ‼️ 🪖 Quick capture -> test case
     - https://github.com/dwjohnston/thunderjar/issues/167
     - A skill that triages `quickCaptures` and sets one up
 - 👐 🪖 `tj-interpret-results`
