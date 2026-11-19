@@ -49,14 +49,21 @@ const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
  * one round trip, not a `docker exec` of several. `recorded` is what was recorded of the container
  * run: what the harness's `cli` left, or "" if nothing, and the agent's replies, or why there are
  * none. Throws a DockerContainerError if the container can't be started.
+ *
+ * `secretEnv` names the run's secret variables, its harness's `requiredEnv` and its test case's
+ * `secretEnv`: the postrun image has them blank, so each is passed in by name, its value from
+ * Thunderjar's own environment. Its test case's `env` needs nothing: the postrun image keeps it.
  */
 export async function openMeasurementContext(
   postrunImage: string,
   container: string,
   { harnessResult, reply, replies }: Recorded,
   runtime: DockerRuntime = localRuntime(),
+  secretEnv: string[] = [],
 ): Promise<OpenedMeasurementContext> {
-  const session = await openShellSession(postrunImage, container, runtime);
+  // Safe to give secrets to: a measurement container is removed once its measurements are taken,
+  // and never committed, so nothing it's given can reach an image.
+  const session = await openShellSession(postrunImage, container, runtime, secretEnv);
   // Where the agent worked: the postrun image's working directory, as its prerun image's last WORKDIR set it.
   const workdir = session.workdir.startsWith("/") ? session.workdir : WORKDIR;
   const mustRun = async (what: string, command: string, stdin?: string) => {

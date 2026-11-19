@@ -365,8 +365,14 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       hooks.onMeasuring?.(permutation, iteration);
       let opened = 0;
       const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: [reply as Reply] };
+      // The variables the agent was given by name: its postrun image has them blank. Already
+      // checked before the run, so one unset now is left out by Docker. On a runner, its
+      // submission gave it these too.
+      const secretEnv = [...new Set([...permutation.env, ...permutation.secretEnv])];
       const open = async (usesContainer: boolean) =>
-        usesContainer ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime) : recordedContext(recorded);
+        usesContainer
+          ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime, secretEnv)
+          : recordedContext(recorded);
       log.debug({ ...at, measurements: measurements.length }, "measuring");
       const measuringAt = Date.now();
       // One measurement container for all of them: on a remote runtime, each takes seconds to start.

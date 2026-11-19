@@ -47,6 +47,8 @@ Thunderjar comes with these instruments
 
 `shell` runs in the agent's container after it finishes, in the folder it started in. Its value is the exit code and stdout.
 
+It sees the run's environment variables: the test case's `env` and `secretEnv`, and the harness's `requiredEnv`, e.g. `DATABASE_URL` for a command that queries the database.
+
 e.g. one of each, as the object passed to `declareMeasurement`:
 
 ```ts
