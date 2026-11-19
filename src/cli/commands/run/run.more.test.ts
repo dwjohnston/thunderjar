@@ -373,6 +373,20 @@ describe("0206 leaked-secret: a run's secret values, written into files, are fou
       ],
     });
   });
+
+  test("run warns, as it finishes, which secrets each postrun image holds, and that a pushed one's are exposed", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, exitCode } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", dataDir()], { env: { ...docker.env, ...secrets } });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(`
+1 of 1 postrun images hold a secret's value in their files:
+  1-1  FAKE_HARNESS_KEY       2 files: /workspace/.env, /workspace/agent.log
+  1-1  FAKE_TEST_CASE_SECRET  1 file: /workspace/.env
+The images were still committed, measured and pushed, if there's an image store. Treat a secret in one that was pushed as exposed, and rotate it.
+Recorded in `);
+  });
 });
 
 describe("0201 minimal existing setup", () => {
