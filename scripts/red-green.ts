@@ -64,3 +64,8 @@ export function testCases(junit: string): TestCase[] {
   }
   return cases;
 }
+
+/** The failure count in `bun test`'s summary, which also counts files that didn't load. */
+export function summaryFailCount(_output: string): number {
+  return 0;
+}

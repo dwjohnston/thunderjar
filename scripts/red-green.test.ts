@@ -12,7 +12,7 @@
  *
  */
 import { describe, expect, test } from "bun:test";
-import { commitKind, isTestFile, testCases } from "./red-green.ts";
+import { commitKind, isTestFile, summaryFailCount, testCases } from "./red-green.ts";
 
 describe("commitKind", () => {
   test("reads the marker after a prefix", () => {
@@ -72,5 +72,11 @@ describe("testCases", () => {
       { id: "a.test.ts: outer > passes", file: "a.test.ts", line: 10, failing: false },
       { id: "a.test.ts: outer > is skipped", file: "a.test.ts", line: 14, failing: false },
     ]);
+  });
+});
+
+describe("summaryFailCount", () => {
+  test("reads the fail line, which counts files that didn't load", () => {
+    expect(summaryFailCount(" 1 pass\n 3 fail\n 2 errors\n 1 expect() calls\nRan 4 tests across 3 files.")).toBe(3);
   });
 });
