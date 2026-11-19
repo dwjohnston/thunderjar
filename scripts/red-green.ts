@@ -89,3 +89,13 @@ export function changedLines(diff: string): Map<string, [number, number][]> {
   }
   return changed;
 }
+
+/** The lines where each test or describe starts, per file. A test runs until the next one starts. */
+export function blockStarts(_junit: string): Map<string, number[]> {
+  return new Map();
+}
+
+/** Whether the diff changed a line of the test, from its first line to where the next test or describe starts. */
+export function wasChanged(_test: TestCase, _starts: Map<string, number[]>, _changed: Map<string, [number, number][]>): boolean {
+  return false;
+}

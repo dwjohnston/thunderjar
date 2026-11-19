@@ -12,7 +12,7 @@
  *
  */
 import { describe, expect, test } from "bun:test";
-import { changedLines, commitKind, isTestFile, summaryFailCount, testCases } from "./red-green.ts";
+import { blockStarts, changedLines, commitKind, isTestFile, summaryFailCount, type TestCase, testCases, wasChanged } from "./red-green.ts";
 
 describe("commitKind", () => {
   test("reads the marker after a prefix", () => {
@@ -111,5 +111,14 @@ describe("changedLines", () => {
         ],
       ]),
     );
+  });
+});
+
+describe("wasChanged", () => {
+  const starts = blockStarts(JUNIT);
+  const at = (line: number): TestCase => ({ id: "t", file: "a.test.ts", line, failing: true });
+
+  test("is true when a changed line is between the test's start and the next block's", () => {
+    expect(wasChanged(at(10), starts, changedLines(DIFF))).toBe(true);
   });
 });
