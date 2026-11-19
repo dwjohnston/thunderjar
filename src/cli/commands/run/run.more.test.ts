@@ -216,6 +216,27 @@ Permutation 2: prerun image thunderjar-prerun:0d345b7c
     expect(runs.map((command) => command.includes(OPTIONS))).toEqual([false, true]);
     expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:0d345b7c -c `);
   });
+
+  test("scrubbed-env: the postrun image holds no value the agent was run with, and its base image's own", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "scrubbed-env", "--data-dir", data], {
+      env: { ...docker.env, FAKE_HARNESS_KEY: "secret-harness-key", FAKE_RUN_OPTION_KEY: "secret-run-option-key" },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    // The agent saw every variable it was given.
+    expect(record.reply).toEqual({ outcome: "collected", text: "key set, run option set, overridden set" });
+    expect(await docker.envOf(record.postrunImage)).toEqual([
+      'FAKE_IMAGE_SETTING=kept: "quoted", $HOME, a \\ backslash and 100%',
+      "FAKE_OVERRIDDEN=image-value",
+      "FAKE_HARNESS_KEY=",
+      "FAKE_RUN_OPTION_KEY=",
+    ]);
+  });
 });
 
 describe("0201 minimal existing setup", () => {

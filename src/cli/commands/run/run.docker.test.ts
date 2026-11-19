@@ -166,6 +166,33 @@ Recorded in <DATA>/runs.sqlite
 `);
   }, 600_000);
 
+  test("0206 scrubbed-env: the postrun image holds no value the agent was run with, and keeps its base image's own", async () => {
+    const prefix = `${PREFIX}-scrubbed`;
+    const data = `${DATA_DIR}/scrubbed`;
+    const secrets = { FAKE_HARNESS_KEY: "secret-harness-key", FAKE_RUN_OPTION_KEY: "secret-run-option-key" };
+    const { stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "scrubbed-env", "--image-prefix", prefix, "--data-dir", data], {
+      docker: "real",
+      env: secrets,
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [record] = (await storedRuns(data)).containerRuns as [ContainerRunRecord];
+    // The agent was given its key, by requiredEnv, and the base image's run options' variables.
+    expect(record.reply).toEqual({ outcome: "collected", text: "key set, run option set, overridden set" });
+
+    const envOf = async (image: string) => JSON.parse(await $`docker image inspect --format ${"{{json .Config.Env}}"} ${image}`.text()) as string[];
+    const [prerun] = lines(await $`docker image ls --format ${"{{.Repository}}:{{.Tag}}"} --filter ${`reference=${prefix}-prerun`}`.text()) as [string];
+    const prerunEnv = await envOf(prerun);
+    const postrunEnv = await envOf(record.postrunImage);
+    expect(prerunEnv).toContain('FAKE_IMAGE_SETTING=kept: "quoted", $HOME, a \\ backslash and 100%');
+    expect(prerunEnv).toContain("FAKE_OVERRIDDEN=image-value");
+    // No value it was run with is in the postrun image's config: the variables the prerun image
+    // doesn't set are blank, and those it does have its values.
+    for (const value of Object.values(secrets)) expect(JSON.stringify(postrunEnv)).not.toContain(value);
+    expect(postrunEnv.toSorted()).toEqual([...prerunEnv, "FAKE_HARNESS_KEY=", "FAKE_RUN_OPTION_KEY="].toSorted());
+  }, 600_000);
+
   test("0202 quoting: the prompt reaches the agent byte for byte, through a file", async () => {
     const prefix = `${PREFIX}-quoting`;
     const data = `${DATA_DIR}/quoting`;

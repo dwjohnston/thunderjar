@@ -147,6 +147,21 @@ test("a prerun image's value with quotes, `$` and a backslash comes back byte fo
   await removeContainer("tj-run-1");
 });
 
+test("scrubbedEnvChanges blanks every variable the image doesn't set, and gives back the image's own values", () => {
+  expect(scrubbedEnvChanges(["PATH=/usr/bin:/bin", "EMPTY=", `ODD=${AWKWARD_VALUE}`], ["PATH", "EMPTY", "ODD", "API_KEY", "FROM_RUN_OPTIONS", "API_KEY"])).toEqual([
+    'ENV "API_KEY"=',
+    'ENV "FROM_RUN_OPTIONS"=',
+    'ENV "PATH"="/usr/bin:/bin"',
+    'ENV "EMPTY"=""',
+    `ENV "ODD"="he said \\"hi\\" to \\$HOME and \\\${USER:-x}, 'quoted', a \\\\ backslash, \`ls\`, 100% and\ta tab"`,
+  ]);
+  expect(scrubbedEnvChanges([], [])).toEqual([]);
+});
+
+test("scrubbedEnvChanges escapes a name too", () => {
+  expect(scrubbedEnvChanges([], ["ODD$NAME"])).toEqual(['ENV "ODD\\$NAME"=']);
+});
+
 test("scrubbedEnvChanges refuses a value with a newline, naming its variable and never the value", () => {
   const error = (() => {
     try {

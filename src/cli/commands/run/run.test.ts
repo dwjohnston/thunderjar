@@ -257,6 +257,9 @@ Recorded in <DATA>/runs.sqlite
     // Alpha's container was given its key. Beta's, of another harness, wasn't.
     expect(await docker.fileIn(`thunderjar-postrun:${id}-1-1`, "/thunderjar/fake-harness-key")).toBe("set\n");
     expect(await docker.fileIn(`thunderjar-postrun:${id}-2-1`, "/thunderjar/fake-harness-key")).toBe("\n");
+    // Neither postrun image holds the key's value.
+    expect(await docker.envOf(`thunderjar-postrun:${id}-1-1`)).toEqual(["FAKE_HARNESS_KEY="]);
+    expect(await docker.envOf(`thunderjar-postrun:${id}-2-1`)).toEqual([]);
   });
 
   test("quoting: the prompt reaches the agent byte for byte, through a file", async () => {
