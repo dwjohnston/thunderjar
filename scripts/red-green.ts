@@ -328,10 +328,53 @@ async function checkBranch(): Promise<string[]> {
   return problems;
 }
 
+/**
+ * Checks the commit being made, for the commit-msg hook: the message in `messageFile`, and what's
+ * staged. With --amend, the changes are those of the amended commit, from HEAD's parent.
+ */
+async function checkStaged(messageFile: string): Promise<string[]> {
+  const subject =
+    (await Bun.file(messageFile).text())
+      .split("\n")
+      .find((line) => line.trim() !== "" && !line.startsWith("#"))
+      ?.trim() ?? "";
+  const kind = commitKind(subject);
+  const base = Bun.argv.includes("--amend") ? "HEAD^" : "HEAD";
+  if ((await $`git rev-parse --verify --quiet ${base}`.nothrow().quiet()).exitCode !== 0) return [];
+
+  const testFilesChanged = (await lines($`git diff --cached --name-only --no-renames ${base}`)).filter(isTestFile);
+  const label = `The commit being made: ${subject}`;
+  console.log(label);
+  if (kind === "other") {
+    const problem = report(label, judge({ kind, testFilesChanged, nextKind: "unknown", result: null, changedFailing: [], addsTests: false, multiRedApproved: true }), null);
+    return problem === null ? [] : [problem];
+  }
+
+  // The staged files, not the working folder, which may hold changes that aren't being committed.
+  const temp = tempDir();
+  const copy = `${temp}/staged`;
+  console.log("  Running the tests on the staged files. Set THUNDERJAR_SKIP_RED_GREEN_HOOK=1 to skip.");
+  try {
+    await $`git checkout-index --all --prefix=${copy}/`;
+    await $`bun install --frozen-lockfile`.cwd(copy).quiet();
+    const docker = (await $`docker info`.nothrow().quiet()).exitCode === 0;
+    const dockerFiles = docker ? testFilesChanged.filter((file) => file.endsWith(".docker.test.ts")) : [];
+    const examined = await examine(copy, `${temp}/report`, kind, testFilesChanged, dockerFiles, (args) => $`git diff --cached ${base} ${args}`.text());
+    // The multi-red-approved label is a PR's, so only CI checks it.
+    const problem = report(label, judge({ kind, testFilesChanged, nextKind: "unknown", multiRedApproved: true, ...examined }), examined.result);
+    return problem === null ? [] : [problem];
+  } finally {
+    await $`rm -rf ${temp}`.nothrow().quiet();
+  }
+}
+
 async function main(): Promise<void> {
-  const problems = await checkBranch();
+  const staged = Bun.argv.indexOf("--staged");
+  const messageFile = staged === -1 ? undefined : Bun.argv[staged + 1];
+  const problems = messageFile === undefined ? await checkBranch() : await checkStaged(messageFile);
   if (problems.length > 0) {
     console.error(`\n${problems.length} commit(s) break the red/green rules:\n\n${problems.join("\n\n")}`);
+    if (messageFile !== undefined) console.error("\nSet THUNDERJAR_SKIP_RED_GREEN_HOOK=1 to commit anyway.");
     process.exit(1);
   }
 }
