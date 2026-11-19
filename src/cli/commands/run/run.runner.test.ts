@@ -230,6 +230,41 @@ Recorded in .thunderjar/.data/runs.sqlite
     expect(await docker.envOf(`thunderjar-postrun:${execution.executionId}-1-1`)).toEqual(expect.arrayContaining(["TC_SETTING=test", "TC_SECRET="]));
   });
 
+  test("the runner's measurement containers see the test case's secretEnv and the harness's requiredEnv, by name", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWithRunner();
+    const thunderjarDir = `${copy.dir}/.thunderjar`;
+    const harness = `${thunderjarDir}/parameters/harnessModels/fake-harness-alpha/index.ts`;
+    await Bun.write(harness, (await Bun.file(harness).text()).replace('version: "1.0.0",', 'version: "1.0.0",\n  requiredEnv: ["FAKE_HARNESS_KEY"],'));
+    const testCase = `${thunderjarDir}/test-cases/example.ts`;
+    await Bun.write(testCase, (await Bun.file(testCase).text()).replace("iterations: 1,", 'iterations: 1,\n  secretEnv: ["TC_SECRET"],'));
+    // Prints whether each is set and not blank, never its value: a shell measurement's stdout is stored.
+    await Bun.write(
+      `${thunderjarDir}/parameters/tasks/is-prime/measurements/envSeen.ts`,
+      `import { declareMeasurement } from "thunderjar";
+export default declareMeasurement({
+  instrument: "shell",
+  config: { command: 'echo "secret \${TC_SECRET:+set}, key \${FAKE_HARNESS_KEY:+set}"' },
+  metrics: { exited0: { stat: "rate" } },
+});
+`,
+    );
+    const env = { ...docker.env, FAKE_HARNESS_KEY: "s3cret-key", TC_SECRET: "s3cret-test-case" };
+
+    const { stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const { execution, containerRuns } = await readProjectStore(copy.dir);
+    // The fake runs the runner with none of this process's variables: the values came in the submission.
+    expect(containerRuns[0]?.result.envSeen).toMatchObject({ outcome: { outcome: "measured", data: { exitCode: 0, stdout: "secret set, key set\n" } } });
+    const runnerLog = await Bun.file(`${thunderjarDir}/logs/${execution.executionId}-runner.log`).text();
+    for (const text of [(await docker.commands()).join("\n"), runnerLog, JSON.stringify(containerRuns)]) {
+      expect(text).not.toContain("s3cret-key");
+      expect(text).not.toContain("s3cret-test-case");
+    }
+  });
+
   test("a test case's secretEnv that's unset stops run with a runner before anything is built", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithRunner();
