@@ -106,6 +106,6 @@ export function blockStarts(junit: string): Map<string, number[]> {
 
 /** Whether the diff changed a line of the test, from its first line to where the next test or describe starts. */
 export function wasChanged(test: TestCase, starts: Map<string, number[]>, changed: Map<string, [number, number][]>): boolean {
-  const end = (starts.get(test.file) ?? []).find((line) => line > test.line) ?? test.line + 1;
+  const end = (starts.get(test.file) ?? []).find((line) => line > test.line) ?? Infinity;
   return (changed.get(test.file) ?? []).some(([first, last]) => first < end && last >= test.line);
 }
