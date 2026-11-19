@@ -153,20 +153,22 @@ export function judge(facts: Facts): string[] {
   if (result !== null && result.unattributed > 0) {
     problems.push(`${result.unattributed} failure(s) not tied to a test: a file didn't load, or an error was thrown between tests`);
   }
-  if (kind !== "red") return problems;
+  if (kind !== "red" && kind !== "multi-red") return problems;
 
-  if (facts.nextKind !== "green" && facts.nextKind !== "unknown") problems.push("a 🔴 commit must be followed by a 🟢 commit");
+  if (facts.nextKind !== "green" && facts.nextKind !== "unknown") problems.push(`a ${kind === "red" ? "🔴" : "🔴🔴"} commit must be followed by a 🟢 commit`);
   if (failing.length === 0) {
     problems.push("expected a failing test, but none failed. A Docker test needs --docker.");
     return problems;
   }
-  if (failing.length > 1) {
+  if (kind === "red" && failing.length > 1) {
     problems.push(`expected exactly one failing test, but ${failing.length} failed. Split them into 🔴/🟢 cycles:\n${list(failing)}`);
   }
   const unchanged = failing.filter((id) => !facts.changedFailing.includes(id));
   if (unchanged.length > 0) {
     problems.push(`these failing tests weren't added or changed by this commit:\n${list(unchanged)}`);
   }
+  if (kind === "multi-red" && facts.addsTests) problems.push("🔴🔴 commits may only change existing expectations, but this one adds tests");
+  if (kind === "multi-red" && !facts.multiRedApproved) problems.push("🔴🔴 commits need the PR to have the `multi-red-approved` label");
   return problems;
 }
 
