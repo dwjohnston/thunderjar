@@ -5,7 +5,7 @@
 import { AXES, type Axis } from "../config/permutations.ts";
 import type { Measurement } from "../config/measurements.ts";
 import type { Better, Stat, TokenCosts } from "../api/declarations.ts";
-import type { ContainerRunRecord, ExecutionRecord, PostrunPurge } from "../store/runDataStore.ts";
+import type { ContainerRunRecord, ExecutionRecord, FoundSecret, PostrunPurge } from "../store/runDataStore.ts";
 import { STATS, type ScoreKind } from "../instruments/instruments.ts";
 import { type AggregatedMeasurement, aggregatePermutation, type LeftOut } from "./aggregate.ts";
 import { agentEnd, endedCleanly, failureHint, knownCost, totalTokens } from "./runFacts.ts";
@@ -44,6 +44,8 @@ export type PermutationSummary = {
   withoutTokenCosts: { run: string; tokenCosts?: TokenCosts }[];
   /** Its runs whose postrun image was purged, and when. Their measures still count: they just can't be retaken. */
   purged: ({ run: string } & PostrunPurge)[];
+  /** The secrets found in its runs' postrun images' files, by run, by name, never value. Absent if none was. */
+  secretsFound?: ({ run: string } & FoundSecret)[];
 };
 
 /** A metric as declared: its name, its statistic, the kind of score that combines, and which way is better. */
@@ -81,6 +83,7 @@ function tally(values: string[]): { end: string; runs: number }[] {
 
 function summarisePermutation(permutation: number, runs: ContainerRunRecord[], measurements: Measurement[]): PermutationSummary {
   const [first] = runs;
+  const secretsFound = runs.flatMap((run) => (run.secretsFound ?? []).map((secret) => ({ run: runName(run), ...secret })));
   const { measures, leftOut } = runs.length === 0 ? { measures: {}, leftOut: [] } : aggregatePermutation(runs, measurements);
   return {
     permutation,
@@ -101,6 +104,7 @@ function summarisePermutation(permutation: number, runs: ContainerRunRecord[], m
     leftOut: leftOut.map(({ iteration, ...rest }) => ({ run: runName({ permutation, iteration }), ...rest })),
     withoutTokenCosts: runs.filter(({ tokenCosts }) => tokenCosts?.outcome !== "collected").map((run) => ({ run: runName(run), tokenCosts: run.tokenCosts })),
     purged: runs.flatMap((run) => (run.postrunPurge === undefined ? [] : [{ run: runName(run), ...run.postrunPurge }])),
+    ...(secretsFound.length > 0 && { secretsFound }),
   };
 }
 

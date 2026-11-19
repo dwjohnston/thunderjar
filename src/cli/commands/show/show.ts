@@ -162,6 +162,11 @@ function permutationTable(summary: ExecutionSummary, paint: Paint): string[] {
   if (unclean.length > 0) {
     lines.push("", paint.red("! Agents that didn't end cleanly:"), ...columns(unclean.map(({ run, end, why }) => [paint.bold(run), paint.red(end), ...(why === undefined ? [] : [paint.dim(why)])])));
   }
+  const secrets = permutations.flatMap((permutation) => permutation.secretsFound ?? []);
+  if (secrets.length > 0) {
+    lines.push("", paint.red("! Postrun images that hold a secret's value in their files:"), ...columns(secrets.map((secret) => [paint.bold(secret.run), paint.red(secret.name), secretFiles(secret)])));
+    lines.push("  If one was pushed, treat its secrets as exposed, and rotate them.");
+  }
   if (leftOut.length > 0) lines.push("", paint.yellow("* Left out:"), ...columns(leftOut));
   const purged = purgedLines(permutations, paint);
   if (purged.length > 0) lines.push("", paint.dim("Postrun images purged:"), ...purged);
