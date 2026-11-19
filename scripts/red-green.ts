@@ -91,11 +91,21 @@ export function changedLines(diff: string): Map<string, [number, number][]> {
 }
 
 /** The lines where each test or describe starts, per file. A test runs until the next one starts. */
-export function blockStarts(_junit: string): Map<string, number[]> {
-  return new Map();
+export function blockStarts(junit: string): Map<string, number[]> {
+  const starts = new Map<string, number[]>();
+  for (const match of junit.matchAll(/<(?:testcase|testsuite)\b([^>]*?)\/?>/g)) {
+    const attributes = match[1] ?? "";
+    const line = Number(attribute(attributes, "line"));
+    if (!line) continue;
+    const file = attribute(attributes, "file").replace(/^\.\//, "");
+    starts.set(file, [...(starts.get(file) ?? []), line]);
+  }
+  for (const lines of starts.values()) lines.sort((a, b) => a - b);
+  return starts;
 }
 
 /** Whether the diff changed a line of the test, from its first line to where the next test or describe starts. */
-export function wasChanged(test: TestCase, _starts: Map<string, number[]>, changed: Map<string, [number, number][]>): boolean {
-  return (changed.get(test.file) ?? []).some(([, last]) => last >= test.line);
+export function wasChanged(test: TestCase, starts: Map<string, number[]>, changed: Map<string, [number, number][]>): boolean {
+  const end = (starts.get(test.file) ?? []).find((line) => line > test.line) ?? test.line + 1;
+  return (changed.get(test.file) ?? []).some(([first, last]) => first < end && last >= test.line);
 }
