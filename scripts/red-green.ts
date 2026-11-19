@@ -25,7 +25,8 @@ export function commitKind(subject: string): CommitKind {
   return marker === undefined ? "other" : (MARKERS[marker] ?? "other");
 }
 
-/** Whether a file holds tests or their expectations. */
+/** Whether a file holds tests or their expectations. The gauntlet's challenges aren't Thunderjar's tests. */
 export function isTestFile(path: string): boolean {
+  if (path.startsWith("src/gauntlet/")) return false;
   return /\.test\.[cm]?[jt]sx?$/.test(path) || path.endsWith(".result.json");
 }
