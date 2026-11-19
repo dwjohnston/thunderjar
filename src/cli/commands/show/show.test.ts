@@ -7,6 +7,9 @@ import { $ } from "bun";
 import { Database } from "bun:sqlite";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
+import { type PostrunPurge, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
+
+const PURGE: PostrunPurge = { purgedAt: "2026-11-19T09:00:00.000Z", from: "imageStore", reason: "held leaked keys" };
 
 /** Is-prime-baseline: complete, 8 permutations × 5 iterations; 2-4 errored and 6-3 skipped measures. */
 const BASELINE = "01m3vf68s54p5eyn5s3t1ygkdj";
@@ -360,6 +363,67 @@ ${Array.from({ length: 19 }, (_, i) => `  retrying ${i + 6}`).join("\n")}
   Error: unknown model fake-model-large
 
 `);
+  });
+
+  test("an execution whose postrun images were all purged says so in one line below the table, its measures still aggregated", async () => {
+    const data = await copyOfStore();
+    await sqliteStore(storeFileIn(data)).markPostrunsPurged(TWO_HARNESSES, PURGE);
+
+    const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", TWO_HARNESSES, "--data-dir", data]);
+
+    expect(stdout).toContain(" 1   fake-harness-alpha@1.0.0/fake-model-small   1/1    3.0                    2.0                     1/1                           0.6 ");
+    expect(stdout).toEndWith(`
+Postrun images purged:
+  all 2 runs  2026-11-19 09:00, from the image store  (held leaked keys)
+`);
+    expect(exitCode).toBe(0);
+  });
+
+  test("an execution with some postrun images purged lists them, a line per purge", async () => {
+    const data = await copyOfStore();
+    const store = sqliteStore(storeFileIn(data));
+    await store.markPostrunsPurged(BASELINE, PURGE, [{ permutation: 1, iteration: 2 }, { permutation: 3, iteration: 5 }]);
+    await store.markPostrunsPurged(BASELINE, { purgedAt: "2026-11-18T23:59:00.000Z", from: "daemon" }, [{ permutation: 8, iteration: 1 }]);
+
+    const { stdout } = await thunderjar(scenario("0203"), ["show", BASELINE, "--data-dir", data]);
+
+    expect(stdout).toEndWith(`
+Postrun images purged:
+  1-2, 3-5  2026-11-19 09:00, from the image store  (held leaked keys)
+  8-1       2026-11-18 23:59, from the local daemon
+`);
+  });
+
+  test("a container run whose postrun image was purged says when, where from and why, beside it; --json has it", async () => {
+    const data = await copyOfStore();
+    await sqliteStore(storeFileIn(data)).markPostrunsPurged(BASELINE, { ...PURGE, from: "both" }, [{ permutation: 6, iteration: 3 }]);
+
+    const run = await thunderjar(scenario("0203"), ["show", BASELINE, "6-3", "--data-dir", data]);
+    const record = JSON.parse((await thunderjar(scenario("0203"), ["show", BASELINE, "6-3", "--data-dir", data, "--json"])).stdout);
+    const summary = JSON.parse((await thunderjar(scenario("0203"), ["show", BASELINE, "--data-dir", data, "--json"])).stdout);
+
+    expect(run.stdout).toContain(`
+Postrun image  thunderjar-postrun:<ULID>-6-3
+Purged         2026-11-19 09:00, from the local daemon and the image store  (held leaked keys)
+Ran at         2026-10-01 10:32
+`);
+    expect(record.postrunPurge).toEqual({ ...PURGE, from: "both" });
+    expect(summary.permutations.map(({ purged }: { purged: unknown[] }) => purged)).toEqual([
+      [],
+      [],
+      [],
+      [],
+      [],
+      [{ run: "6-3", ...PURGE, from: "both" }],
+      [],
+      [],
+    ]);
+  });
+
+  test("a container run recorded before purges were, or never purged, has no purge", async () => {
+    const { stdout } = await thunderjar(scenario("0203"), ["show", BASELINE, "6-3", "--json"]);
+
+    expect(JSON.parse(stdout).postrunPurge).toBeUndefined();
   });
 
   test("--data-dir reads a container run outside any project", async () => {

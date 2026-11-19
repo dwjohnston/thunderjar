@@ -5,7 +5,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { scenario } from "../../../testing/scenario.ts";
-import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
+import { $ } from "bun";
+import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { loadMeasurements } from "../../../config/measurements.ts";
 import { type ExecutionPage, startViewServer } from "./view.ts";
 
@@ -82,6 +83,24 @@ describe("0203 recorded executions", () => {
 
     expect((await get("/api/nope")).status).toBe(404);
     expect((await get("/nope")).status).toBe(404);
+  });
+});
+
+describe("a copy of 0203's store with postrun images purged", () => {
+  test("/api/executions/:id carries each run's purge, in its record and its permutation's summary", async () => {
+    const data = `${TMP_DIR}/data-${crypto.randomUUID()}`;
+    await $`mkdir -p ${data} && cp -R ${STORE()}/. ${data}`.quiet();
+    try {
+      const purge = { purgedAt: "2026-11-19T09:00:00.000Z", from: "imageStore", reason: "held leaked keys" } as const;
+      await sqliteStore(storeFileIn(data)).markPostrunsPurged("01m3ygz4g89aqh8yey8em0twpq", purge, [{ permutation: 2, iteration: 1 }]);
+
+      const body = (await (await serve(data)("/api/executions/01m3ygz4g89aqh8yey8em0twpq")).json()) as ExecutionPage;
+
+      expect(body.containerRuns.map(({ postrunPurge }) => postrunPurge)).toEqual([undefined, purge]);
+      expect(body.summary.permutations.map(({ purged }) => purged)).toEqual([[], [{ run: "2-1", ...purge }]]);
+    } finally {
+      await $`rm -rf ${data}`.quiet();
+    }
   });
 });
 
