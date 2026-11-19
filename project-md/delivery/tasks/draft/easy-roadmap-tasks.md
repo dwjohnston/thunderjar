@@ -218,4 +218,4 @@ These need configuring per harness, so they're harder:
        - Through the configured runtime, so it works on a remote Docker host too.
        - Overlaps somewhat with `attach`, which follows a running execution.
     3. A purged postrun image fails with that reason.
-    4. Open question: the branch name, e.g. `tj-run-<run>`, after the tag convention.
+    4. The branch is `thunderjar/<container run>`, as the CLI reference names it for `restore`.
