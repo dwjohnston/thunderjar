@@ -27,4 +27,8 @@ describe("commitKind", () => {
     expect(commitKind("🤖 Claude: Let a 🔴🔴 commit fail several tests")).toBe("other");
     expect(commitKind("Explain 🟢 commits in AGENTS.md")).toBe("other");
   });
+
+  test("reads a marker at the start, with a colon in the rest", () => {
+    expect(commitKind("🔴 Docs: the link is broken")).toBe("red");
+  });
 });
