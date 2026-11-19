@@ -5,7 +5,7 @@
 import { AXES, type Axis } from "../config/permutations.ts";
 import type { Measurement } from "../config/measurements.ts";
 import type { Better, Stat, TokenCosts } from "../api/declarations.ts";
-import type { ContainerRunRecord, ExecutionRecord } from "../store/runDataStore.ts";
+import type { ContainerRunRecord, ExecutionRecord, PostrunPurge } from "../store/runDataStore.ts";
 import { STATS, type ScoreKind } from "../instruments/instruments.ts";
 import { type AggregatedMeasurement, aggregatePermutation, type LeftOut } from "./aggregate.ts";
 import { agentEnd, endedCleanly, failureHint, knownCost, totalTokens } from "./runFacts.ts";
@@ -42,6 +42,8 @@ export type PermutationSummary = {
   leftOut: (Omit<LeftOut, "iteration"> & { run: string })[];
   /** Its runs without token costs collected, and why: undefined if recorded before token costs were. */
   withoutTokenCosts: { run: string; tokenCosts?: TokenCosts }[];
+  /** Its runs whose postrun image was purged, and when. Their measures still count: they just can't be retaken. */
+  purged: ({ run: string } & PostrunPurge)[];
 };
 
 /** A metric as declared: its name, its statistic, the kind of score that combines, and which way is better. */
@@ -98,6 +100,7 @@ function summarisePermutation(permutation: number, runs: ContainerRunRecord[], m
     measures,
     leftOut: leftOut.map(({ iteration, ...rest }) => ({ run: runName({ permutation, iteration }), ...rest })),
     withoutTokenCosts: runs.filter(({ tokenCosts }) => tokenCosts?.outcome !== "collected").map((run) => ({ run: runName(run), tokenCosts: run.tokenCosts })),
+    purged: runs.flatMap((run) => (run.postrunPurge === undefined ? [] : [{ run: runName(run), ...run.postrunPurge }])),
   };
 }
 

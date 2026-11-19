@@ -10,7 +10,8 @@
 //   executions      (execution_id PRIMARY KEY, record)                      its ExecutionRecord
 //   container_runs  (execution_id, permutation, iteration PRIMARY KEY, record)  a ContainerRunRecord each
 //
-// Each record is a JSON column, so a record's shape can grow without a migration; the keys
+// Each record is a JSON column, so a record's shape can grow without a migration, e.g. a
+// container run's `postrunPurge`, which older records simply don't have; the keys
 // beside it are only for lookups and order. Each write is one statement, so it's atomic.
 // Reads open the file read-only, so reading never creates or changes it.
 import { SQL } from "bun";
@@ -134,7 +135,44 @@ export type ContainerRunRecord = {
   turns?: { harnessResult: string | null; harnessStderr?: string | null; reply: Reply }[];
   /** The run's measures, by measurement name. Empty until it has been measured. */
   result: Record<string, RecordedMeasure>;
+  /**
+   * That its postrun image was deleted, so `postrunImage` names an image that may no longer exist.
+   * Its measures stay valid; they just can't be retaken. Absent if it never was.
+   */
+  postrunPurge?: PostrunPurge;
 };
+
+/** Where a postrun image was deleted from: the local Docker daemon, the image store's registry, or both. */
+export type PurgedFrom = "daemon" | "imageStore" | "both";
+
+/** When, and where from, a container run's postrun image was deleted, and why. */
+export type PostrunPurge = {
+  /** ISO timestamp of when it was deleted. */
+  purgedAt: string;
+  from: PurgedFrom;
+  reason?: string;
+};
+
+/** A container run of an execution, by its place in the matrix. */
+export type RunKey = { permutation: number; iteration: number };
+
+/**
+ * `next` marked on a run already purged as `previous`: the earlier time, every place it was
+ * deleted from, and `next`'s reason, or else `previous`'s. So marking again is harmless.
+ */
+export function mergePurge(previous: PostrunPurge | undefined, next: PostrunPurge): PostrunPurge {
+  if (previous === undefined) return next;
+  const from = previous.from === next.from ? next.from : "both";
+  const purgedAt = previous.purgedAt < next.purgedAt ? previous.purgedAt : next.purgedAt;
+  const reason = next.reason ?? previous.reason;
+  return { purgedAt, from, ...(reason === undefined ? {} : { reason }) };
+}
+
+/** `runs`, or only those `only` names if given, each marked with `purge`. */
+function markedRuns(runs: ContainerRunRecord[], purge: PostrunPurge, only?: readonly RunKey[]): ContainerRunRecord[] {
+  const chosen = only === undefined ? runs : runs.filter((run) => only.some((key) => key.permutation === run.permutation && key.iteration === run.iteration));
+  return chosen.map((run) => ({ ...run, postrunPurge: mergePurge(run.postrunPurge, purge) }));
+}
 
 export interface RunDataStore {
   /** Records `record`, replacing any recorded for the same execution. */
@@ -145,6 +183,12 @@ export interface RunDataStore {
   listExecutions(): Promise<ExecutionRecord[]>;
   /** The container runs recorded for `executionId`, by permutation then iteration. Empty if none. */
   containerRunsOf(executionId: string): Promise<ContainerRunRecord[]>;
+  /**
+   * Marks the postrun images of `executionId`'s container runs as purged, or only of those `runs`
+   * names if given, and returns the records as marked, by permutation then iteration. Marking a
+   * run again merges the two purges (see mergePurge), so it's harmless. Runs not recorded are ignored.
+   */
+  markPostrunsPurged(executionId: string, purge: PostrunPurge, runs?: readonly RunKey[]): Promise<ContainerRunRecord[]>;
   /**
    * Checks the store can be used, so a run finds out before it builds or runs anything, not as
    * its first container run is recorded. Throws a RunDataStoreError if a database can't be
@@ -257,6 +301,21 @@ export function sqliteStore(path: string): RunDataStore {
       );
       return rows.map((row) => parse<ContainerRunRecord>(`container run ${executionId} ${row.permutation}-${row.iteration}`, row.record));
     },
+    async markPostrunsPurged(executionId, purge, runs) {
+      // No file is no runs to mark: don't create one.
+      if (!writer && !(await Bun.file(path).exists())) return [];
+      const db = await forWriting();
+      const select = db.query("SELECT permutation, iteration, record FROM container_runs WHERE execution_id = $id ORDER BY permutation, iteration");
+      const update = db.query("UPDATE container_runs SET record = $record WHERE execution_id = $id AND permutation = $permutation AND iteration = $iteration");
+      // Read and rewritten in one transaction, so a run recorded meanwhile isn't overwritten.
+      return db.transaction(() => {
+        const rows = select.all({ id: executionId }) as { permutation: number; iteration: number; record: string }[];
+        const records = rows.map((row) => parse<ContainerRunRecord>(`container run ${executionId} ${row.permutation}-${row.iteration}`, row.record));
+        const marked = markedRuns(records, purge, runs);
+        for (const run of marked) update.run({ id: executionId, permutation: run.permutation, iteration: run.iteration, record: JSON.stringify(run) });
+        return marked;
+      })();
+    },
   };
 }
 
@@ -334,6 +393,25 @@ export function postgresStore(url: string, label: string, retryDelaysMs: readonl
         () => sql`SELECT record FROM thunderjar_container_runs WHERE execution_id = ${executionId} ORDER BY permutation, iteration`,
       );
       return (rows as { record: ContainerRunRecord }[]).map((row) => row.record);
+    },
+    async markPostrunsPurged(executionId, purge, runs) {
+      // Read, locked, and rewritten in one transaction, so a run recorded meanwhile isn't overwritten.
+      return run(() =>
+        sql.begin(async (tx) => {
+          const rows = (await tx`SELECT record FROM thunderjar_container_runs WHERE execution_id = ${executionId}
+            ORDER BY permutation, iteration FOR UPDATE`) as { record: ContainerRunRecord }[];
+          const marked = markedRuns(
+            rows.map((row) => row.record),
+            purge,
+            runs,
+          );
+          for (const record of marked) {
+            await tx`UPDATE thunderjar_container_runs SET record = ${record}
+              WHERE execution_id = ${executionId} AND permutation = ${record.permutation} AND iteration = ${record.iteration}`;
+          }
+          return marked;
+        }),
+      );
     },
   };
 }

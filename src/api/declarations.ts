@@ -619,7 +619,17 @@ export function postgresStore(options: { urlEnv: string }): PostgresStore {
 
 export type RunDataStoreDeclaration = SqliteStore | PostgresStore;
 
-export type ImageStore = { repository: string };
+export type ImageStore = {
+  repository: string;
+  /**
+   * A command `purge image` runs to delete one image from the store, when its registry refuses
+   * the standard delete (`DELETE /v2/<name>/manifests/<digest>`), as some do. It's run once per
+   * image, in the project folder, with the image's reference added as its last argument, e.g.
+   * `["./scripts/delete-image.sh"]` runs `./scripts/delete-image.sh ghcr.io/acme/images:<tag>`.
+   * Exiting 0 means the image is gone. Without it, an image the registry won't delete stays.
+   */
+  deleteCommand?: string[];
+};
 
 /**
  * What prerun builds are given beside their build context, for a fragment that needs a credential
@@ -735,11 +745,13 @@ export type ConfigDeclaration = {
   /**
    * @docs
    * @name imageStore
-   * @type {{ repository: string } | null}
+   * @type {{ repository: string; deleteCommand?: string[] } | null}
    * @description
    * The registry repository prerun and postrun images are pushed to, e.g.
    * `{ repository: "ghcr.io/acme/thunderjar-images" }`, with the user's `docker login`. `null`
    * keeps them in the local Docker daemon only: nothing is pushed, and no login is needed.
+   * `deleteCommand` is what `purge image` runs to delete an image the registry won't delete
+   * through its standard API, given the image's reference as its last argument.
    */
   imageStore: ImageStore | null;
   /**

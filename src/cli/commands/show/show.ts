@@ -8,7 +8,14 @@ import { AXES, abbreviateHash } from "../../../config/permutations.ts";
 import type { ModelTokenCosts, Reply, TokenCosts } from "../../../api/declarations.ts";
 import { scoreOf } from "../../../execution/aggregate.ts";
 import { type ExecutionSummary, type PermutationSummary, runName, summariseExecution } from "../../../execution/executionSummary.ts";
-import { type ContainerRunRecord, type ExecutionRecord, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
+import {
+  type ContainerRunRecord,
+  type ExecutionRecord,
+  type PostrunPurge,
+  type PurgedFrom,
+  type RecordedOutcome,
+  RunDataStoreError,
+} from "../../../store/runDataStore.ts";
 import { type Paint, padEnd, painter, plain, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
@@ -156,7 +163,35 @@ function permutationTable(summary: ExecutionSummary, paint: Paint): string[] {
     lines.push("", paint.red("! Agents that didn't end cleanly:"), ...columns(unclean.map(({ run, end, why }) => [paint.bold(run), paint.red(end), ...(why === undefined ? [] : [paint.dim(why)])])));
   }
   if (leftOut.length > 0) lines.push("", paint.yellow("* Left out:"), ...columns(leftOut));
+  const purged = purgedLines(permutations, paint);
+  if (purged.length > 0) lines.push("", paint.dim("Postrun images purged:"), ...purged);
   return lines;
+}
+
+/** Where a postrun image was purged from, in words. */
+const purgedFromText = (from: PurgedFrom) =>
+  from === "daemon" ? "the local daemon" : from === "imageStore" ? "the image store" : "the local daemon and the image store";
+
+/** A purge: when, to the minute, where from, and why, if it says. */
+const showPurge = ({ purgedAt, from, reason }: PostrunPurge, paint: Paint) =>
+  `${minute(purgedAt)}, from ${purgedFromText(from)}${reason === undefined ? "" : paint.dim(`  (${reason})`)}`;
+
+/**
+ * The runs whose postrun images were purged, a line per purge, so a whole execution purged at
+ * once is one line: its runs, or `all <n> runs`, then when, where from and why.
+ */
+function purgedLines(permutations: PermutationSummary[], paint: Paint): string[] {
+  const groups = new Map<string, { purge: PostrunPurge; runs: string[] }>();
+  for (const { run, ...purge } of permutations.flatMap((permutation) => permutation.purged)) {
+    const key = JSON.stringify([minute(purge.purgedAt), purge.from, purge.reason]);
+    const group = groups.get(key) ?? groups.set(key, { purge, runs: [] }).get(key)!;
+    group.runs.push(run);
+  }
+  if (groups.size === 0) return [];
+  const total = permutations.reduce((sum, { iterations }) => sum + iterations, 0);
+  return columns(
+    [...groups.values()].map(({ purge, runs }) => [paint.bold(runs.length === total && total > 1 ? `all ${total} runs` : runs.join(", ")), showPurge(purge, paint)]),
+  );
 }
 
 /** One execution: what it was, then its permutation table, or that it has no container runs. */
@@ -248,6 +283,7 @@ export function renderContainerRun(record: ContainerRunRecord, paint: Paint = pl
         ["Execution", `${paint.bold(executionId)}  ${paint.dim(`(${testCase})`)}`],
         ["Permutation", `${permutation}  ${paint.dim(`(${abbreviateHash(permutationHash)})`)}, iteration ${iteration}`],
         ["Postrun image", paint.cyan(postrunImage)],
+        ...(record.postrunPurge === undefined ? [] : [["Purged", paint.yellow(showPurge(record.postrunPurge, paint))] as [string, string]]),
         ["Ran at", minute(ranAt)],
       ],
       paint,

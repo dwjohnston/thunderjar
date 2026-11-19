@@ -37,9 +37,10 @@ describe("imageStoreProblem", () => {
   test("null and { repository } are fine", () => {
     expect(imageStoreProblem(null)).toBeUndefined();
     expect(imageStoreProblem({ repository: "ghcr.io/acme/images" })).toBeUndefined();
+    expect(imageStoreProblem({ repository: "ghcr.io/acme/images", deleteCommand: ["./delete.sh", "--quiet"] })).toBeUndefined();
   });
 
-  test.each([[undefined], ["ghcr.io/acme/images"], [[]], [{}], [{ repository: 1 }]])("%p is not", (imageStore: unknown) => {
+  test.each([[undefined], ["ghcr.io/acme/images"], [[]], [{}], [{ repository: 1 }], [{ repository: "ghcr.io/acme/images", deleteCommand: [] }], [{ repository: "ghcr.io/acme/images", deleteCommand: "./delete.sh" }]])("%p is not", (imageStore: unknown) => {
     expect(imageStoreProblem(imageStore)).toBeString();
   });
 });

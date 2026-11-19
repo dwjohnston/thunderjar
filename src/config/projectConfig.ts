@@ -38,8 +38,11 @@ export function imageStoreProblem(imageStore: unknown): string | undefined {
   if (typeof imageStore !== "object" || Array.isArray(imageStore)) {
     return `must be { repository: "<registry>/<name>" }, or null to keep images local, got ${show(imageStore)}`;
   }
-  const { repository } = imageStore as { repository?: unknown };
+  const { repository, deleteCommand } = imageStore as { repository?: unknown; deleteCommand?: unknown };
   if (typeof repository !== "string") return `repository must be a string, got ${show(repository)}`;
+  if (deleteCommand !== undefined && !isCommand(deleteCommand)) {
+    return `deleteCommand must be a non-empty list of non-empty strings, e.g. ["./scripts/delete-image.sh"], got ${show(deleteCommand)}`;
+  }
   return repositoryProblem(repository);
 }
 
@@ -197,7 +200,10 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
   if (problems.length > 0) throw problemsError(problems);
   const { imageStore, build, runtime, runDataStore } = config as ConfigDeclaration;
   return {
-    imageStore: imageStore === null ? null : { repository: imageStore.repository },
+    imageStore:
+      imageStore === null
+        ? null
+        : { repository: imageStore.repository, ...(imageStore.deleteCommand !== undefined && { deleteCommand: [...imageStore.deleteCommand] }) },
     runDataStore: runDataStore.kind === "postgres" ? { kind: "postgres", urlEnv: runDataStore.urlEnv } : { kind: "sqlite", path: runDataStore.path },
     runtime:
       runtime === undefined
