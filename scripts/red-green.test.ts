@@ -125,4 +125,8 @@ describe("wasChanged", () => {
   test("is false when the changes are in other tests", () => {
     expect(wasChanged(at(5), starts, changedLines(DIFF))).toBe(false);
   });
+
+  test("runs the last test to the end of the file", () => {
+    expect(wasChanged(at(14), starts, changedLines(DIFF))).toBe(true);
+  });
 });
