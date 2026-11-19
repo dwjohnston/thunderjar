@@ -74,6 +74,21 @@ test("postrunTargets: locally by its name and as recorded, in the store only if 
   ]);
 });
 
+test("postrunTargets: a run recorded under its local name, as every run was before pushed references were recorded, is in the store under the name it was pushed as", () => {
+  const record = { executionId: "01e", permutation: 2, permutationHash: "3ab9b840c0ffee", iteration: 3, postrunImage: "thunderjar-postrun:01e-2-3" } as ContainerRunRecord;
+
+  expect(postrunTargets([record], "thunderjar", { repository: "ghcr.io/acme/images" })).toEqual([
+    {
+      executionId: "01e",
+      run: "2-3",
+      permutation: 2,
+      iteration: 3,
+      local: ["thunderjar-postrun:01e-2-3"],
+      stored: "ghcr.io/acme/images:postrun-e01e-h3ab9b840-i02",
+    },
+  ]);
+});
+
 test("purgedFrom: wherever it's gone from, deleted, already gone or recorded", () => {
   expect(purgedFrom({ outcome: "deleted" }, { outcome: "absent" })).toBe("both");
   expect(purgedFrom({ outcome: "recorded" }, undefined)).toBe("daemon");
