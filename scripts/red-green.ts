@@ -52,6 +52,14 @@ export function isTestFile(path: string): boolean {
   return /\.test\.[cm]?[jt]sx?$/.test(path) || path.endsWith(".result.json");
 }
 
+/** A commit's kind, and the test files it changes. */
+export type CommitTests = { kind: CommitKind; testFilesChanged: string[] };
+
+/** The test files to run for a commit. `previous` is the commit before it, or null. */
+export function testsToRun(_commit: CommitTests, _previous: CommitTests | null): string[] {
+  return [];
+}
+
 const ENTITIES: Record<string, string> = { "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&amp;": "&" };
 
 function attribute(attributes: string, name: string): string {
