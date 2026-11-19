@@ -109,3 +109,8 @@ export function wasChanged(test: TestCase, starts: Map<string, number[]>, change
   const end = (starts.get(test.file) ?? []).find((line) => line > test.line) ?? Infinity;
   return (changed.get(test.file) ?? []).some(([first, last]) => first < end && last >= test.line);
 }
+
+/** How many more `test(`/`it(` calls a diff adds than it removes. */
+export function addedTestCount(_diff: string): number {
+  return 0;
+}

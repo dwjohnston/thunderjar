@@ -12,7 +12,7 @@
  *
  */
 import { describe, expect, test } from "bun:test";
-import { blockStarts, changedLines, commitKind, isTestFile, summaryFailCount, type TestCase, testCases, wasChanged } from "./red-green.ts";
+import { addedTestCount, blockStarts, changedLines, commitKind, isTestFile, summaryFailCount, type TestCase, testCases, wasChanged } from "./red-green.ts";
 
 describe("commitKind", () => {
   test("reads the marker after a prefix", () => {
@@ -128,5 +128,12 @@ describe("wasChanged", () => {
 
   test("runs the last test to the end of the file", () => {
     expect(wasChanged(at(14), starts, changedLines(DIFF))).toBe(true);
+  });
+});
+
+describe("addedTestCount", () => {
+  test("counts added test calls, less removed ones", () => {
+    expect(addedTestCount(DIFF)).toBe(0);
+    expect(addedTestCount(`+++ b/a.test.ts\n+  test("one", () => {});\n+  test.each([1])("two", () => {});`)).toBe(2);
   });
 });
