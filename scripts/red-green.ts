@@ -26,6 +26,6 @@ export function commitKind(subject: string): CommitKind {
 }
 
 /** Whether a file holds tests or their expectations. */
-export function isTestFile(_path: string): boolean {
-  return false;
+export function isTestFile(path: string): boolean {
+  return /\.test\.[cm]?[jt]sx?$/.test(path) || path.endsWith(".result.json");
 }
