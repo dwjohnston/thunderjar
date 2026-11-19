@@ -41,4 +41,8 @@ describe("isTestFile", () => {
     expect(isTestFile("src/api/claudeCode.deepseek.result.json")).toBe(true);
     expect(isTestFile("src/testing/thunderjar.ts")).toBe(false);
   });
+
+  test("leaves out the gauntlet's challenges", () => {
+    expect(isTestFile("src/gauntlet/wrong-failing-test/test/retail/money.test.js")).toBe(false);
+  });
 });
