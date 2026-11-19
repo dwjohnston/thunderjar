@@ -194,8 +194,18 @@ These need configuring per harness, so they're harder:
     - In the planned command table, but not built.
 26. `remeasure`
     - Planned, not built.
-27. `restore`
-    - Brings a run's end state in as a local branch. Needs a better name.
-28. `checkout <run>`
-    - Opens a shell in a run's postrun image.
-    - Overlaps somewhat with `attach`, which follows a running execution.
+27. `checkout <run>`
+    - Brings a container run's end state back, to inspect what happened.
+    - Replaces the planned `restore` command.
+    - e.g.
+      ```sh
+      thunderjar checkout <run>            # the run's end state as a local branch
+      thunderjar checkout <run> --shell    # a shell inside its postrun image
+      ```
+    1. Default: a local branch.
+       - The agent's commits, plus a commit of anything it left uncommitted, so the branch is the whole end state.
+    2. `--shell`: `docker run -it` on the postrun image, in the workspace.
+       - Through the configured runtime, so it works on a remote Docker host too.
+       - Overlaps somewhat with `attach`, which follows a running execution.
+    3. A purged postrun image fails with that reason.
+    4. Open question: the branch name, e.g. `tj-run-<run>`, after the tag convention.
