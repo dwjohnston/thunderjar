@@ -12,7 +12,7 @@
  *
  */
 import { describe, expect, test } from "bun:test";
-import { commitKind } from "./red-green.ts";
+import { commitKind, isTestFile } from "./red-green.ts";
 
 describe("commitKind", () => {
   test("reads the marker after a prefix", () => {
@@ -30,5 +30,15 @@ describe("commitKind", () => {
 
   test("reads a marker at the start, with a colon in the rest", () => {
     expect(commitKind("🔴 Docs: the link is broken")).toBe("red");
+  });
+});
+
+describe("isTestFile", () => {
+  test("is a test file, or a test's expected result", () => {
+    expect(isTestFile("src/cli/commands/run/run.test.ts")).toBe(true);
+    expect(isTestFile("src/docker/docker.docker.test.ts")).toBe(true);
+    expect(isTestFile("src/cli/commands/view/app/ErrorBoundary.test.tsx")).toBe(true);
+    expect(isTestFile("src/api/claudeCode.deepseek.result.json")).toBe(true);
+    expect(isTestFile("src/testing/thunderjar.ts")).toBe(false);
   });
 });

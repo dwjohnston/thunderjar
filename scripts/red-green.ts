@@ -24,3 +24,8 @@ export function commitKind(subject: string): CommitKind {
   const marker = /^(?:[^:]*:\s*)?(🔴🔴|🔴|🟢|♻️|♻)/u.exec(subject)?.[1];
   return marker === undefined ? "other" : (MARKERS[marker] ?? "other");
 }
+
+/** Whether a file holds tests or their expectations. */
+export function isTestFile(_path: string): boolean {
+  return false;
+}
