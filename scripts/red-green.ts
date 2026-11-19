@@ -31,6 +31,13 @@ export function isTestFile(path: string): boolean {
   return /\.test\.[cm]?[jt]sx?$/.test(path) || path.endsWith(".result.json");
 }
 
+const ENTITIES: Record<string, string> = { "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&amp;": "&" };
+
+function attribute(attributes: string, name: string): string {
+  const value = new RegExp(`\\b${name}="([^"]*)"`).exec(attributes)?.[1] ?? "";
+  return value.replace(/&(lt|gt|quot|apos|amp);/g, (entity) => ENTITIES[entity] ?? entity);
+}
+
 /** One test in a `bun test --reporter=junit` report. */
 export type TestCase = {
   /** `file: describe > test`. */
@@ -41,6 +48,19 @@ export type TestCase = {
 };
 
 /** The tests in a JUnit report. */
-export function testCases(_junit: string): TestCase[] {
-  return [];
+export function testCases(junit: string): TestCase[] {
+  const cases: TestCase[] = [];
+  for (const match of junit.matchAll(/<testcase\b([^>]*?)(?:\/>|>([\s\S]*?)<\/testcase>)/g)) {
+    const [, attributes = "", body = ""] = match;
+    // Bun writes nested describes innermost first: "inner > outer".
+    const describes = attribute(attributes, "classname").split(" > ").reverse().filter(Boolean);
+    const file = attribute(attributes, "file").replace(/^\.\//, "");
+    cases.push({
+      id: `${file}: ${[...describes, attribute(attributes, "name")].join(" > ")}`,
+      file,
+      line: Number(attribute(attributes, "line")),
+      failing: body.includes("<failure"),
+    });
+  }
+  return cases;
 }
