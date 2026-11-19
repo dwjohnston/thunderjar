@@ -124,6 +124,18 @@ export function showSecrets(found: SecretRun[], total: number, paint: Paint = pl
   ];
 }
 
+/** A container run whose postrun image couldn't be searched for secrets: its name, and why. */
+export type UnsearchedRun = { run: string; reason: string };
+
+/** What `run` says, once it's done, about the postrun images, of `total`, that couldn't be searched for secrets, and why. */
+export function showUnsearched(unsearched: UnsearchedRun[], total: number, paint: Paint = plain): string[] {
+  if (unsearched.length === 0) return [];
+  return [
+    paint.yellow(`Couldn't search ${unsearched.length} of ${total} postrun images for secrets' values, so they may hold one:`),
+    ...unsearched.map(({ run, reason }) => `  ${run}  ${paint.dim(reason)}`),
+  ];
+}
+
 /** What `--timings` calls each phase. */
 const PHASE_LABELS: Record<string, string> = {
   build: "building prerun images",
@@ -184,6 +196,8 @@ export type RunDisplay = {
   unclean: UncleanRun[];
   /** The secrets found in postrun images, so far. */
   secrets: SecretRun[];
+  /** The postrun images that couldn't be searched for secrets, so far. */
+  unsearched: UnsearchedRun[];
   /** How long each phase took, once the execution has said. */
   timings: () => ExecutionTimings | undefined;
   /**
@@ -236,6 +250,7 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
   let timings: ExecutionTimings | undefined;
   const unclean: UncleanRun[] = [];
   const secrets: SecretRun[] = [];
+  const unsearched: UnsearchedRun[] = [];
   const hooks: RunHooks = {
     onBuilding: (image) => {
       if (live !== undefined) return void prerunRows.set(image, live.add(`${paint.cyan(image)}  ${paint.dim("building")} `));
@@ -306,6 +321,7 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
         unclean.push({ run: `${permutation.number}-${iteration.number}`, end: agentEnd(execution, harnessResult), ...(why !== undefined && { why }) });
       }
       for (const secret of record.secretsFound ?? []) secrets.push({ run: `${permutation.number}-${iteration.number}`, ...secret });
+      if (record.secretSearchFailed !== undefined) unsearched.push({ run: `${permutation.number}-${iteration.number}`, reason: record.secretSearchFailed });
       const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
       // Its cost if it can be trusted, else its tokens, if it has either.
       const cost = knownCost(tokenCosts);
@@ -375,5 +391,5 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
     }
     return true;
   };
-  return { hooks, open, close, fail, stop, unclean, secrets, timings: () => timings, reportFailure };
+  return { hooks, open, close, fail, stop, unclean, secrets, unsearched, timings: () => timings, reportFailure };
 }

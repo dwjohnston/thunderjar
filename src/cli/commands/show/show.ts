@@ -283,9 +283,10 @@ function environmentLines({ env = {}, secretEnv = [] }: ContainerRunRecord, pain
 
 /**
  * The secrets found in its postrun image's files, a line each, by name, with where, and that a
- * pushed image has exposed them. Nothing if none was found.
+ * pushed image has exposed them, or why its files couldn't be searched. Nothing if none was found.
  */
-function secretLines({ secretsFound = [] }: ContainerRunRecord, paint: Paint): string[] {
+function secretLines({ secretsFound = [], secretSearchFailed }: ContainerRunRecord, paint: Paint): string[] {
+  if (secretSearchFailed !== undefined) return [paint.bold("Secrets in its postrun image"), `  ${paint.yellow("not searched")}  ${paint.dim(`(${secretSearchFailed})`)}: it may hold one`, ""];
   if (secretsFound.length === 0) return [];
   const exposed = "Its postrun image holds these secrets' values in its files. If it was pushed, treat them as exposed, and rotate them.";
   return [paint.bold("Secrets in its postrun image"), ...columns(secretsFound.map((secret) => [paint.red(secret.name), secretFiles(secret)])), `  ${exposed}`, ""];

@@ -108,8 +108,8 @@ export function parseSecretSearch(text: string | undefined, names: string[]): Fo
 /**
  * Searches the files of the postrun image `image` for the values of the secret variables `names`,
  * in the container `container`, which is removed afterwards. Undefined, and no container, if none
- * is worth searching for: see searchableSecrets. A search that takes longer than
- * secretSearchTimeoutSeconds() is `failed`, with why.
+ * is worth searching for: see searchableSecrets. Never throws: a search that fails, or takes
+ * longer than secretSearchTimeoutSeconds(), is `failed`, with why, and the run goes on.
  */
 export async function searchForSecrets(image: string, container: string, names: string[], runtime: DockerRuntime): Promise<SecretSearch | undefined> {
   const searched = searchableSecrets(names);
@@ -130,6 +130,8 @@ export async function searchForSecrets(image: string, container: string, names: 
     // Names and paths only: never a value.
     log.info({ image, searched, found, ms: Date.now() - startedAt }, "searched the postrun image for secrets");
     return { found };
+  } catch (error) {
+    return { failed: error instanceof Error ? error.message : String(error) };
   } finally {
     await removeContainer(container, runtime).catch(() => {});
   }

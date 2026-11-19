@@ -21,7 +21,7 @@ import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError as error, printJson } from "../../output.ts";
 import { detachedMessage, followToEnd, reportRunnerFailure } from "../run/followRunner.ts";
-import { type RunDisplay, runDisplay, showSecrets, showTimings, showUnclean } from "../run/runDisplay.ts";
+import { type RunDisplay, runDisplay, showSecrets, showTimings, showUnclean, showUnsearched } from "../run/runDisplay.ts";
 
 /**
  * Follows execution `executionId`, running on the runtime of the nearest `.thunderjar/` folder in
@@ -82,6 +82,7 @@ async function attach(cwd: string, executionId: string, imagePrefix: string, sto
     display?.stop();
     for (const line of showUnclean(display?.unclean ?? [], containers, paint)) print(line);
     for (const line of showSecrets(display?.secrets ?? [], containers, paint)) print(line);
+    for (const line of showUnsearched(display?.unsearched ?? [], containers, paint)) print(line);
     print(paint.dim(`Recorded in ${displayPath(cwd, recordedIn)}`));
     if (json) printJson({ execution, recordedIn, containerRuns });
     if (execution.status === "failed") process.exitCode = 1;

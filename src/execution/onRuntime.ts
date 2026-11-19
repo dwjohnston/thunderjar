@@ -94,7 +94,7 @@ export async function storePrerunImages(
 }
 
 /** Thunderjar's own variables a runner is given if they're set here: how long a container may take to start. */
-const PASSED_SETTINGS = ["THUNDERJAR_START_TIMEOUT_SECONDS"];
+const PASSED_SETTINGS = ["THUNDERJAR_START_TIMEOUT_SECONDS", "THUNDERJAR_SECRET_SEARCH_TIMEOUT_SECONDS"];
 
 /**
  * The variables a runner is given for `plan`: those its harnesses need, its test case's

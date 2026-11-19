@@ -149,6 +149,8 @@ export type ContainerRunRecord = {
    * never value. Absent if none was, and from runs recorded before they were looked for.
    */
   secretsFound?: FoundSecret[];
+  /** Why its postrun image's files couldn't be searched for its secret values, if they couldn't: it may hold one. */
+  secretSearchFailed?: string;
 };
 
 /** Where a postrun image was deleted from: the local Docker daemon, the image store's registry, or both. */
