@@ -245,14 +245,15 @@ Commits follow the red/green TDD workflow of the [red-green-tdd skill](https://g
 
 The `Red/green` workflow (`red-green.yml`) checks every commit of a PR with `scripts/red-green.ts`:
 
-| Marker | May change test files | Tests at the commit |
+| Marker | May change test files | Test files run, which must... |
 |---|---|---|
-| 🔴 | Yes | Exactly one fails, and the commit added or changed it |
-| 🔴🔴 | Yes, but adds no tests | At least one fails, and the commit changed each one. Needs the `multi-red-approved` label |
-| 🟢 | No | All pass |
-| ♻️ | Yes | All pass |
+| 🔴 | Yes | Its own: exactly one fails, and the commit added or changed it |
+| 🔴🔴 | Yes, but adds no tests | Its own: at least one fails, and the commit changed each one. Needs the `multi-red-approved` label |
+| 🟢 | No | The 🔴 commit's before it: all pass |
+| ♻️ | Yes | Its own: all pass |
 | None | No | Not run |
 
+- Only the commit's own test files run, or for a 🟢, its 🔴's. The CI check job runs the whole suite at the head.
 - A 🔴 or 🔴🔴 commit must be followed by a 🟢 commit.
 - A test file that fails to load fails the commit, whatever its marker.
 - Test files are `*.test.*` and `*.result.json`, outside `src/gauntlet/`.

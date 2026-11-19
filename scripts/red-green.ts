@@ -18,17 +18,20 @@
 //
 // The marker starts a commit's subject, or follows a `prefix: ` such as `🤖 Claude: `.
 //
+// Only the commit's own test files run: a 🔴, 🔴🔴 or ♻️ commit's, or for a 🟢 commit, those of the
+// 🔴 commit before it. The CI check job runs the whole suite at the head.
+//
 // - 🔴: exactly one test fails, on an assertion, and the commit added or changed it.
 // - 🔴🔴: at least one test fails, and the commit changed every failing test. It adds no tests,
 //   and needs --multi-red-approved (CI passes it for a PR with the `multi-red-approved` label).
 // - A 🔴 or 🔴🔴 commit is followed by a 🟢 commit.
-// - 🟢: touches no test file, and every test passes.
-// - ♻️: may change test files, and every test passes.
-// - No marker: touches no test file. Its tests aren't run: the CI check job runs them at the head.
+// - 🟢: touches no test file, and its 🔴 commit's test files pass.
+// - ♻️: may change test files, and they pass.
+// - No marker: touches no test file. Its tests aren't run.
 // - A failure not tied to a test, e.g. a file that doesn't load, fails any commit.
 //
-// Tests run in a temporary git worktree, so this checkout is never touched. --docker also runs the
-// `.docker.test.ts` files the branch changes. Merge commits are skipped.
+// Tests run in a temporary git worktree, so this checkout is never touched. `.docker.test.ts` files
+// run only with --docker. Merge commits are skipped.
 //
 // Exits 1 if any commit breaks a rule.
 import { $ } from "bun";
@@ -239,24 +242,31 @@ async function lines(command: ReturnType<typeof $>): Promise<string[]> {
 type Examined = Pick<Facts, "result" | "changedFailing" | "addsTests">;
 
 /**
- * Runs the tests in `dir`, a copy of the commit, and works out which failing tests the commit
- * changed. `diff` gives the commit's `git diff` of the files it's passed, with the extra args.
+ * Runs `files`, test files of the commit, in `dir`, a copy of it, and works out which failing tests
+ * the commit changed. `.docker.test.ts` files run only with `docker`. `diff` gives the commit's
+ * `git diff` of the files it's passed, with the extra args. The result is null if no file ran.
  */
 async function examine(
   dir: string,
   report: string,
   kind: CommitKind,
   testFilesChanged: string[],
-  dockerFiles: string[],
+  files: string[],
+  docker: boolean,
   diff: (args: string[]) => Promise<string>,
 ): Promise<Examined> {
-  const runs = [await runTests(dir, `${report}.xml`, ["--parallel"])];
   const present: string[] = [];
-  for (const file of dockerFiles) {
+  for (const file of files) {
     if (await Bun.file(`${dir}/${file}`).exists()) present.push(`./${file}`);
   }
-  if (present.length > 0) {
-    runs.push(await runTests(dir, `${report}.docker.xml`, ["--timeout", "600000", ...present], { THUNDERJAR_DOCKER_TESTS: "1" }));
+  const unit = present.filter((file) => !file.endsWith(".docker.test.ts"));
+  const dockerFiles = docker ? present.filter((file) => file.endsWith(".docker.test.ts")) : [];
+  if (unit.length === 0 && dockerFiles.length === 0) return { result: null, changedFailing: [], addsTests: false };
+
+  const runs = [];
+  if (unit.length > 0) runs.push(await runTests(dir, `${report}.xml`, ["--parallel", ...unit]));
+  if (dockerFiles.length > 0) {
+    runs.push(await runTests(dir, `${report}.docker.xml`, ["--timeout", "600000", ...dockerFiles], { THUNDERJAR_DOCKER_TESTS: "1" }));
   }
   const result = { failing: runs.flatMap((run) => run.failing), unattributed: runs.reduce((sum, run) => sum + run.unattributed, 0) };
   if ((kind !== "red" && kind !== "multi-red") || testFilesChanged.length === 0) return { result, changedFailing: [], addsTests: false };
@@ -274,7 +284,7 @@ async function examine(
 /** Prints a commit's outcome. Returns its problems, labelled, or null if it has none. */
 function report(label: string, problems: string[], result: TestResult | null): string | null {
   if (problems.length === 0) {
-    const outcome = result === null ? "no test files changed" : result.failing.length === 0 ? "all pass" : `failing: ${result.failing.map((test) => test.id).join(", ")}`;
+    const outcome = result === null ? "no tests to run" : result.failing.length === 0 ? "all pass" : `failing: ${result.failing.map((test) => test.id).join(", ")}`;
     console.log(`  ✅ ${outcome}`);
     return null;
   }
@@ -301,20 +311,22 @@ async function checkBranch(): Promise<string[]> {
     }),
   );
   const checked = commits.filter((commit) => !commit.isMerge);
-  const dockerFiles = docker ? (await lines($`git diff --name-only ${base}...${head}`)).filter((file) => file.endsWith(".docker.test.ts")) : [];
 
   const temp = tempDir();
   const worktree = `${temp}/worktree`;
   let hasWorktree = false;
   const problems: string[] = [];
+  let previous: CommitTests | null = null;
   try {
     for (const [index, commit] of checked.entries()) {
       const label = `${commit.sha.slice(0, 7)} ${commit.subject}`;
       console.log(`\n${label}`);
       const testFilesChanged = (await lines($`git diff --name-only --no-renames ${commit.sha}^ ${commit.sha}`)).filter(isTestFile);
 
+      const files = testsToRun({ kind: commit.kind, testFilesChanged }, previous);
+      previous = { kind: commit.kind, testFilesChanged };
       let examined: Examined = { result: null, changedFailing: [], addsTests: false };
-      if (commit.kind !== "other") {
+      if (files.length > 0) {
         if (!hasWorktree) {
           await $`git worktree add --detach ${worktree} ${commit.sha}`.quiet();
           hasWorktree = true;
@@ -322,7 +334,7 @@ async function checkBranch(): Promise<string[]> {
         await $`git checkout --detach --force --quiet ${commit.sha}`.cwd(worktree);
         await $`git clean -fdq`.cwd(worktree);
         await $`bun install --frozen-lockfile`.cwd(worktree).quiet();
-        examined = await examine(worktree, `${temp}/${commit.sha}`, commit.kind, testFilesChanged, dockerFiles, (args) =>
+        examined = await examine(worktree, `${temp}/${commit.sha}`, commit.kind, testFilesChanged, files, docker, (args) =>
           $`git diff ${commit.sha}^ ${commit.sha} ${args}`.text(),
         );
       }
@@ -357,7 +369,10 @@ async function checkStaged(messageFile: string): Promise<string[]> {
   const testFilesChanged = (await lines($`git diff --cached --name-only --no-renames ${base}`)).filter(isTestFile);
   const label = `The commit being made: ${subject}`;
   console.log(label);
-  if (kind === "other") {
+  const previousSubject = (await $`git log -1 --format=%s ${base}`.text()).trim();
+  const previousTests = (await lines($`git diff --name-only --no-renames ${base}^ ${base}`.nothrow().quiet())).filter(isTestFile);
+  const files = testsToRun({ kind, testFilesChanged }, { kind: commitKind(previousSubject), testFilesChanged: previousTests });
+  if (files.length === 0) {
     const problem = report(label, judge({ kind, testFilesChanged, nextKind: "unknown", result: null, changedFailing: [], addsTests: false, multiRedApproved: true }), null);
     return problem === null ? [] : [problem];
   }
@@ -370,8 +385,7 @@ async function checkStaged(messageFile: string): Promise<string[]> {
     await $`git checkout-index --all --prefix=${copy}/`;
     await $`bun install --frozen-lockfile`.cwd(copy).quiet();
     const docker = (await $`docker info`.nothrow().quiet()).exitCode === 0;
-    const dockerFiles = docker ? testFilesChanged.filter((file) => file.endsWith(".docker.test.ts")) : [];
-    const examined = await examine(copy, `${temp}/report`, kind, testFilesChanged, dockerFiles, (args) => $`git diff --cached ${base} ${args}`.text());
+    const examined = await examine(copy, `${temp}/report`, kind, testFilesChanged, files, docker, (args) => $`git diff --cached ${base} ${args}`.text());
     // The multi-red-approved label is a PR's, so only CI checks it.
     const problem = report(label, judge({ kind, testFilesChanged, nextKind: "unknown", multiRedApproved: true, ...examined }), examined.result);
     return problem === null ? [] : [problem];
