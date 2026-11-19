@@ -41,11 +41,11 @@ Labels on suggested items:
 - ‼️ 🍳 Quick capture -> test case
     - https://github.com/dwjohnston/thunderjar/issues/167
     - A skill that triages `quickCaptures` and sets one up
-- 👐 🍳 `tj-interpret-results`
+- 👐 🪖 `tj-interpret-results`
     - Reads `show --json`, says which permutation won and what to try next
-- 👐 🍳 `tj-iterate`
+- 👐 🪖 `tj-iterate`
     - Loop: tweak a promptset, run, compare, repeat
-- 😴 🍳 `tj-remote-setup`
+- 😴 🪖 `tj-remote-setup`
     - Walks through image store, run data store, runtime
 
 
