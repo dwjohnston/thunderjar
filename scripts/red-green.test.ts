@@ -166,4 +166,9 @@ describe("judge", () => {
   test("a 🔴 commit passes with one failing test it changed", () => {
     expect(judge(facts({ kind: "red", testFilesChanged: ["a.test.ts"], result: { failing: failing("new"), unattributed: 0 }, changedFailing: ["new"] }))).toEqual([]);
   });
+
+  test("a 🔴 commit with two failing tests fails", () => {
+    const problems = judge(facts({ kind: "red", result: { failing: failing("one", "two"), unattributed: 0 }, changedFailing: ["one", "two"] }));
+    expect(problems.join("\n")).toContain("exactly one failing test, but 2 failed");
+  });
 });
