@@ -36,6 +36,7 @@ export type {
   PostgresStore,
   PromptSetDeclaration,
   Reply,
+  RequiredEnv,
   ResolveCtx,
   Resolved,
   RunDataStoreDeclaration,

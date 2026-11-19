@@ -16,7 +16,7 @@
 // `secretEnv`, names only, whose values stay in the shell that runs Thunderjar.
 import type { TestCaseDeclaration } from "../api/declarations.ts";
 import { ENV_NAME } from "./envName.ts";
-import { requiredEnvProblem } from "./requiredEnv.ts";
+import { envNamesProblem } from "./requiredEnv.ts";
 
 const show = (value: unknown) => JSON.stringify(value) ?? String(value);
 
@@ -48,7 +48,7 @@ function envProblems(env: unknown): EnvProblem[] {
  */
 export function testCaseEnvProblems(testCase: Record<string, unknown>): EnvProblem[] {
   const problems = envProblems(testCase.env);
-  const secretProblem = requiredEnvProblem(testCase.secretEnv);
+  const secretProblem = envNamesProblem(testCase.secretEnv);
   if (secretProblem) problems.push({ field: "secretEnv", message: secretProblem });
   if (problems.length > 0) return problems;
   const env = (testCase.env ?? {}) as Record<string, string>;

@@ -269,14 +269,15 @@ function metricLines(record: ContainerRunRecord, measurements: Measurement[], pa
 }
 
 /**
- * The variables its test case gave its agent container, a line each: `env`'s with their values,
- * then `secretEnv`'s names, as only they were recorded. Nothing if it was given none, or was
- * recorded before test cases could give any.
+ * The variables its agent container was given, a line each: its test case's `env`'s with their
+ * values, then `secretEnv`'s names, then its harness's `requiredEnv`'s, as only their names were
+ * recorded. Nothing if it was given none, or was recorded before they were.
  */
-function environmentLines({ env = {}, secretEnv = [] }: ContainerRunRecord, paint: Paint): string[] {
+function environmentLines({ env = {}, secretEnv = [], harnessEnv = [] }: ContainerRunRecord, paint: Paint): string[] {
   const rows = [
     ...Object.entries(env).map(([name, value]) => [paint.dim(name), value]),
     ...secretEnv.map((name) => [paint.dim(name), paint.dim("secret, from the shell: not recorded")]),
+    ...harnessEnv.map((name) => [paint.dim(name), paint.dim("the harness's, from the shell: not recorded")]),
   ];
   return rows.length === 0 ? [] : [paint.bold("Environment"), ...columns(rows), ""];
 }

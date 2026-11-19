@@ -322,6 +322,64 @@ Permutation 1: prerun image thunderjar-prerun:2bdc0dba
   });
 });
 
+describe("0202 with a harness that needs one of two variables", () => {
+  /** A copy of 0202 whose fake-harness-alpha needs FAKE_HARNESS_TOKEN or FAKE_HARNESS_KEY, and says which it got. */
+  const copyWithOneOf = async () => {
+    const copy = await copyScenarioProject("0202");
+    const harness = `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`;
+    const text = await Bun.file(harness).text();
+    await Bun.write(harness, text.replace('requiredEnv: ["FAKE_HARNESS_KEY"]', 'requiredEnv: [{ oneOf: ["FAKE_HARNESS_TOKEN", "FAKE_HARNESS_KEY"] }]'));
+    return copy;
+  };
+
+  test("with neither set, run names both, and the harness, and stops", async () => {
+    await using docker = await fakeDocker();
+    await using copy = await copyWithOneOf();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", dataDir()], { env: docker.env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe(
+      "Error: fake-harness-alpha needs one of FAKE_HARNESS_TOKEN or FAKE_HARNESS_KEY, none of which is set.\nExport it in the shell that runs thunderjar.\n",
+    );
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
+  });
+
+  test("with both set, only the first reaches the agent, and the record names it", async () => {
+    await using docker = await fakeDocker();
+    await using copy = await copyWithOneOf();
+    const data = dataDir();
+
+    const { stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], {
+      env: { ...docker.env, FAKE_HARNESS_TOKEN: "fake-token", ...KEY },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [run] = (await docker.commands()).filter((command) => command.startsWith("docker run --name")) as [string];
+    expect(run).toContain(" -e FAKE_HARNESS_TOKEN ");
+    expect(run).not.toContain("FAKE_HARNESS_KEY");
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    expect(record.harnessEnv).toEqual(["FAKE_HARNESS_TOKEN"]);
+  });
+
+  test("with only the second set, it's the one passed", async () => {
+    await using docker = await fakeDocker();
+    await using copy = await copyWithOneOf();
+    const data = dataDir();
+
+    const { exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
+
+    expect(exitCode).toBe(0);
+    const [run] = (await docker.commands()).filter((command) => command.startsWith("docker run --name")) as [string];
+    expect(run).toContain(" -e FAKE_HARNESS_KEY ");
+    expect(run).not.toContain("FAKE_HARNESS_TOKEN");
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    expect(record.harnessEnv).toEqual(["FAKE_HARNESS_KEY"]);
+  });
+});
+
 describe("0206 measured-env: a run's variables reach its measurement containers", () => {
   const secrets = { FAKE_HARNESS_KEY: "secret-harness-key", ...TEST_CASE_SECRET };
 

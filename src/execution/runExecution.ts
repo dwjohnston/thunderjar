@@ -113,7 +113,7 @@ type RecordedTurn = { harnessResult: string | null; harnessStderr: string | null
 /** The record of `permutation`'s `iteration`, as it ran in execution `run`. */
 function containerRunRecord(
   { plan, name, testCase }: ExecutionToRun,
-  { number: permutationNumber, permutation, version, testCaseEnv, secretEnv }: PlannedPermutation,
+  { number: permutationNumber, permutation, version, env: harnessEnv, testCaseEnv, secretEnv }: PlannedPermutation,
   iteration: PlannedIteration,
   execution: Execution,
   last: RecordedTurn,
@@ -145,6 +145,7 @@ function containerRunRecord(
     // Only when the test case gives them. A secret's name, never its value.
     ...(Object.keys(testCaseEnv).length > 0 && { env: testCaseEnv }),
     ...(secretEnv.length > 0 && { secretEnv }),
+    ...(harnessEnv.length > 0 && { harnessEnv }),
     execution,
     harnessResult: last.harnessResult,
     harnessStderr: last.harnessStderr,

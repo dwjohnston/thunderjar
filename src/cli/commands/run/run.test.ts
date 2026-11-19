@@ -163,6 +163,7 @@ Recorded in <DATA>/runs.sqlite
         initialPrompt: { name: "plain", parameterHash: SHA },
       },
       harnessModel: { harness: "fake-harness-alpha", version: "1.0.0", modelId: "fake-model-small-001" },
+      harnessEnv: ["FAKE_HARNESS_KEY"],
       execution: { startedAt: expect.any(Number), finishedAt: expect.any(Number), exitCode: 0, timedOut: false, timeoutSeconds: 600 },
       harnessResult: `${ALPHA_JSON}\n`,
       harnessStderr: "",

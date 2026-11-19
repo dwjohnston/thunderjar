@@ -82,7 +82,7 @@ describe("claudeCode", () => {
   test("is a harness declaration, pinning its version", () => {
     expect(declaredBy(harness)).toBe("declareHarness");
     expect(harness.version).toBe("2.1.311");
-    expect(harness.requiredEnv).toEqual(["ANTHROPIC_API_KEY"]);
+    expect(harness.requiredEnv).toEqual([{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }]);
   });
 
   test("installs Claude Code as root, writes the model and run script, then runs as node", () => {
