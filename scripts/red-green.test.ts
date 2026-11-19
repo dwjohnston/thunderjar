@@ -190,4 +190,9 @@ describe("judge", () => {
     expect(judge(facts({ ...red, nextKind: null })).join("\n")).toContain("followed by a 🟢");
     expect(judge(facts({ ...red, nextKind: "refactor" })).join("\n")).toContain("followed by a 🟢");
   });
+
+  test("a 🔴 commit being made isn't judged on the commit after it", () => {
+    const red = { kind: "red" as const, result: { failing: failing("new"), unattributed: 0 }, changedFailing: ["new"] };
+    expect(judge(facts({ ...red, nextKind: "unknown" }))).toEqual([]);
+  });
 });
