@@ -12,7 +12,7 @@
  *
  */
 import { describe, expect, test } from "bun:test";
-import { commitKind, isTestFile, summaryFailCount, testCases } from "./red-green.ts";
+import { changedLines, commitKind, isTestFile, summaryFailCount, testCases } from "./red-green.ts";
 
 describe("commitKind", () => {
   test("reads the marker after a prefix", () => {
@@ -78,5 +78,38 @@ describe("testCases", () => {
 describe("summaryFailCount", () => {
   test("reads the fail line, which counts files that didn't load", () => {
     expect(summaryFailCount(" 1 pass\n 3 fail\n 2 errors\n 1 expect() calls\nRan 4 tests across 3 files.")).toBe(3);
+  });
+});
+
+const DIFF = `diff --git a/a.test.ts b/a.test.ts
+index 1111111..2222222 100644
+--- a/a.test.ts
++++ b/a.test.ts
+@@ -11 +11 @@ describe("outer", () => {
+-    expect(1).toBe(1);
++    expect(1).toBe(2);
+@@ -20,0 +21,3 @@
++  test("new", () => {
++    expect(1).toBe(2);
++  });
+@@ -30,2 +33,0 @@
+-  it("gone", () => {});
+-  // gone
+`;
+
+describe("changedLines", () => {
+  test("reads each hunk's lines in the new version", () => {
+    expect(changedLines(DIFF)).toEqual(
+      new Map([
+        [
+          "a.test.ts",
+          [
+            [11, 11],
+            [21, 23],
+            [33, 33],
+          ],
+        ],
+      ]),
+    );
   });
 });

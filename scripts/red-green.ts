@@ -69,3 +69,8 @@ export function testCases(junit: string): TestCase[] {
 export function summaryFailCount(output: string): number {
   return Number(/^\s*(\d+) fail$/m.exec(output)?.[1] ?? 0);
 }
+
+/** The lines a `git diff -U0` adds or changes, per file, in the new version, as [first, last]. */
+export function changedLines(_diff: string): Map<string, [number, number][]> {
+  return new Map();
+}
