@@ -274,8 +274,8 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * this harness's agent containers only, as `docker run -e NAME`, so its value comes from the shell
    * that runs Thunderjar, and is never on a command line or in a log. Its postrun image doesn't
    * keep it: when the container is committed, every variable its prerun image doesn't set is
-   * blanked, so measurement containers, started from the postrun image, don't see it either.
-   * `plan` and `run` stop if one is unset.
+   * blanked. Its measurement containers, started from the postrun image, are given it the same
+   * way, by name. `plan` and `run` stop if one is unset.
    */
   requiredEnv?: string[];
 };
@@ -366,7 +366,8 @@ export type MeasurementResult<T> =
 /**
  * What an instrument runs against: a measurement container, started from a container run's
  * postrun image, and discarded once the measure is taken. Relative paths, glob patterns and
- * commands resolve in `workdir`.
+ * commands resolve in `workdir`. It has the run's variables: its test case's `env`, and, by name,
+ * its harness's `requiredEnv` and its test case's `secretEnv`.
  */
 export type MeasurementContext = {
   exec(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }>;
@@ -603,8 +604,8 @@ export type TestCaseDeclaration<T extends TaskNames = TaskNames> = {
    * @default {}
    * @description
    * Environment variables the agent's containers are given, with their values, e.g.
-   * `{ NODE_ENV: "test" }`. Not secret: each run records them, and its postrun image keeps them.
-   * They don't change any hash, so changing one doesn't rebuild a prerun image. For a secret, use
+   * `{ NODE_ENV: "test" }`. Not secret: each run records them, and its postrun image keeps them,
+   * so its measurement containers see them too. They don't change any hash, so changing one doesn't rebuild a prerun image. For a secret, use
    * `secretEnv`.
    */
   env?: Record<string, string>;
@@ -616,9 +617,10 @@ export type TestCaseDeclaration<T extends TaskNames = TaskNames> = {
    * @description
    * The names of more environment variables the agent's containers are given, e.g.
    * `["DATABASE_URL"]`, each passed as `docker run -e NAME`, so its value comes from the shell
-   * that runs Thunderjar, as a harness's `requiredEnv` does. The value is never on a command line,
-   * in a log, in a run's record or in its postrun image: only the name is recorded. `plan` and `run`
-   * stop if one is unset. A runner on a runtime is sent them without listing them in `runner.env`.
+   * that runs Thunderjar, as a harness's `requiredEnv` does. Its measurement containers are given
+   * them the same way, e.g. for a `shell` measurement that queries a database. The value is never
+   * on a command line, in a log, in a run's record or in its postrun image: only the name is
+   * recorded. `plan` and `run` stop if one is unset. A runner on a runtime is sent them without listing them in `runner.env`.
    */
   secretEnv?: string[];
 };

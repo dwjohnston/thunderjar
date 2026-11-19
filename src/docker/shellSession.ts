@@ -91,10 +91,14 @@ export function framedReader(stream: ReadableStream<Uint8Array>) {
 
 /**
  * Starts the container `name` from `image` in `runtime`, running a shell session, and returns it
- * once it's ready. Throws a DockerContainerError, with Docker's reason, if it can't be started.
+ * once it's ready. Each variable named in `env` is passed in with `-e NAME`, so Docker copies its
+ * value from Thunderjar's own environment, and leaves it out if it's unset there: the value is
+ * never on a command line or in a log. Throws a DockerContainerError, with Docker's reason, if it
+ * can't be started.
  */
-export async function openShellSession(image: string, name: string, runtime: DockerRuntime): Promise<ShellSession> {
-  const args = ["run", "--rm", "--interactive", "--name", name, "--pull", runtime.pull, "--entrypoint", "sh", image, "-c", SESSION_SCRIPT];
+export async function openShellSession(image: string, name: string, runtime: DockerRuntime, env: string[] = []): Promise<ShellSession> {
+  const passed = env.flatMap((variable) => ["-e", variable]);
+  const args = ["run", "--rm", "--interactive", "--name", name, "--pull", runtime.pull, ...passed, "--entrypoint", "sh", image, "-c", SESSION_SCRIPT];
   const startedAt = Date.now();
   const child = Bun.spawn([...runtime.command, ...args], { env: Bun.env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
   const stderr = new Response(child.stderr).text();
@@ -113,7 +117,8 @@ export async function openShellSession(image: string, name: string, runtime: Doc
     throw await ended();
   }
   const workdir = ready.slice("ready ".length);
-  log.debug({ container: name, image, workdir, ms: Date.now() - startedAt }, "started a shell session");
+  // Only the variables' names: their values are never logged.
+  log.debug({ container: name, image, workdir, env, ms: Date.now() - startedAt }, "started a shell session");
 
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();

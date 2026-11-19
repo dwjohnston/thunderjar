@@ -241,10 +241,10 @@ Recorded in <DATA>/runs.sqlite
       ]),
     );
     // Then its measures were taken in one container, from the postrun image, running a shell session
-    // that's sent each measure's commands, and is removed when it ends. saysArr, of the reply, needs no container.
+    // that's sent each measure's commands, given the harness's key by name, and is removed when it ends. saysArr, of the reply, needs no container.
     for (const n of [1, 2]) {
       const measuring = commands.filter((command) => command.includes(` ${container(n)}-measure-`));
-      expect(measuring).toEqual([`docker run --rm --interactive --name ${container(n)}-measure-1 --pull never --entrypoint sh thunderjar-postrun:${id}-${n}-1 -c <script>`]);
+      expect(measuring).toEqual([`docker run --rm --interactive --name ${container(n)}-measure-1 --pull never ${n === 1 ? "-e FAKE_HARNESS_KEY " : ""}--entrypoint sh thunderjar-postrun:${id}-${n}-1 -c <script>`]);
       expect(commands.indexOf(measuring[0] as string)).toBeGreaterThan(commands.indexOf(`docker rm --force ${container(n)}`));
     }
     expect(await docker.images()).toEqual([

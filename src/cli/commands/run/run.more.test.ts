@@ -322,6 +322,38 @@ Permutation 1: prerun image thunderjar-prerun:2bdc0dba
   });
 });
 
+describe("0206 measured-env: a run's variables reach its measurement containers", () => {
+  const secrets = { FAKE_HARNESS_KEY: "secret-harness-key", ...TEST_CASE_SECRET };
+
+  test("the measurement sees the test case's env, its secretEnv and the harness's requiredEnv; no secret's value is in a command, log or record", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stderr, exitCode, log } = await thunderjar(scenario("0206"), ["run", "measured-env", "--data-dir", data, "-v"], {
+      env: { ...docker.env, ...secrets },
+      log: true,
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const store = await readStore(data);
+    const [record] = store.containerRuns as [ContainerRunRecord];
+    expect(record.reply).toEqual({ outcome: "collected", text: "key set, run option , overridden " });
+    // The shell measurement prints whether each secret is set and not blank, never its value.
+    expect(record.result.envSeen).toMatchObject({ outcome: { outcome: "measured", data: { exitCode: 0, stdout: "setting test, secret set, key set\n" } } });
+
+    const commands = await docker.commands();
+    const [session] = commands.filter((command) => command.startsWith("docker run --rm --interactive")) as [string];
+    // By name: Docker copies each value from Thunderjar's own environment.
+    expect(session).toContain(" -e FAKE_HARNESS_KEY -e FAKE_TEST_CASE_SECRET --entrypoint sh ");
+    for (const value of Object.values(secrets)) {
+      expect(commands.filter((command) => command.includes(value))).toEqual([]);
+      expect(log).not.toContain(value);
+      expect(JSON.stringify(store)).not.toContain(value);
+    }
+  });
+});
+
 describe("0201 minimal existing setup", () => {
   test("example: one permutation, one iteration", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0201"), ["run", "example", "--dry-run"]);

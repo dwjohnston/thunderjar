@@ -216,6 +216,24 @@ Recorded in <DATA>/runs.sqlite
     expect(JSON.stringify(postrunEnv)).not.toContain(secret);
   }, 600_000);
 
+  test("0206 measured-env: the measurement container sees the test case's env, its secretEnv and the harness's requiredEnv", async () => {
+    const prefix = `${PREFIX}-measured-env`;
+    const data = `${DATA_DIR}/measured-env`;
+    const secrets = { FAKE_HARNESS_KEY: "secret-harness-key", FAKE_TEST_CASE_SECRET: "secret-test-case-value" };
+    const { stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "measured-env", "--image-prefix", prefix, "--data-dir", data], {
+      docker: "real",
+      env: secrets,
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [record] = (await storedRuns(data)).containerRuns as [ContainerRunRecord];
+    // Whether each is set and not blank, never its value: the postrun image has the secrets blank.
+    expect(record.result.envSeen).toMatchObject({ outcome: { outcome: "measured", data: { exitCode: 0, stdout: "setting test, secret set, key set\n" } } });
+    const postrunEnv = JSON.parse(await $`docker image inspect --format ${"{{json .Config.Env}}"} ${record.postrunImage}`.text()) as string[];
+    for (const value of Object.values(secrets)) expect(JSON.stringify(postrunEnv)).not.toContain(value);
+  }, 600_000);
+
   test("0202 quoting: the prompt reaches the agent byte for byte, through a file", async () => {
     const prefix = `${PREFIX}-quoting`;
     const data = `${DATA_DIR}/quoting`;
