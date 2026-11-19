@@ -50,7 +50,8 @@
 // removes tags from images, failing for one that doesn't exist or is in failing, or for any if
 // FAKE_DOCKER_FAIL_IMAGE_RM is set. `system df`
 // reports made-up sizes: 100MB an image. `run --rm --interactive` runs a shell session, as
-// src/docker/shellSession.ts speaks to one; it fails to start for a container named in failing.
+// src/docker/shellSession.ts speaks to one, each command with only the container's environment,
+// as `run` gives one; it fails to start for a container named in failing.
 //
 // An image's environment comes from its Dockerfile's `ENV` lines, or `fakeDocker({ env })`. A
 // container's is its image's, with each `-e`/`--env` given to `run`: `NAME`, from the fake's own
@@ -360,6 +361,9 @@ if (import.meta.main) {
     if ((await list("failing")).includes(name)) fail(`docker: Error response from daemon: failed to start container ${name}`);
     const container = `${dir}/containers/${name}`;
     await Bun.write(`${container}/image`, `${image}\n`);
+    await keepContainerEnv(name, image, rest.slice(1));
+    // Each command sees only the container's environment, beside PATH and HOME, as `run` does.
+    const sessionEnv = { PATH: Bun.env.PATH ?? "/usr/bin:/bin", HOME: `${container}/root`, ...Object.fromEntries(await envIn(`${container}/env.json`)) };
     await $`mkdir -p ${container}/root/workspace ${container}/root/thunderjar`.quiet();
     await $`if [ -d ${filesystemOf(image)} ]; then cp -R ${filesystemOf(image)}/. ${container}/root; fi`.quiet();
     const input = Bun.stdin.stream().getReader();
@@ -388,7 +392,7 @@ if (import.meta.main) {
       const [commandLength, stdinLength] = take(newline + 1).trim().split(" ").map(Number) as [number, number];
       if (!(await fill(commandLength + stdinLength))) break;
       const [script, stdin] = [take(commandLength), take(stdinLength)];
-      const result = await inContainer(container, ["sh", "-c", script], stdin);
+      const result = await inContainer(container, ["sh", "-c", script], stdin, sessionEnv);
       const [out, err] = [result.stdout, result.stderr];
       process.stdout.write(`${result.exitCode} ${out.length} ${err.length}\n`);
       process.stdout.write(out);

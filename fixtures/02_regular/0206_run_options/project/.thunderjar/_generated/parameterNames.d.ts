@@ -3,8 +3,9 @@
 type BaseImageName = "alpine" | "node20" | "node20-env" | "node20-unconfined";
 type CodeStateName = "baseline";
 type PromptSetName = "snerk";
-type TaskName = "sandbox";
+type TaskName = "env-measured" | "sandbox";
 type InitialPromptNames = {
+  "env-measured": "plain";
   "sandbox": "plain";
 };
 type HarnessName = "fake-env-reader" | "fake-keyed" | "fake-sandboxer";
