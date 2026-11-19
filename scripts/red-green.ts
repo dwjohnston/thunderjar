@@ -146,7 +146,14 @@ export type Facts = {
 
 /** The rules the commit breaks. */
 export function judge(facts: Facts): string[] {
+  const { kind, result } = facts;
   const problems: string[] = [];
+  const failing = result?.failing.map((test) => test.id) ?? [];
+  if (kind !== "red") return problems;
+
+  if (failing.length > 1) {
+    problems.push(`expected exactly one failing test, but ${failing.length} failed. Split them into 🔴/🟢 cycles:\n${list(failing)}`);
+  }
   return problems;
 }
 
