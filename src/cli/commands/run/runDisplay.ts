@@ -19,10 +19,10 @@ import { DockerBuildError, DockerContainerError, DockerPullError, DockerPushErro
 import type { PlannedIteration, PlannedPermutation } from "../../../execution/planExecution.ts";
 import type { RunHooks } from "../../../execution/runExecution.ts";
 import type { ExecutionTimings } from "../../../execution/timings.ts";
-import { type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type FoundSecret, type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, plain } from "../../colour.ts";
 import { displayPath } from "../../dataDir.ts";
-import { agentEnd, dollars, endedCleanly, failureHint, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, secretFiles, endedCleanly, failureHint, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { type LiveRow, liveRows } from "../../liveRows.ts";
 import { print, printError as error } from "../../output.ts";
 import { textOutput } from "../../textOutput.ts";
@@ -102,6 +102,40 @@ export function showUnclean(unclean: UncleanRun[], total: number, paint: Paint =
   ];
 }
 
+/** A secret found in a container run's postrun image: the run's name, and the secret, by name, never value. */
+export type SecretRun = { run: string } & FoundSecret;
+
+/** What's said of postrun images that hold a secret: that one pushed has exposed it. */
+export const EXPOSED =
+  "The images were still committed, measured and pushed, if there's an image store. Treat a secret in one that was pushed as exposed, and rotate it.";
+
+/**
+ * What `run` says, once it's done, about the postrun images, of `total`, that hold a secret's value
+ * in their files: how many, then a line for each secret in each, and that a pushed one's are exposed.
+ */
+export function showSecrets(found: SecretRun[], total: number, paint: Paint = plain): string[] {
+  if (found.length === 0) return [];
+  const images = new Set(found.map(({ run }) => run)).size;
+  const width = Math.max(...found.map(({ name }) => name.length));
+  return [
+    paint.red(`${images} of ${total} postrun images hold a secret's value in their files:`),
+    ...found.map((secret) => `  ${secret.run}  ${paint.red(secret.name.padEnd(width))}  ${paint.dim(secretFiles(secret))}`),
+    EXPOSED,
+  ];
+}
+
+/** A container run whose postrun image couldn't be searched for secrets: its name, and why. */
+export type UnsearchedRun = { run: string; reason: string };
+
+/** What `run` says, once it's done, about the postrun images, of `total`, that couldn't be searched for secrets, and why. */
+export function showUnsearched(unsearched: UnsearchedRun[], total: number, paint: Paint = plain): string[] {
+  if (unsearched.length === 0) return [];
+  return [
+    paint.yellow(`Couldn't search ${unsearched.length} of ${total} postrun images for secrets' values, so they may hold one:`),
+    ...unsearched.map(({ run, reason }) => `  ${run}  ${paint.dim(reason)}`),
+  ];
+}
+
 /** What `--timings` calls each phase. */
 const PHASE_LABELS: Record<string, string> = {
   build: "building prerun images",
@@ -110,6 +144,7 @@ const PHASE_LABELS: Record<string, string> = {
   agent: "running agents",
   collect: "reading what agents left",
   commit: "committing postrun images",
+  secretSearch: "searching postrun images for secrets",
   pushPostrun: "pushing postrun images",
   measure: "measuring",
 };
@@ -159,6 +194,10 @@ export type RunDisplay = {
   stop: () => void;
   /** The agents that didn't end cleanly, so far. */
   unclean: UncleanRun[];
+  /** The secrets found in postrun images, so far. */
+  secrets: SecretRun[];
+  /** The postrun images that couldn't be searched for secrets, so far. */
+  unsearched: UnsearchedRun[];
   /** How long each phase took, once the execution has said. */
   timings: () => ExecutionTimings | undefined;
   /**
@@ -210,6 +249,8 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
   };
   let timings: ExecutionTimings | undefined;
   const unclean: UncleanRun[] = [];
+  const secrets: SecretRun[] = [];
+  const unsearched: UnsearchedRun[] = [];
   const hooks: RunHooks = {
     onBuilding: (image) => {
       if (live !== undefined) return void prerunRows.set(image, live.add(`${paint.cyan(image)}  ${paint.dim("building")} `));
@@ -279,6 +320,8 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
         const why = failureHint(record);
         unclean.push({ run: `${permutation.number}-${iteration.number}`, end: agentEnd(execution, harnessResult), ...(why !== undefined && { why }) });
       }
+      for (const secret of record.secretsFound ?? []) secrets.push({ run: `${permutation.number}-${iteration.number}`, ...secret });
+      if (record.secretSearchFailed !== undefined) unsearched.push({ run: `${permutation.number}-${iteration.number}`, reason: record.secretSearchFailed });
       const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
       // Its cost if it can be trusted, else its tokens, if it has either.
       const cost = knownCost(tokenCosts);
@@ -348,5 +391,5 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
     }
     return true;
   };
-  return { hooks, open, close, fail, stop, unclean, timings: () => timings, reportFailure };
+  return { hooks, open, close, fail, stop, unclean, secrets, unsearched, timings: () => timings, reportFailure };
 }

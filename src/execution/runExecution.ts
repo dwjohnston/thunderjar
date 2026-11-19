@@ -26,6 +26,7 @@ import type {
 } from "../store/runDataStore.ts";
 import { agentOutput, head, storedStderr } from "./agentOutput.ts";
 import { runInContainer } from "./containerRun.ts";
+import type { SecretSearch } from "./secretSearch.ts";
 import { containerName, executionContainerPrefix, recordedPostrunImage, storedPostrunImage, storedPrerunImage } from "./images.ts";
 import { type PullHooks, pullIntoRuntime, type PushHooks, pushToStore } from "./imageStore.ts";
 import { inParallel } from "./inParallel.ts";
@@ -118,6 +119,7 @@ function containerRunRecord(
   last: RecordedTurn,
   tokenCosts: TokenCosts,
   postrunImage: string,
+  secrets?: SecretSearch,
 ): ContainerRunRecord {
   const { harness } = parsePair(permutation.harnessModel);
   return {
@@ -149,6 +151,9 @@ function containerRunRecord(
     reply: last.reply,
     tokenCosts,
     result: {},
+    // Only when one was found: a clean run's record is as it was before secrets were looked for.
+    ...(secrets !== undefined && "found" in secrets && secrets.found.length > 0 && { secretsFound: secrets.found }),
+    ...(secrets !== undefined && "failed" in secrets && { secretSearchFailed: secrets.failed }),
   };
 }
 
@@ -313,7 +318,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     const at = { executionId, permutation: permutation.number, iteration: iteration.number };
     log.info({ ...at, permutationHash: permutation.permutation.hash }, "container run starting");
     const container = containerName(plan.executionId, permutation.number, iteration.number, imagePrefix);
-    const { execution, harnessResult: resultFile, stderr, committed } = await runInContainer({
+    const { execution, harnessResult: resultFile, stderr, committed, secrets } = await runInContainer({
       prerunImage: prerunImageOf(permutation),
       postrunImage: iteration.postrunImage,
       env: permutation.env,
@@ -332,7 +337,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     });
     // Where the postrun image is kept: the image store's reference, as the local name lives only on the runtime.
     const stored = imageStore === null ? undefined : storedPostrunImage(imageStore.repository, plan.executionId, permutation.permutation.hash, iteration.number);
-    const record = containerRunRecord(run, permutation, iteration, execution, ran, tokenCosts, recordedPostrunImage(iteration.postrunImage, stored));
+    const record = containerRunRecord(run, permutation, iteration, execution, ran, tokenCosts, recordedPostrunImage(iteration.postrunImage, stored), secrets);
     const { harnessResult, reply } = record;
     await store.recordContainerRun(record);
     // Timed out, its exit code is null.
@@ -343,6 +348,9 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     if (execution.timedOut) log.warn({ ...at, timeoutSeconds: execution.timeoutSeconds, output }, "agent timed out");
     else if (execution.exitCode !== 0) log.warn({ ...at, exitCode: execution.exitCode, output }, "agent exited non-zero");
     else if (output.some((turn) => turn.stderr !== undefined)) log.debug({ ...at, output }, "agent output");
+    // Names and paths only, never a value.
+    if (record.secretsFound !== undefined) log.warn({ ...at, secretsFound: record.secretsFound }, "secrets found in the postrun image's files");
+    if (record.secretSearchFailed !== undefined) log.warn({ ...at, reason: record.secretSearchFailed }, "couldn't search the postrun image for secrets");
     if (tokenCosts.outcome === "unavailable" && tokenCosts.reason === "unparseable") {
       log.warn({ ...at, result: resultFile && head(resultFile, 500) }, "token costs unparseable from the result file");
     }

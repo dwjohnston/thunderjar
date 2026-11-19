@@ -1,6 +1,6 @@
 import type { Resolved } from "../api/declarations.ts";
 import { registryHost } from "../config/projectConfig.ts";
-import type { ContainerRunRecord, ExecutionRecord } from "../store/runDataStore.ts";
+import type { ContainerRunRecord, ExecutionRecord, FoundSecret } from "../store/runDataStore.ts";
 import { knownCost, totalTokens } from "../execution/runFacts.ts";
 import { type Paint, plain } from "./colour.ts";
 import type { Stat } from "../api/declarations.ts";
@@ -32,6 +32,13 @@ export function runTotals(runs: Pick<ContainerRunRecord, "tokenCosts">[]): RunTo
  * them, comma-separated, could misread: a space, a comma, a quote, a backslash or a `$`.
  */
 export const envEntry = (name: string, value: string) => `${name}=${/^[\w./:@%+=-]*$/.test(value) ? value : JSON.stringify(value)}`;
+
+/** How many paths of the files holding a secret `secretFiles` names before `…`. */
+const NAMED_PATHS = 3;
+
+/** How many files hold a secret found in a postrun image, and the first NAMED_PATHS of their paths. */
+export const secretFiles = ({ files, paths }: FoundSecret) =>
+  `${files} ${files === 1 ? "file" : "files"}: ${paths.slice(0, NAMED_PATHS).join(", ")}${files > NAMED_PATHS ? ", …" : ""}`;
 
 /** `ms` as minutes and seconds, e.g. `0:31`, or with hours once it's that long, e.g. `1:02:05`. */
 export function duration(ms: number): string {

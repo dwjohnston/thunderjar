@@ -65,7 +65,7 @@ Two optional fields give the agent's containers environment variables.
 
 ❌ **Don't** add them for the harness's own API key: its `requiredEnv` already passes it.
 
-**Why:** `env`'s values are shown by `plan`, recorded with each run and kept in the postrun image. A `secretEnv` value is never written down, and `plan` and `run` stop if it's unset.
+**Why:** `env`'s values are shown by `plan`, recorded with each run and kept in the postrun image. A `secretEnv` value is never written down, and `plan` and `run` stop if it's unset. If the agent writes one into a file, e.g. a `.env` or a log, `run` warns that the postrun image holds it.
 
 
 

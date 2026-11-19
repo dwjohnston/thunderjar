@@ -354,6 +354,98 @@ describe("0206 measured-env: a run's variables reach its measurement containers"
   });
 });
 
+describe("0206 leaked-secret: a run's secret values, written into files, are found in its postrun image", () => {
+  const secrets = { FAKE_HARNESS_KEY: "secret-harness-key", ...TEST_CASE_SECRET };
+
+  test("each secret found is recorded by name, with the paths of the files that hold it", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { exitCode } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", data], { env: { ...docker.env, ...secrets } });
+
+    expect(exitCode).toBe(0);
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    expect(record.reply).toEqual({ outcome: "collected", text: "leaked" });
+    expect(record).toMatchObject({
+      secretsFound: [
+        { name: "FAKE_HARNESS_KEY", files: 2, paths: ["/workspace/.env", "/workspace/agent.log"] },
+        { name: "FAKE_TEST_CASE_SECRET", files: 1, paths: ["/workspace/.env"] },
+      ],
+    });
+  });
+
+  test("run warns, as it finishes, which secrets each postrun image holds, and that a pushed one's are exposed", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, exitCode } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", dataDir()], { env: { ...docker.env, ...secrets } });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(`
+1 of 1 postrun images hold a secret's value in their files:
+  1-1  FAKE_HARNESS_KEY       2 files: /workspace/.env, /workspace/agent.log
+  1-1  FAKE_TEST_CASE_SECRET  1 file: /workspace/.env
+The images were still committed, measured and pushed, if there's an image store. Treat a secret in one that was pushed as exposed, and rotate it.
+Recorded in `);
+  });
+
+  test("a search that times out doesn't fail the run: it's recorded as not done, and run says so", async () => {
+    await using docker = await fakeDocker({ slowStart: { "-secrets": 5 } });
+    const data = dataDir();
+
+    const { stdout, exitCode } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", data], {
+      env: { ...docker.env, ...secrets, THUNDERJAR_SECRET_SEARCH_TIMEOUT_SECONDS: "1" },
+    });
+
+    expect(exitCode).toBe(0);
+    const [record] = (await readStore(data)).containerRuns as [ContainerRunRecord];
+    expect(record).toMatchObject({ secretSearchFailed: "it took longer than 1s" });
+    expect(record).not.toHaveProperty("secretsFound");
+    expect(stdout).toContain(`
+Couldn't search 1 of 1 postrun images for secrets' values, so they may hold one:
+  1-1  it took longer than <duration>
+Recorded in `);
+  });
+
+  test("no secret's value is in a command, the log, the record or the output; the search is given each by name", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, log } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", data, "--log-level", "trace"], {
+      env: { ...docker.env, ...secrets },
+      log: true,
+    });
+
+    const commands = await docker.commands();
+    const [search] = commands.filter((command) => command.startsWith("docker run --name ") && command.includes("-secrets ")) as [string];
+    expect(search).toContain(" -e FAKE_HARNESS_KEY -e FAKE_TEST_CASE_SECRET --user 0 --network none --entrypoint sh thunderjar-postrun:");
+    expect(log).toContain("secrets found in the postrun image's files");
+    const store = JSON.stringify(await readStore(data));
+    for (const value of Object.values(secrets)) {
+      for (const text of [commands.join("\n"), log, store, stdout, stderr]) expect(text).not.toContain(value);
+    }
+  });
+
+  test("a clean run, and one whose secrets are too short to search for, record nothing, and run says nothing", async () => {
+    await using docker = await fakeDocker();
+    const [cleanData, shortData] = [dataDir(), dataDir()];
+
+    const clean = await thunderjar(scenario("0206"), ["run", "test-case-env", "--data-dir", cleanData], { env: { ...docker.env, ...TEST_CASE_SECRET } });
+    const short = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", shortData], {
+      env: { ...docker.env, FAKE_HARNESS_KEY: "short-key", FAKE_TEST_CASE_SECRET: "short" },
+    });
+
+    for (const { stdout } of [clean, short]) expect(stdout).not.toContain("secret");
+    const runs = [...(await readStore(cleanData)).containerRuns, ...(await readStore(shortData)).containerRuns];
+    expect(runs).toHaveLength(2);
+    for (const run of runs) {
+      expect(run).not.toHaveProperty("secretsFound");
+      expect(run).not.toHaveProperty("secretSearchFailed");
+    }
+    // Searched once: test-case-env's secret, not leaked-secret's short ones.
+    expect((await docker.commands()).filter((command) => command.includes("-secrets "))).toHaveLength(1);
+  });
+});
+
 describe("0201 minimal existing setup", () => {
   test("example: one permutation, one iteration", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0201"), ["run", "example", "--dry-run"]);

@@ -275,7 +275,8 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * that runs Thunderjar, and is never on a command line or in a log. Its postrun image doesn't
    * keep it: when the container is committed, every variable its prerun image doesn't set is
    * blanked. Its measurement containers, started from the postrun image, are given it the same
-   * way, by name. `plan` and `run` stop if one is unset.
+   * way, by name. `plan` and `run` stop if one is unset. If the agent writes its value into a
+   * file, the postrun image's files are searched for it before it's pushed, and `run` warns.
    */
   requiredEnv?: string[];
 };
@@ -619,8 +620,10 @@ export type TestCaseDeclaration<T extends TaskNames = TaskNames> = {
    * `["DATABASE_URL"]`, each passed as `docker run -e NAME`, so its value comes from the shell
    * that runs Thunderjar, as a harness's `requiredEnv` does. Its measurement containers are given
    * them the same way, e.g. for a `shell` measurement that queries a database. The value is never
-   * on a command line, in a log, in a run's record or in its postrun image: only the name is
-   * recorded. `plan` and `run` stop if one is unset. A runner on a runtime is sent them without listing them in `runner.env`.
+   * on a command line, in a log, in a run's record or in its postrun image's config: only the name
+   * is recorded. If the agent writes a value into a file, the postrun image's files are searched
+   * for it before it's pushed, and `run` warns. `plan` and `run` stop if one is unset. A runner on
+   * a runtime is sent them without listing them in `runner.env`.
    */
   secretEnv?: string[];
 };
