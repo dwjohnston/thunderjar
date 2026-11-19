@@ -56,7 +56,11 @@ export function isTestFile(path: string): boolean {
 export type CommitTests = { kind: CommitKind; testFilesChanged: string[] };
 
 /** The test files to run for a commit. `previous` is the commit before it, or null. */
-export function testsToRun(_commit: CommitTests, _previous: CommitTests | null): string[] {
+export function testsToRun(commit: CommitTests, previous: CommitTests | null): string[] {
+  const runnable = (files: string[]) => files.filter((file) => /\.test\.[cm]?[jt]sx?$/.test(file));
+  if (commit.kind === "red" || commit.kind === "multi-red" || commit.kind === "refactor") return runnable(commit.testFilesChanged);
+  // A 🟢 commit changes no test file. It's there to make its 🔴 commit's test pass.
+  if (commit.kind === "green" && (previous?.kind === "red" || previous?.kind === "multi-red")) return runnable(previous.testFilesChanged);
   return [];
 }
 
