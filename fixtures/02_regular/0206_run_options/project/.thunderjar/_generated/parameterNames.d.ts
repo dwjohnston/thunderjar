@@ -8,7 +8,7 @@ type InitialPromptNames = {
   "env-measured": "plain";
   "sandbox": "plain";
 };
-type HarnessName = "fake-env-reader" | "fake-keyed" | "fake-sandboxer";
+type HarnessName = "fake-env-reader" | "fake-keyed" | "fake-leaker" | "fake-sandboxer";
 type HarnessModelName = `${HarnessName}/${string}`;
 
 interface ThunderjarParameterNames {

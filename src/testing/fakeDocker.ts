@@ -29,7 +29,7 @@
 // environment, and `--ssh default`.
 //
 // `run` runs the container's script on the host, with /workspace and /thunderjar in it mapped to
-// the container's root/, and root/workspace its working directory. Its environment is only the
+// the container's root/, as is a lone `/`, e.g. in `cd /`, and root/workspace its working directory. Its environment is only the
 // container's (see below), beside PATH and HOME, as a container sees only what it's given. While it runs, `kill` stops it, and everything it started, as if the
 // container had been killed. A built image's container
 // starts with only the files its Dockerfile writes with `COPY <<'EOF' <path>` heredocs, as
@@ -418,7 +418,11 @@ if (import.meta.main) {
       console.log(crypto.randomUUID().replaceAll("-", ""));
     } else {
       const passed = Object.fromEntries(await envIn(`${container}/env.json`));
-      const map = (text: string) => text.replace(/\/(workspace|thunderjar)(?![\w.-])/g, (_, folder: string) => `${container}/root/${folder}`);
+      // A lone `/`, e.g. `cd /`, is the container's root, its root/.
+      const map = (text: string) =>
+        text
+          .replace(/\/(workspace|thunderjar)(?![\w.-])/g, (_, folder: string) => `${container}/root/${folder}`)
+          .replace(/(?<=^|[\s;&|('"])\/(?=$|[\s;&|)'"])/g, `${container}/root/`);
       let mapped = map(script);
       const runScript = `${container}/root/thunderjar/thunderjar-run.sh`;
       if (mapped.includes(runScript) && (await Bun.file(runScript).exists())) {
