@@ -121,6 +121,17 @@ test("a variable a container was run with is blank in its postrun image, and its
   await removeContainer("tj-run-1");
 });
 
+test("a variable of the prerun image overridden at run time has the prerun image's value in the postrun image", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"], env: { "tj-prerun:aaaaaaaa": ["OVERRIDDEN=image value"] } });
+  Object.assign(Bun.env, docker.env);
+
+  await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "true", { runOptions: ["--env", "OVERRIDDEN=secret-override"] });
+  await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa");
+
+  expect(await docker.envOf("tj-postrun:x-1-1")).toEqual(["OVERRIDDEN=image value"]);
+  await removeContainer("tj-run-1");
+});
+
 test("runContainer throws a DockerContainerError with the reason when its script fails", async () => {
   await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
   Object.assign(Bun.env, docker.env);
