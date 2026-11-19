@@ -153,7 +153,7 @@ export function judge(facts: Facts): string[] {
   if (result !== null && result.unattributed > 0) {
     problems.push(`${result.unattributed} failure(s) not tied to a test: a file didn't load, or an error was thrown between tests`);
   }
-  if (kind === "green" && testFilesChanged.length > 0) {
+  if ((kind === "green" || kind === "other") && testFilesChanged.length > 0) {
     problems.push(`only 🔴, 🔴🔴 and ♻️ commits may change test files, but this one changes:\n${list(testFilesChanged)}`);
   }
   if ((kind === "green" || kind === "refactor") && failing.length > 0) {
