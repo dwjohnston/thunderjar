@@ -11,7 +11,7 @@
         "pino-pretty": "^13.2.0",
         "react": "19",
         "react-dom": "19",
-        "thunderjar": "v0.4.0-rc.0",
+        "thunderjar": "0.4.0",
       },
       "devDependencies": {
         "@changesets/cli": "^2.31.0",
@@ -625,7 +625,7 @@
 
     "thread-stream": ["thread-stream@4.2.1", "", { "dependencies": { "real-require": "^1.0.0" } }, "sha512-Stg6edJXC/6/xqGwSXwFokrUhChJ18amEjpKH89WrQQ0oVFDF+pUUcTpiwWhFUrE89Vf16FBOlwhaw+lescxMQ=="],
 
-    "thunderjar": ["thunderjar@0.4.0-rc.0", "", { "dependencies": { "bun": "1.3.14", "commander": "^15.0.0", "pino": "^10.4.0", "pino-pretty": "^13.2.0", "react": "19", "react-dom": "19" }, "bin": { "thunderjar": "dist/index.js" } }, "sha512-HP1Vbdy2mjg/0NdjXHUmq4d69/Qe4pH4HGzQcbMGVBePNvTDaDMrhdDS2FrCJlmZ+I8FFblmjTEUg7fdhIlznw=="],
+    "thunderjar": ["thunderjar@0.4.0", "", { "dependencies": { "bun": "1.3.14", "commander": "^15.0.0", "pino": "^10.4.0", "pino-pretty": "^13.2.0", "react": "19", "react-dom": "19" }, "bin": { "thunderjar": "dist/index.js" } }, "sha512-G6PhmY+JekB16CoBgb0jpZ5NE3xVX4AsVMputPAmxLLPLqTpuQSB0pm20Oz7EolJN71cxnXdxFLjP1bMDFWwGQ=="],
 
     "thunderjar-published": ["thunderjar@0.4.0-rc.0", "", { "dependencies": { "bun": "1.3.14", "commander": "^15.0.0", "pino": "^10.4.0", "pino-pretty": "^13.2.0", "react": "19", "react-dom": "19" }, "bin": { "thunderjar": "dist/index.js" } }, "sha512-HP1Vbdy2mjg/0NdjXHUmq4d69/Qe4pH4HGzQcbMGVBePNvTDaDMrhdDS2FrCJlmZ+I8FFblmjTEUg7fdhIlznw=="],
 

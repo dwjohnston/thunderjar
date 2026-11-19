@@ -60,7 +60,7 @@
     "pino-pretty": "^13.2.0",
     "react": "19",
     "react-dom": "19",
-    "thunderjar": "v0.4.0-rc.0"
+    "thunderjar": "0.4.0"
   },
   "devDependencies": {
     "thunderjar-published": "npm:thunderjar@0.4.0-rc.0",
