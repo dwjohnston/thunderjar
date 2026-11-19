@@ -16,8 +16,13 @@ export type CommitKind = "red" | "multi-red" | "green" | "refactor" | "other";
 
 const MARKERS: Record<string, CommitKind> = { "🔴🔴": "multi-red", "🔴": "red", "🟢": "green", "♻️": "refactor", "♻": "refactor" };
 
-/** What a commit's subject says it is. */
+/**
+ * What a commit's subject says it is. The marker starts the subject, or follows a `prefix: `,
+ * e.g. `🤖 Claude: 🔴 ...`. A marker later in the subject is only mentioned, not meant.
+ */
 export function commitKind(subject: string): CommitKind {
-  const marker = /(🔴🔴|🔴|🟢|♻️|♻)/u.exec(subject)?.[1];
+  const prefixEnd = subject.lastIndexOf(": ");
+  const rest = prefixEnd === -1 ? subject : subject.slice(prefixEnd + 2);
+  const marker = /^(🔴🔴|🔴|🟢|♻️|♻)/u.exec(rest)?.[1];
   return marker === undefined ? "other" : (MARKERS[marker] ?? "other");
 }
