@@ -51,6 +51,7 @@ jobs:
         startsWith(github.event.comment.body, '/slow-tests') &&
         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
       (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
         contains(fromJSON('["changeset-release/main", "release-candidate/main"]'), github.head_ref)) ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -90,6 +91,11 @@ jobs:
               content: "rocket",
             });
             const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.issue.number });
+            // The jobs run the PR's code with the repository's secrets, so never a fork's. A deleted fork has no head repo.
+            if (pr.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              await reply("`/slow-tests` doesn't run on PRs from forks.");
+              return core.setFailed("PR is from a fork");
+            }
             core.setOutput("test-case", testCase);
             core.setOutput("sha", pr.head.sha);
             core.setOutput("repo", pr.head.repo.full_name);
