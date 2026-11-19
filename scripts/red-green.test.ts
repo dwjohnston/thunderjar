@@ -214,4 +214,9 @@ describe("judge", () => {
     expect(judge(facts({ kind: "refactor", testFilesChanged: ["a.test.ts"] }))).toEqual([]);
     expect(judge(facts({ kind: "refactor", result: { failing: failing("old"), unattributed: 0 } })).join("\n")).toContain("1 failed");
   });
+
+  test("an unmarked commit may not change test files", () => {
+    expect(judge(facts({ kind: "other", result: null }))).toEqual([]);
+    expect(judge(facts({ kind: "other", result: null, testFilesChanged: ["a.test.ts"] })).join("\n")).toContain("only 🔴, 🔴🔴 and ♻️ commits may change test files");
+  });
 });
