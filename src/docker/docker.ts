@@ -465,6 +465,14 @@ export const IMAGE_CONFIG_FORMAT = "{{json .Config.Entrypoint}}\t{{json .Config.
 export const ENV_NAMES_FORMAT = '[{{range $i, $e := .Config.Env}}{{if $i}},{{end}}{{json (index (split $e "=") 0)}}{{end}}]';
 
 /**
+ * `word` as a Dockerfile's `ENV` reads it back, byte for byte: in double quotes, with `\`, `"` and
+ * `$` escaped, so nothing in it is expanded.
+ */
+function envWord(word: string): string {
+  return `"${word.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
+}
+
+/**
  * The `ENV` changes that leave a committed container's environment holding nothing from the time
  * it ran, given its image's environment, `imageEnv`, as `NAME=value` entries, and the names of the
  * container's variables, `containerNames`. Every variable the image doesn't have, e.g. one passed
@@ -482,8 +490,8 @@ export function scrubbedEnvChanges(imageEnv: string[], containerNames: string[])
   const imageNames = new Set(image.map(([variable]) => variable));
   const blanked = [...new Set(containerNames)].filter((variable) => variable !== "" && !imageNames.has(variable));
   return [
-    ...blanked.map((variable) => `ENV "${variable}"=`),
-    ...image.map(([variable, value]) => `ENV "${variable}"="${value}"`),
+    ...blanked.map((variable) => `ENV ${envWord(variable)}=`),
+    ...image.map(([variable, value]) => `ENV ${envWord(variable)}=${envWord(value)}`),
   ];
 }
 
