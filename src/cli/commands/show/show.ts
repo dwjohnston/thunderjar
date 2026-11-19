@@ -19,7 +19,7 @@ import {
 import { type Paint, padEnd, painter, plain, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { dollars, duration, endedCleanly, minute, paintStatus, plural, showResolved, showStat, showValue, thousands } from "../../format.ts";
+import { dollars, duration, endedCleanly, minute, paintStatus, plural, secretFiles, showResolved, showStat, showValue, thousands } from "../../format.ts";
 import { print, printError, printJson } from "../../output.ts";
 
 const GAP = "   ";
@@ -277,6 +277,16 @@ function environmentLines({ env = {}, secretEnv = [] }: ContainerRunRecord, pain
 }
 
 /**
+ * The secrets found in its postrun image's files, a line each, by name, with where, and that a
+ * pushed image has exposed them. Nothing if none was found.
+ */
+function secretLines({ secretsFound = [] }: ContainerRunRecord, paint: Paint): string[] {
+  if (secretsFound.length === 0) return [];
+  const exposed = "Its postrun image holds these secrets' values in its files. If it was pushed, treat them as exposed, and rotate them.";
+  return [paint.bold("Secrets in its postrun image"), ...columns(secretsFound.map((secret) => [paint.red(secret.name), secretFiles(secret)])), `  ${exposed}`, ""];
+}
+
+/**
  * One container run: where it sits, its parameters, how the agent ran, its reply if it was
  * recorded with one, each measure's stored value, and, given the task's measurements, each
  * metric's score.
@@ -316,6 +326,7 @@ export function renderContainerRun(record: ContainerRunRecord, paint: Paint = pl
     ),
     "",
     ...environmentLines(record, paint),
+    ...secretLines(record, paint),
     ...labelled(
       [
         ["Harness", `${harnessModel.harness} ${harnessModel.version}`],

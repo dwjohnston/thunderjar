@@ -22,7 +22,7 @@ import type { ExecutionTimings } from "../../../execution/timings.ts";
 import { type FoundSecret, type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, plain } from "../../colour.ts";
 import { displayPath } from "../../dataDir.ts";
-import { agentEnd, dollars, endedCleanly, failureHint, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
+import { agentEnd, dollars, secretFiles, endedCleanly, failureHint, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { type LiveRow, liveRows } from "../../liveRows.ts";
 import { print, printError as error } from "../../output.ts";
 import { textOutput } from "../../textOutput.ts";
@@ -104,13 +104,6 @@ export function showUnclean(unclean: UncleanRun[], total: number, paint: Paint =
 
 /** A secret found in a container run's postrun image: the run's name, and the secret, by name, never value. */
 export type SecretRun = { run: string } & FoundSecret;
-
-/** How many paths of the files holding a secret `showSecrets` names before `…`. */
-const NAMED_PATHS = 3;
-
-/** How many files hold a secret, and the first NAMED_PATHS of their paths. */
-export const secretFiles = ({ files, paths }: FoundSecret) =>
-  `${files} ${files === 1 ? "file" : "files"}: ${paths.slice(0, NAMED_PATHS).join(", ")}${files > NAMED_PATHS ? ", …" : ""}`;
 
 /** What's said of postrun images that hold a secret: that one pushed has exposed it. */
 export const EXPOSED =
