@@ -19,6 +19,7 @@ import {
   reasonOf,
   removeContainer,
   runContainer,
+  scrubbedEnvChanges,
 } from "./docker.ts";
 
 const saved = { THUNDERJAR_DOCKER: Bun.env.THUNDERJAR_DOCKER, FAKE_DOCKER_DIR: Bun.env.FAKE_DOCKER_DIR };
@@ -99,6 +100,78 @@ test("a container runs its script, its files can be read, and it can be committe
   await removeContainer("tj-run-1");
   expect(await docker.images()).toEqual(["tj-prerun:aaaaaaaa", "tj-postrun:x-1-1"]);
   expect(await docker.containers()).toEqual([]);
+});
+
+test("a variable a container was run with is blank in its postrun image, and its value on no command line but `docker run`", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"] });
+  Object.assign(Bun.env, docker.env, { TJ_TEST_SECRET: "secret-from-env" });
+
+  try {
+    await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "true", {
+      env: ["TJ_TEST_SECRET"],
+      runOptions: ["-e", "RUN_OPTION_SECRET=secret-from-run-options"],
+    });
+    await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa");
+  } finally {
+    delete Bun.env.TJ_TEST_SECRET;
+  }
+
+  expect(await docker.envOf("tj-postrun:x-1-1")).toEqual(["TJ_TEST_SECRET=", "RUN_OPTION_SECRET="]);
+  const commands = (await docker.commands()).filter((command) => !command.startsWith("docker run"));
+  expect(commands.join("\n")).not.toContain("secret");
+  await removeContainer("tj-run-1");
+});
+
+test("a variable of the prerun image overridden at run time has the prerun image's value in the postrun image", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"], env: { "tj-prerun:aaaaaaaa": ["OVERRIDDEN=image value"] } });
+  Object.assign(Bun.env, docker.env);
+
+  await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "true", { runOptions: ["--env", "OVERRIDDEN=secret-override"] });
+  await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa");
+
+  expect(await docker.envOf("tj-postrun:x-1-1")).toEqual(["OVERRIDDEN=image value"]);
+  await removeContainer("tj-run-1");
+});
+
+/** Values a Dockerfile's ENV would mangle, unless quoted and escaped. */
+const AWKWARD_VALUE = `he said "hi" to $HOME and \${USER:-x}, 'quoted', a \\ backslash, \`ls\`, 100% and\ta tab`;
+
+test("a prerun image's value with quotes, `$` and a backslash comes back byte for byte in the postrun image", async () => {
+  await using docker = await fakeDocker({ images: ["tj-prerun:aaaaaaaa"], env: { "tj-prerun:aaaaaaaa": [`ODD=${AWKWARD_VALUE}`] } });
+  Object.assign(Bun.env, docker.env);
+
+  await runContainer("tj-prerun:aaaaaaaa", "tj-run-1", "true");
+  await commitContainer("tj-run-1", "tj-postrun:x-1-1", "tj-prerun:aaaaaaaa");
+
+  expect(await docker.envOf("tj-postrun:x-1-1")).toEqual([`ODD=${AWKWARD_VALUE}`]);
+  await removeContainer("tj-run-1");
+});
+
+test("scrubbedEnvChanges blanks every variable the image doesn't set, and gives back the image's own values", () => {
+  expect(scrubbedEnvChanges(["PATH=/usr/bin:/bin", "EMPTY=", `ODD=${AWKWARD_VALUE}`], ["PATH", "EMPTY", "ODD", "API_KEY", "FROM_RUN_OPTIONS", "API_KEY"])).toEqual([
+    'ENV "API_KEY"=',
+    'ENV "FROM_RUN_OPTIONS"=',
+    'ENV "PATH"="/usr/bin:/bin"',
+    'ENV "EMPTY"=""',
+    `ENV "ODD"="he said \\"hi\\" to \\$HOME and \\\${USER:-x}, 'quoted', a \\\\ backslash, \`ls\`, 100% and\ta tab"`,
+  ]);
+  expect(scrubbedEnvChanges([], [])).toEqual([]);
+});
+
+test("scrubbedEnvChanges escapes a name too", () => {
+  expect(scrubbedEnvChanges([], ["ODD$NAME"])).toEqual(['ENV "ODD\\$NAME"=']);
+});
+
+test("scrubbedEnvChanges refuses a value with a newline, naming its variable and never the value", () => {
+  const error = (() => {
+    try {
+      return scrubbedEnvChanges(["MULTI=secret-line-1\nsecret-line-2"], ["MULTI"]);
+    } catch (e) {
+      return e;
+    }
+  })();
+  expect(error).toBeInstanceOf(DockerContainerError);
+  expect((error as Error).message).toBe(`the environment variable "MULTI" can't be written in an ENV instruction: it has a newline`);
 });
 
 test("runContainer throws a DockerContainerError with the reason when its script fails", async () => {

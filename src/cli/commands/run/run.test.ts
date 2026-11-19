@@ -5,6 +5,7 @@
 // `bun run fixture 0202 run is-prime-baseline --dry-run`. For real Docker, see run.docker.test.ts.
 import { afterEach, describe, expect, test } from "bun:test";
 import { $, SQL } from "bun";
+import { ENV_NAMES_FORMAT, IMAGE_CONFIG_FORMAT } from "../../../docker/docker.ts";
 import type { ContainerRunRecord } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
@@ -232,8 +233,10 @@ Recorded in <DATA>/runs.sqlite
         `docker cp ${container(n)}:/thunderjar/run.json <destination>`,
         `docker cp ${container(n)}:/thunderjar/result.json <destination>`,
         `docker cp ${container(n)}:/thunderjar/stderr.log <destination>`,
-        `docker image inspect --format {{json .Config.Entrypoint}}\t{{json .Config.Cmd}} ${prerun(n)}`,
-        `docker commit --change ENTRYPOINT [""] --change CMD ["sh"] ${container(n)} thunderjar-postrun:${id}-${n}-1`,
+        `docker image inspect --format ${IMAGE_CONFIG_FORMAT} ${prerun(n)}`,
+        `docker container inspect --format ${ENV_NAMES_FORMAT} ${container(n)}`,
+        // Alpha's key is blanked, so its postrun image doesn't hold its value.
+        `docker commit --change ENTRYPOINT [""] --change CMD ["sh"] ${n === 1 ? '--change ENV "FAKE_HARNESS_KEY"= ' : ""}${container(n)} thunderjar-postrun:${id}-${n}-1`,
         `docker rm --force ${container(n)}`,
       ]),
     );
@@ -254,6 +257,9 @@ Recorded in <DATA>/runs.sqlite
     // Alpha's container was given its key. Beta's, of another harness, wasn't.
     expect(await docker.fileIn(`thunderjar-postrun:${id}-1-1`, "/thunderjar/fake-harness-key")).toBe("set\n");
     expect(await docker.fileIn(`thunderjar-postrun:${id}-2-1`, "/thunderjar/fake-harness-key")).toBe("\n");
+    // Neither postrun image holds the key's value.
+    expect(await docker.envOf(`thunderjar-postrun:${id}-1-1`)).toEqual(["FAKE_HARNESS_KEY="]);
+    expect(await docker.envOf(`thunderjar-postrun:${id}-2-1`)).toEqual([]);
   });
 
   test("quoting: the prompt reaches the agent byte for byte, through a file", async () => {

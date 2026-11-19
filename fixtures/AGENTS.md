@@ -119,6 +119,9 @@ bun run fixture 0202 plan is-prime-baseline
     - Base image `node20-unconfined` is `node20` with `runOptions` `--security-opt seccomp=unconfined --security-opt apparmor=unconfined`. On Ubuntu 23.10 and later, the host must also allow unprivileged user namespaces, `sysctl kernel.apparmor_restrict_unprivileged_userns=0`, as CI does.
     - Task `sandbox`, in place of `is-prime`, with initial prompt `plain`, `Sandbox yourself.`, and measurement `sandboxed`, a `replyMatches` of `^sandboxed$`.
     - Test case `sandboxed`, instead of `example`: both base images.
+    - Base image `node20-env` sets `FAKE_IMAGE_SETTING`, a value awkward to quote, and `FAKE_OVERRIDDEN=image-value`, and its `runOptions` pass `-e FAKE_RUN_OPTION_KEY` and `--env FAKE_OVERRIDDEN=run-time-value`.
+    - `fake-keyed` needs `FAKE_HARNESS_KEY` (`requiredEnv`), and replies whether it saw it, `FAKE_RUN_OPTION_KEY` and `FAKE_OVERRIDDEN`, never their values: `key set, run option set, overridden set`.
+    - Test case `scrubbed-env`: `fake-keyed` on `node20-env`, so a test can check its postrun image holds none of the values it was run with.
   - `0207_image_store`: the shared setup, with `imageStore: { repository: "ghcr.io/acme/thunderjar-images" }`, so `run` and `build` check the `docker login` for `ghcr.io`, then push each image. The fake Docker has a login only when a test gives it one: `fakeDocker({ loggedIn: ["ghcr.io"] })`.
   - `0208_parameter_files`: the shared setup, with a fake agent whose script is kept in its `files/` folder.
     - `fake-scripted`, version `1.0.0`, on `fake-model-small-001`, copies `files/scripts/` from `ctx.dir` to `/opt/fake-scripted/`, and its `cli` runs `agent.sh` from there, which writes a correct `isPrime.ts` and replies `Ran from /opt/fake-scripted.` Its `notes.md`, beside `index.ts` but not in `files/`, never reaches the build.

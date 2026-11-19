@@ -271,8 +271,11 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * @type {string[]}
    * @description
    * The names of the environment variables the agent needs, e.g. its API key. Each is passed into
-   * this harness's containers only, as `docker run -e NAME`, so its value comes from the shell that
-   * runs Thunderjar, and is never written down. `plan` and `run` stop if one is unset.
+   * this harness's agent containers only, as `docker run -e NAME`, so its value comes from the shell
+   * that runs Thunderjar, and is never on a command line or in a log. Its postrun image doesn't
+   * keep it: when the container is committed, every variable its prerun image doesn't set is
+   * blanked, so measurement containers, started from the postrun image, don't see it either.
+   * `plan` and `run` stop if one is unset.
    */
   requiredEnv?: string[];
 };

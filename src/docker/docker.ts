@@ -455,19 +455,76 @@ export async function readContainerFile(name: string, path: string, runtime: Doc
   }
 }
 
+/** An image's entrypoint, command and environment, each as JSON, between tabs. */
+export const IMAGE_CONFIG_FORMAT = "{{json .Config.Entrypoint}}\t{{json .Config.Cmd}}\t{{json .Config.Env}}";
+
+/**
+ * The names of a container's environment variables, as a JSON array: never their values, which
+ * stay in Docker.
+ */
+export const ENV_NAMES_FORMAT = '[{{range $i, $e := .Config.Env}}{{if $i}},{{end}}{{json (index (split $e "=") 0)}}{{end}}]';
+
+/**
+ * `word` as a Dockerfile's `ENV` reads it back, byte for byte: in double quotes, with `\`, `"` and
+ * `$` escaped, so nothing in it is expanded. A newline can't be written in one: a `--change` ends
+ * at it. Throws a DockerContainerError for one, naming `variable`, never the value.
+ */
+function envWord(word: string, variable: string): string {
+  if (/[\r\n]/.test(word)) throw new DockerContainerError(`the environment variable ${JSON.stringify(variable)} can't be written in an ENV instruction: it has a newline`);
+  return `"${word.replace(/[\\"$]/g, (c) => `\\${c}`)}"`;
+}
+
+/**
+ * The `ENV` changes that leave a committed container's environment holding nothing from the time
+ * it ran, given its image's environment, `imageEnv`, as `NAME=value` entries, and the names of the
+ * container's variables, `containerNames`. Every variable the image doesn't have, e.g. one passed
+ * with `-e`, is blanked; every one it has gets the image's value back, whatever it was run with.
+ *
+ * By rule, not by list: so it covers a harness's `requiredEnv`, `-e` and `--env-file` in a base
+ * image's `runOptions`, and whatever else gave the container a variable. Docker can't remove a
+ * variable from a commit's config, only set it, so one blanked is left set to "".
+ */
+export function scrubbedEnvChanges(imageEnv: string[], containerNames: string[]): string[] {
+  const image = imageEnv.map((entry) => {
+    const at = entry.indexOf("=");
+    return at === -1 ? ([entry, ""] as const) : ([entry.slice(0, at), entry.slice(at + 1)] as const);
+  });
+  const imageNames = new Set(image.map(([variable]) => variable));
+  const blanked = [...new Set(containerNames)].filter((variable) => variable !== "" && !imageNames.has(variable));
+  return [
+    ...blanked.map((variable) => `ENV ${envWord(variable, variable)}=`),
+    ...image.map(([variable, value]) => `ENV ${envWord(variable, variable)}=${envWord(value, variable)}`),
+  ];
+}
+
 /**
  * Commits the stopped container `name` into the image `image`, with the entrypoint and command of
  * the image `like`, the one it ran from, so starting the new image doesn't run the container's
- * script again. Throws a DockerContainerError.
+ * script again.
+ *
+ * Its environment is `like`'s, so it holds nothing from the time the container ran: `docker
+ * commit` would otherwise save every variable the container was given, e.g. an agent's API key,
+ * into the image's config, which is pushed with it. See scrubbedEnvChanges. Only the variables'
+ * names are read from the container: their values never leave Docker.
+ *
+ * Throws a DockerContainerError, also if `like`'s environment can't be written back.
  */
 export async function commitContainer(name: string, image: string, like: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
-  const inspected = await mustRun(["image", "inspect", "--format", "{{json .Config.Entrypoint}}\t{{json .Config.Cmd}}", like], runtime);
-  const [entrypoint, cmd] = inspected.trim().split("\t");
+  const inspected = await mustRun(["image", "inspect", "--format", IMAGE_CONFIG_FORMAT, like], runtime);
+  const [entrypoint, cmd, env] = inspected.trim().split("\t");
+  const containerNames = JSON.parse(await mustRun(["container", "inspect", "--format", ENV_NAMES_FORMAT, name], runtime)) as string[];
+  // The image's own variables aren't secret: they're in `like`, and in its Dockerfile.
+  const imageEnv = (JSON.parse(env ?? "null") as string[] | null) ?? [];
   // `ENTRYPOINT []` is ignored; `[""]` clears it.
-  const changes = [`ENTRYPOINT ${entrypoint === "null" ? '[""]' : entrypoint}`, `CMD ${cmd === "null" ? '["sh"]' : cmd}`];
+  const changes = [
+    `ENTRYPOINT ${entrypoint === "null" ? '[""]' : entrypoint}`,
+    `CMD ${cmd === "null" ? '["sh"]' : cmd}`,
+    ...scrubbedEnvChanges(imageEnv, containerNames),
+  ];
   const startedAt = Date.now();
   await mustRun(["commit", ...changes.flatMap((change) => ["--change", change]), name, image], runtime);
-  log.info({ container: name, image, ms: Date.now() - startedAt }, "committed container");
+  // Only the names: the values of the image's variables are in the command, logged at debug.
+  log.info({ container: name, image, variables: containerNames, ms: Date.now() - startedAt }, "committed container");
 }
 
 /** Removes the container `name`, stopped or not. Throws a DockerContainerError. */

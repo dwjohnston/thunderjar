@@ -22,14 +22,15 @@
 //     image         the image it was run from
 //     root/         its files: only what was written to /workspace and /thunderjar
 //   filesystems/  the root/ of each committed container, by image (URI-encoded)
+//   env/          the environment of each image that has one, by image (URI-encoded), as JSON `NAME=value`
+//                 entries; a container's is in containers/<name>/env.json
 //
 // `build` takes `--secret id=<id>,env=<env>`, failing as Docker does if `<env>` is unset in its own
 // environment, and `--ssh default`.
 //
 // `run` runs the container's script on the host, with /workspace and /thunderjar in it mapped to
 // the container's root/, and root/workspace its working directory. Its environment is only the
-// variables passed with `-e NAME`, from the fake's own, beside PATH and HOME, as a container sees
-// only what it's given. While it runs, `kill` stops it, and everything it started, as if the
+// container's (see below), beside PATH and HOME, as a container sees only what it's given. While it runs, `kill` stops it, and everything it started, as if the
 // container had been killed. A built image's container
 // starts with only the files its Dockerfile writes with `COPY <<'EOF' <path>` heredocs, as
 // writeFile does, under /workspace or /thunderjar: no RUN is run. A script that runs /thunderjar/thunderjar-run.sh runs a
@@ -50,6 +51,15 @@
 // FAKE_DOCKER_FAIL_IMAGE_RM is set. `system df`
 // reports made-up sizes: 100MB an image. `run --rm --interactive` runs a shell session, as
 // src/docker/shellSession.ts speaks to one; it fails to start for a container named in failing.
+//
+// An image's environment comes from its Dockerfile's `ENV` lines, or `fakeDocker({ env })`. A
+// container's is its image's, with each `-e`/`--env` given to `run`: `NAME`, from the fake's own
+// environment, skipped if unset there, or `NAME=value`.
+// `container inspect --format <format> <name>` prints the names of its variables as a JSON array,
+// whatever the format. `image inspect --format <format> <image>` prints the image's entrypoint and
+// command, both null, then, if the format asks for `.Config.Env`, its environment, between tabs.
+// `commit` saves the container's environment with each `--change ENV …` applied, read as Docker
+// reads one: quotes, `\` escapes, and `$NAME` expanded. `tag` copies an image's.
 //
 // A runner (src/execution/runner.ts) really runs too. `run --detach --name <name> --pull missing
 // [<option>]… <image>`, with no `--entrypoint`, starts the CLI's `runner` command on the host, in
@@ -83,6 +93,8 @@ export type FakeDocker = AsyncDisposable & {
   pushed: () => Promise<string[]>;
   /** The names of the containers not yet removed. */
   containers: () => Promise<string[]>;
+  /** The environment of `image`, as `NAME=value` entries, or undefined if it has none. */
+  envOf: (image: string) => Promise<string[] | undefined>;
   /** The text of the file at `path`, from the container's root, in the committed image `image`, or undefined if there's none. */
   fileIn: (image: string, path: string) => Promise<string | undefined>;
   /** Deletes its state. */
@@ -103,6 +115,50 @@ async function processTree(pid: string): Promise<string[]> {
 
 const lines = (values: string[]) => values.map((value) => `${value}\n`).join("");
 
+/** Where the environment of `image` is kept, in the fake's state `dir`. */
+const envFile = (dir: string, image: string) => `${dir}/env/${encodeURIComponent(image)}.json`;
+
+const REFERENCE = /^\$(\{\w+\}|\w+)/;
+
+/**
+ * The variables a Dockerfile `ENV` instruction sets, given the text after `ENV `, read as Docker
+ * reads it: split at unquoted spaces, quotes removed, `\` escapes undone (in double quotes, only
+ * of `\`, `"` and `$`), and `$NAME` or `${NAME}` outside single quotes expanded from `env`.
+ */
+export function parseEnvInstruction(text: string, env: Map<string, string>): [string, string][] {
+  const words: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    while (i < text.length && /\s/.test(text[i] as string)) i++;
+    if (i >= text.length) break;
+    let word = "";
+    let quote: string | undefined;
+    for (; i < text.length; i++) {
+      const c = text[i] as string;
+      const reference = REFERENCE.exec(text.slice(i));
+      if (quote === undefined && /\s/.test(c)) break;
+      if (c === "\\" && quote !== "'" && i + 1 < text.length && (quote === undefined || /[\\"$]/.test(text[i + 1] as string))) {
+        word += text[++i];
+      } else if (c === quote) {
+        quote = undefined;
+      } else if (quote === undefined && (c === '"' || c === "'")) {
+        quote = c;
+      } else if (quote !== "'" && reference) {
+        word += env.get(reference[0].replace(/^\$\{?|\}$/g, "")) ?? "";
+        i += reference[0].length - 1;
+      } else {
+        word += c;
+      }
+    }
+    words.push(word);
+  }
+  return words.map((word) => [word.slice(0, word.indexOf("=")), word.slice(word.indexOf("=") + 1)]);
+}
+
+/** `entries`, each `NAME=value`, as a map. */
+const envMap = (entries: string[]) => new Map(entries.map((entry): [string, string] => [entry.slice(0, entry.indexOf("=")), entry.slice(entry.indexOf("=") + 1)]));
+const envEntries = (env: Map<string, string>) => [...env].map(([name, value]) => `${name}=${value}`);
+
 /**
  * State for the fake, in which `images` exist, building or committing the `failing` images, or
  * pushing the `failing` references, fails, building the `slow` images takes a second, Docker is logged in to the registry hosts `loggedIn`,
@@ -117,6 +173,7 @@ export async function fakeDocker({
   pullDenied = false,
   stored = [],
   slowStart = {},
+  env = {},
 }: {
   images?: string[];
   failing?: string[];
@@ -128,6 +185,8 @@ export async function fakeDocker({
   stored?: string[];
   /** How many seconds `run` waits before it makes a container, by the end of its name, e.g. `{ "-1-1": 3 }`. */
   slowStart?: Record<string, number>;
+  /** The environment of each image that has one, as `NAME=value` entries, by image. */
+  env?: Record<string, string[]>;
 } = {}): Promise<FakeDocker> {
   const dir = `${FIXTURES_DIR}/.tmp/docker-${crypto.randomUUID()}`;
   await Bun.write(`${dir}/images`, lines(images));
@@ -138,6 +197,7 @@ export async function fakeDocker({
   if (unreachable) await Bun.write(`${dir}/unreachable`, "");
   if (pullDenied) await Bun.write(`${dir}/pull-denied`, "");
   if (stored.length > 0) await Bun.write(`${dir}/pushed`, lines(stored));
+  for (const [image, entries] of Object.entries(env)) await Bun.write(envFile(dir, image), JSON.stringify(entries));
   // A new Bun.file each time: one read caches the file's size, so a second would miss what was appended since.
   const commandsFile = () => Bun.file(`${dir}/commands`);
   const listOf = async (file: string) => (await Bun.file(file).text()).split("\n").filter(Boolean);
@@ -164,6 +224,10 @@ export async function fakeDocker({
       (await $`test -d ${dir}/containers`.quiet().nothrow()).exitCode === 0
         ? (await Array.fromAsync(new Glob("*/image").scan({ cwd: `${dir}/containers` }))).map((file) => file.slice(0, -"/image".length)).sort()
         : [],
+    envOf: async (image) => {
+      const file = Bun.file(envFile(dir, image));
+      return (await file.exists()) ? ((await file.json()) as string[]) : undefined;
+    },
     fileIn: async (image, path) => {
       const file = Bun.file(`${dir}/filesystems/${encodeURIComponent(image)}${path}`);
       return (await file.exists()) ? file.text() : undefined;
@@ -200,6 +264,24 @@ if (import.meta.main) {
   };
 
   const filesystemOf = (image: string) => `${dir}/filesystems/${encodeURIComponent(image)}`;
+  /** The environment kept in `file`, empty if there's none. */
+  const envIn = async (file: string) => envMap((await Bun.file(file).exists()) ? ((await Bun.file(file).json()) as string[]) : []);
+  /**
+   * Keeps the environment of the container `name`: its image's, with each `-e`/`--env` of `runArgs`
+   * before `--entrypoint`, from the fake's own environment for a bare `NAME`, as Docker does,
+   * skipping one that's unset there.
+   */
+  const keepContainerEnv = async (name: string, image: string, runArgs: string[]) => {
+    const env = await envIn(envFile(dir as string, image));
+    for (let i = 0; i < runArgs.length && runArgs[i] !== "--entrypoint"; i++) {
+      const arg = runArgs[i] as string;
+      const given = arg === "-e" || arg === "--env" ? runArgs[++i] : arg.startsWith("--env=") ? arg.slice("--env=".length) : undefined;
+      if (given === undefined) continue;
+      if (given.includes("=")) env.set(given.slice(0, given.indexOf("=")), given.slice(given.indexOf("=") + 1));
+      else if (Bun.env[given] !== undefined) env.set(given, Bun.env[given] as string);
+    }
+    await Bun.write(`${dir}/containers/${name}/env.json`, JSON.stringify(envEntries(env)));
+  };
 
   /**
    * Runs `program` on the host as if in `container`, its /workspace and /thunderjar mapped to the
@@ -213,22 +295,17 @@ if (import.meta.main) {
 
   /**
    * `docker run [--detach] --name <name> --pull never [-e <NAME>]… [<option>]… --entrypoint sh <image> -c <script>`,
-   * parsed. Other options are recorded in `commands`, and otherwise ignored.
+   * parsed. Options but `-e` and `--env`, which keepContainerEnv reads, are recorded in `commands`,
+   * and otherwise ignored.
    */
   const parseRun = (runArgs: string[]) => {
     const detach = runArgs[0] === "--detach";
     const rest = detach ? runArgs.slice(1) : runArgs;
     if (rest[0] !== "--name" || rest[2] !== "--pull" || (rest[3] !== "never" && rest[3] !== "missing")) return undefined;
-    const env: string[] = [];
-    let i = 4;
-    while (rest[i] === "-e" && rest[i + 1] !== undefined) {
-      env.push(rest[i + 1] as string);
-      i += 2;
-    }
     // The options end at the --entrypoint five from the end.
-    i = rest.length - 5;
+    const i = rest.length - 5;
     if (i < 4 || rest[i] !== "--entrypoint" || rest[i + 1] !== "sh" || rest[i + 3] !== "-c") return undefined;
-    return { detach, name: rest[1] as string, env, image: rest[i + 2] as string, script: rest[i + 4] as string };
+    return { detach, name: rest[1] as string, image: rest[i + 2] as string, script: rest[i + 4] as string };
   };
 
   const [command, subcommand, ...rest] = args;
@@ -259,6 +336,11 @@ if (import.meta.main) {
       await $`mkdir -p ${dir}/contexts/${image} && cp -R ${context}/. ${dir}/contexts/${image}`.quiet();
       // COPY [--chmod=…] <<'DELIM' <path>, then its lines, up to DELIM.
       const dockerfile = (await Bun.file(`${context}/Dockerfile`).text()).split("\n");
+      const env = new Map<string, string>();
+      for (const line of dockerfile.filter((each) => each.startsWith("ENV "))) {
+        for (const [variable, value] of parseEnvInstruction(line.slice("ENV ".length), env)) env.set(variable, value);
+      }
+      if (env.size > 0) await Bun.write(envFile(dir, image), JSON.stringify(envEntries(env)));
       for (let i = 0; i < dockerfile.length; i++) {
         const copy = /^COPY (?:--\S+ )*<<'?(\w+)'? (\/(?:workspace|thunderjar)\/\S+)$/.exec(dockerfile[i] as string);
         if (!copy) continue;
@@ -315,7 +397,7 @@ if (import.meta.main) {
     await $`rm -rf ${container}`.quiet();
   } else if (command === "run" && parseRun(args.slice(1))) {
     // docker run [--detach] --name <name> --pull never [-e <NAME>]… [<option>]… --entrypoint sh <image> -c <script>
-    const { detach, name, env, image, script } = parseRun(args.slice(1))!;
+    const { detach, name, image, script } = parseRun(args.slice(1))!;
     if (!dir) fail("fake docker: running a container needs FAKE_DOCKER_DIR");
     if (!(await list("images")).includes(image)) fail(`docker: Error response from daemon: No such image: ${image}`);
     for (const line of await list("slow-start")) {
@@ -325,12 +407,13 @@ if (import.meta.main) {
     const container = `${dir}/containers/${name}`;
     if (await state(`containers/${name}/image`).exists()) fail(`docker: Error response from daemon: Conflict. The container name "/${name}" is already in use.`);
     await Bun.write(`${container}/image`, `${image}\n`);
+    await keepContainerEnv(name, image, args.slice(1));
     await $`mkdir -p ${container}/root/workspace ${container}/root/thunderjar`.quiet();
     await $`if [ -d ${filesystemOf(image)} ]; then cp -R ${filesystemOf(image)}/. ${container}/root; fi`.quiet();
     if (detach) {
       console.log(crypto.randomUUID().replaceAll("-", ""));
     } else {
-      const passed = Object.fromEntries(env.flatMap((variable) => (Bun.env[variable] === undefined ? [] : [[variable, Bun.env[variable] as string]])));
+      const passed = Object.fromEntries(await envIn(`${container}/env.json`));
       const map = (text: string) => text.replace(/\/(workspace|thunderjar)(?![\w.-])/g, (_, folder: string) => `${container}/root/${folder}`);
       let mapped = map(script);
       const runScript = `${container}/root/thunderjar/thunderjar-run.sh`;
@@ -463,13 +546,29 @@ if (import.meta.main) {
   } else if (command === "image" && subcommand === "inspect" && rest[0] === "--format" && rest.length === 3) {
     // docker image inspect --format <format> <image>
     if (!(await list("images")).includes(rest[2] as string)) fail(`Error: No such image: ${rest[2]}`);
-    console.log("null\tnull");
+    const env = await envIn(envFile(dir as string, rest[2] as string));
+    console.log((rest[1] as string).includes(".Config.Env") ? `null\tnull\t${JSON.stringify(env.size > 0 ? envEntries(env) : null)}` : "null\tnull");
+  } else if (command === "container" && subcommand === "inspect" && rest[0] === "--format" && rest.length === 3) {
+    // docker container inspect --format <format> <name>: the names of its variables, never their values
+    const name = rest[2] as string;
+    if (!dir || !(await state(`containers/${name}/image`).exists())) fail(`Error response from daemon: No such container: ${name}`);
+    console.log(JSON.stringify([...(await envIn(`${dir}/containers/${name}/env.json`)).keys()]));
   } else if (command === "commit" && rest.length >= 2) {
     // docker commit [--change <change>]… <name> <image>
     const [name, image] = args.slice(-2) as [string, string];
     if (!dir || !(await state(`containers/${name}/image`).exists())) fail(`Error response from daemon: No such container: ${name}`);
     if ((await list("failing")).includes(image)) fail(`Error response from daemon: failed to commit ${name} as ${image}`);
     await $`mkdir -p ${filesystemOf(image)} && cp -R ${dir}/containers/${name}/root/. ${filesystemOf(image)}`.quiet();
+    // The container's environment, with each `--change ENV …` applied: Docker reads a change up to a newline.
+    const env = await envIn(`${dir}/containers/${name}/env.json`);
+    const options = args.slice(1, -2);
+    for (let i = 0; i < options.length; i += 2) {
+      const change = options[i + 1] ?? "";
+      if (options[i] !== "--change") fail(`fake docker: unknown commit option ${options[i]}`);
+      if (/[\r\n]/.test(change)) fail(`Error response from daemon: ${change.split(/[\r\n]/).at(-1)} is not a valid change command`);
+      if (change.startsWith("ENV ")) for (const [variable, value] of parseEnvInstruction(change.slice("ENV ".length), env)) env.set(variable, value);
+    }
+    await Bun.write(envFile(dir as string, image), JSON.stringify(envEntries(env)));
     if (!(await list("images")).includes(image)) await append("images", image);
   } else if (command === "kill" && rest.length === 0) {
     // docker kill <name>; a container named in `failing` can't be killed, as if the daemon couldn't be reached.
@@ -494,6 +593,7 @@ if (import.meta.main) {
     if (dir && !images.includes(rest[0] as string)) await append("images", rest[0] as string);
     // The tag names the same image, so it has the same files, e.g. the run script a build wrote.
     if (dir) await $`if [ -d ${filesystemOf(subcommand as string)} ]; then mkdir -p ${filesystemOf(rest[0] as string)} && cp -R ${filesystemOf(subcommand as string)}/. ${filesystemOf(rest[0] as string)}; fi`.quiet();
+    if (dir && (await Bun.file(envFile(dir, subcommand as string)).exists())) await Bun.write(envFile(dir, rest[0] as string), Bun.file(envFile(dir, subcommand as string)));
   } else if (command === "push" && subcommand === "--quiet" && rest.length === 1) {
     // docker push --quiet <reference>
     const reference = rest[0] as string;
