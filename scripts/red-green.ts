@@ -111,6 +111,12 @@ export function wasChanged(test: TestCase, starts: Map<string, number[]>, change
 }
 
 /** How many more `test(`/`it(` calls a diff adds than it removes. */
-export function addedTestCount(_diff: string): number {
-  return 0;
+export function addedTestCount(diff: string): number {
+  const call = /^[+-]\s*(?:test|it)(?:\.\w+)*\s*\(/;
+  let count = 0;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+++") || line.startsWith("---") || !call.test(line)) continue;
+    count += line.startsWith("+") ? 1 : -1;
+  }
+  return count;
 }
