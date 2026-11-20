@@ -99,4 +99,24 @@ describe("remeasure", () => {
     }
     expect((await runsOf(copy, BASELINE)).filter((run) => run.earlierResults !== undefined)).toEqual([]);
   });
+
+  test("a run whose postrun image was purged is skipped, and listed as skipped", async () => {
+    const copy = await project();
+    await sqliteStore(`${copy.dir}/.thunderjar/.data/runs.sqlite`).markPostrunsPurged(TWO_HARNESSES, { purgedAt: "2026-10-05T00:00:00.000Z", from: "daemon" }, [
+      { permutation: 2, iteration: 1 },
+    ]);
+    const [, before2] = (await runsOf(copy, TWO_HARNESSES)) as [ContainerRunRecord, ContainerRunRecord];
+    const fake = await docker([postrun(TWO_HARNESSES, "1-1")]);
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["remeasure", TWO_HARNESSES], { env: fake.env });
+
+    expect({ stdout, stderr, exitCode }).toEqual({
+      stdout: `remeasured 1 run, skipped 1 (postrun image purged)\n  <ULID> 2-1  postrun image purged\n`,
+      stderr: "",
+      exitCode: 0,
+    });
+    const [after1, after2] = (await runsOf(copy, TWO_HARNESSES)) as [ContainerRunRecord, ContainerRunRecord];
+    expect(after1.earlierResults).toHaveLength(1);
+    expect(after2).toEqual(before2);
+  });
 });
