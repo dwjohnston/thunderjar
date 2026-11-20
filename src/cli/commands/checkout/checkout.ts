@@ -26,6 +26,7 @@ import {
   endStateBundle,
   findContainerRun,
   gitDir,
+  openShell,
   parseContainerRunId,
   runBranch,
   unavailableReason,
@@ -37,7 +38,7 @@ import { print, printError } from "../../output.ts";
 
 type Options = { dataDir?: string; shell?: boolean };
 
-async function checkout(cwd: string, runId: string, { dataDir }: Options): Promise<void> {
+async function checkout(cwd: string, runId: string, { dataDir, shell = false }: Options): Promise<void> {
   const fail = (reason: string) => {
     printError(`Can't check out ${runId}: ${reason}.`);
     process.exitCode = 1;
@@ -54,6 +55,10 @@ async function checkout(cwd: string, runId: string, { dataDir }: Options): Promi
   // Through the configured runtime, so a postrun image on a remote Docker host can be checked out too.
   const { runtime: configured } = await loadProjectConfig(root);
   const runtime = configured === null ? remeasureRuntime() : remoteRuntime(configured.command);
+  if (shell) {
+    process.exitCode = await openShell(run, runtime);
+    return;
+  }
   if ((await gitDir(cwd)) === undefined) return fail(`checkout makes a branch in the git repository it's run in, and ${cwd} isn't in one. Use --shell to look inside its postrun image instead`);
   const branch = runBranch(run);
   try {
