@@ -30,10 +30,11 @@ import {
 import { type Paint, padEnd, painter, visibleLength } from "../../colour.ts";
 import { confirm } from "../../confirm.ts";
 import { plural } from "../../format.ts";
-import { print, printError } from "../../output.ts";
+import { jsonOption } from "../../json.ts";
+import { print, printError, printJson } from "../../output.ts";
 import { olderThanOption } from "./age.ts";
 
-type CaptureOptions = { from: PurgeFrom; remote: string; olderThan?: number; all?: boolean; verdict?: Verdict; yes?: boolean; dryRun?: boolean };
+type CaptureOptions = { from: PurgeFrom; remote: string; olderThan?: number; all?: boolean; verdict?: Verdict; yes?: boolean; dryRun?: boolean; json?: boolean };
 
 /** Prints `message` as an error, with exit code 1. */
 function fail(message: string): void {
@@ -96,9 +97,16 @@ async function purgeCapture(cwd: string, sessions: string[], options: CaptureOpt
     if (error instanceof UnknownSessionError) return fail(error.message);
     return fail(error instanceof Error ? error.message : String(error));
   }
-  if (targets.length === 0) return void print("Nothing to purge.");
+  const report = (sessions: PurgeTarget[]) => options.json && printJson({ dryRun: options.dryRun === true, from, remote: places.remote ? remote : null, sessions });
+  if (targets.length === 0) {
+    print("Nothing to purge.");
+    return void report([]);
+  }
   for (const line of targetLines(targets, painter(), now)) print(line);
-  if (options.dryRun) return void print(`${plural(targets.length, "session")} would be deleted.`);
+  if (options.dryRun) {
+    print(`${plural(targets.length, "session")} would be deleted.`);
+    return void report(targets);
+  }
   if (!options.yes) {
     if (!process.stdin.isTTY) return fail("Not deleting without asking, and there's no terminal to ask on. Pass --yes to delete, or --dry-run to see what would be.");
     const where = !places.remote ? "" : places.local ? `, here and from ${remote}` : ` from ${remote}`;
@@ -111,6 +119,7 @@ async function purgeCapture(cwd: string, sessions: string[], options: CaptureOpt
     return fail(error instanceof Error ? error.message : String(error));
   }
   print(`${plural(targets.length, "session")} deleted.`);
+  report(targets);
 }
 
 export function createPurgeCaptureCommand(): Command {
@@ -124,6 +133,7 @@ export function createPurgeCaptureCommand(): Command {
     .option("--remote <name>", "the remote, with --from remote or all", "origin")
     .option("-y, --yes", "don't ask first")
     .option("--dry-run", "only say what would be deleted")
+    .addOption(jsonOption())
     .action(async (sessions: string[], options: CaptureOptions) => {
       await purgeCapture(process.cwd(), sessions, options);
     });
