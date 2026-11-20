@@ -345,3 +345,11 @@ export async function firstTask(tasksDir: string, skip: ReadonlySet<string> = ne
   }
   return null;
 }
+
+/**
+ * The base for a detached HEAD: the one branch on the remote at HEAD, from
+ * `git branch -r --points-at HEAD --format=%(refname:short)`. Null when there's none, or more than one.
+ */
+export function baseFromRemoteBranches(output: string): string | null {
+  return output;
+}

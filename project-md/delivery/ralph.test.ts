@@ -14,7 +14,7 @@
  */
 import { $ } from "bun";
 import { expect, test } from "bun:test";
-import { firstTask, moveTaskToDone, parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
+import { baseFromRemoteBranches, firstTask, moveTaskToDone, parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
 
 test("parseTask reads harness, model and effort from the frontmatter", () => {
   const text = "---\nharness: claude-code\nmodel: sonnet\neffort: medium\n---\n\n# 3900: A task\n";
@@ -85,4 +85,11 @@ test("moveTaskToDone moves the task file to done/ in its own commit", async () =
   expect(await Bun.file(`${dir}/project-md/delivery/tasks/3900_a-task.md`).exists()).toBe(false);
   expect((await $`git status --porcelain`.cwd(dir).text()).trim()).toBe("");
   await $`rm -rf ${dir}`;
+});
+
+test("baseFromRemoteBranches finds the base of a detached HEAD from the one remote branch at it", () => {
+  expect(baseFromRemoteBranches("origin/claude/charming-archimedes-4oj2q6\n")).toBe("claude/charming-archimedes-4oj2q6");
+  expect(baseFromRemoteBranches("origin\norigin/HEAD\norigin/main\n")).toBe("main");
+  expect(baseFromRemoteBranches("origin/main\norigin/other\n")).toBeNull();
+  expect(baseFromRemoteBranches("")).toBeNull();
 });
