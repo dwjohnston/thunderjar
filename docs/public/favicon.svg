@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 20 160 225">
+  <!-- Thunderjar favicon: the splash page's jar, with fixed colours. -->
+  <path d="M44 70 Q30 78 30 100 L30 210 Q30 236 56 236 L144 236 Q170 236 170 210 L170 100 Q170 78 156 70 Z" fill="#03141a" stroke="#3dffc5" stroke-width="10" stroke-linejoin="round"/>
+  <rect x="40" y="28" width="120" height="42" rx="8" fill="#0f5b58" stroke="#3dffc5" stroke-width="10"/>
+  <path d="M112 92 L72 162 L100 162 L86 214 L132 138 L104 138 L120 92 Z" fill="#ffe23d" stroke="#ffe23d" stroke-width="6" stroke-linejoin="round"/>
+</svg>
