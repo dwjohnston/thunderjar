@@ -143,3 +143,15 @@ test("--from remote deletes on the remote, in both stores, even sessions not her
   expect(remoteRefs()).toEqual([]);
   expect(localRefs()).toEqual(before);
 });
+
+test("--from remote with --verdict fetches the records to read the verdicts, and creates no refs here", async () => {
+  pushAll();
+  const other = `${dir}/other`;
+  await $`git init -q -b main ${other} && git -C ${other} remote add origin ${remote}`.quiet();
+
+  const { stdout, exitCode } = await purge(["--from", "remote", "--verdict", "one-shot", "--dry-run"], other);
+
+  expect(stdout).toBe('new-one-shot  one-shot  0m  "Add a --json flag to show"\n1 session would be deleted.\n');
+  expect(exitCode).toBe(0);
+  expect(localRefs(other)).toEqual([]);
+});
