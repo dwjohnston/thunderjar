@@ -13,14 +13,26 @@
 import { Command, Option } from "commander";
 import { repoRoot } from "../../../capture/git.ts";
 import { localCaptureRefs, VERDICTS, type Verdict } from "../../../capture/list.ts";
-import { type CaptureSelection, deleteLocal, type PurgeTarget, selectionProblem, selectTargets, UnknownSessionError } from "../../../capture/purge.ts";
+import {
+  type CaptureSelection,
+  deleteLocal,
+  deleteRemote,
+  PURGE_FROM,
+  type PurgeFrom,
+  type PurgeTarget,
+  readable,
+  remoteCaptureRefs,
+  selectionProblem,
+  selectTargets,
+  UnknownSessionError,
+} from "../../../capture/purge.ts";
 import { type Paint, padEnd, painter, visibleLength } from "../../colour.ts";
 import { confirm } from "../../confirm.ts";
 import { plural } from "../../format.ts";
 import { print, printError } from "../../output.ts";
 import { olderThanOption } from "./age.ts";
 
-type CaptureOptions = { olderThan?: number; all?: boolean; verdict?: Verdict; yes?: boolean; dryRun?: boolean };
+type CaptureOptions = { from: PurgeFrom; remote: string; olderThan?: number; all?: boolean; verdict?: Verdict; yes?: boolean; dryRun?: boolean };
 
 /** Prints `message` as an error, with exit code 1. */
 function fail(message: string): void {
@@ -65,23 +77,32 @@ async function purgeCapture(cwd: string, sessions: string[], options: CaptureOpt
   if (problem) return fail(problem);
   const root = repoRoot(cwd);
   if (root === null) return fail("Not in a git repository: captures are kept in one.");
+  const { from, remote } = options;
   const now = Date.now();
-  const local = localCaptureRefs(root);
+  const places = { local: from !== "remote", remote: from !== "local" };
   let targets: PurgeTarget[];
   try {
-    targets = selectTargets(root, { local, remote: [] }, local, selection, now);
+    const local = places.local ? localCaptureRefs(root) : [];
+    const remoteRefs = places.remote ? remoteCaptureRefs(root, remote) : [];
+    targets = selectTargets(root, { local, remote: remoteRefs }, [...local, ...readable(root, remoteRefs)], selection, now);
   } catch (error) {
     if (error instanceof UnknownSessionError) return fail(error.message);
-    throw error;
+    return fail(error instanceof Error ? error.message : String(error));
   }
   if (targets.length === 0) return void print("Nothing to purge.");
   for (const line of targetLines(targets, painter(), now)) print(line);
   if (options.dryRun) return void print(`${plural(targets.length, "session")} would be deleted.`);
   if (!options.yes) {
     if (!process.stdin.isTTY) return fail("Not deleting without asking, and there's no terminal to ask on. Pass --yes to delete, or --dry-run to see what would be.");
-    if (!(await confirm("Delete them?"))) return void print("Nothing was deleted.");
+    const where = places.local ? "" : ` from ${remote}`;
+    if (!(await confirm(`Delete them${where}?`))) return void print("Nothing was deleted.");
   }
-  deleteLocal(root, targets.flatMap(({ local }) => local));
+  try {
+    if (places.remote) deleteRemote(root, remote, targets.flatMap((target) => target.remote));
+    if (places.local) deleteLocal(root, targets.flatMap((target) => target.local));
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : String(error));
+  }
   print(`${plural(targets.length, "session")} deleted.`);
 }
 
@@ -92,6 +113,8 @@ export function createPurgeCaptureCommand(): Command {
     .addOption(olderThanOption("sessions"))
     .option("--all", "every captured session")
     .addOption(new Option("--verdict <verdict>", "only sessions with this verdict, as `capture list` shows it").choices(VERDICTS))
+    .addOption(new Option("--from <place>", "where from: this repository, the remote, or both").choices(PURGE_FROM.filter((place) => place !== "all")).default("local"))
+    .option("--remote <name>", "the remote, with --from remote", "origin")
     .option("-y, --yes", "don't ask first")
     .option("--dry-run", "only say what would be deleted")
     .action(async (sessions: string[], options: CaptureOptions) => {
