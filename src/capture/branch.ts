@@ -48,9 +48,13 @@ const SUBJECT = /^thunderjar capture: \S+ (start|turn-\d+)$/;
 /** The session's records on its branch, oldest first. Empty without the branch. */
 export function readBranch(root: string, sessionId: string): BranchEntry[] {
   const branch = branchName(sessionId);
-  if (!refExists(root, branch)) return [];
+  return refExists(root, branch) ? readBranchAt(root, branch) : [];
+}
+
+/** The records on a session's branch whose tip is `revision`, e.g. a commit fetched from a remote, oldest first. */
+export function readBranchAt(root: string, revision: string): BranchEntry[] {
   // -z ends each commit with NUL; %x00 splits its fields. A JSON record never holds a NUL.
-  const fields = git(root, ["log", "-z", "--first-parent", "--reverse", "--format=%H%x00%T%x00%cI%x00%B", branch]).split("\0");
+  const fields = git(root, ["log", "-z", "--first-parent", "--reverse", "--format=%H%x00%T%x00%cI%x00%B", revision]).split("\0");
   const entries: BranchEntry[] = [];
   for (let i = 0; i + 3 < fields.length; i += 4) {
     const [commit, tree, committedAt, message] = [fields[i]!.trim(), fields[i + 1]!, fields[i + 2]!, fields[i + 3]!];
