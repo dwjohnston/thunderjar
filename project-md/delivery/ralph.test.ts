@@ -72,16 +72,27 @@ test("firstTask is the lowest-numbered task file, ignoring done/ and draft/", as
   await $`rm -rf ${dir}`;
 });
 
-test("moveTaskToDone moves the task file to done/ in its own commit", async () => {
+test("moveTaskToDone moves the task file to done/ in its own commit, with the run in its frontmatter", async () => {
   const dir = `${Bun.env.TMPDIR ?? "/tmp"}/ralph-test-${crypto.randomUUID()}`;
   const text = "---\nharness: claude-code\nmodel: sonnet\neffort: low\n---\n\n# 3900: A task\n";
   await Bun.write(`${dir}/project-md/delivery/tasks/3900_a-task.md`, text);
   await $`git init --quiet && git config user.name t && git config user.email t@t && git add -A && git commit --quiet -m start`.cwd(dir);
   const task = parseTask("3900_a-task", `${dir}/project-md/delivery/tasks/3900_a-task.md`, text);
 
-  await moveTaskToDone(dir, task);
+  const run = {
+    session: "0f7a5cac-ab79-43e4-a619-088ed9d6caec",
+    capture: "thunderjar/capture/0f7a5cac-ab79-43e4-a619-088ed9d6caec",
+    branchedFrom: "main",
+    date: "2026-11-20T10:00:00.000Z",
+    costUsd: 0.42,
+    durationMs: 61000,
+    isError: false,
+  };
+  await moveTaskToDone(dir, task, run);
 
-  expect(await Bun.file(`${dir}/project-md/delivery/tasks/done/3900_a-task.md`).exists()).toBe(true);
+  const done = await Bun.file(`${dir}/project-md/delivery/tasks/done/3900_a-task.md`).text();
+  expect(Bun.YAML.parse(/^---\n([\s\S]*?)\n---\n/.exec(done)?.[1] ?? "")).toEqual({ harness: "claude-code", model: "sonnet", effort: "low", ralph: run });
+  expect(done.endsWith("# 3900: A task\n")).toBe(true);
   expect(await Bun.file(`${dir}/project-md/delivery/tasks/3900_a-task.md`).exists()).toBe(false);
   expect((await $`git status --porcelain`.cwd(dir).text()).trim()).toBe("");
   await $`rm -rf ${dir}`;

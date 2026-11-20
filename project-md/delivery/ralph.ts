@@ -321,8 +321,19 @@ export function pullRequestArgs(repo: Repo, pr: PullRequest): string[] {
   ];
 }
 
+/** What ralph records of a run, in the done task file's frontmatter. */
+export type RunInfo = {
+  session: string;
+  capture: string;
+  branchedFrom: string;
+  date: string;
+  costUsd: number | null;
+  durationMs: number | null;
+  isError: boolean;
+};
+
 /** Moves the task file to done/ in the worktree, as its own commit, so the PR closes the task. */
-export async function moveTaskToDone(worktree: string, task: Task): Promise<void> {
+export async function moveTaskToDone(worktree: string, task: Task, _run?: RunInfo): Promise<void> {
   const from = `${TASKS_RELATIVE}/${task.name}.md`;
   const to = `${TASKS_RELATIVE}/done/${task.name}.md`;
   if (await Bun.file(`${worktree}/${to}`).exists()) return;
