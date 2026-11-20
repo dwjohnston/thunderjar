@@ -126,3 +126,14 @@ export async function checkoutBundle(cwd: string, bundle: Uint8Array, branch: st
     await Bun.file(path).delete();
   }
 }
+
+/**
+ * Opens an interactive shell in a container from `record`'s postrun image, in its working
+ * directory, removed when the shell ends: bash if it has it, else sh. Returns the shell's exit code.
+ */
+export async function openShell(record: ContainerRunRecord, runtime: DockerRuntime): Promise<number> {
+  const args = ["run", "--rm", "--interactive", "--tty", "--pull", runtime.pull, "--entrypoint", "sh", record.postrunImage, "-c", "command -v bash >/dev/null && exec bash || exec sh"];
+  log.info({ image: record.postrunImage, runtime: runtime.command }, "opening a shell");
+  const shell = Bun.spawn([...runtime.command, ...args], { stdio: ["inherit", "inherit", "inherit"] });
+  return shell.exited;
+}
