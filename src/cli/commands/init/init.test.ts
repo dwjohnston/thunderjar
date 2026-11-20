@@ -1,0 +1,304 @@
+// `thunderjar init`, through the CLI, on a copy of an uninitialised scenario, because it writes into the project.
+import { describe, expect, test } from "bun:test";
+import { $, Glob } from "bun";
+import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
+import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
+
+/** Every file under `.thunderjar/` in `dir`, sorted. */
+const filesIn = (dir: string) =>
+  [...new Glob("**/*").scanSync({ cwd: `${dir}/.thunderjar`, dot: true })].toSorted();
+
+const read = (dir: string, path: string) => Bun.file(`${dir}/.thunderjar/${path}`).text();
+
+const P = "parameters";
+
+/**
+ * `thunderjar init` in `dir`. Scenario copies are inside this repository, so git stops looking at
+ * fixtures/.tmp/: a copy is a git repository only if it has its own .git.
+ */
+const init = (dir: string) => thunderjar(dir, ["init"], { env: { GIT_CEILING_DIRECTORIES: TMP_DIR } });
+
+const HARNESSES = ["claude-code-2.1.311", "copilot-1.0.105", "codex-0.166.0", "opencode-1.19.5"];
+
+/** What `init` scaffolds in any project, in the order it prints them, after the nested package.json. */
+const SCAFFOLD = [
+  "tsconfig.json",
+  ".gitignore",
+  "thunderjar.config.ts",
+  "AGENTS.md",
+  "test-cases/compare-models.ts",
+  "test-cases/compare-harnesses.ts",
+  `${P}/baseImages/node20/index.ts`,
+  `${P}/codeStates/baseline/index.ts`,
+  `${P}/promptSets/snerk/index.ts`,
+  `${P}/promptSets/house-style/index.ts`,
+  `${P}/promptSets/house-style/files/AGENTS.md`,
+  ...HARNESSES.map((harness) => `${P}/harnessModels/${harness}/index.ts`),
+  `${P}/tasks/is-prime/initial-prompts/plain.ts`,
+  `${P}/tasks/is-prime/measurements/isPrimeTsExists.ts`,
+  `${P}/tasks/is-prime/measurements/isPrimeTests.ts`,
+  `${P}/tasks/is-prime/measurements/isPrime.test.ts`,
+  `${P}/tasks/is-prime/measurements/isPrime.reference.ts`,
+  `${P}/tasks/is-prime/measurements/isPrimeShape.ts`,
+  `${P}/tasks/is-prime/measurements/tsIgnoreCount.ts`,
+];
+
+const createdLines = (paths: string[]) =>
+  ["Created .thunderjar/", ...paths.map((path) => `Created .thunderjar/${path}`)].join("\n") + "\n";
+
+describe("0101 empty project", () => {
+  test("scaffolds .thunderjar/, with a nested package.json and its node_modules ignored", async () => {
+    await using copy = await copyScenarioProject("0101");
+
+    const { stdout, stderr, exitCode } = await init(copy.dir);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const created = ["package.json", ...SCAFFOLD];
+    expect(stdout).toBe(createdLines(created));
+    expect(filesIn(copy.dir)).toEqual(created.toSorted());
+    expect(JSON.parse(await read(copy.dir, "package.json"))).toEqual({
+      name: "thunderjar-config",
+      private: true,
+      type: "module",
+      dependencies: { thunderjar: "latest" },
+    });
+    expect(await read(copy.dir, ".gitignore")).toBe("_generated/\n.data/\nlogs/\nnode_modules/\n");
+    expect(await read(copy.dir, "thunderjar.config.ts")).toBe(`import { declareConfig, sqliteStore } from "thunderjar";
+
+export default declareConfig({
+  // Images stay in the local Docker daemon. To push them to a registry, name its repository,
+  // e.g. { repository: "ghcr.io/your-org/thunderjar-images" }, and \`docker login\` to it.
+  imageStore: null,
+  // Run results go to a local SQLite file. To share them between machines, e.g. CI and your
+  // laptop, use a Postgres database instead, with its URL in an environment variable:
+  //   runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL" }),
+  // and import postgresStore from "thunderjar".
+  runDataStore: sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }),
+});
+`);
+    expect(await read(copy.dir, "test-cases/compare-models.ts")).toBe(`import { declareTestCase } from "thunderjar";
+
+// The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5. Each pair is a
+// harness folder, then the model ID its agent is given.
+export default declareTestCase({
+  baseImage: ["node20"],
+  codeState: ["baseline"],
+  promptSet: ["snerk"],
+  harnessModel: ["claude-code-2.1.311/claude-haiku-4-5-20251001", "claude-code-2.1.311/claude-haiku-5-5"],
+  task: "is-prime",
+  initialPrompt: ["plain"],
+  iterations: 1,
+});
+`);
+    expect(await read(copy.dir, "test-cases/compare-harnesses.ts")).toBe(`import { declareTestCase } from "thunderjar";
+
+// The same model in three harnesses: Haiku 5.5 in Claude Code, GitHub Copilot CLI and OpenCode.
+// Each harness needs its own key: CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY, COPILOT_GITHUB_TOKEN and OPENCODE_API_KEY.
+export default declareTestCase({
+  baseImage: ["node20"],
+  codeState: ["baseline"],
+  promptSet: ["snerk"],
+  harnessModel: [
+    "claude-code-2.1.311/claude-haiku-5-5",
+    "copilot-1.0.105/claude-haiku-5.5",
+    "opencode-1.19.5/opencode/claude-haiku-5-5",
+  ],
+  task: "is-prime",
+  initialPrompt: ["plain"],
+  iterations: 1,
+});
+`);
+  });
+
+  test("outside a git repository, its code state leaves /workspace empty, and says how to clone one", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const baseline = await read(copy.dir, `${P}/codeStates/baseline/index.ts`);
+    expect(baseline).toContain("export default declareCodeState({});");
+    expect(baseline).toContain("//     applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\\\\n");
+  });
+
+  test("its Claude Code harness is the library's, pinned by its folder", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const harness = await read(copy.dir, `${P}/harnessModels/claude-code-2.1.311/index.ts`);
+    expect(harness).toStartWith('import { claudeCode } from "thunderjar";\n');
+    expect(harness).toEndWith('\nexport default claudeCode({ version: "2.1.311" });\n');
+  });
+
+  test("its Codex harness is the library's, pinned by its folder", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const harness = await read(copy.dir, `${P}/harnessModels/codex-0.166.0/index.ts`);
+    expect(harness).toStartWith('import { codex } from "thunderjar";\n');
+    expect(harness).toEndWith('\nexport default codex({ version: "0.166.0" });\n');
+  });
+
+  test("its Copilot harness is the library's, pinned by its folder", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const harness = await read(copy.dir, `${P}/harnessModels/copilot-1.0.105/index.ts`);
+    expect(harness).toStartWith('import { copilot } from "thunderjar";\n');
+    expect(harness).toEndWith('\nexport default copilot({ version: "1.0.105" });\n');
+  });
+
+  test("its base image gives every user a git identity", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    expect(await read(copy.dir, `${P}/baseImages/node20/index.ts`)).toContain(`RUN git config --system user.name "Thunderjar agent" \\\\
+  && git config --system user.email agent@thunderjar.invalid\``);
+  });
+
+  test("every declaration it scaffolds imports thunderjar and loads", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    // A file whose name has a further dot, like a measurement's `isPrime.test.ts`, comes with a declaration.
+    const isDeclaration = (path: string) => /^[^.]+\.ts$/.test(path.slice(path.lastIndexOf("/") + 1));
+    const files = filesIn(copy.dir).filter(isDeclaration);
+    expect(files).toHaveLength(SCAFFOLD.filter(isDeclaration).length);
+    for (const path of files) {
+      const module = await import(`${copy.dir}/.thunderjar/${path}`);
+      expect(module.default).toBeDefined();
+    }
+  });
+
+  test("what it scaffolds type-checks with its own tsconfig.json", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const result = await $`${REPO_ROOT}/node_modules/.bin/tsc --noEmit -p ${copy.dir}/.thunderjar/tsconfig.json`
+      .quiet()
+      .nothrow();
+
+    expect(result.stdout.toString() + result.stderr.toString()).toBe("");
+    expect(result.exitCode).toBe(0);
+  }, 30_000);
+
+  test("run again, it creates only what's missing and leaves the rest as it was", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+    await Bun.write(`${copy.dir}/.thunderjar/thunderjar.config.ts`, "// edited\n");
+    await $`rm ${copy.dir}/.thunderjar/test-cases/compare-models.ts`.quiet();
+
+    const { stdout, stderr, exitCode } = await init(copy.dir);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(
+      [
+        "Created .thunderjar/test-cases/compare-models.ts",
+        ...["package.json", ...SCAFFOLD]
+          .filter((path) => path !== "test-cases/compare-models.ts")
+          .map((path) => `Exists  .thunderjar/${path}`),
+      ].join("\n") + "\n",
+    );
+    expect(await read(copy.dir, "thunderjar.config.ts")).toBe("// edited\n");
+  });
+});
+
+describe("0102 JavaScript project", () => {
+  test("a project with its own package.json gets no nested one", async () => {
+    await using copy = await copyScenarioProject("0102");
+    const rootPackage = await Bun.file(`${copy.dir}/package.json`).text();
+
+    const { stdout, stderr, exitCode } = await init(copy.dir);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(createdLines(SCAFFOLD));
+    expect(filesIn(copy.dir)).toEqual(SCAFFOLD.toSorted());
+    expect(await read(copy.dir, ".gitignore")).toBe("_generated/\n.data/\nlogs/\n");
+    expect(await Bun.file(`${copy.dir}/package.json`).text()).toBe(rootPackage);
+  });
+});
+
+describe("0101 empty project, made a git repository", () => {
+  const git = (dir: string, args: string[]) => $`git ${args}`.cwd(dir).env({ ...Bun.env, GIT_CEILING_DIRECTORIES: TMP_DIR }).quiet();
+  const commit = async (dir: string) => {
+    await git(dir, ["init", "--quiet"]);
+    await git(dir, ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "first"]);
+    return (await git(dir, ["rev-parse", "HEAD"])).stdout.toString().trim();
+  };
+
+  test("with an origin, its code state clones it at the project's commit", async () => {
+    await using copy = await copyScenarioProject("0101");
+    const head = await commit(copy.dir);
+    await git(copy.dir, ["remote", "add", "origin", "https://github.com/acme/widgets.git"]);
+
+    const { stderr, exitCode } = await init(copy.dir);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(await read(copy.dir, `${P}/codeStates/baseline/index.ts`)).toBe(`import { declareCodeState } from "thunderjar";
+
+// The project's repository, cloned into /workspace at a commit. The commit must be pushed, so the
+// build can fetch it. Pin a commit, never a branch: the same text must always build the same thing.
+export default declareCodeState({
+  config: {
+    repo: "https://github.com/acme/widgets.git",
+    commit: "${head}",
+  },
+  applyParameter: (config) => \`RUN git clone --quiet \${config.repo} /workspace \\\\
+  && git -C /workspace checkout --quiet --detach \${config.commit} \\\\
+  && git -C /workspace remote remove origin\`,
+});
+`);
+  });
+
+  test("without an origin, or before its first commit, it's treated as outside one", async () => {
+    await using noOrigin = await copyScenarioProject("0101");
+    await commit(noOrigin.dir);
+    await using noCommit = await copyScenarioProject("0101");
+    await git(noCommit.dir, ["init", "--quiet"]);
+
+    for (const dir of [noOrigin.dir, noCommit.dir]) {
+      expect((await init(dir)).exitCode).toBe(0);
+      expect(await read(dir, `${P}/codeStates/baseline/index.ts`)).toContain("export default declareCodeState({});");
+    }
+  });
+});
+
+describe("0201 minimal existing setup", () => {
+  const ALPHA = `${P}/harnessModels/fake-harness-alpha/`;
+  const CLAUDE_CODE = `${P}/harnessModels/claude-code-2.1.311/`;
+  const GENERATED = "_generated/parameterNames.d.ts";
+  // What a minimal setup leaves out: every harness but Claude Code, the second prompt set, and init's
+  // test cases, which use real harnesses. 0201 has one test case of its own, `example`, instead.
+  const leftOut = (path: string) =>
+    (path.startsWith(`${P}/harnessModels/`) && !path.startsWith(CLAUDE_CODE)) ||
+    path.startsWith(`${P}/promptSets/house-style/`) ||
+    path.startsWith("test-cases/");
+
+  test("is what init scaffolds in 0101, with the agent swapped for fake-harness-alpha, no starters, and its own test case", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+    const scaffolded = filesIn(copy.dir).filter((path) => !leftOut(path));
+    const existing = filesIn(scenario("0201"));
+
+    const swapped = (path: string) => path.replace(CLAUDE_CODE, ALPHA);
+    expect(existing).toEqual([...scaffolded.map(swapped), "test-cases/example.ts", GENERATED].toSorted());
+    for (const path of scaffolded.filter((path) => !path.startsWith(CLAUDE_CODE))) {
+      expect(await read(scenario("0201"), path), path).toBe(await read(copy.dir, path));
+    }
+  });
+});
+
+describe("0501 Claude Code", () => {
+  test("holds exactly what init scaffolds in 0101", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    // Its Codex, Copilot and OpenCode harnesses are copies from before `codex()`, `copilot()` and `opencode()`, and the fixture is left as it was.
+    const helperHarnesses = ["codex-0.166.0/", "copilot-1.0.105/", "opencode-1.19.5/"];
+    for (const path of filesIn(copy.dir).filter((path) => !helperHarnesses.some((h) => path.includes(h)))) {
+      expect(await read(scenario("0501"), path), path).toBe(await read(copy.dir, path));
+    }
+  });
+});

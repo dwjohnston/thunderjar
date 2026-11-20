@@ -1,0 +1,435 @@
+name: Release
+
+# Everything that publishes to npm lives in this file, because npm trusted
+# publishing trusts a single workflow file per package.
+#
+# - Stable: the changesets "Release Version x.y.z" PR. Merging it publishes to `latest`.
+# - Release candidate: the "Release candidate" PR. Merging it publishes x.y.z-rc.N to `rc`.
+# - Preview: a `/preview` comment on an open PR, by someone with write access.
+#   Publishes x.y.z-preview-<short sha> to `preview`. npm won't exchange an OIDC
+#   token from an `issue_comment` run, so the comment run dispatches this
+#   workflow, and the `workflow_dispatch` run publishes.
+# See AGENTS.md, "Releases".
+on:
+  push:
+    branches:
+      - main
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to publish a preview of
+        required: true
+      sha:
+        description: Commit to publish. It must be the PR head. Defaults to the PR head.
+        required: false
+      comment_id:
+        description: The /preview comment to react to, if any
+        required: false
+
+concurrency:
+  # Pushes to main run one at a time. Each comment and each dispatch gets its
+  # own group, so a preview can't replace a pending release run.
+  group: ${{ github.workflow }}-${{ github.event_name == 'issue_comment' && format('comment-{0}', github.event.comment.id) || github.event_name == 'workflow_dispatch' && format('dispatch-{0}', github.run_id) || github.ref }}
+
+permissions: {}
+
+jobs:
+  release:
+    name: Release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write # npm trusted publishing (OIDC)
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # changesets/action shells out to npm/node under the hood, and npm
+      # trusted publishing needs a recent npm (11.5.1+), which Node 24 ships.
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      # Only used when changesets are pending, which is when the release PR is opened or updated.
+      - name: Work out the next version
+        id: next
+        run: echo "version=$(bun scripts/release-versions.ts next)" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          publish: bun run release
+          version: bun run version
+          title: "🚀 Release Version ${{ steps.next.outputs.version }}"
+          commit: Release Version ${{ steps.next.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Tags pushed with GITHUB_TOKEN don't trigger other workflows, so the docs
+  # deploy is called directly once a release is published.
+  docs:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
+
+  # Runs after `release`, so it sees any stable release (and its tags) made by this push.
+  release-candidate:
+    name: Release candidate
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write # npm trusted publishing (OIDC)
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RC_BRANCH: release-candidate/main
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Fetch tags made by the release job
+        run: git fetch --tags --force origin
+
+      # Runs when the RC PR was just merged: .release/rc.json has a version with no tag yet.
+      # Each step checks whether it's already done, so a re-run picks up where a failed run stopped.
+      # The tag is created with the GitHub release, so a missing tag means the release is missing too.
+      - name: Publish merged release candidate
+        run: |
+          version=$(bun scripts/release-versions.ts rc-to-publish)
+          if [ -z "$version" ]; then
+            echo "No release candidate to publish."
+            exit 0
+          fi
+
+          if [ "$(npm view "thunderjar@$version" version 2>/dev/null)" = "$version" ]; then
+            echo "thunderjar@$version is already on npm."
+          else
+            npm pkg set version="$version"
+            bun run build
+            npm publish --tag rc
+            git restore package.json
+          fi
+
+          bun scripts/release-versions.ts rc-notes > "$RUNNER_TEMP/rc-notes.md"
+          gh release create "v$version" --target "$GITHUB_SHA" --prerelease --title "v$version" --notes-file "$RUNNER_TEMP/rc-notes.md"
+          git fetch --tags origin
+
+      - name: Open, update or close the release candidate PR
+        run: |
+          result=$(bun scripts/release-versions.ts prepare-rc --body-file "$RUNNER_TEMP/rc-body.md")
+          action=$(jq -r .action <<<"$result")
+          existing=$(gh pr list --head "$RC_BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+
+          if [ "$action" = close ]; then
+            if [ -n "$existing" ]; then
+              gh pr close "$existing" --delete-branch --comment "Closing: there are no pending changesets that aren't already in a release candidate."
+            fi
+            exit 0
+          fi
+
+          version=$(jq -r .version <<<"$result")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$RC_BRANCH"
+          git add .release/rc.json
+          git commit -m "Release candidate v$version"
+          git push --force origin "$RC_BRANCH"
+
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "Release candidate v$version" --body-file "$RUNNER_TEMP/rc-body.md"
+          else
+            gh pr create --base main --head "$RC_BRANCH" --title "Release candidate v$version" --body-file "$RUNNER_TEMP/rc-body.md"
+          fi
+
+  # Previews run in separate jobs, so the PR's code never runs alongside a token
+  # that can write to the repo or publish to npm.
+  preview-request:
+    name: Preview / request
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/preview')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      COMMENT_BODY: ${{ github.event.comment.body }}
+      COMMENT_ID: ${{ github.event.comment.id }}
+      COMMENTER: ${{ github.event.comment.user.login }}
+      PR_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - name: Parse the comment
+        id: comment
+        run: |
+          # Only the first line is the command, so a footer or note below it is ignored.
+          body=$(printf '%s\n' "$COMMENT_BODY" | head -n 1 | tr -s '[:space:]' ' ' | sed -E 's/^ +| +$//g')
+          if ! [[ "$body" =~ ^/preview( ([0-9a-f]{7,40}))?$ ]]; then
+            echo "Usage: /preview, or /preview <commit sha> to pin the commit."
+            exit 1
+          fi
+          echo "requested=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+
+      - name: Check the commenter has write access
+        run: |
+          permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$COMMENTER/permission" --jq .permission)
+          case "$permission" in
+            admin|write) echo "$COMMENTER has $permission access." ;;
+            *) echo "$COMMENTER has '$permission' access. /preview needs write access."; exit 1 ;;
+          esac
+
+      # A bare /preview builds whatever the head is when this runs, so a push
+      # made just after the comment would be built. /preview <sha> rules that out.
+      - name: Resolve the PR head commit
+        id: pr
+        env:
+          REQUESTED: ${{ steps.comment.outputs.requested }}
+        run: |
+          read -r state sha < <(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,headRefOid --jq '"\(.state) \(.headRefOid)"')
+          if [ "$state" != OPEN ]; then
+            echo "PR #$PR_NUMBER is $state, not open."
+            exit 1
+          fi
+          if [ -n "$REQUESTED" ] && [[ "$sha" != "$REQUESTED"* ]]; then
+            echo "The PR head is $sha, not $REQUESTED. Comment /preview again for the current commit."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      # Runs created by GITHUB_TOKEN are skipped, except for workflow_dispatch.
+      - name: Dispatch the preview publish
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$DEFAULT_BRANCH" \
+            -f pr="$PR_NUMBER" -f sha="$SHA" -f comment_id="$COMMENT_ID"
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=eyes > /dev/null
+
+  # Only people with write access can dispatch a workflow, so this checks the
+  # inputs and the PR rather than who asked.
+  preview-authorize:
+    name: Preview / authorize
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      pr: ${{ steps.pr.outputs.pr }}
+      sha: ${{ steps.pr.outputs.sha }}
+      comment_id: ${{ steps.pr.outputs.comment_id }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ inputs.pr }}
+      REQUESTED: ${{ inputs.sha }}
+      COMMENT_ID: ${{ inputs.comment_id }}
+    steps:
+      - name: Resolve the PR head commit
+        id: pr
+        run: |
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || ! [[ "$REQUESTED" =~ ^([0-9a-f]{7,40})?$ ]] || ! [[ "$COMMENT_ID" =~ ^[0-9]*$ ]]; then
+            echo "pr and comment_id must be numbers, and sha a commit sha."
+            exit 1
+          fi
+          read -r state sha < <(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,headRefOid --jq '"\(.state) \(.headRefOid)"')
+          if [ "$state" != OPEN ]; then
+            echo "PR #$PR_NUMBER is $state, not open."
+            exit 1
+          fi
+          if [ -n "$REQUESTED" ] && [[ "$sha" != "$REQUESTED"* ]]; then
+            echo "The PR head is $sha, not $REQUESTED. Comment /preview again for the current commit."
+            exit 1
+          fi
+          {
+            echo "pr=$PR_NUMBER"
+            echo "sha=$sha"
+            echo "comment_id=$COMMENT_ID"
+          } >> "$GITHUB_OUTPUT"
+
+  preview-build:
+    name: Preview / build
+    needs: preview-authorize
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      SHA: ${{ needs.preview-authorize.outputs.sha }}
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.preview-authorize.outputs.sha }}
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Set preview version
+        id: version
+        run: |
+          version=$(bun scripts/release-versions.ts preview --sha "$SHA")
+          npm pkg set version="$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build and pack
+        run: |
+          bun run build
+          mkdir "$RUNNER_TEMP/pack"
+          npm pack --pack-destination "$RUNNER_TEMP/pack"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: preview-package
+          path: ${{ runner.temp }}/pack/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  # The build job ran the PR's code, so treat its outputs as untrusted: pass
+  # them through env (never ${{ }} in run:), and check them before publishing.
+  preview-publish:
+    name: Preview / publish
+    needs: [preview-authorize, preview-build]
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      id-token: write # npm trusted publishing (OIDC)
+    env:
+      SHA: ${{ needs.preview-authorize.outputs.sha }}
+      VERSION: ${{ needs.preview-build.outputs.version }}
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Download package
+        uses: actions/download-artifact@v8
+        with:
+          name: preview-package
+          path: pack
+
+      # A `tag` or `publishConfig` in package.json would override --tag preview,
+      # for example to publish to `latest`, so the manifest is checked as well.
+      - name: Check the package
+        run: |
+          expected="^[0-9]+\.[0-9]+\.[0-9]+-preview-${SHA:0:7}$"
+          if ! [[ "$VERSION" =~ $expected ]]; then
+            echo "Unexpected preview version '$VERSION' for $SHA."
+            exit 1
+          fi
+
+          shopt -s nullglob
+          tarballs=(pack/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ]; then
+            echo "Expected one tarball, found ${#tarballs[@]}."
+            exit 1
+          fi
+          mv -- "${tarballs[0]}" package.tgz
+
+          tar -xOzf package.tgz package/package.json | jq -e --arg version "$VERSION" '
+            .name == "thunderjar"
+            and .version == $version
+            and (has("tag") | not)
+            and ((.publishConfig // {}) == {"access": "public"})
+          ' > /dev/null || {
+            echo "package.json in the tarball must be thunderjar@$VERSION, with no tag and publishConfig {\"access\": \"public\"}."
+            exit 1
+          }
+
+      - name: Publish to npm
+        run: |
+          if [ "$(npm view "thunderjar@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "thunderjar@$VERSION is already on npm."
+          else
+            npm publish package.tgz --tag preview --ignore-scripts --registry https://registry.npmjs.org
+          fi
+
+      - name: Comment on the PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENT_ID: ${{ needs.preview-authorize.outputs.comment_id }}
+          PR_NUMBER: ${{ needs.preview-authorize.outputs.pr }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Published preview \`thunderjar@$VERSION\` from $SHA.
+
+          \`\`\`sh
+          bun install thunderjar@$VERSION
+          \`\`\`"
+          if [ -n "$COMMENT_ID" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$COMMENT_ID/reactions" -f content=rocket > /dev/null
+          fi
+
+  preview-failed:
+    name: Preview / report failure
+    needs: [preview-request, preview-authorize, preview-build, preview-publish]
+    if: failure() && (github.event_name == 'issue_comment' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.issue.number || inputs.pr }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Comment on the PR
+        run: gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Preview failed. See $RUN_URL"
