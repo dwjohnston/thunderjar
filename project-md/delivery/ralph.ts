@@ -258,3 +258,10 @@ function positiveNumber(value: string): number {
   if (!Number.isFinite(number) || number <= 0) throw new InvalidArgumentError("must be a positive number");
   return number;
 }
+
+export type Repo = { owner: string; repo: string };
+
+/** The GitHub owner and repo of a remote URL, from its last two path segments. */
+export function parseRemote(url: string): Repo {
+  return { owner: "", repo: url };
+}

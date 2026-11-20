@@ -13,7 +13,7 @@
  *
  */
 import { expect, test } from "bun:test";
-import { parseTask } from "./ralph.ts";
+import { parseRemote, parseTask } from "./ralph.ts";
 
 test("parseTask reads harness, model and effort from the frontmatter", () => {
   const text = "---\nharness: claude-code\nmodel: sonnet\neffort: medium\n---\n\n# 3900: A task\n";
@@ -25,4 +25,15 @@ test("parseTask reads harness, model and effort from the frontmatter", () => {
     effort: "medium",
     text,
   });
+});
+
+test("parseRemote reads the owner and repo from a remote URL", () => {
+  for (const url of [
+    "https://github.com/dwjohnston/thunderjar",
+    "https://github.com/dwjohnston/thunderjar.git",
+    "git@github.com:dwjohnston/thunderjar.git",
+    "http://proxy@127.0.0.1:8080/git/dwjohnston/thunderjar",
+  ]) {
+    expect(parseRemote(url)).toEqual({ owner: "dwjohnston", repo: "thunderjar" });
+  }
 });
