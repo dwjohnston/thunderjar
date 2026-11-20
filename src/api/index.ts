@@ -2,6 +2,7 @@
 export { CLAUDE_CODE_COMMAND, claudeCode, claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
 export { CODEX_COMMAND, codex, codexReply, codexTokenCosts } from "./codex.ts";
 export { COPILOT_COMMAND, COPILOT_USAGE_FILE, copilot, copilotCommand, copilotReply, copilotTokenCosts } from "./copilot.ts";
+export { OPENCODE_COMMAND, opencode, opencodeReply, opencodeTokenCosts } from "./opencode.ts";
 export { codeStateGitCheckout, resolveGitCheckout, type CodeStateGitCheckoutConfig } from "./codeStateGitCheckout.ts";
 export { MODEL_PATH, PROMPT_PATH, RESULT_PATH, RUN_SCRIPT_PATH, writeFile, writeModel, writePrompt, writeRunScript } from "./files.ts";
 export {
