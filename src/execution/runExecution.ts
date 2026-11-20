@@ -15,6 +15,7 @@ import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaratio
 import { diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
+import { givenOverrides, hasOverrides, type Overrides } from "../config/overrides.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
 import type {
   ContainerRunRecord,
@@ -66,7 +67,10 @@ export type ExecutionToRun = {
   root: string;
   /** The test case's name. */
   name: string;
+  /** Already given its `overrides`, if any. */
   testCase: TestCaseDeclaration;
+  /** What was given on the command line in place of the test case's own, recorded with the execution. */
+  overrides?: Overrides;
   plan: PlannedExecution;
   imagePrefix?: string;
   /** Where its images are pushed, or `null` (the default) to keep them local. Its login is checked before this runs. */
@@ -293,6 +297,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     finishedAt,
     status,
     matrix: { shape: matrixShape(testCase), permutations: plan.permutations.length, iterations: testCase.iterations },
+    ...(hasOverrides(run.overrides) && { overrides: givenOverrides(run.overrides) }),
   });
   let recording: Promise<void> | undefined;
   const recordStart = () => {
