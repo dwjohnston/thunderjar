@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // The task itself: discount matches the SPEC.md examples.
 const script = `

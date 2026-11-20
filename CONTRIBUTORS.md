@@ -48,25 +48,19 @@ Basically changes are merged to main, they will be installable via `bunx skills 
 
 ## Dogfooding
 
-The repo runs thunderjar on itself from [`.thunderjar/`](./.thunderjar/). It uses a published release, installed as an npm alias devDependency:
+We have thunderjar evals in the [`.thunderjar/`](./.thunderjar/) folder. 
 
-```json
-"thunderjar-published": "npm:thunderjar@0.3.0-preview-476b801"
-```
+These files do `import {x} from "thunderjar"` regular [self references](https://nodejs.org/api/packages.html#self-referencing-a-package-using-its-name).
 
-`.thunderjar/` code imports from `thunderjar-published`, not `thunderjar`.
 
-Why the alias: Changesets rewrites any dependency named `thunderjar` to the version it's about to release. That version isn't on npm yet, so `bun install` fails on the "Release Version x.y.z" PR. The alias has a different name and an `npm:` range, so Changesets leaves it alone.
+### Running dog food tests 
 
-To dogfood a newer release, bump the version in the alias by hand.
-
-To run it, with Docker and `ANTHROPIC_API_KEY`:
+Needs an ANTHROPIC_API_KEY or CLAUDE_CLOUD_OAUTH_TOKEN
 
 ```sh
 bun run dogfood:local
 ```
 
-It runs the `compare-models` test case with the installed `thunderjar-published`, on the local Docker daemon. The Dogfood workflow runs it on every pull request, with the `ANTHROPIC_API_KEY` repository secret, and keeps the run data as an artifact. See [.thunderjar/AGENTS.md](./.thunderjar/AGENTS.md).
 
 ### Remote runs
 

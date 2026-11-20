@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // This repository at the commit that added src/gauntlet/nested-skills, with the agent starting in
 // the fixture's root, src/gauntlet/nested-skills, where only the base skill is beside the agent.

@@ -1,4 +1,4 @@
-import { declareConfig, postgresStore, sqliteStore } from "thunderjar-published";
+import { declareConfig, postgresStore, sqliteStore } from "thunderjar";
 
 // Set THUNDERJAR_REMOTE=1 to run on Fly.io, with images in ghcr and run data in Supabase. The
 // `/slow-tests` PR comment does that in CI. Without it, everything stays on this machine.
@@ -35,7 +35,6 @@ export default declareConfig(
       runtime: {
         command: ["./.thunderjar/fly-docker.sh"],
         concurrency: remoteConcurrency,
-        // Spread, so it type-checks against thunderjar-published, which doesn't know `runner` yet.
         ...(onRuntime && { runner: { registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" } } }),
       },
       build: { concurrency: remoteConcurrency },

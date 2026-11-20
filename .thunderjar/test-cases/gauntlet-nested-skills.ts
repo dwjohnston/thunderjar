@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareTestCase } from "thunderjar-published";
+import { declareTestCase } from "thunderjar";
 
 // Gauntlet: src/gauntlet/nested-skills. Which nested skills does the agent pick up? Each folder's
 // skill asks for its own emoji in every reply: red at the fixture's root, green in a/, blue in b/.

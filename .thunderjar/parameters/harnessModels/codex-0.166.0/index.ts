@@ -1,4 +1,4 @@
-import { declareHarness, type TokenCosts, writeModel, writeRunScript } from "thunderjar-published";
+import { declareHarness, type TokenCosts, writeModel, writeRunScript } from "thunderjar";
 
 // OpenAI's Codex CLI, on OpenRouter, without its sandbox or approvals: the container is the sandbox.
 // A custom model provider points Codex at OpenRouter's Responses API. It needs OPENROUTER_API_KEY.

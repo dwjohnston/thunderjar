@@ -13,7 +13,7 @@
  *
  */
 
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // Does the final reply report that API keys end up in the postrun image? They're passed with
 // `docker run -e`, and `docker commit` keeps the container's environment.

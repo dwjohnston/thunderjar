@@ -1,4 +1,4 @@
-import { declareHarness, type TokenCosts, writeModel, writeRunScript } from "thunderjar-published";
+import { declareHarness, type TokenCosts, writeModel, writeRunScript } from "thunderjar";
 
 // OpenCode, on OpenRouter. OpenCode's built-in openrouter provider reads OPENROUTER_API_KEY itself.
 // A test case names a model as "openrouter/" plus its OpenRouter ID, e.g. "opencode-1.19.5/openrouter/anthropic/claude-haiku-5.5".

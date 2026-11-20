@@ -8,7 +8,7 @@
  * Humans: add your notes here
  */
 
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // This repository at tag tj-thunderjar-humans-md, where AGENTS.md includes @HUMANS.md, which asks for ☝️ in
 // every response.

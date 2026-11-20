@@ -8,7 +8,7 @@
  * Humans: add your notes here
  */
 
-import { declareTestCase } from "thunderjar-published";
+import { declareTestCase } from "thunderjar";
 
 // Does each harness follow HUMANS.md, included from AGENTS.md with @HUMANS.md? A cheap model per harness.
 export default declareTestCase({

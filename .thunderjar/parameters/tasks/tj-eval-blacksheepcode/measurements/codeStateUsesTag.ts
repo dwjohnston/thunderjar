@@ -1,4 +1,4 @@
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // Does a new code state name the tj-codestate-1 tag, looked up in resolve rather than in applyParameter?
 // In the captured session it did: the thing to keep.

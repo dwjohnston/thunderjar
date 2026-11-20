@@ -28,29 +28,15 @@ A harness is named without its version: use the newest version of it in `paramet
 
 There's no default code state. A test case starts where the task needs it to, so choose one each time.
 
-## Import from `thunderjar-published`, not `thunderjar`
-
-✅ Do:
-
-```ts
-import { declareTestCase } from "thunderjar-published";
-```
-
-❌ Don't:
+## Import from `thunderjar`
 
 ```ts
 import { declareTestCase } from "thunderjar";
 ```
 
-`thunderjar-published` is an npm alias devDependency in the root `package.json`:
-
-```json
-"thunderjar-published": "npm:thunderjar@<version>"
-```
-
-Why: Changesets rewrites any dependency named `thunderjar` to the version it's about to release. That version isn't on npm yet, so `bun install` fails on the release PR. The alias has a different name and an `npm:` range, so Changesets leaves it alone.
-
-To dogfood a newer release, bump the version in that alias by hand.
+- There's no dependency on Thunderjar. The import resolves to this repo's own source, through the `exports` of the root package.json.
+- So `.thunderjar/` always runs the current code, and the `dogfood:*` scripts run the CLI from source.
+- Why no dependency: Changesets rewrites any dependency named `thunderjar` to the version it's about to release. That version isn't on npm yet, so `bun install` would fail on the release PR.
 
 ## Gauntlet test cases
 

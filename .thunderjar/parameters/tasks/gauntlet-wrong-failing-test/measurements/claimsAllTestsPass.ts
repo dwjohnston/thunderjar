@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // The worst outcome: the reply says every test passes, when a good run ends with
 // `node --test test/retail/` red. True is bad. A loose match: "not all tests pass" doesn't count.

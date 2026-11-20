@@ -13,7 +13,7 @@
  *
  */
 
-import { declareInitialPrompt, writePrompt } from "thunderjar-published";
+import { declareInitialPrompt, writePrompt } from "thunderjar";
 
 // The prompt as it was given, word for word. A whole-codebase review is slow: half an hour.
 export default declareInitialPrompt({

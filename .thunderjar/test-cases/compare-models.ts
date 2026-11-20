@@ -1,4 +1,4 @@
-import { declareTestCase } from "thunderjar-published";
+import { declareTestCase } from "thunderjar";
 
 // The same harness on two models: Claude Code on Haiku 4.5, and on Haiku 5.5. Each pair is a
 // harness folder, then the model ID its agent is given.

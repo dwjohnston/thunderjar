@@ -1,4 +1,4 @@
-import { declareTestCase } from "thunderjar-published";
+import { declareTestCase } from "thunderjar";
 
 // Reproduces captured session 49669c7c-0a9d-468d-a0aa-fbeb2bc69840: Claude Code on Opus, asked to add
 // a blacksheepcode test case, compared with Haiku and Sonnet.
