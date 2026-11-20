@@ -20,12 +20,20 @@
 import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadMeasurements } from "../../../config/measurements.ts";
-import { remeasureContainerRun, withNewResult } from "../../../execution/remeasure.ts";
+import { remeasureContainerRun, skipReason, withNewResult } from "../../../execution/remeasure.ts";
+import { runName } from "../../../execution/executionSummary.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, openStore } from "../../dataDir.ts";
 import { plural } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { print } from "../../output.ts";
+
+/** Why runs were skipped: the reason, if they share one, else how many each, e.g. `2 postrun image purged, 1 never started`. */
+function reasons(skipped: { reason: string }[]): string {
+  const counts = Map.groupBy(skipped, ({ reason }) => reason);
+  if (counts.size === 1) return [...counts.keys()][0]!;
+  return [...counts].map(([reason, runs]) => `${runs.length} ${reason}`).join(", ");
+}
 
 type Options = { dataDir?: string; imagePrefix: string };
 
@@ -37,15 +45,22 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix }: 
   const byId = recorded.filter((execution) => execution.executionId === target);
   const executions = byId.length > 0 ? byId : recorded.filter((execution) => execution.testCase === target);
   let remeasured = 0;
+  const skipped: { executionId: string; run: string; reason: string }[] = [];
   for (const execution of executions) {
     const measurements = await loadMeasurements(root, execution.task);
     for (const run of await store.containerRunsOf(execution.executionId)) {
+      const reason = skipReason(run);
+      if (reason !== undefined) {
+        skipped.push({ executionId: execution.executionId, run: runName(run), reason });
+        continue;
+      }
       const result = await remeasureContainerRun(run, measurements, imagePrefix);
       await store.recordContainerRun(withNewResult(run, result));
       remeasured++;
     }
   }
-  print(`remeasured ${plural(remeasured, "run")}`);
+  print(`remeasured ${plural(remeasured, "run")}${skipped.length === 0 ? "" : `, skipped ${skipped.length} (${reasons(skipped)})`}`);
+  for (const { executionId, run, reason } of skipped) print(`  ${executionId} ${run}  ${reason}`);
 }
 
 export function createRemeasureCommand(): Command {
