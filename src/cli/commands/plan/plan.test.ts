@@ -601,4 +601,15 @@ Matrix shape: 1/1/1/1/1 (1 permutation)
     expect(stdout).toContain(`\noverrides:     --harness-model ${pairs}\n`);
     expect(stdout).toContain("Matrix shape: 1/1/1/2/1 (2 permutations)");
   });
+
+
+  test("--initial-prompt replaces the test case's initial prompts", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example", "--initial-prompt", "plain,terse"], { env: KEY });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("\ninitialPrompt: plain, terse\n");
+    expect(stdout).toContain("\noverrides:     --initial-prompt plain,terse\n");
+    expect(stdout).toContain("Matrix shape: 1/1/1/1/2 (2 permutations)");
+  });
 });
