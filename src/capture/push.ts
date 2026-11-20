@@ -39,6 +39,12 @@ export function pushArgs({ fetch, remote }: PushOptions, stores: readonly StoreK
   return ["push", "--no-verify", remote, ...stores.map((store) => REFSPECS[store])];
 }
 
+/** The git arguments that push only `session`, held in `store`. */
+export function sessionPushArgs(remote: string, session: string, store: StoreKind): string[] {
+  const refspec = store === "refs" ? `${REF_PREFIX}/${session}/*:${REF_PREFIX}/${session}/*` : `${BRANCH_PREFIX}/${session}:${BRANCH_PREFIX}/${session}`;
+  return ["push", "--no-verify", remote, refspec];
+}
+
 /** Pushes or fetches the captures. Returns git's output, or null when there was nothing to push. */
 export function push(root: string, options: PushOptions): string | null {
   const args = pushArgs(options, localStores(root));

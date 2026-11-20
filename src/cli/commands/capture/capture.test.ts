@@ -206,6 +206,28 @@ describe("capture push", () => {
   });
 });
 
+describe("capture push --session", () => {
+  const prompt = (env: Record<string, string>) =>
+    thunderjar(["capture", "prompt", "--harness", "codex"], { stdin: JSON.stringify({ session_id: "s1", cwd: repo, prompt: "p" }), env });
+
+  test("--dry-run pushes only that session, in either store", async () => {
+    await prompt({ CLAUDE_CODE_REMOTE: "true" });
+    expect((await thunderjar(["capture", "push", "--session", "s1", "--dry-run"])).stdout).toBe(
+      "git push --no-verify origin refs/heads/thunderjar/capture/s1:refs/heads/thunderjar/capture/s1\n",
+    );
+    await thunderjar(["capture", "prompt", "--harness", "codex"], { stdin: JSON.stringify({ session_id: "s2", cwd: repo, prompt: "p" }), env: { THUNDERJAR_CAPTURE_STORE: "refs" } });
+    expect((await thunderjar(["capture", "push", "--session", "s2", "--dry-run"])).stdout).toBe(
+      "git push --no-verify origin refs/thunderjar/capture/s2/*:refs/thunderjar/capture/s2/*\n",
+    );
+  });
+
+  test("fails for a session with no capture", async () => {
+    const result = await thunderjar(["capture", "push", "--session", "nope"]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("No capture of session nope. `thunderjar capture list` shows the captures.");
+  });
+});
+
 describe("capture import", () => {
   test("copies branch captures into refs, once", async () => {
     await thunderjar(["capture", "prompt", "--harness", "codex"], {
