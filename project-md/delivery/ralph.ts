@@ -241,8 +241,8 @@ async function pushCapture(root: string, sessionId: string): Promise<string | nu
   }
   // `thunderjar capture push` pushes every capture; this pushes just this session's.
   await $`git -C ${root} push --no-verify ${REMOTE} ${branch}`;
-  const repo = (await $`gh repo view --json url --jq .url`.cwd(root).text()).trim();
-  return `${repo}/tree/${branch}`;
+  const { owner, repo } = await remoteRepo(root);
+  return `https://github.com/${owner}/${repo}/tree/${branch}`;
 }
 
 export function prBody(task: Task, result: string, captureLink: string | null, failures: string[]): string {
@@ -263,5 +263,12 @@ export type Repo = { owner: string; repo: string };
 
 /** The GitHub owner and repo of a remote URL, from its last two path segments. */
 export function parseRemote(url: string): Repo {
-  return { owner: "", repo: url };
+  const match = /[:/]([^/:]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url);
+  if (!match?.[1] || !match[2]) throw new Error(`Can't read a GitHub owner and repo from the remote URL ${url}`);
+  return { owner: match[1], repo: match[2] };
+}
+
+/** The GitHub repo of the remote, from its URL: no `gh repo view`, whose GraphQL is blocked in Claude Code cloud sessions. */
+async function remoteRepo(root: string): Promise<Repo> {
+  return parseRemote((await $`git -C ${root} remote get-url ${REMOTE}`.text()).trim());
 }
