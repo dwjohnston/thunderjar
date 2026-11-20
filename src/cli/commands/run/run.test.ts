@@ -654,4 +654,18 @@ describe("run --json", () => {
     expect(plan.overrides).toEqual({ promptSet: ["glurk"], iterations: 2 });
     expect(plan.permutations.map(({ parameters }: { parameters: { promptSet: string } }) => parameters.promptSet)).toEqual(["glurk"]);
   });
+
+
+  test("with overrides, the execution records them", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--data-dir", data, "--prompt-set", "glurk", "--iterations", "2"], {
+      env: { ...docker.env, ...KEY },
+    });
+
+    expect(exitCode).toBe(0);
+    const { execution } = await readStore(data);
+    expect(execution.overrides).toEqual({ promptSet: ["glurk"], iterations: 2 });
+  });
 });
