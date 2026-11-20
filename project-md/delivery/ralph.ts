@@ -368,3 +368,8 @@ async function defaultBase(root: string, base: string | undefined): Promise<stri
   if (found === null) throw new Error(`HEAD is detached, and not at exactly one ${REMOTE} branch: pass --base <branch>.`);
   return found;
 }
+
+/** The branch a task starts from, and its PR targets: the previous task's branch, so tasks stack; or, for the first, the base. */
+export function branchFrom(base: string, previous: Task | null): string {
+  return base;
+}

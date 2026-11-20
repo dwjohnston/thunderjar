@@ -14,7 +14,7 @@
  */
 import { $ } from "bun";
 import { expect, test } from "bun:test";
-import { baseFromRemoteBranches, firstTask, moveTaskToDone, parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
+import { baseFromRemoteBranches, branchFrom, firstTask, moveTaskToDone, parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
 
 test("parseTask reads harness, model and effort from the frontmatter", () => {
   const text = "---\nharness: claude-code\nmodel: sonnet\neffort: medium\n---\n\n# 3900: A task\n";
@@ -92,4 +92,11 @@ test("baseFromRemoteBranches finds the base of a detached HEAD from the one remo
   expect(baseFromRemoteBranches("origin\norigin/HEAD\norigin/main\n")).toBe("main");
   expect(baseFromRemoteBranches("origin/main\norigin/other\n")).toBeNull();
   expect(baseFromRemoteBranches("")).toBeNull();
+});
+
+test("branchFrom stacks each task on the previous task's branch, and the first on the base", () => {
+  const text = "---\nharness: claude-code\nmodel: sonnet\neffort: low\n---\n";
+  const previous = parseTask("3900_first", "tasks/3900_first.md", text);
+  expect(branchFrom("main", null)).toBe("main");
+  expect(branchFrom("main", previous)).toBe("ralph/3900_first");
 });
