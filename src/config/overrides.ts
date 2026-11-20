@@ -26,6 +26,7 @@ export const OVERRIDES = {
   codeState: { flag: "--code-state", what: "code states" },
   promptSet: { flag: "--prompt-set", what: "prompt sets" },
   harnessModel: { flag: "--harness-model", what: "harness model pairs" },
+  initialPrompt: { flag: "--initial-prompt", what: "initial prompts" },
 } as const satisfies Partial<Record<Axis | "iterations", { flag: string; what: string }>>;
 
 export type OverridableField = keyof typeof OVERRIDES;
