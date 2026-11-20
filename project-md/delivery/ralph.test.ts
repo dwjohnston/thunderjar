@@ -13,7 +13,7 @@
  *
  */
 import { expect, test } from "bun:test";
-import { parseRemote, parseTask } from "./ralph.ts";
+import { parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
 
 test("parseTask reads harness, model and effort from the frontmatter", () => {
   const text = "---\nharness: claude-code\nmodel: sonnet\neffort: medium\n---\n\n# 3900: A task\n";
@@ -36,4 +36,25 @@ test("parseRemote reads the owner and repo from a remote URL", () => {
   ]) {
     expect(parseRemote(url)).toEqual({ owner: "dwjohnston", repo: "thunderjar" });
   }
+});
+
+test("pullRequestArgs opens a draft PR over REST, not GraphQL", () => {
+  const repo = { owner: "dwjohnston", repo: "thunderjar" };
+  const pr = { title: "4000_a-task", head: "ralph/4000_a-task", base: "main", body: "Did it." };
+  expect(pullRequestArgs(repo, pr)).toEqual([
+    "api",
+    "repos/dwjohnston/thunderjar/pulls",
+    "-f",
+    "title=4000_a-task",
+    "-f",
+    "head=ralph/4000_a-task",
+    "-f",
+    "base=main",
+    "-f",
+    "body=Did it.",
+    "-F",
+    "draft=true",
+    "--jq",
+    ".html_url",
+  ]);
 });

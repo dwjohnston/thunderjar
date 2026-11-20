@@ -272,3 +272,10 @@ export function parseRemote(url: string): Repo {
 async function remoteRepo(root: string): Promise<Repo> {
   return parseRemote((await $`git -C ${root} remote get-url ${REMOTE}`.text()).trim());
 }
+
+export type PullRequest = { title: string; head: string; base: string; body: string };
+
+/** The `gh` arguments that open `pr` as a draft. */
+export function pullRequestArgs(repo: Repo, pr: PullRequest): string[] {
+  return ["pr", "create", "--draft", "--title", pr.title, "--head", pr.head, "--base", pr.base, "--body", pr.body, repo.repo];
+}
