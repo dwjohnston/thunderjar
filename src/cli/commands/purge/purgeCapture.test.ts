@@ -155,3 +155,15 @@ test("--from remote with --verdict fetches the records to read the verdicts, and
   expect(exitCode).toBe(0);
   expect(localRefs(other)).toEqual([]);
 });
+
+test("--from all deletes the session here and on the remote", async () => {
+  pushAll();
+
+  const { stdout, exitCode } = await purge(["--from", "all", "a-question", "--yes"]);
+
+  expect(stdout).toEndWith("1 session deleted.\n");
+  expect(exitCode).toBe(0);
+  const others = ["refs/heads/thunderjar/capture/new-one-shot", "refs/thunderjar/capture/old-incomplete/start"];
+  expect(localRefs()).toEqual(others);
+  expect(remoteRefs()).toEqual(others);
+});
