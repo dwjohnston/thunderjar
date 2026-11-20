@@ -12,8 +12,9 @@
  *
  *
  */
+import { $ } from "bun";
 import { expect, test } from "bun:test";
-import { nextAction, parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
+import { moveTaskToDone, nextAction, parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
 
 test("parseTask reads harness, model and effort from the frontmatter", () => {
   const text = "---\nharness: claude-code\nmodel: sonnet\neffort: medium\n---\n\n# 3900: A task\n";
@@ -66,4 +67,19 @@ test("nextAction skips tasks with a PR, and resumes a pushed run that has no PR"
   expect(nextAction({ hasPr: false, hasState: true, onRemote: false })).toBe("run");
   expect(nextAction({ hasPr: false, hasState: false, onRemote: true })).toBe("orphan");
   expect(nextAction({ hasPr: false, hasState: false, onRemote: false })).toBe("run");
+});
+
+test("moveTaskToDone moves the task file to done/ in its own commit", async () => {
+  const dir = `${Bun.env.TMPDIR ?? "/tmp"}/ralph-test-${crypto.randomUUID()}`;
+  const text = "---\nharness: claude-code\nmodel: sonnet\neffort: low\n---\n\n# 3900: A task\n";
+  await Bun.write(`${dir}/project-md/delivery/tasks/3900_a-task.md`, text);
+  await $`git init --quiet && git config user.name t && git config user.email t@t && git add -A && git commit --quiet -m start`.cwd(dir);
+  const task = parseTask("3900_a-task", `${dir}/project-md/delivery/tasks/3900_a-task.md`, text);
+
+  await moveTaskToDone(dir, task);
+
+  expect(await Bun.file(`${dir}/project-md/delivery/tasks/done/3900_a-task.md`).exists()).toBe(true);
+  expect(await Bun.file(`${dir}/project-md/delivery/tasks/3900_a-task.md`).exists()).toBe(false);
+  expect((await $`git status --porcelain`.cwd(dir).text()).trim()).toBe("");
+  await $`rm -rf ${dir}`;
 });

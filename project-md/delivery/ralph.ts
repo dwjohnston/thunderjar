@@ -344,3 +344,6 @@ export function nextAction(found: { hasPr: boolean; hasState: boolean; onRemote:
   // Saved but never pushed: ralph stopped before the push, so run it again.
   return "run";
 }
+
+/** Moves the task file to done/ in the worktree, as its own commit, so the PR closes the task. */
+export async function moveTaskToDone(worktree: string, task: Task): Promise<void> {}
