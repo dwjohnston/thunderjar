@@ -53,12 +53,12 @@ import {
 import { type ExecutionRecord, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, padEnd, painter, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
+import { confirm } from "../../confirm.ts";
 import { dataDirOption, displayPath, openStore, resolvePath } from "../../dataDir.ts";
 import { minute, plural } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError, printJson, printWarning } from "../../output.ts";
-import { textOutput } from "../../textOutput.ts";
 
 type ImageOptions = {
   testCase?: string;
@@ -97,23 +97,6 @@ function planLines(executions: ExecutionTargets[], preruns: PrerunTarget[], pain
   );
   for (const { local, stored } of preruns) lines.push(`  ${paint.dim("prerun")}  ${[local, stored].filter(Boolean).map((image) => paint.cyan(image!)).join("  ")}`);
   return lines;
-}
-
-/** Asks `question` on the terminal, and whether the answer was yes. */
-async function confirm(question: string): Promise<boolean> {
-  textOutput().write(`${question} [y/N] `);
-  const reader = Bun.stdin.stream().getReader();
-  let answer = "";
-  try {
-    while (!answer.includes("\n")) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      answer += new TextDecoder().decode(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return /^y(es)?$/i.test(answer.trim());
 }
 
 /** Runs `command` with `reference` added, in `cwd`: undefined if it exited 0, or else why it failed. */
