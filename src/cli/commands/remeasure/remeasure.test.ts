@@ -21,6 +21,7 @@ import { $ } from "bun";
 import { type ContainerRunRecord, sqliteStore } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, type ProjectCopy, thunderjar } from "../../../testing/cli.ts";
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
+import { scenario } from "../../../testing/scenario.ts";
 
 /** Two-harnesses: 2 container runs, 1-1 and 2-1, started 2026-10-02. */
 const TWO_HARNESSES = "01m3ygz4g89aqh8yey8em0twpq";
@@ -131,5 +132,15 @@ describe("remeasure", () => {
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["remeasure", TWO_HARNESSES], { env: fake.env });
 
     expect({ stdout, stderr, exitCode }).toEqual({ stdout: "remeasured 1 run, skipped 1 (never started)\n  <ULID> 2-1  never started\n", stderr: "", exitCode: 0 });
+  });
+
+  test("an execution or test case with nothing recorded is an error", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0203"), ["remeasure", "two-harness"]);
+
+    expect({ stdout, stderr, exitCode }).toEqual({
+      stdout: "",
+      stderr: "Error: No execution or test case two-harness recorded. List the executions with `thunderjar executions`.\n",
+      exitCode: 1,
+    });
   });
 });
