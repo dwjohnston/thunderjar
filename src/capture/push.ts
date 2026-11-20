@@ -12,7 +12,7 @@
 // never moved, and capture branches only fast-forward, so neither direction needs --force.
 import { BRANCH_PREFIX, branchSessions } from "./branch.ts";
 import { git, REF_PREFIX } from "./git.ts";
-import { STORES, type StoreKind } from "./store.ts";
+import { startedIn, STORES, type StoreKind } from "./store.ts";
 
 export const REFSPECS: Record<StoreKind, string> = {
   refs: `${REF_PREFIX}/*:${REF_PREFIX}/*`,
@@ -37,6 +37,18 @@ export function pushArgs({ fetch, remote }: PushOptions, stores: readonly StoreK
   if (stores.length === 0) return null;
   // --no-verify: the repository's pre-push hooks are about branches, not records.
   return ["push", "--no-verify", remote, ...stores.map((store) => REFSPECS[store])];
+}
+
+/** The git arguments that push one session's capture from `store`. */
+export function sessionPushArgs(remote: string, store: StoreKind, sessionId: string): string[] {
+  const spec = store === "branch" ? `${BRANCH_PREFIX}/${sessionId}` : `${REF_PREFIX}/${sessionId}/*`;
+  return ["push", "--no-verify", remote, `${spec}:${spec}`];
+}
+
+/** The args that push one session, or null when it has no capture. */
+export function sessionArgs(root: string, remote: string, sessionId: string): string[] | null {
+  const store = startedIn(root, sessionId);
+  return store === null ? null : sessionPushArgs(remote, store, sessionId);
 }
 
 /** Pushes or fetches the captures. Returns git's output, or null when there was nothing to push. */
