@@ -13,12 +13,13 @@
 import { Command, Option } from "commander";
 import { repoRoot } from "../../../capture/git.ts";
 import { localCaptureRefs, VERDICTS, type Verdict } from "../../../capture/list.ts";
-import { type CaptureSelection, type PurgeTarget, selectTargets } from "../../../capture/purge.ts";
+import { type CaptureSelection, deleteLocal, type PurgeTarget, selectTargets } from "../../../capture/purge.ts";
 import { type Paint, padEnd, painter } from "../../colour.ts";
+import { confirm } from "../../confirm.ts";
 import { plural } from "../../format.ts";
 import { print, printError } from "../../output.ts";
 
-type CaptureOptions = { verdict?: Verdict; dryRun?: boolean };
+type CaptureOptions = { verdict?: Verdict; yes?: boolean; dryRun?: boolean };
 
 /** Prints `message` as an error, with exit code 1. */
 function fail(message: string): void {
@@ -52,24 +53,32 @@ function targetLines(targets: PurgeTarget[], paint: Paint, now: number): string[
   return rows.map((row) => row.map((cell, i) => (i < 3 ? padEnd(cell, widths[i]!) : cell)).join("  ").trimEnd());
 }
 
-async function purgeCapture(cwd: string, options: CaptureOptions): Promise<void> {
+async function purgeCapture(cwd: string, sessions: string[], options: CaptureOptions): Promise<void> {
   const root = repoRoot(cwd);
   if (root === null) return fail("Not in a git repository: captures are kept in one.");
-  const selection: CaptureSelection = { sessions: [], all: false, ...(options.verdict !== undefined && { verdict: options.verdict }) };
+  const selection: CaptureSelection = { sessions, all: false, ...(options.verdict !== undefined && { verdict: options.verdict }) };
   const now = Date.now();
   const local = localCaptureRefs(root);
   const targets = selectTargets(root, { local, remote: [] }, local, selection, now);
   if (targets.length === 0) return void print("Nothing to purge.");
   for (const line of targetLines(targets, painter(), now)) print(line);
   if (options.dryRun) return void print(`${plural(targets.length, "session")} would be deleted.`);
+  if (!options.yes) {
+    if (!process.stdin.isTTY) return fail("Not deleting without asking, and there's no terminal to ask on. Pass --yes to delete, or --dry-run to see what would be.");
+    if (!(await confirm("Delete them?"))) return void print("Nothing was deleted.");
+  }
+  deleteLocal(root, targets.flatMap(({ local }) => local));
+  print(`${plural(targets.length, "session")} deleted.`);
 }
 
 export function createPurgeCaptureCommand(): Command {
   return new Command("capture")
     .description("Delete captured sessions, from both stores: refs/thunderjar/capture/<session>/* and the thunderjar/capture/<session> branches. Says what it would delete, and asks first.")
+    .argument("[sessions...]", "the full IDs of the sessions to delete, as `capture list` shows them")
     .addOption(new Option("--verdict <verdict>", "only sessions with this verdict, as `capture list` shows it").choices(VERDICTS))
+    .option("-y, --yes", "don't ask first")
     .option("--dry-run", "only say what would be deleted")
-    .action(async (options: CaptureOptions) => {
-      await purgeCapture(process.cwd(), options);
+    .action(async (sessions: string[], options: CaptureOptions) => {
+      await purgeCapture(process.cwd(), sessions, options);
     });
 }
