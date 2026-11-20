@@ -70,7 +70,7 @@ if (import.meta.main) {
     .description(
       "Run the delivery tasks in project-md/delivery/tasks/ one at a time with `claude -p`, each on its own branch and draft PR, with its capture pushed beside it.",
     )
-    .option("--base <branch>", "the branch each task starts from and its PR targets (default: the current branch)")
+    .option("--base <branch>", "the branch each task starts from and its PR targets (default: the current branch, or on a detached HEAD the one remote branch at it)")
     .option("--max <n>", "how many tasks to run", positiveNumber, DEFAULT_MAX)
     .option("--budget-usd <amount>", "the most one task may spend, passed to claude as --max-budget-usd", positiveNumber, DEFAULT_BUDGET_USD)
     .option("--dry-run", "print the task it would pick and the claude command, then stop", false)
@@ -99,8 +99,7 @@ Example:
 
 export async function main(options: Options): Promise<void> {
   const root = (await $`git -C ${import.meta.dirname} rev-parse --show-toplevel`.text()).trim();
-  const base = options.base ?? (await $`git -C ${root} branch --show-current`.text()).trim();
-  if (base === "") throw new Error("Not on a branch: pass --base.");
+  const base = await defaultBase(root, options.base);
   await $`git -C ${root} fetch --quiet ${REMOTE} ${base}`;
   const repo = await remoteRepo(root);
   const stateDir = `${(await $`git -C ${root} rev-parse --path-format=absolute --git-common-dir`.text()).trim()}/ralph`;
@@ -351,5 +350,21 @@ export async function firstTask(tasksDir: string, skip: ReadonlySet<string> = ne
  * `git branch -r --points-at HEAD --format=%(refname:short)`. Null when there's none, or more than one.
  */
 export function baseFromRemoteBranches(output: string): string | null {
-  return output;
+  const prefix = `${REMOTE}/`;
+  const branches = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(prefix) && line !== `${prefix}HEAD`)
+    .map((line) => line.slice(prefix.length));
+  return branches.length === 1 ? (branches[0] ?? null) : null;
+}
+
+/** --base when given; else the current branch; else, on a detached HEAD, the one remote branch at it. */
+async function defaultBase(root: string, base: string | undefined): Promise<string> {
+  if (base) return base;
+  const current = (await $`git -C ${root} branch --show-current`.text()).trim();
+  if (current !== "") return current;
+  const found = baseFromRemoteBranches(await $`git -C ${root} branch -r --points-at HEAD ${"--format=%(refname:short)"}`.text());
+  if (found === null) throw new Error(`HEAD is detached, and not at exactly one ${REMOTE} branch: pass --base <branch>.`);
+  return found;
 }
