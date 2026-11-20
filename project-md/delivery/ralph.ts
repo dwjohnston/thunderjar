@@ -105,6 +105,7 @@ export async function main(options: Options): Promise<void> {
   const stateDir = `${(await $`git -C ${root} rev-parse --path-format=absolute --git-common-dir`.text()).trim()}/ralph`;
   // A task moves to done/ on its own branch, so this checkout still has it until its PR is merged.
   const ran = new Set<string>();
+  let previous: Task | null = null;
 
   for (let iteration = 1; iteration <= options.max; iteration++) {
     const task = await firstTask(TASKS_DIR, ran);
@@ -114,9 +115,10 @@ export async function main(options: Options): Promise<void> {
     }
     ran.add(task.name);
     console.log(`[${iteration}/${options.max}] ${task.name} (${task.harness}, ${task.model}, effort ${task.effort})`);
-    if (!(await runTask(root, repo, stateDir, task, base, options))) {
+    if (!(await runTask(root, repo, stateDir, task, branchFrom(base, previous), options))) {
       throw new Error(`${task.name} failed: see its draft PR. Stopping, since later tasks may depend on it.`);
     }
+    previous = task;
   }
 }
 
@@ -371,5 +373,5 @@ async function defaultBase(root: string, base: string | undefined): Promise<stri
 
 /** The branch a task starts from, and its PR targets: the previous task's branch, so tasks stack; or, for the first, the base. */
 export function branchFrom(base: string, previous: Task | null): string {
-  return base;
+  return previous ? branchFor(previous) : base;
 }
