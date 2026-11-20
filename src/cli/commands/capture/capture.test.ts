@@ -200,6 +200,16 @@ describe("capture push", () => {
     );
   });
 
+  test("--session pushes one session, and fails for one with no capture", async () => {
+    await capture({ CLAUDE_CODE_REMOTE: "true" });
+    expect((await thunderjar(["capture", "push", "--session", "cli-session", "--dry-run"])).stdout).toBe(
+      "git push --no-verify origin refs/heads/thunderjar/capture/cli-session:refs/heads/thunderjar/capture/cli-session\n",
+    );
+    const result = await thunderjar(["capture", "push", "--session", "nope"]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("No capture of session nope.");
+  });
+
   test("THUNDERJAR_CAPTURE_STORE=refs overrides a cloud session", async () => {
     await capture({ CLAUDE_CODE_REMOTE: "true", THUNDERJAR_CAPTURE_STORE: "refs" });
     expect((await thunderjar(["capture", "push", "--dry-run"])).stdout).toBe("git push --no-verify origin refs/thunderjar/capture/*:refs/thunderjar/capture/*\n");
