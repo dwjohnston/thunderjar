@@ -17,6 +17,7 @@
 import { SQL } from "bun";
 import { Database } from "bun:sqlite";
 import type { Reply, Resolved, TokenCosts } from "../api/declarations.ts";
+import type { Overrides } from "../config/overrides.ts";
 import type { Axis } from "../config/permutations.ts";
 import { moduleLogger } from "../log/logger.ts";
 
@@ -43,6 +44,11 @@ export type ExecutionRecord = {
     permutations: number;
     iterations: number;
   };
+  /**
+   * The lists, and iterations, given on the command line in place of the test case's own, so it
+   * wasn't the test case as written. Absent if none were, and from executions recorded before they could be.
+   */
+  overrides?: Overrides;
 };
 
 /** How the agent ran, from the run script's /thunderjar/run.json. */
