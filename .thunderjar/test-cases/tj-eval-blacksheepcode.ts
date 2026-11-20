@@ -4,7 +4,7 @@ import { declareTestCase } from "thunderjar-published";
 // a blacksheepcode test case, compared with Haiku and Sonnet.
 export default declareTestCase({
   baseImage: ["node20"],
-  codeState: ["tj-eval-blacksheepcode-start"],
+  codeState: ["tj-eval-blacksheepcode-start", "tj-eval-blacksheepcode-new-skills"],
   promptSet: ["none"],
   harnessModel: [
     "claude-code-2.1.326/claude-haiku-5-5",
