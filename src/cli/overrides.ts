@@ -13,7 +13,7 @@
  */
 
 import { type Command, InvalidArgumentError, Option } from "commander";
-import type { Overrides } from "../config/overrides.ts";
+import { OVERRIDABLE, OVERRIDES, type Overrides } from "../config/overrides.ts";
 
 /** A comma-separated list of names, e.g. `snerk,glurk`. */
 const names = (value: string): string[] => {
@@ -24,11 +24,14 @@ const names = (value: string): string[] => {
 
 /** One flag per field of the test case an override can replace: `run`, `plan` and `build` take them all. */
 export function overrideOptions(): Option[] {
-  return [new Option("--prompt-set <names>", "use these prompt sets, comma-separated, instead of the test case's").argParser(names)];
+  return OVERRIDABLE.map((field) => {
+    const { flag, what } = OVERRIDES[field];
+    return new Option(`${flag} <names>`, `use these ${what}, comma-separated, instead of the test case's`).argParser(names);
+  });
 }
 
 /** The overrides among a command's parsed options. */
-export const overridesOf = (options: Overrides): Overrides => ({ promptSet: options.promptSet });
+export const overridesOf = (options: Overrides): Overrides => Object.fromEntries(OVERRIDABLE.map((field) => [field, options[field]]));
 
 /** `command`, with every override flag. */
 export function withOverrideOptions(command: Command): Command {
