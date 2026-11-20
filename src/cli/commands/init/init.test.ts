@@ -129,6 +129,15 @@ export default declareTestCase({
     expect(harness).toEndWith('\nexport default claudeCode({ version: "2.1.311" });\n');
   });
 
+  test("its Codex harness is the library's, pinned by its folder", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const harness = await read(copy.dir, `${P}/harnessModels/codex-0.166.0/index.ts`);
+    expect(harness).toStartWith('import { codex } from "thunderjar";\n');
+    expect(harness).toEndWith('\nexport default codex({ version: "0.166.0" });\n');
+  });
+
   test("its base image gives every user a git identity", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
@@ -277,7 +286,8 @@ describe("0501 Claude Code", () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
 
-    for (const path of filesIn(copy.dir)) {
+    // Its Codex harness is a copy from before `codex()`, and the fixture is left as it was.
+    for (const path of filesIn(copy.dir).filter((path) => !path.includes("codex-0.166.0/"))) {
       expect(await read(scenario("0501"), path), path).toBe(await read(copy.dir, path));
     }
   });
