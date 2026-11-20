@@ -2,6 +2,14 @@
 harness: claude-code
 model: opus
 effort: medium
+ralph:
+  session: "8ee05f73-c2db-4a37-a34b-e588c51e1262"
+  capture: "thunderjar/capture/8ee05f73-c2db-4a37-a34b-e588c51e1262"
+  branchedFrom: "ralph/4900_remeasure"
+  date: "2026-11-20T06:48:28.302Z"
+  costUsd: 1.9782958000000004
+  durationMs: 807619
+  isError: false
 ---
 
 <!--
