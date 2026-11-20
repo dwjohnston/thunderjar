@@ -122,3 +122,10 @@ test("refuses a bare purge, session IDs with --all, an unknown session, and dele
   }
   expect(localRefs()).toEqual(before);
 });
+
+test("--older-than picks sessions by when they started, oldest first", async () => {
+  expect((await purge(["--older-than", "1d", "--dry-run"])).stdout).toBe(
+    'old-incomplete  incomplete  40d  "Fix the old bug"\na-question      question    2d   "What does this do?"\n2 sessions would be deleted.\n',
+  );
+  expect((await purge(["--all", "--older-than", "a month"])).stderr).toContain('"a month" is not an age');
+});
