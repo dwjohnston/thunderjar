@@ -502,4 +502,18 @@ describe("--json", () => {
     expect(exitCode).toBe(0);
     expect(JSON.parse(stdout)).toEqual([{ prerunImage: "thunderjar-prerun:ded54607", dockerfile: expect.stringContaining("FROM ") }]);
   });
+
+
+describe("parameter overrides", () => {
+  test("--prompt-set replaces the test case's prompt sets in the images built", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["build", "example", "--dry-run", "--json", "--prompt-set", "glurk"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [image, ...rest] = JSON.parse(stdout);
+    expect(rest).toEqual([]);
+    expect(image.dockerfile).toContain(GLURK);
+    expect(image.dockerfile).not.toContain(SNERK);
+  });
+});
 });
