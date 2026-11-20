@@ -17,12 +17,13 @@
 //   one-shot       1 turn
 //   few-shot       2-3 turns
 //   conversation   more than 3 turns
-import { branchSessions, readBranch } from "./branch.ts";
-import { git, REF_PREFIX, readRecord } from "./git.ts";
+import { BRANCH_PREFIX, readBranchAt } from "./branch.ts";
+import { git, parseRecord, REF_PREFIX } from "./git.ts";
 import type { StartRecord, TurnRecord } from "./records.ts";
 import { STORES, type StoreKind } from "./store.ts";
 
-export type Verdict = "incomplete" | "question" | "rewritten" | "one-shot" | "few-shot" | "conversation";
+export const VERDICTS = ["incomplete", "question", "rewritten", "one-shot", "few-shot", "conversation"] as const;
+export type Verdict = (typeof VERDICTS)[number];
 
 /** The most turns a `few-shot` capture can have. A first guess: change it freely. */
 export const FEW_SHOT_MAX_TURNS = 3;
@@ -54,28 +55,55 @@ export function verdictOf(capture: Pick<Capture, "startTree" | "lastTree" | "tur
 type Stored<T> = { record: T; tree: string };
 type SessionRecords = { start?: Stored<StartRecord>; turns: Map<number, Stored<TurnRecord>>; stores: Set<StoreKind> };
 
+/** A capture ref, in either store, and the object it points at: a tag in the refs store, a commit in the branch store. */
+export type CaptureRef = { ref: string; oid: string };
+
+/** The session and store of a capture ref, and in the refs store its record's kind. Undefined for any other ref. */
+export function parseCaptureRef(ref: string): { session: string; store: StoreKind; kind?: string } | undefined {
+  if (ref.startsWith(`${BRANCH_PREFIX}/`)) {
+    const session = ref.slice(BRANCH_PREFIX.length + 1);
+    return session && !session.includes("/") ? { session, store: "branch" } : undefined;
+  }
+  if (!ref.startsWith(`${REF_PREFIX}/`)) return undefined;
+  const [session, kind, ...rest] = ref.slice(REF_PREFIX.length + 1).split("/");
+  return session && kind && rest.length === 0 ? { session, store: "refs", kind } : undefined;
+}
+
+/** The capture refs in this repository, in both stores. */
+export function localCaptureRefs(root: string): CaptureRef[] {
+  return git(root, ["for-each-ref", "--format=%(refname) %(objectname)", `${REF_PREFIX}/`, `${BRANCH_PREFIX}/`])
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [ref, oid] = line.split(" ");
+      return { ref: ref!, oid: oid! };
+    });
+}
+
 /** The records in the refs store, by session. */
-function readRefsStore(root: string, into: Map<string, SessionRecords>) {
-  const refs = git(root, ["for-each-ref", "--format=%(refname)", `${REF_PREFIX}/`]).split("\n").filter(Boolean);
-  for (const ref of refs) {
-    const [session, kind] = ref.slice(REF_PREFIX.length + 1).split("/");
-    if (!session || !kind) continue;
-    const turn = kind.match(/^turn-(\d+)$/)?.[1];
+function readRefsStore(root: string, refs: CaptureRef[], into: Map<string, SessionRecords>) {
+  for (const { ref, oid } of refs) {
+    const parsed = parseCaptureRef(ref);
+    if (parsed?.store !== "refs") continue;
+    const { session, kind } = parsed;
+    const turn = kind!.match(/^turn-(\d+)$/)?.[1];
     if (kind !== "start" && !turn) continue;
     const entry = sessionOf(into, session);
     entry.stores.add("refs");
-    const stored = { record: readRecord(root, ref), tree: git(root, ["rev-parse", `${ref}^{tree}`]) };
+    const stored = { record: parseRecord(git(root, ["cat-file", "tag", oid])), tree: git(root, ["rev-parse", `${oid}^{tree}`]) };
     if (kind === "start") entry.start = stored as Stored<StartRecord>;
     else entry.turns.set(Number(turn), stored as Stored<TurnRecord>);
   }
 }
 
 /** The records in the branch store, by session. A record the refs store has too is left as the refs store has it. */
-function readBranchStore(root: string, into: Map<string, SessionRecords>) {
-  for (const session of branchSessions(root)) {
-    const entry = sessionOf(into, session);
+function readBranchStore(root: string, refs: CaptureRef[], into: Map<string, SessionRecords>) {
+  for (const { ref, oid } of refs) {
+    const parsed = parseCaptureRef(ref);
+    if (parsed?.store !== "branch") continue;
+    const entry = sessionOf(into, parsed.session);
     entry.stores.add("branch");
-    for (const { record, tree } of readBranch(root, session)) {
+    for (const { record, tree } of readBranchAt(root, oid)) {
       if (record.kind === "start") entry.start ??= { record, tree };
       else if (!entry.turns.has(record.turn)) entry.turns.set(record.turn, { record, tree });
     }
@@ -90,9 +118,17 @@ function sessionOf(sessions: Map<string, SessionRecords>, session: string): Sess
 
 /** Every capture in the repository, from both stores, merged by session, oldest first. */
 export function listCaptures(root: string): Capture[] {
+  return capturesOf(root, localCaptureRefs(root));
+}
+
+/**
+ * The captures `refs` hold, merged by session, oldest first. Their objects must be in this repository, but
+ * the refs needn't be, e.g. a remote's, fetched without refs. A session with no start record is left out.
+ */
+export function capturesOf(root: string, refs: CaptureRef[]): Capture[] {
   const sessions = new Map<string, SessionRecords>();
-  readRefsStore(root, sessions);
-  readBranchStore(root, sessions);
+  readRefsStore(root, refs, sessions);
+  readBranchStore(root, refs, sessions);
 
   const captures: Capture[] = [];
   for (const [session, { start, turns, stores }] of sessions) {
