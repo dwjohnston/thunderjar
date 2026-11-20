@@ -35,24 +35,31 @@ bun project-md/delivery/ralph.ts --max 3
 flowchart TD
     A[Pick the lowest-numbered file in tasks/<br/>not done/, draft/ or archive/] --> B{Any left?}
     B -- No --> Z[Stop: no tasks left]
-    B -- Yes --> C[Worktree on ralph/&lt;task&gt;<br/>from origin/&lt;base&gt;]
+    B -- Yes --> C[Worktree on ralph/&lt;task&gt;<br/>from the previous task's branch<br/>or, for the first, origin/&lt;base&gt;]
     C --> D[claude -p with the task's model and effort<br/>capture on, as a branch]
-    D --> E[Move the task file to done/<br/>as its own commit]
-    E --> F[Check: no error, the agent committed,<br/>lint, typecheck and tests pass]
-    F --> G[Save the run to .git/ralph/&lt;task&gt;.json]
-    G --> H[Force-push ralph/&lt;task&gt;]
-    H --> I[Open a draft PR, or update the branch's open one<br/>over REST, titled ❌ if the checks failed]
-    I --> J[Push the capture branch<br/>a failure only warns]
-    J --> K{Checks passed?}
-    K -- No --> Y[Stop: later tasks may depend on it]
-    K -- Yes --> L{Reached --max?}
-    L -- No --> A
-    L -- Yes --> X[Stop]
+    D --> E[Move the task file to done/<br/>with the run in its frontmatter]
+    E --> F[Force-push ralph/&lt;task&gt;]
+    F --> G[Open a draft PR<br/>into the branch it started from]
+    G --> H[Push the capture branch]
+    H --> I{Reached --max?}
+    I -- No --> A
+    I -- Yes --> X[Stop]
 ```
 
 - `<base>` is `--base`, else the current branch, else on a detached HEAD the one origin branch at it.
-- A task is done once its PR, which moves its file to done/, is merged. Until then, running ralph again runs it again.
-- With `--max` above 1, a task already run in that invocation is skipped.
+- Tasks stack: each PR targets the previous task's branch.
+- The run in the done file's frontmatter:
+  ```yaml
+  ralph:
+    session: "0f7a5cac-…"
+    capture: "thunderjar/capture/0f7a5cac-…"
+    branchedFrom: "main"
+    date: "2026-11-20T10:00:00.000Z"
+    costUsd: 0.42
+    durationMs: 61000
+    isError: false
+  ```
+- A task is done once its PR, which moves its file to done/, is merged. Until then, a new run of ralph runs it again.
 
 
 Format 
