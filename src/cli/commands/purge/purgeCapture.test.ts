@@ -129,3 +129,17 @@ test("--older-than picks sessions by when they started, oldest first", async () 
   );
   expect((await purge(["--all", "--older-than", "a month"])).stderr).toContain('"a month" is not an age');
 });
+
+test("--from remote deletes on the remote, in both stores, even sessions not here, and leaves the local refs", async () => {
+  pushAll();
+  git(repo, ["update-ref", "-d", "refs/heads/thunderjar/capture/new-one-shot"]);
+  const before = localRefs();
+
+  const { stdout, stderr, exitCode } = await purge(["--from", "remote", "--all", "--yes"]);
+
+  expect(stderr).toBe("");
+  expect(stdout).toEndWith("3 sessions deleted.\n");
+  expect(exitCode).toBe(0);
+  expect(remoteRefs()).toEqual([]);
+  expect(localRefs()).toEqual(before);
+});
