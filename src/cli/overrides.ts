@@ -22,10 +22,17 @@ const names = (value: string): string[] => {
   return list;
 };
 
+/** A whole number, 1 or more. */
+const count = (value: string): number => {
+  if (!/^\d+$/.test(value) || Number(value) < 1) throw new InvalidArgumentError("It must be a whole number, 1 or more.");
+  return Number(value);
+};
+
 /** One flag per field of the test case an override can replace: `run`, `plan` and `build` take them all. */
 export function overrideOptions(): Option[] {
   return OVERRIDABLE.map((field) => {
     const { flag, what } = OVERRIDES[field];
+    if (field === "iterations") return new Option(`${flag} <n>`, "run <n> iterations of each permutation, instead of the test case's iterations").argParser(count);
     return new Option(`${flag} <names>`, `use these ${what}, comma-separated, instead of the test case's`).argParser(names);
   });
 }
