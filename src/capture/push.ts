@@ -10,7 +10,7 @@
 
 // Pushing the captures to a remote, or fetching them from it, in both stores. Capture refs are added and
 // never moved, and capture branches only fast-forward, so neither direction needs --force.
-import { BRANCH_PREFIX, branchSessions } from "./branch.ts";
+import { BRANCH_PREFIX, branchName, branchSessions } from "./branch.ts";
 import { git, REF_PREFIX } from "./git.ts";
 import { STORES, type StoreKind } from "./store.ts";
 
@@ -43,4 +43,10 @@ export function pushArgs({ fetch, remote }: PushOptions, stores: readonly StoreK
 export function push(root: string, options: PushOptions): string | null {
   const args = pushArgs(options, localStores(root));
   return args ? git(root, args) : null;
+}
+
+/** The git arguments that push one session's capture from its `store`. */
+export function sessionPushArgs(remote: string, store: StoreKind, sessionId: string): string[] {
+  const ref = store === "refs" ? `${REF_PREFIX}/${sessionId}/*` : branchName(sessionId);
+  return ["push", "--no-verify", remote, `${ref}:${ref}`];
 }
