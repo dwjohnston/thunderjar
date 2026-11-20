@@ -61,6 +61,15 @@ const countExpectErrors = (copy: ProjectCopy) =>
     `import { declareMeasurement } from "thunderjar";\n\nexport default declareMeasurement({\n  instrument: "grep",\n  config: { glob: "**/*.ts", pattern: "@ts-expect-error" },\n  metrics: { count: { stat: "mean" } },\n});\n`,
   );
 
+/** `text` parsed as JSON, or as it is if it isn't JSON. */
+const parsed = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
 const runsOf = (copy: ProjectCopy, executionId: string) => sqliteStore(`${copy.dir}/.thunderjar/.data/runs.sqlite`).containerRunsOf(executionId);
 
 describe("remeasure", () => {
@@ -159,5 +168,25 @@ describe("remeasure", () => {
     const [after1, after2] = (await runsOf(copy, TWO_HARNESSES)) as [ContainerRunRecord, ContainerRunRecord];
     expect(after1.earlierResults).toHaveLength(1);
     expect(after2).toEqual(before2);
+  });
+
+  test("--json: the runs remeasured, skipped and failed, on stdout as JSON", async () => {
+    const copy = await project();
+    await sqliteStore(`${copy.dir}/.thunderjar/.data/runs.sqlite`).markPostrunsPurged(TWO_HARNESSES, { purgedAt: "2026-10-05T00:00:00.000Z", from: "daemon" }, [
+      { permutation: 1, iteration: 1 },
+    ]);
+    const fake = await docker([postrun(TWO_HARNESSES_AGAIN, "1-1")]);
+
+    const { stdout, exitCode } = await thunderjar(copy.dir, ["remeasure", "two-harnesses", "--json"], { env: fake.env });
+
+    expect(exitCode).toBe(1);
+    expect(parsed(stdout)).toEqual({
+      remeasured: [{ executionId: "<ULID>", run: "1-1" }],
+      skipped: [{ executionId: "<ULID>", run: "1-1", reason: "postrun image purged" }],
+      failed: [
+        { executionId: "<ULID>", run: "2-1", error: "docker: Error response from daemon: No such image: thunderjar-postrun:<ULID>-2-1" },
+        { executionId: "<ULID>", run: "2-1", error: "docker: Error response from daemon: No such image: thunderjar-postrun:<ULID>-2-1" },
+      ],
+    });
   });
 });
