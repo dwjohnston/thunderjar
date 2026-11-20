@@ -420,7 +420,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell" | "commits"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell" | "commits" | "filesChanged"}
  * @description
  * What to measure. Each instrument takes its own `config`, and returns its own value, the measure:
  *
@@ -431,6 +431,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * | `bunTestFile` | `{ subject, test }` | `{ passed, total }`: tests passed, of all the tests | the pass rate, `passed / total` |
  * | `replyMatches` | `{ pattern, turn? }` | `boolean`: whether the agent's reply matches `pattern` | the value |
  * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
+ * | `filesChanged` | `{ glob? }` | `FileChanges`: `{ added, modified, deleted }` paths changed since the start | none: give each metric a `score` |
  * | `commits` | `{}` | `Commit[]`, oldest first: `{ sha, message, files: { added, modified, deleted } }` | none: give each metric a `score` |
  *
  * `shell` stores `command`'s stdout as it is, up to 64 KiB, in the run data store. A command that
@@ -490,6 +491,19 @@ export type InstrumentTypes = {
    * the workspace isn't a git repository, or has no `refs/thunderjar/start`.
    */
   commits: { config: Record<string, never>; value: Commit[] };
+  /**
+   * Everything changed since the start, `refs/thunderjar/start`, committed or not, as one
+   * `FileChanges`. Untracked files count as added, git-ignored ones, e.g. `node_modules`, are left
+   * out. A rename is a deletion plus an addition. `glob` limits it to the paths matching it. The
+   * measurement fails in a workspace that isn't a git repository.
+   */
+  filesChanged: {
+    config: {
+      /** Only report paths matching this. Default: every path. */
+      glob?: string;
+    };
+    value: FileChanges;
+  };
 };
 
 /** Files changed, as paths relative to the workspace, like `glob` elsewhere. */
