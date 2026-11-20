@@ -30,10 +30,16 @@ minor
 
 ## Artifacts
 
-- A `thunderjar/start` ref in the workspace of the prerun image, at the commit the agent starts from.
-  - Written after the code state and promptset are applied, so it's exactly what the agent sees.
-  - Workspaces that aren't git repositories get no ref, and no error.
-- The ref is still there in the postrun image, so measurement containers can use it.
+- A new step in the prerun Dockerfile that Thunderjar generates, in `src/execution/prerunDockerfile.ts`.
+  - It runs right after the prompt set fragment, so it tags exactly what the agent starts from.
+  - e.g.
+    ```dockerfile
+    RUN if git -C /workspace rev-parse --git-dir >/dev/null 2>&1; then git -C /workspace update-ref refs/thunderjar/start HEAD; fi
+    ```
+  - It does nothing in a workspace that isn't a git repository.
+- Every prerun image's hash changes, so existing images are rebuilt once.
+
+In each run, the ref is then in the prerun image, and still in the postrun image, where measurement containers can use it.
 
 ## Example CLI Output
 
