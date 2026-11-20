@@ -105,3 +105,20 @@ test("session IDs with --yes delete their refs in both stores, and leave the res
   expect(exitCode).toBe(0);
   expect(localRefs()).toEqual(["refs/thunderjar/capture/a-question/start", "refs/thunderjar/capture/a-question/turn-1"]);
 });
+
+test("refuses a bare purge, session IDs with --all, an unknown session, and deleting without asking", async () => {
+  const before = localRefs();
+  const refusals: [string[], string][] = [
+    [[], "Say which captures to purge: session IDs, --older-than <age>, --verdict <verdict>, or --all."],
+    [["a-question", "--all"], "Give session IDs or --all: only one of them."],
+    [["a-question", "nope"], "No capture of session nope. `thunderjar capture list` shows the captures."],
+    [["a-question"], "Not deleting without asking, and there's no terminal to ask on. Pass --yes to delete, or --dry-run to see what would be."],
+  ];
+
+  for (const [args, message] of refusals) {
+    const { stderr, exitCode } = await purge(args);
+    expect(stderr).toBe(`Error: ${message}\n`);
+    expect(exitCode).toBe(1);
+  }
+  expect(localRefs()).toEqual(before);
+});
