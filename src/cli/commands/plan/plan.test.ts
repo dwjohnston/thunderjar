@@ -275,7 +275,7 @@ describe("0402 broken declarations", () => {
       "a measurement naming an unknown instrument",
       "unknown-instrument",
       [
-        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell`,
+        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell, commits`,
       ],
     ],
     [

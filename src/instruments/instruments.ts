@@ -3,6 +3,7 @@
 // unit-testable against a fake context over a folder.
 import type { InstrumentName, InstrumentTypes, Stat } from "../api/declarations.ts";
 import { bunTestFile } from "./bunTestFile/bunTestFile.ts";
+import { commits } from "./commits/commits.ts";
 import { fileCreated } from "./fileCreated/fileCreated.ts";
 import { grep } from "./grep/grep.ts";
 import type { Instrument, ScoreKind } from "./instrument.ts";
@@ -10,13 +11,13 @@ import { replyMatches } from "./replyMatches/replyMatches.ts";
 import { shell } from "./shell/shell.ts";
 
 export type { Instrument, ScoreKind } from "./instrument.ts";
-export { bunTestFile, fileCreated, grep, replyMatches, shell };
+export { bunTestFile, commits, fileCreated, grep, replyMatches, shell };
 export { STDOUT_LIMIT } from "./shell/shell.ts";
 
 /** Every built-in instrument, by the name a measurement gives as its `instrument`. */
 export const instruments: {
   [I in InstrumentName]: Instrument<InstrumentTypes[I]["config"], InstrumentTypes[I]["value"]>;
-} = { fileCreated, grep, bunTestFile, replyMatches, shell };
+} = { fileCreated, grep, bunTestFile, replyMatches, shell, commits };
 
 export const isInstrumentName = (name: unknown): name is InstrumentName => typeof name === "string" && Object.hasOwn(instruments, name);
 
