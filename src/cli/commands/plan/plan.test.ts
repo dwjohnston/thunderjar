@@ -578,4 +578,15 @@ Matrix shape: 1/1/1/1/1 (1 permutation)
     expect(stdout).toContain("\noverrides:     --base-image node20\n");
     expect(stdout).toContain("Matrix shape: 1/1/1/1/1 (1 permutation)");
   });
+
+
+  test("--code-state replaces the test case's code states", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0209"), ["plan", "follow-main", "--code-state", "baseline"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("\ncodeState:     baseline\n");
+    expect(stdout).toContain("\noverrides:     --code-state baseline\n");
+    expect(stdout).not.toContain("follow-main");
+  });
 });
