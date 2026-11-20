@@ -22,6 +22,38 @@ effort: low            # low | medium | high
 ---
 ```
 
+## The ralph loop
+
+`ralph.ts` runs the ready tasks one at a time, each to its own draft PR.
+
+```sh
+bun project-md/delivery/ralph.ts --dry-run   # show the next task and its claude command
+bun project-md/delivery/ralph.ts --max 3
+```
+
+```mermaid
+flowchart TD
+    A[Pick the lowest-numbered file in tasks/<br/>not done/, draft/ or archive/] --> B{Any left?}
+    B -- No --> Z[Stop: no tasks left]
+    B -- Yes --> C[Worktree on ralph/&lt;task&gt;<br/>from origin/&lt;base&gt;]
+    C --> D[claude -p with the task's model and effort<br/>capture on, as a branch]
+    D --> E[Move the task file to done/<br/>as its own commit]
+    E --> F[Check: no error, the agent committed,<br/>lint, typecheck and tests pass]
+    F --> G[Save the run to .git/ralph/&lt;task&gt;.json]
+    G --> H[Force-push ralph/&lt;task&gt;]
+    H --> I[Open a draft PR, or update the branch's open one<br/>over REST, titled ❌ if the checks failed]
+    I --> J[Push the capture branch<br/>a failure only warns]
+    J --> K{Checks passed?}
+    K -- No --> Y[Stop: later tasks may depend on it]
+    K -- Yes --> L{Reached --max?}
+    L -- No --> A
+    L -- Yes --> X[Stop]
+```
+
+- `<base>` is `--base`, else the current branch, else on a detached HEAD the one origin branch at it.
+- A task is done once its PR, which moves its file to done/, is merged. Until then, running ralph again runs it again.
+- With `--max` above 1, a task already run in that invocation is skipped.
+
 
 Format 
 ```markdown 
