@@ -14,7 +14,7 @@
 
 // `thunderjar purge image`: deletes the images executions left, from the local Docker daemon and
 // the image store, and marks each postrun image purged on its container run's record. It says
-// what it would purge and asks first. `purge` is a group: `image` is its only command for now.
+// what it would purge and asks first. `purge` is a group: `capture` (capture.ts) is its other command.
 import { Command, InvalidArgumentError, Option } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadProjectConfig, registryHost } from "../../../config/projectConfig.ts";
@@ -59,6 +59,7 @@ import { minute, plural } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError, printJson, printWarning } from "../../output.ts";
+import { createPurgeCaptureCommand } from "./capture.ts";
 
 type ImageOptions = {
   testCase?: string;
@@ -283,5 +284,5 @@ export function createPurgeImageCommand(): Command {
 }
 
 export function createPurgeCommand(): Command {
-  return new Command("purge").description("Delete what executions left behind, and record that it's gone.").addCommand(createPurgeImageCommand());
+  return new Command("purge").description("Delete what executions left behind, and record that it's gone.").addCommand(createPurgeImageCommand()).addCommand(createPurgeCaptureCommand());
 }
