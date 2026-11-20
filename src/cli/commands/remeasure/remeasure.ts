@@ -63,12 +63,12 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix, js
   for (const execution of executions) {
     const measurements = await loadMeasurements(root, execution.task);
     for (const run of await store.containerRunsOf(execution.executionId)) {
+      const at: RunAt = { executionId: execution.executionId, run: runName(run) };
       const reason = skipReason(run);
       if (reason !== undefined) {
-        skipped.push({ executionId: execution.executionId, run: runName(run), reason });
+        skipped.push({ ...at, reason });
         continue;
       }
-      const at = { executionId: execution.executionId, run: runName(run), postrunImage: run.postrunImage };
       let result: Record<string, RecordedMeasure>;
       try {
         result = await remeasureContainerRun(run, measurements, imagePrefix);
@@ -76,14 +76,14 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix, js
         // Docker couldn't start its measurement container, e.g. its postrun image was deleted
         // without being marked purged: the others may still be measured.
         const message = error instanceof Error ? error.message : String(error);
-        log.warn({ ...at, error: message }, "couldn't remeasure");
-        printError(`Couldn't remeasure ${execution.executionId} ${runName(run)}: ${message}`);
-        failed.push({ executionId: execution.executionId, run: runName(run), error: message });
+        log.warn({ ...at, postrunImage: run.postrunImage, error: message }, "couldn't remeasure");
+        printError(`Couldn't remeasure ${at.executionId} ${at.run}: ${message}`);
+        failed.push({ ...at, error: message });
         continue;
       }
       log.info({ ...at, result }, "remeasured");
       await store.recordContainerRun(withNewResult(run, result));
-      remeasured.push({ executionId: execution.executionId, run: runName(run) });
+      remeasured.push(at);
     }
   }
   if (failed.length > 0) process.exitCode = 1;
