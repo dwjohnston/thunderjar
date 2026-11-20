@@ -19,7 +19,7 @@ import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { REPO_ROOT } from "../../../testing/scenario.ts";
 
 const REPOSITORY = "ghcr.io/acme/thunderjar-images";
-const PRERUN = `${REPOSITORY}:prerun-h77e9dd16`;
+const PRERUN = `${REPOSITORY}:prerun-h4799f255`;
 const REMOTE = "docker --context cloud";
 const MEASURES = `isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1`;
 
@@ -80,7 +80,7 @@ describe("0211 remote runtime, with a runner", () => {
 Running the execution on the runtime, in a runner started with \`<REPO>/src/testing/fakeDocker.ts --context cloud\`
 Building the runner image <RUNNER> ... done
 Pushing <RUNNER> ... done
-Building thunderjar-prerun:77e9dd16 ... done
+Building thunderjar-prerun:4799f255 ... done
 Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
@@ -95,8 +95,8 @@ Recorded in .thunderjar/.data/runs.sqlite
       `${REMOTE} tag ${runnerImage} ${runnerImage}`,
       `${REMOTE} push --quiet ${runnerImage}`,
       `${REMOTE} image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun`,
-      expect.stringMatching(new RegExp(`^${REMOTE} build -t thunderjar-prerun:77e9dd16 `)),
-      `${REMOTE} tag thunderjar-prerun:77e9dd16 ${PRERUN}`,
+      expect.stringMatching(new RegExp(`^${REMOTE} build -t thunderjar-prerun:4799f255 `)),
+      `${REMOTE} tag thunderjar-prerun:4799f255 ${PRERUN}`,
       `${REMOTE} push --quiet ${PRERUN}`,
     ]);
     // Through the runtime's command: the runner is started, sent its submission, followed, and removed.
@@ -168,7 +168,7 @@ Recorded in .thunderjar/.data/runs.sqlite
     const before = (await docker.commands()).length;
     // As on other machines: neither the local daemon nor the runtime has the prerun image.
     const removed = Bun.file(`${docker.env.FAKE_DOCKER_DIR}/removed`);
-    await Bun.write(removed, `${(await removed.exists()) ? await removed.text() : ""}thunderjar-prerun:77e9dd16\n${PRERUN}\n`);
+    await Bun.write(removed, `${(await removed.exists()) ? await removed.text() : ""}thunderjar-prerun:4799f255\n${PRERUN}\n`);
 
     const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: docker.env });
 
