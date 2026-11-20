@@ -55,11 +55,11 @@ describe("selectionProblem", () => {
   });
 });
 
-test("postrunTargets: locally by its name and as recorded, in the store only if it was pushed there", () => {
+test("postrunTargets: locally by its name and as recorded; in the store as recorded there, and nowhere without a store", () => {
   const record = (postrunImage: string) => ({ executionId: "01e", permutation: 2, iteration: 3, postrunImage }) as ContainerRunRecord;
   const store = { repository: "localhost:5000/acme/images" };
 
-  expect(postrunTargets([record("thunderjar-postrun:01e-2-3")], "thunderjar", store)).toEqual([
+  expect(postrunTargets([record("thunderjar-postrun:01e-2-3")], "thunderjar", null)).toEqual([
     { executionId: "01e", run: "2-3", permutation: 2, iteration: 3, local: ["thunderjar-postrun:01e-2-3"] },
   ]);
   expect(postrunTargets([record("localhost:5000/acme/images:postrun-e01e-h1-i02")], "tj", store)).toEqual([
@@ -70,6 +70,21 @@ test("postrunTargets: locally by its name and as recorded, in the store only if 
       iteration: 3,
       local: ["tj-postrun:01e-2-3", "localhost:5000/acme/images:postrun-e01e-h1-i02"],
       stored: "localhost:5000/acme/images:postrun-e01e-h1-i02",
+    },
+  ]);
+});
+
+test("postrunTargets: a run recorded under its local name, as every run was before pushed references were recorded, is in the store under the name it was pushed as", () => {
+  const record = { executionId: "01e", permutation: 2, permutationHash: "3ab9b840c0ffee", iteration: 3, postrunImage: "thunderjar-postrun:01e-2-3" } as ContainerRunRecord;
+
+  expect(postrunTargets([record], "thunderjar", { repository: "ghcr.io/acme/images" })).toEqual([
+    {
+      executionId: "01e",
+      run: "2-3",
+      permutation: 2,
+      iteration: 3,
+      local: ["thunderjar-postrun:01e-2-3"],
+      stored: "ghcr.io/acme/images:postrun-e01e-h3ab9b840-i02",
     },
   ]);
 });
