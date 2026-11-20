@@ -120,7 +120,18 @@ export async function nextTask(root: string): Promise<Task | null> {
 
 /** Reads a task file's frontmatter. Throws when it's missing or invalid. */
 export function parseTask(name: string, path: string, text: string): Task {
-  return { name, path, harness: "claude-code", model: "", effort: "low", text };
+  const match = /^---\n([\s\S]*?)\n---\n/.exec(text);
+  if (!match?.[1]) throw new Error(`${path} has no frontmatter: it needs harness, model and effort`);
+  const data = Bun.YAML.parse(match[1]) as Record<string, unknown>;
+  const { harness, model, effort } = data;
+  if (!HARNESSES.includes(harness as Harness)) {
+    throw new Error(`${path}: harness is ${JSON.stringify(harness)}, use one of ${HARNESSES.join(", ")}`);
+  }
+  if (typeof model !== "string" || model === "") throw new Error(`${path}: model is missing`);
+  if (!EFFORTS.includes(effort as Effort)) {
+    throw new Error(`${path}: effort is ${JSON.stringify(effort)}, use one of ${EFFORTS.join(", ")}`);
+  }
+  return { name, path, harness: harness as Harness, model, effort: effort as Effort, text };
 }
 
 export function branchFor(task: Task): string {
