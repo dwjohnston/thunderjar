@@ -295,8 +295,9 @@ describe("0501 Claude Code", () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
 
-    // Its Codex harness is a copy from before `codex()`, and the fixture is left as it was.
-    for (const path of filesIn(copy.dir).filter((path) => !path.includes("codex-0.166.0/"))) {
+    // Its Codex and Copilot harnesses are copies from before `codex()` and `copilot()`, and the fixture is left as it was.
+    const helperHarnesses = ["codex-0.166.0/", "copilot-1.0.105/"];
+    for (const path of filesIn(copy.dir).filter((path) => !helperHarnesses.some((h) => path.includes(h)))) {
       expect(await read(scenario("0501"), path), path).toBe(await read(copy.dir, path));
     }
   });
