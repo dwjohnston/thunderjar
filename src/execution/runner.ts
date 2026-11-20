@@ -86,6 +86,7 @@ export async function runSubmission(
         root,
         name: submission.name,
         testCase: submission.testCase,
+        overrides: submission.overrides,
         plan,
         imagePrefix: submission.imagePrefix,
         imageStore,

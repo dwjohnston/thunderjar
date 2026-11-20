@@ -261,7 +261,7 @@ async function run(
   const hostTimer = timings();
   /** The execution, run here: each Docker command given to the local daemon, or the runtime. */
   const executeHere = async ({ store, where }: OpenStore): Promise<Executed> => {
-    const execution = await runExecution({ root, name, testCase, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks);
+    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks);
     return { execution, recordedIn: where, containerRuns: json ? await store.containerRunsOf(execution.executionId) : [] };
   };
   /** The execution, run by a runner on the runtime: its images stored, then submitted and followed. */
@@ -277,6 +277,7 @@ async function run(
     const submission: Submission = {
       name,
       testCase,
+      overrides,
       plan: planData(plan),
       concurrency,
       imagePrefix,
