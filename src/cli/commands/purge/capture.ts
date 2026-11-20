@@ -13,13 +13,13 @@
 import { Command, Option } from "commander";
 import { repoRoot } from "../../../capture/git.ts";
 import { localCaptureRefs, VERDICTS, type Verdict } from "../../../capture/list.ts";
-import { type CaptureSelection, deleteLocal, type PurgeTarget, selectTargets } from "../../../capture/purge.ts";
-import { type Paint, padEnd, painter } from "../../colour.ts";
+import { type CaptureSelection, deleteLocal, type PurgeTarget, selectionProblem, selectTargets, UnknownSessionError } from "../../../capture/purge.ts";
+import { type Paint, padEnd, painter, visibleLength } from "../../colour.ts";
 import { confirm } from "../../confirm.ts";
 import { plural } from "../../format.ts";
 import { print, printError } from "../../output.ts";
 
-type CaptureOptions = { verdict?: Verdict; yes?: boolean; dryRun?: boolean };
+type CaptureOptions = { all?: boolean; verdict?: Verdict; yes?: boolean; dryRun?: boolean };
 
 /** Prints `message` as an error, with exit code 1. */
 function fail(message: string): void {
@@ -49,17 +49,25 @@ function targetLines(targets: PurgeTarget[], paint: Paint, now: number): string[
     paint.dim(startedAt === null ? "?" : age(startedAt, now)),
     prompt === null ? "" : JSON.stringify(firstLine(prompt, 60)),
   ]);
-  const widths = [0, 1, 2].map((i) => Math.max(...rows.map((row) => row[i]!.length)));
+  const widths = [0, 1, 2].map((i) => Math.max(...rows.map((row) => visibleLength(row[i]!))));
   return rows.map((row) => row.map((cell, i) => (i < 3 ? padEnd(cell, widths[i]!) : cell)).join("  ").trimEnd());
 }
 
 async function purgeCapture(cwd: string, sessions: string[], options: CaptureOptions): Promise<void> {
+  const selection: CaptureSelection = { sessions, all: options.all === true, ...(options.verdict !== undefined && { verdict: options.verdict }) };
+  const problem = selectionProblem(selection);
+  if (problem) return fail(problem);
   const root = repoRoot(cwd);
   if (root === null) return fail("Not in a git repository: captures are kept in one.");
-  const selection: CaptureSelection = { sessions, all: false, ...(options.verdict !== undefined && { verdict: options.verdict }) };
   const now = Date.now();
   const local = localCaptureRefs(root);
-  const targets = selectTargets(root, { local, remote: [] }, local, selection, now);
+  let targets: PurgeTarget[];
+  try {
+    targets = selectTargets(root, { local, remote: [] }, local, selection, now);
+  } catch (error) {
+    if (error instanceof UnknownSessionError) return fail(error.message);
+    throw error;
+  }
   if (targets.length === 0) return void print("Nothing to purge.");
   for (const line of targetLines(targets, painter(), now)) print(line);
   if (options.dryRun) return void print(`${plural(targets.length, "session")} would be deleted.`);
@@ -75,6 +83,7 @@ export function createPurgeCaptureCommand(): Command {
   return new Command("capture")
     .description("Delete captured sessions, from both stores: refs/thunderjar/capture/<session>/* and the thunderjar/capture/<session> branches. Says what it would delete, and asks first.")
     .argument("[sessions...]", "the full IDs of the sessions to delete, as `capture list` shows them")
+    .option("--all", "every captured session")
     .addOption(new Option("--verdict <verdict>", "only sessions with this verdict, as `capture list` shows it").choices(VERDICTS))
     .option("-y, --yes", "don't ask first")
     .option("--dry-run", "only say what would be deleted")
