@@ -1,6 +1,7 @@
 // `thunderjar show <execution> [container run]`: the recorded results of an execution, one row per
 // permutation with each metric aggregated across its iterations, or one container run's record.
 // The metrics are read from the stored measures when shown, as the task's measurements declare them today.
+import { hasOverrides, showOverrides } from "../../../config/overrides.ts";
 import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadMeasurements, type Measurement } from "../../../config/measurements.ts";
@@ -199,9 +200,12 @@ function purgedLines(permutations: PermutationSummary[], paint: Paint): string[]
   );
 }
 
-/** One execution: what it was, then its permutation table, or that it has no container runs. */
+/**
+ * One execution: what it was, with the overrides it was run with, if any, then its permutation
+ * table, or that it has no container runs.
+ */
 export function renderExecution(execution: ExecutionRecord, runs: ContainerRunRecord[], measurements: Measurement[], paint: Paint = plain): string {
-  const { executionId, testCase, task, startedAt, status, matrix } = execution;
+  const { executionId, testCase, task, startedAt, status, matrix, overrides } = execution;
   const header = labelled(
     [
       ["Execution", paint.bold(executionId)],
@@ -210,6 +214,7 @@ export function renderExecution(execution: ExecutionRecord, runs: ContainerRunRe
       ["Started", minute(startedAt)],
       ["Status", paintStatus(status, paint)],
       ["Matrix", `${plural(matrix.permutations, "permutation")} × ${plural(matrix.iterations, "iteration")}`],
+      ...(hasOverrides(overrides) ? [["Overrides", paint.yellow(showOverrides(overrides))] as [string, string]] : []),
     ],
     paint,
   );
