@@ -9,6 +9,7 @@ import { createGenerateCommand } from "./commands/generate/generate.ts";
 import { createInitCommand } from "./commands/init/init.ts";
 import { createPlanCommand } from "./commands/plan/plan.ts";
 import { createPurgeCommand } from "./commands/purge/purge.ts";
+import { createRemeasureCommand } from "./commands/remeasure/remeasure.ts";
 import { createRunCommand } from "./commands/run/run.ts";
 import { createRunnerCommand } from "./commands/runner/runner.ts";
 import { createShowCommand } from "./commands/show/show.ts";
@@ -97,6 +98,7 @@ export function createProgram(): Command {
     .addCommand(createExecutionsCommand())
     .addCommand(createShowCommand())
     .addCommand(createViewCommand())
+    .addCommand(createRemeasureCommand())
     .addCommand(createPurgeCommand())
     .addCommand(createCaptureCommand());
   // Commands made on their own and added don't inherit the program's help settings.
