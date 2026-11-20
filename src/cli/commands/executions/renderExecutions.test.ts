@@ -41,3 +41,14 @@ describe("renderExecutions in colour", () => {
     expect(rendered).toContain("\x1b[31mfailed\x1b[39m");
   });
 });
+
+describe("renderExecutions with overrides", () => {
+  test("follows an execution's status with the overrides it was run with", () => {
+    const overridden: ExecutionRecord = { ...record("01BBB", "example", "failed"), overrides: { promptSet: ["glurk"], iterations: 3 } };
+
+    expect(renderExecutions([record("01AAA", "example", "complete"), overridden])).toBe(
+      `01AAA  example  2026-11-11 04:00  2 permutations × 1 iteration  complete
+01BBB  example  2026-11-11 04:00  2 permutations × 1 iteration  failed    overrides: --prompt-set glurk --iterations 3`,
+    );
+  });
+});
