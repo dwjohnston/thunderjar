@@ -15,6 +15,7 @@
 // `thunderjar remeasure`, through the CLI, with the fake Docker, on a copy of 0203's project, whose
 // own run data store it writes. Each postrun image exists in the fake, its files only those a test
 // gives it.
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
 import { type ContainerRunRecord, sqliteStore } from "../../../store/runDataStore.ts";
@@ -118,5 +119,17 @@ describe("remeasure", () => {
     const [after1, after2] = (await runsOf(copy, TWO_HARNESSES)) as [ContainerRunRecord, ContainerRunRecord];
     expect(after1.earlierResults).toHaveLength(1);
     expect(after2).toEqual(before2);
+  });
+
+  test("a run whose container never started has no postrun image: it's skipped, and listed as skipped", async () => {
+    const copy = await project();
+    const db = new Database(`${copy.dir}/.thunderjar/.data/runs.sqlite`, { strict: true });
+    db.query("UPDATE container_runs SET record = json_set(record, '$.execution.failedToStart', 'no such image') WHERE execution_id = $id AND permutation = 2").run({ id: TWO_HARNESSES });
+    db.close();
+    const fake = await docker([postrun(TWO_HARNESSES, "1-1")]);
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["remeasure", TWO_HARNESSES], { env: fake.env });
+
+    expect({ stdout, stderr, exitCode }).toEqual({ stdout: "remeasured 1 run, skipped 1 (never started)\n  <ULID> 2-1  never started\n", stderr: "", exitCode: 0 });
   });
 });
