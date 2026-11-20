@@ -84,11 +84,11 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
   test("says which prerun images are built, asking Docker once", async () => {
     await using docker = await fakeDocker({
       images: [
-        "thunderjar-prerun:32a1d048",
-        "thunderjar-prerun:6aeed656",
-        "thunderjar-prerun:577ed2bd",
-        "thunderjar-prerun:6eec2774",
-        "other-prerun:341adb24",
+        "thunderjar-prerun:ded54607",
+        "thunderjar-prerun:602318c8",
+        "thunderjar-prerun:e4f0784f",
+        "thunderjar-prerun:35965dab",
+        "other-prerun:3b9c542f",
         "thunderjar-postrun:93bd21bc",
       ],
     });
@@ -110,7 +110,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
   });
 
   test("--image-prefix looks for the images under that prefix", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:32a1d048", "other-prerun:341adb24", "other-prerun:43876a6a"] });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:ded54607", "other-prerun:3b9c542f", "other-prerun:3a7b72ac"] });
 
     const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline", "--image-prefix", "other"], {
       env: { ...docker.env, ...KEY },
@@ -132,7 +132,7 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
   });
 
   test("when Docker can't be reached, it still plans, with each image's status unknown, and says why", async () => {
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:32a1d048"], unreachable: true });
+    await using docker = await fakeDocker({ images: ["thunderjar-prerun:ded54607"], unreachable: true });
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example"], { env: { ...docker.env, ...KEY } });
 

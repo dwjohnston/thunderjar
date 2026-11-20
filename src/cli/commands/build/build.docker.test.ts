@@ -21,13 +21,13 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("build, against real Docker", 
   });
 
   test("0202 example: builds the image from the fragments, and a second build finds it present", async () => {
-    const image = `${REPOSITORY}:32a1d048`;
+    const image = `${REPOSITORY}:ded54607`;
 
     const first = await build(scenario("0202"), "example");
 
     expect(first.stderr).toBe("");
     expect(first.exitCode).toBe(0);
-    expect(first.stdout).toBe("Building <PREFIX>-prerun:32a1d048 ... done\n1 built, 0 already present\n");
+    expect(first.stdout).toBe("Building <PREFIX>-prerun:ded54607 ... done\n1 built, 0 already present\n");
     expect(await inImage(image, "pwd && cat FAKE_INSTRUCTIONS.md")).toBe(
       "/workspace\nWrite small functions, and say what each one is for.",
     );
@@ -59,6 +59,30 @@ export default declarePromptSet({
     expect(exitCode).toBe(0);
     const image = (stdout.match(/^Building (\S+) \.\.\. done$/m) as RegExpMatchArray)[1] as string;
     expect(await inImage(image.replace("<PREFIX>", PREFIX), "cat /workspace/AGENTS.md")).toBe("# Snerk");
+  });
+
+  test("tags the starting commit as refs/thunderjar/start, and only in a git repository", async () => {
+    await using copy = await copyScenarioProject("0201");
+    await Bun.write(
+      `${copy.dir}/.thunderjar/parameters/codeStates/baseline/index.ts`,
+      `import { declareCodeState } from "thunderjar";
+
+export default declareCodeState({
+  applyParameter: () => "RUN git init --quiet && git commit --quiet --allow-empty -m start",
+});
+`,
+    );
+
+    const { stdout, stderr, exitCode } = await build(copy.dir, "example");
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const image = ((stdout.match(/^Building (\S+) \.\.\. done$/m) as RegExpMatchArray)[1] as string).replace("<PREFIX>", PREFIX);
+    expect(await inImage(image, "git -C /workspace rev-parse refs/thunderjar/start")).toBe(await inImage(image, "git -C /workspace rev-parse HEAD"));
+
+    const outside = await build(scenario("0202"), "example");
+    expect(outside.exitCode).toBe(0);
+    expect(await inImage(`${REPOSITORY}:ded54607`, "git -C /workspace rev-parse --git-dir 2>&1 || true")).not.toContain("refs");
   });
 
   test("a failed build is an error with Docker's reason", async () => {

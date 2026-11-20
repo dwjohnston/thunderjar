@@ -136,8 +136,8 @@ Dry run: nothing was purged.
     const { stdout, exitCode } = await purge(scenario("0203"), ["--test-case", "two-harnesses", "--kind", "prerun", "--dry-run"]);
 
     expect(stdout).toBe(`Would purge 2 prerun images, from the local daemon:
-  prerun  thunderjar-prerun:fcd312b3
-  prerun  thunderjar-prerun:1920abed
+  prerun  thunderjar-prerun:9ee415ba
+  prerun  thunderjar-prerun:81306645
 Dry run: nothing was purged.
 `);
     expect(exitCode).toBe(0);
