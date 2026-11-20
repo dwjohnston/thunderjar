@@ -197,7 +197,8 @@ async function runTask(root: string, task: Task, options: Options): Promise<bool
     const captureLink = await pushCapture(root, sessionId);
     const body = prBody(task, output.result, captureLink, failures);
     const title = failures.length === 0 ? task.name : `❌ ralph failed: ${task.name}`;
-    const url = (await $`gh pr create --draft --base ${BASE} --head ${branch} --title ${title} --body ${body}`.cwd(worktree).text()).trim();
+    const prArgs = pullRequestArgs(await remoteRepo(root), { title, head: branch, base: BASE, body });
+    const url = (await $`gh ${prArgs}`.text()).trim();
     console.log(failures.length === 0 ? `  PR: ${url}` : `  failed (${failures.join("; ")}). PR: ${url}`);
     return failures.length === 0;
   } finally {
@@ -277,5 +278,20 @@ export type PullRequest = { title: string; head: string; base: string; body: str
 
 /** The `gh` arguments that open `pr` as a draft. */
 export function pullRequestArgs(repo: Repo, pr: PullRequest): string[] {
-  return ["pr", "create", "--draft", "--title", pr.title, "--head", pr.head, "--base", pr.base, "--body", pr.body, repo.repo];
+  return [
+    "api",
+    `repos/${repo.owner}/${repo.repo}/pulls`,
+    "-f",
+    `title=${pr.title}`,
+    "-f",
+    `head=${pr.head}`,
+    "-f",
+    `base=${pr.base}`,
+    "-f",
+    `body=${pr.body}`,
+    "-F",
+    "draft=true",
+    "--jq",
+    ".html_url",
+  ];
 }
