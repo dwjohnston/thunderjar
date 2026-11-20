@@ -143,4 +143,21 @@ describe("remeasure", () => {
       exitCode: 1,
     });
   });
+
+  test("a run that can't be measured, its postrun image gone unrecorded, fails alone: the rest are still remeasured", async () => {
+    const copy = await project();
+    const [, before2] = (await runsOf(copy, TWO_HARNESSES)) as [ContainerRunRecord, ContainerRunRecord];
+    const fake = await docker([postrun(TWO_HARNESSES, "1-1")]);
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["remeasure", TWO_HARNESSES], { env: fake.env });
+
+    expect({ stdout, stderr, exitCode }).toEqual({
+      stdout: "remeasured 1 run, 1 failed\n",
+      stderr: "Error: Couldn't remeasure <ULID> 2-1: docker: Error response from daemon: No such image: thunderjar-postrun:<ULID>-2-1\n",
+      exitCode: 1,
+    });
+    const [after1, after2] = (await runsOf(copy, TWO_HARNESSES)) as [ContainerRunRecord, ContainerRunRecord];
+    expect(after1.earlierResults).toHaveLength(1);
+    expect(after2).toEqual(before2);
+  });
 });
