@@ -1,0 +1,4 @@
+[test]
+# src/gauntlet holds challenges for Thunderjar experiments, not Thunderjar code. Their tests
+# run with `node --test`, and some fail on purpose.
+pathIgnorePatterns = ["src/gauntlet/**"]
