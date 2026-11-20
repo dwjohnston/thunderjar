@@ -593,3 +593,17 @@ describe("0101 empty project", () => {
     expect(exitCode).toBe(1);
   });
 });
+
+describe("an execution run with overrides", () => {
+  test("says so, below its matrix", async () => {
+    const data = await copyOfStore();
+    const store = sqliteStore(storeFileIn(data));
+    const running = (await store.listExecutions()).find(({ executionId }) => executionId === RUNNING)!;
+    await store.recordExecution({ ...running, overrides: { promptSet: ["glurk"], iterations: 3 } });
+
+    const { stdout, exitCode } = await thunderjar(scenario("0203"), ["show", RUNNING, "--data-dir", data]);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("\nMatrix     1 permutation × 1 iteration\nOverrides  --prompt-set glurk --iterations 3\n");
+  });
+});
