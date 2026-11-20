@@ -33,13 +33,13 @@ bun project-md/delivery/ralph.ts --max 3
 
 ```mermaid
 flowchart TD
-    S["git fetch --quiet origin &lt;base&gt;"] --> A
+    S["git fetch --quiet origin #lt;base#gt;"] --> A
     A[Pick the lowest-numbered file in tasks/<br/>not done/, draft/ or archive/] --> B{Any left?}
     B -- No --> Z[Stop: no tasks left]
-    B -- Yes --> C["git worktree add -B ralph/&lt;task&gt; &lt;worktree&gt; origin/&lt;from&gt;"]
+    B -- Yes --> C["git worktree add -B ralph/#lt;task#gt; #lt;worktree#gt; origin/#lt;from#gt;"]
     C --> D[claude -p with the task's model and effort<br/>capture on, as a branch]
     D --> E[Move the task file to done/<br/>with the run in its frontmatter]
-    E --> F[Force-push ralph/&lt;task&gt;]
+    E --> F[Force-push ralph/#lt;task#gt;]
     F --> G[Open a draft PR<br/>into the branch it started from]
     G --> H[Push the capture branch]
     H --> I{Reached --max?}
