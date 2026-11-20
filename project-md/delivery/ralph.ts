@@ -16,17 +16,18 @@
 
 // A single-node ralph loop over the delivery tasks. Each iteration:
 //
-//   1. Picks the lowest-numbered task in tasks/ (not archive/ or done/) with no PR for ralph/<task>.
+//   1. Picks the lowest-numbered task file in tasks/: not in archive/, done/ or draft/.
 //   2. Makes a worktree from origin/<base> on ralph/<task>. <base> is --base, or the branch ralph runs from.
 //   3. Runs `claude -p` on it, with capture on the branch store, under a session ID made here.
 //   4. Moves the task file to done/, as its own commit.
 //   5. Checks it: no error, at least one commit by the agent, lint, typecheck and tests pass.
-//   6. Saves the run's state in .git/ralph/<task>.json, then pushes the branch.
-//   7. Opens a draft PR, whose description is the agent's final message.
+//   6. Saves the run's state in .git/ralph/<task>.json, then force-pushes ralph/<task>, which ralph owns.
+//   7. Opens a draft PR, whose description is the agent's final message, or updates the branch's open one.
 //   8. Pushes the session's capture branch, thunderjar/capture/<session>, and only that one. A failure only warns.
 //
 // GitHub is reached over REST (`gh api`), never GraphQL, which Claude Code cloud sessions block.
-// If ralph stops between the push and the PR, a rerun opens the PR from the saved state.
+// A task is done once its file is in done/ on the base branch, i.e. once its PR is merged. Until then a
+// rerun runs it again.
 // A failed task still gets its branch, capture and PR, titled "❌ ralph failed: …", then the loop stops:
 // tasks are ordered by prerequisite, so later ones would build on a gap.
 import { $ } from "bun";
@@ -103,43 +104,21 @@ export async function main(options: Options): Promise<void> {
   await $`git -C ${root} fetch --quiet ${REMOTE} ${base}`;
   const repo = await remoteRepo(root);
   const stateDir = `${(await $`git -C ${root} rev-parse --path-format=absolute --git-common-dir`.text()).trim()}/ralph`;
+  // A task moves to done/ on its own branch, so this checkout still has it until its PR is merged.
+  const ran = new Set<string>();
 
   for (let iteration = 1; iteration <= options.max; iteration++) {
-    const next = await nextTask(root, repo, stateDir);
-    if (!next) {
+    const task = await firstTask(TASKS_DIR, ran);
+    if (!task) {
       console.log("No tasks left.");
       return;
     }
-    const { task, action } = next;
+    ran.add(task.name);
     console.log(`[${iteration}/${options.max}] ${task.name} (${task.harness}, ${task.model}, effort ${task.effort})`);
-    if (action === "orphan") {
-      throw new Error(
-        `${branchFor(task)} is on ${REMOTE} with no PR and no saved run. Open a PR for it, or delete the branch, then run ralph again.`,
-      );
-    }
-    const ok =
-      action === "resume"
-        ? await finish(root, repo, stateDir, task, await loadState(stateDir, task))
-        : await runTask(root, repo, stateDir, task, base, options);
-    if (!ok) {
+    if (!(await runTask(root, repo, stateDir, task, base, options))) {
       throw new Error(`${task.name} failed: see its draft PR. Stopping, since later tasks may depend on it.`);
     }
   }
-}
-
-/** The lowest-numbered task that isn't skipped, and what to do with it; or null when there's none. */
-export async function nextTask(root: string, repo: Repo, stateDir: string): Promise<{ task: Task; action: Action } | null> {
-  const files = [...new Bun.Glob("*.md").scanSync(TASKS_DIR)].sort();
-  for (const file of files) {
-    const task = parseTask(file.replace(/\.md$/, ""), `${TASKS_DIR}/${file}`, await Bun.file(`${TASKS_DIR}/${file}`).text());
-    const branch = branchFor(task);
-    // REST, not `gh pr list`: GraphQL is blocked in Claude Code cloud sessions.
-    const prs = await $`gh api ${`repos/${repo.owner}/${repo.repo}/pulls?head=${repo.owner}:${branch}&state=all`} --jq length`.text();
-    const onRemote = (await $`git -C ${root} ls-remote --heads ${REMOTE} ${branch}`.text()).trim() !== "";
-    const action = nextAction({ hasPr: prs.trim() !== "0", hasState: await Bun.file(statePath(stateDir, task)).exists(), onRemote });
-    if (action !== "skip") return { task, action };
-  }
-  return null;
 }
 
 /** Reads a task file's frontmatter. Throws when it's missing or invalid. */
@@ -197,15 +176,11 @@ export function claudeArgs(task: Task, sessionId: string, budgetUsd: number): st
   ];
 }
 
-/** What a run left, saved before anything is pushed, so a rerun can open its PR if ralph stops before it. */
+/** What a run left, saved before anything is pushed, so it isn't lost if ralph stops before the PR opens. */
 export type RunState = { sessionId: string; base: string; result: string; failures: string[] };
 
 function statePath(stateDir: string, task: Task): string {
   return `${stateDir}/${task.name}.json`;
-}
-
-async function loadState(stateDir: string, task: Task): Promise<RunState> {
-  return (await Bun.file(statePath(stateDir, task)).json()) as RunState;
 }
 
 /** Runs one task through to its PR. Returns whether it passed its checks. */
@@ -232,18 +207,20 @@ async function runTask(root: string, repo: Repo, stateDir: string, task: Task, b
 
     const state: RunState = { sessionId, base, result: output.result, failures };
     await Bun.write(statePath(stateDir, task), `${JSON.stringify(state, null, 2)}\n`);
-    await $`git -C ${worktree} push --no-verify --set-upstream ${REMOTE} ${branch}`;
-    return await finish(root, repo, stateDir, task, state);
+    // --force: ralph owns ralph/<task>, and a rerun replaces the last run's branch.
+    await $`git -C ${worktree} push --no-verify --force --set-upstream ${REMOTE} ${branch}`;
+    console.log(`  saved the run in ${statePath(stateDir, task)}`);
+    return await finish(root, repo, task, state);
   } finally {
     await $`git -C ${root} worktree remove --force ${worktree}`.nothrow();
   }
 }
 
 /**
- * Opens the PR of a pushed run, then pushes its capture, then forgets its saved state. The capture
- * goes last, and only warns when it fails, so the PR is never lost to it.
+ * Opens the PR of a pushed run, or updates the open one for its branch, then pushes its capture. The
+ * capture goes last, and only warns when it fails, so the PR is never lost to it.
  */
-async function finish(root: string, repo: Repo, stateDir: string, task: Task, state: RunState): Promise<boolean> {
+async function finish(root: string, repo: Repo, task: Task, state: RunState): Promise<boolean> {
   const branch = branchFor(task);
   const capture = `${CAPTURE_BRANCH_PREFIX}/${state.sessionId}`;
   const hasCapture = (await $`git -C ${root} rev-parse --verify --quiet refs/heads/${capture}`.nothrow().quiet()).exitCode === 0;
@@ -252,7 +229,12 @@ async function finish(root: string, repo: Repo, stateDir: string, task: Task, st
 
   const body = prBody(task, state.result, captureLink, state.failures);
   const title = state.failures.length === 0 ? task.name : `❌ ralph failed: ${task.name}`;
-  const url = (await $`gh ${pullRequestArgs(repo, { title, head: branch, base: state.base, body })}`.text()).trim();
+  const pr = { title, head: branch, base: state.base, body };
+  // REST, not `gh pr list`: GraphQL is blocked in Claude Code cloud sessions.
+  const open = (await $`gh api ${`repos/${repo.owner}/${repo.repo}/pulls?head=${repo.owner}:${branch}&state=open`} --jq ${".[0].number // empty"}`.text()).trim();
+  const url = open
+    ? (await $`gh api -X PATCH ${`repos/${repo.owner}/${repo.repo}/pulls/${open}`} -f ${`title=${title}`} -f ${`body=${body}`} --jq .html_url`.text()).trim()
+    : (await $`gh ${pullRequestArgs(repo, pr)}`.text()).trim();
   console.log(state.failures.length === 0 ? `  PR: ${url}` : `  failed (${state.failures.join("; ")}). PR: ${url}`);
 
   if (hasCapture) {
@@ -260,7 +242,6 @@ async function finish(root: string, repo: Repo, stateDir: string, task: Task, st
     const pushed = await $`git -C ${root} push --no-verify ${REMOTE} ${capture}`.nothrow();
     if (pushed.exitCode !== 0) console.warn(`  couldn't push ${capture}: push it by hand, the PR links to it`);
   }
-  await Bun.file(statePath(stateDir, task)).delete();
   return state.failures.length === 0;
 }
 
@@ -339,22 +320,6 @@ export function pullRequestArgs(repo: Repo, pr: PullRequest): string[] {
   ];
 }
 
-/**
- * What to do with a task:
- * - skip: it has a PR.
- * - resume: its run was saved and its branch pushed, but its PR never opened. Open it from the saved state.
- * - run: run it, afresh.
- * - orphan: its branch is on the remote with no PR and no saved state. A human decides.
- */
-export type Action = "skip" | "resume" | "run" | "orphan";
-
-export function nextAction(found: { hasPr: boolean; hasState: boolean; onRemote: boolean }): Action {
-  if (found.hasPr) return "skip";
-  if (found.onRemote) return found.hasState ? "resume" : "orphan";
-  // Saved but never pushed: ralph stopped before the push, so run it again.
-  return "run";
-}
-
 /** Moves the task file to done/ in the worktree, as its own commit, so the PR closes the task. */
 export async function moveTaskToDone(worktree: string, task: Task): Promise<void> {
   const from = `${TASKS_RELATIVE}/${task.name}.md`;
@@ -371,6 +336,12 @@ export async function moveTaskToDone(worktree: string, task: Task): Promise<void
 }
 
 /** The lowest-numbered task file in `tasksDir`, not in done/ or draft/; or null when there's none. */
-export async function firstTask(tasksDir: string): Promise<Task | null> {
+export async function firstTask(tasksDir: string, skip: ReadonlySet<string> = new Set()): Promise<Task | null> {
+  // `*.md` matches only files directly in tasksDir, so done/, draft/ and archive/ are left out.
+  for (const file of [...new Bun.Glob("*.md").scanSync(tasksDir)].sort()) {
+    const name = file.replace(/\.md$/, "");
+    if (skip.has(name)) continue;
+    return parseTask(name, `${tasksDir}/${file}`, await Bun.file(`${tasksDir}/${file}`).text());
+  }
   return null;
 }
