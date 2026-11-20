@@ -1,0 +1,281 @@
+name: Slow tests
+
+# Tests that spend real money on models, run only when asked for or before a release:
+#
+# - A `/slow-tests` comment on a PR, by the repo's owner, a member or a collaborator. GitHub only
+#   runs issue_comment workflows from the default branch, so changes to this file take effect
+#   once they're on main.
+# - The release candidate PR (branch release-candidate/main) and the stable release PR
+#   (changeset-release/main), as checks.
+# - Running the workflow by hand, from the Actions tab.
+#
+# Jobs:
+# - fly:      `/slow-tests` only. The dogfood test case `compare-models` run remotely: containers on
+#             Fly.io, images in ghcr, run data in Supabase. `/slow-tests <test case>` runs another
+#             one. The outcome is posted back as a PR comment.
+# - dogfood:  .thunderjar/'s compare-models with the local Docker daemon, as `bun run dogfood:local`.
+# - capture:  src/cli/commands/capture/capture.docker.test.ts with step 4, a real two-turn job in
+#             each harness: Claude Code on Anthropic, Codex, Copilot CLI and OpenCode on OpenRouter.
+# - report:   `/slow-tests` only. A PR comment with each job's outcome, since a run started by a
+#             comment doesn't show as a check on the PR.
+#
+# Repository secrets:
+#   FLYIO_TOKEN        Fly.io API token for the runtime's app
+#   THUNDERJAR_DB_URL  Supabase Postgres URL (the pooler one: the direct one is IPv6 only)
+#   ANTHROPIC_API_KEY  for Claude Code: in fly, dogfood and capture
+#   OPENROUTER_API_KEY for Copilot and OpenCode in fly, only in test cases with those harnesses
+#   OPENROUTER_TOKEN   for Codex, Copilot CLI and OpenCode in capture
+# Repository variables:
+#   FLY_MACHINE                   the name of CI's machine in the Fly app, e.g. tj-ci: not the one
+#                                 used for development. The workflow starts it, and stops it after.
+# Optional repository variables:
+#   FLY_APP, FLY_ORG              the Fly app and org, if not thunderjar-runtime-dwj and personal
+#   THUNDERJAR_IMAGE_REPOSITORY   if not ghcr.io/dwjohnston/thunderjar-images
+on:
+  issue_comment:
+    types: [created]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  # Whether to run at all, and what to check out: the PR's head, or the dispatched ref.
+  target:
+    if: >-
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, '/slow-tests') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(fromJSON('["changeset-release/main", "release-candidate/main"]'), github.head_ref)) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.target.outputs.sha }}
+      repo: ${{ steps.target.outputs.repo }}
+      test-case: ${{ steps.target.outputs.test-case }}
+    steps:
+      - name: Read the command, and acknowledge it
+        id: target
+        uses: actions/github-script@v8
+        with:
+          script: |
+            if (context.eventName === "pull_request") {
+              const pr = context.payload.pull_request;
+              core.setOutput("sha", pr.head.sha);
+              core.setOutput("repo", pr.head.repo.full_name);
+              return;
+            }
+            if (context.eventName === "workflow_dispatch") {
+              core.setOutput("sha", context.sha);
+              core.setOutput("repo", `${context.repo.owner}/${context.repo.repo}`);
+              return;
+            }
+            const words = context.payload.comment.body.trim().split(/\s+/);
+            if (words[0] !== "/slow-tests") return core.setFailed("Not a /slow-tests command");
+            const testCase = words[1] ?? "compare-models";
+            const reply = (body) =>
+              github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+            if (!/^[A-Za-z0-9_-]+$/.test(testCase)) {
+              await reply(`\`/slow-tests\`: \`${testCase}\` isn't a test case name.`);
+              return core.setFailed(`Bad test case name: ${testCase}`);
+            }
+            await github.rest.reactions.createForIssueComment({
+              ...context.repo,
+              comment_id: context.payload.comment.id,
+              content: "rocket",
+            });
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.issue.number });
+            // The jobs run the PR's code with the repository's secrets, so never a fork's. A deleted fork has no head repo.
+            if (pr.head.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              await reply("`/slow-tests` doesn't run on PRs from forks.");
+              return core.setFailed("PR is from a fork");
+            }
+            core.setOutput("test-case", testCase);
+            core.setOutput("sha", pr.head.sha);
+            core.setOutput("repo", pr.head.repo.full_name);
+
+  fly:
+    needs: target
+    if: github.event_name == 'issue_comment'
+    # One run at a time: they share CI's Fly machine, and each run stops it when it ends.
+    concurrency:
+      group: slow-tests-fly
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      THUNDERJAR_REMOTE: "1"
+      THUNDERJAR_IMAGE_REPOSITORY: ${{ vars.THUNDERJAR_IMAGE_REPOSITORY }}
+      FLY_APP: ${{ vars.FLY_APP }}
+      FLY_ORG: ${{ vars.FLY_ORG }}
+      FLY_MACHINE: ${{ vars.FLY_MACHINE }}
+      FLYIO_TOKEN: ${{ secrets.FLYIO_TOKEN }}
+      THUNDERJAR_DB_URL: ${{ secrets.THUNDERJAR_DB_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ needs.target.outputs.repo }}
+          ref: ${{ needs.target.outputs.sha }}
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # The action installs `flyctl`. The Fly scripts call it as `fly`.
+      - run: command -v fly || sudo ln -s "$(command -v flyctl)" /usr/local/bin/fly
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start CI's Fly machine
+        run: |
+          [ -n "$FLY_MACHINE" ] || { echo "Set the FLY_MACHINE repository variable to CI's Fly machine" >&2; exit 1; }
+          ./.thunderjar/fly-machine.sh start
+
+      - name: Run the test case
+        id: run
+        env:
+          TEST_CASE: ${{ needs.target.outputs.test-case }}
+        run: |
+          set +e
+          ./node_modules/.bin/thunderjar run "$TEST_CASE" 2>&1 | tee run.log
+          status=${PIPESTATUS[0]}
+          id=$(grep -m1 -oP '^Execution \K\S+' run.log)
+          if [ -n "$id" ]; then
+            # Nothing is recorded if the execution stopped before its first container, e.g. on a failed build.
+            if ./node_modules/.bin/thunderjar show "$id" > show.log 2>&1; then
+              echo "execution=$id" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+          exit "$status"
+
+      - name: Stop CI's Fly machine
+        # Never without FLY_MACHINE: it could stop the development machine.
+        if: always() && vars.FLY_MACHINE != ''
+        run: ./.thunderjar/fly-machine.sh stop
+
+      - name: Post the outcome
+        if: always() && needs.target.outputs.test-case != ''
+        uses: actions/github-script@v8
+        env:
+          TEST_CASE: ${{ needs.target.outputs.test-case }}
+          SHA: ${{ needs.target.outputs.sha }}
+          EXECUTION: ${{ steps.run.outputs.execution }}
+          OUTCOME: ${{ steps.run.outcome }}
+        with:
+          script: |
+            // github-script runs on Node, so this uses fs: the Bun-only rule is for Thunderjar's own code.
+            const fs = require("fs");
+            const read = (path, max) => {
+              if (!fs.existsSync(path)) return "";
+              const text = fs.readFileSync(path, "utf8").replace(/\x1b\[[0-9;]*m/g, "").trim();
+              return text.length > max ? `...\n${text.slice(-max)}` : text;
+            };
+            const { TEST_CASE, SHA, EXECUTION, OUTCOME } = process.env;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const icon = OUTCOME === "success" ? "✅" : "❌";
+            const lines = [
+              `${icon} \`/slow-tests\`: \`${TEST_CASE}\` ${OUTCOME === "success" ? "ran" : OUTCOME === "failure" ? "failed" : "didn't get to run"} on ${SHA.slice(0, 7)}. [Workflow run](${runUrl})`,
+            ];
+            if (EXECUTION) lines.push("", `Execution \`${EXECUTION}\`:`, "", "```", read("show.log", 20000), "```");
+            const log = read("run.log", 30000);
+            if (log) lines.push("", "<details><summary>Run output</summary>", "", "```", log, "```", "", "</details>");
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: lines.join("\n"),
+            });
+
+  # .thunderjar/'s compare-models, run with the installed thunderjar-published on the local Docker
+  # daemon, as `bun run dogfood:local` does.
+  dogfood:
+    needs: target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ needs.target.outputs.repo }}
+          ref: ${{ needs.target.outputs.sha }}
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # As in CI: Ubuntu 24.04's AppArmor stops containers making user namespaces, which Claude
+      # Code's sandbox needs.
+      - name: Let containers make user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Run compare-models (GitHub's Ubuntu runners have Docker)
+        run: bun run dogfood:local
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      - name: Show the execution
+        if: always()
+        run: bunx thunderjar executions
+      - name: Keep the run data and log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: dogfood-run-data
+          path: |
+            .thunderjar/.data/
+            .thunderjar/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # thunderjar capture, from a clean install, with a real two-turn job in each harness. A harness
+  # whose key is missing skips its job.
+  capture:
+    needs: target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ needs.target.outputs.repo }}
+          ref: ${{ needs.target.outputs.sha }}
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Let containers make user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull or build the sample repo image
+        run: bun run di:build:sample-repo --registry ghcr.io/${{ github.repository_owner }}/thunderjar-sample-repo --push
+      # Not `bun run test:docker`: its pattern matches every Docker test.
+      - name: Capture, with real harnesses
+        run: bun test --concurrent --timeout 900000 src/cli/commands/capture/capture.docker.test.ts
+        env:
+          THUNDERJAR_DOCKER_TESTS: "1"
+          THUNDERJAR_AGENT_TESTS: "1"
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_TOKEN }}
+
+  # A run started by a comment doesn't show as a check on the PR, so its outcome is posted there.
+  report:
+    needs: [target, fly, dogfood, capture]
+    if: always() && github.event_name == 'issue_comment' && needs.target.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          SHA: ${{ needs.target.outputs.sha }}
+          RESULTS: ${{ toJSON(needs) }}
+        with:
+          script: |
+            const results = JSON.parse(process.env.RESULTS);
+            const icon = { success: "✅", failure: "❌", cancelled: "⏹️", skipped: "⏭️" };
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const lines = [
+              `\`/slow-tests\` on ${process.env.SHA.slice(0, 7)}: [workflow run](${runUrl})`,
+              "",
+              ...["fly", "dogfood", "capture"].map((job) => `- ${icon[results[job].result] ?? "❔"} ${job}: ${results[job].result}`),
+            ];
+            await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body: lines.join("\n") });

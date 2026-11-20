@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-11T04:43:22Z",
+  "complaint": "Just asking it a question. Can probably test if agent md files will help it get there faster",
+  "capturedBy": null,
+
+  "agent": {
+    "harness": "Claude Code",
+    "harnessVersion": "2.1.322",
+    "harnessSurface": "VS Code extension",
+    "model": "claude-opus-5-5",
+    "sessionId": "a645d209-eb96-4e5b-add8-fd565efec083",
+    "transcriptPath": "~/.claude/projects/-workspace/a645d209-eb96-4e5b-add8-fd565efec083.jsonl",
+    "permissionMode": "auto"
+  },
+
+  "repository": {
+    "root": "/workspace/thunderjar",
+    "branch": "david-session-nov-11",
+    "headCommit": "f48477265210509cc8fd971d807f86410cf982ad",
+    "commitAtSessionStart": "f48477265210509cc8fd971d807f86410cf982ad",
+    "hasUncommittedChanges": false,
+    "uncommittedFiles": [],
+    "diffStat": "",
+    "commitsMadeThisSession": []
+  },
+
+  "conversation": {
+    "initialTask": {
+      "text": "We are working on thunderjar. Firstly, if I'm understanding it right - there's no concept of paralellism, evnen if we are using remote?",
+      "verbatim": true
+    },
+    "subsequentUserTurns": []
+  },
+
+  "context": {
+    "instructionFiles": ["/workspace/CLAUDE.md", "/workspace/AGENTS.md"],
+    "ideSelection": "thunderjar-evaluation-sandbox/.thunderjar/thunderjar.config.ts lines 3-15 (declareConfig with imageStore, postgresStore, runtime fly-docker.sh)",
+    "skillsAvailable": ["tj-config", "tj-eval", "cross-repo-changes", "git-always-commit", "write-for-the-human", "concise-output"],
+    "skillsInvoked": [],
+    "filesChanged": [],
+    "keyActions": [
+      "git ls-files in thunderjar plus grep for parallel/concurrency/Promise.all across *.ts",
+      "Listed src/execution and src/cli/commands/run; grepped for sequential wording",
+      "grep for loops/awaits in src/execution/runExecution.ts and src/execution/prerunBuilds.ts",
+      "Answered: execution is sequential (runExecution.ts:144-182 nested for/await loop); remote runtime is a single Fly Docker daemon"
+    ]
+  },
+
+  "agentAnalysis": {
+    "expected": "Answer the question correctly with minimal exploration.",
+    "actual": "Answered correctly, but needed three rounds of repo-wide grep/listing to find the run loop in src/execution/runExecution.ts.",
+    "suspectedCause": "No AGENTS.md guidance mapping concepts (execution loop, runtime, image store) to source files, so the agent had to search. Worth testing whether an architecture note in AGENTS.md shortens time-to-answer."
+  }
+}
