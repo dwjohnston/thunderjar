@@ -568,4 +568,14 @@ Matrix shape: 1/1/1/1/1 (1 permutation)
       examplePlan("glurk", "--prompt-set glurk", "node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   189377e4  missing"),
     );
   });
+
+  test("--base-image replaces the test case's base images", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["plan", "sandboxed", "--base-image", "node20"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toStartWith("baseImage:     node20\n");
+    expect(stdout).toContain("\noverrides:     --base-image node20\n");
+    expect(stdout).toContain("Matrix shape: 1/1/1/1/1 (1 permutation)");
+  });
 });
