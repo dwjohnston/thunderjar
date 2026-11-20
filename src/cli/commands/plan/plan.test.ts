@@ -617,4 +617,16 @@ Matrix shape: 1/1/1/1/1 (1 permutation)
     expect(stdout).toContain("\noverrides:     --code-state baseline\n");
     expect(stdout).not.toContain("follow-main");
   });
+
+
+  test("--harness-model replaces the test case's harness model pairs", async () => {
+    const pairs = "fake-harness-alpha/fake-model-small-001,fake-harness-beta/fake-model-large-001";
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example", "--harness-model", pairs], { env: KEY });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("\nharnessModel:  fake-harness-alpha/fake-model-small-001, fake-harness-beta/fake-model-large-001\n");
+    expect(stdout).toContain(`\noverrides:     --harness-model ${pairs}\n`);
+    expect(stdout).toContain("Matrix shape: 1/1/1/2/1 (2 permutations)");
+  });
 });
