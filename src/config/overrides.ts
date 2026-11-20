@@ -22,6 +22,7 @@ import type { Axis } from "./permutations.ts";
  * `showOverrides` lists them.
  */
 export const OVERRIDES = {
+  baseImage: { flag: "--base-image", what: "base images" },
   promptSet: { flag: "--prompt-set", what: "prompt sets" },
 } as const satisfies Partial<Record<Axis | "iterations", { flag: string; what: string }>>;
 
