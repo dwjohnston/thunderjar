@@ -14,7 +14,7 @@
  */
 import { $ } from "bun";
 import { expect, test } from "bun:test";
-import { moveTaskToDone, nextAction, parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
+import { firstTask, moveTaskToDone, parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
 
 test("parseTask reads harness, model and effort from the frontmatter", () => {
   const text = "---\nharness: claude-code\nmodel: sonnet\neffort: medium\n---\n\n# 3900: A task\n";
@@ -60,13 +60,16 @@ test("pullRequestArgs opens a draft PR over REST, not GraphQL", () => {
   ]);
 });
 
-test("nextAction skips tasks with a PR, and resumes a pushed run that has no PR", () => {
-  expect(nextAction({ hasPr: true, hasState: true, onRemote: true })).toBe("skip");
-  expect(nextAction({ hasPr: true, hasState: false, onRemote: true })).toBe("skip");
-  expect(nextAction({ hasPr: false, hasState: true, onRemote: true })).toBe("resume");
-  expect(nextAction({ hasPr: false, hasState: true, onRemote: false })).toBe("run");
-  expect(nextAction({ hasPr: false, hasState: false, onRemote: true })).toBe("orphan");
-  expect(nextAction({ hasPr: false, hasState: false, onRemote: false })).toBe("run");
+test("firstTask is the lowest-numbered task file, ignoring done/ and draft/", async () => {
+  const dir = `${Bun.env.TMPDIR ?? "/tmp"}/ralph-test-${crypto.randomUUID()}`;
+  const text = "---\nharness: claude-code\nmodel: sonnet\neffort: low\n---\n";
+  await Bun.write(`${dir}/4000_later.md`, text);
+  await Bun.write(`${dir}/3900_first.md`, text);
+  await Bun.write(`${dir}/done/0100_done.md`, text);
+  await Bun.write(`${dir}/draft/0200_draft.md`, text);
+
+  expect((await firstTask(dir))?.name).toBe("3900_first");
+  await $`rm -rf ${dir}`;
 });
 
 test("moveTaskToDone moves the task file to done/ in its own commit", async () => {

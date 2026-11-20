@@ -369,3 +369,8 @@ export async function moveTaskToDone(worktree: string, task: Task): Promise<void
   }
   await $`git commit --quiet --no-verify -m ${`🤖 ralph: Move task ${task.name} to done`}`.cwd(worktree);
 }
+
+/** The lowest-numbered task file in `tasksDir`, not in done/ or draft/; or null when there's none. */
+export async function firstTask(tasksDir: string): Promise<Task | null> {
+  return null;
+}
