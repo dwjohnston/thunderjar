@@ -28,7 +28,8 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, openStore } from "../../dataDir.ts";
 import { plural } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
-import { print, printError } from "../../output.ts";
+import { jsonOption } from "../../json.ts";
+import { print, printError, printJson } from "../../output.ts";
 
 const log = moduleLogger("remeasure");
 
@@ -39,9 +40,12 @@ function reasons(skipped: { reason: string }[]): string {
   return [...counts].map(([reason, runs]) => `${runs.length} ${reason}`).join(", ");
 }
 
-type Options = { dataDir?: string; imagePrefix: string };
+type Options = { dataDir?: string; imagePrefix: string; json?: boolean };
 
-async function remeasure(cwd: string, target: string, { dataDir, imagePrefix }: Options): Promise<void> {
+/** A container run, by its execution and its place in it, e.g. `1-1`. */
+type RunAt = { executionId: string; run: string };
+
+async function remeasure(cwd: string, target: string, { dataDir, imagePrefix, json = false }: Options): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const { store } = await openStore(cwd, dataDir, root);
   // An execution by its ID, or else every execution of a test case, oldest first.
@@ -53,9 +57,9 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix }: 
     process.exitCode = 1;
     return;
   }
-  let remeasured = 0;
-  let failed = 0;
-  const skipped: { executionId: string; run: string; reason: string }[] = [];
+  const remeasured: RunAt[] = [];
+  const skipped: (RunAt & { reason: string })[] = [];
+  const failed: (RunAt & { error: string })[] = [];
   for (const execution of executions) {
     const measurements = await loadMeasurements(root, execution.task);
     for (const run of await store.containerRunsOf(execution.executionId)) {
@@ -74,18 +78,19 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix }: 
         const message = error instanceof Error ? error.message : String(error);
         log.warn({ ...at, error: message }, "couldn't remeasure");
         printError(`Couldn't remeasure ${execution.executionId} ${runName(run)}: ${message}`);
-        failed++;
+        failed.push({ executionId: execution.executionId, run: runName(run), error: message });
         continue;
       }
       log.info({ ...at, result }, "remeasured");
       await store.recordContainerRun(withNewResult(run, result));
-      remeasured++;
+      remeasured.push({ executionId: execution.executionId, run: runName(run) });
     }
   }
-  if (failed > 0) process.exitCode = 1;
+  if (failed.length > 0) process.exitCode = 1;
   const skips = skipped.length === 0 ? "" : `, skipped ${skipped.length} (${reasons(skipped)})`;
-  print(`remeasured ${plural(remeasured, "run")}${skips}${failed === 0 ? "" : `, ${failed} failed`}`);
+  print(`remeasured ${plural(remeasured.length, "run")}${skips}${failed.length === 0 ? "" : `, ${failed.length} failed`}`);
   for (const { executionId, run, reason } of skipped) print(`  ${executionId} ${run}  ${reason}`);
+  if (json) printJson({ remeasured, skipped, failed });
 }
 
 export function createRemeasureCommand(): Command {
@@ -96,6 +101,7 @@ export function createRemeasureCommand(): Command {
     .argument("<test case | execution>", "an execution's ID, as listed by `thunderjar executions`, or a test case's name, for every past execution of it")
     .addOption(dataDirOption())
     .addOption(imagePrefixOption())
+    .addOption(jsonOption())
     .action(
       reportingConfigErrors(async (target: string, options: Options) => {
         await remeasure(process.cwd(), target, options);
