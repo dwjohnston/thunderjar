@@ -639,4 +639,19 @@ describe("run --json", () => {
       }),
     );
   });
+
+
+  test("--dry-run with overrides: the overrides, and the permutations they make", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(
+      scenario("0202"),
+      ["run", "example", "--dry-run", "--json", "--prompt-set", "glurk", "--iterations", "2"],
+      { env: KEY },
+    );
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const plan = JSON.parse(stdout);
+    expect(plan.overrides).toEqual({ promptSet: ["glurk"], iterations: 2 });
+    expect(plan.permutations.map(({ parameters }: { parameters: { promptSet: string } }) => parameters.promptSet)).toEqual(["glurk"]);
+  });
 });
