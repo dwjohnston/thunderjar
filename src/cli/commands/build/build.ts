@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
+import type { Overrides } from "../../../config/overrides.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
 import { DockerBuildError, DockerPushError, DockerUnavailableError, localRuntime, remoteRuntime } from "../../../docker/docker.ts";
@@ -12,25 +13,31 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { pushFailure } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
+import { overridesOf, withOverrideOptions } from "../../overrides.ts";
 import { print, printError, printJson } from "../../output.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /**
  * Each prerun image test case `name` needs, of the nearest `.thunderjar/` folder in `cwd` or above
- * it, with its Dockerfile. Permutations with the same image hash share one image. Docker isn't
- * asked anything.
+ * it, each list `overrides` gives in place of its own, with its Dockerfile. Permutations with the
+ * same image hash share one image. Docker isn't asked anything.
  */
-export async function prerunDockerfiles(cwd: string, name: string, imagePrefix?: string): Promise<{ prerunImage: string; dockerfile: string }[]> {
+export async function prerunDockerfiles(
+  cwd: string,
+  name: string,
+  imagePrefix?: string,
+  overrides: Overrides = {},
+): Promise<{ prerunImage: string; dockerfile: string }[]> {
   const root = await findThunderjarRoot(cwd);
-  const testCase = await loadTestCase(root, name);
+  const testCase = await loadTestCase(root, name, overrides);
   const permutations = await hashPermutations(root, testCase);
   const unique = [...new Map(permutations.map((permutation) => [permutation.imageHash, permutation])).values()];
   return unique.map(({ imageHash, dockerfile }) => ({ prerunImage: prerunImage(imageHash, imagePrefix), dockerfile }));
 }
 
 /** Each prerun image test case `name` needs, as `# <image>`, then its Dockerfile. See `prerunDockerfiles`. */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain): Promise<string> {
-  const images = await prerunDockerfiles(cwd, name, imagePrefix);
+export async function dryRun(cwd: string, name: string, imagePrefix?: string, paint: Paint = plain, overrides: Overrides = {}): Promise<string> {
+  const images = await prerunDockerfiles(cwd, name, imagePrefix, overrides);
   return images.map(({ prerunImage, dockerfile }) => `${paint.bold("#")} ${paint.cyan(prerunImage)}\n${dockerfile.trimEnd()}`).join("\n\n");
 }
 
@@ -43,14 +50,15 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string, pa
  * image store, pushes each of them, writing `Pushing <reference> ... done`, then a count. Exits 1
  * with an error if a build secret's variable is unset, Docker can't be reached, has no login for the
  * image store's registry (before anything is built), or a build or push fails. With `json`, prints
- * the images built, those already present and the references pushed as JSON once it's done.
+ * the images built, those already present and the references pushed as JSON once it's done. Each
+ * list `overrides` gives replaces the test case's own.
  */
-async function build(cwd: string, name: string, imagePrefix?: string, json = false, local = false): Promise<void> {
+async function build(cwd: string, name: string, imagePrefix?: string, json = false, local = false, overrides: Overrides = {}): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const { imageStore, build: buildOptions, runtime: config } = await loadProjectConfig(root);
   // Where images are built, and pushed from: the runtime, which runs them, unless --local.
   const runtime = local || config === null ? localRuntime() : remoteRuntime(config.command);
-  const testCase = await loadTestCase(root, name);
+  const testCase = await loadTestCase(root, name, overrides);
   checkBuildSecrets(buildOptions);
   const permutations = await hashPermutations(root, testCase);
   const concurrent = buildOptions.concurrency > 1;
@@ -110,7 +118,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
 }
 
 export function createBuildCommand(): Command {
-  return new Command("build")
+  return withOverrideOptions(new Command("build"))
     .description(
       "Build the prerun Docker image of each permutation of a test case, unless it already exists. Permutations with the same hash share one image. With a runtime in thunderjar.config.ts, they're built on its Docker daemon, unless --local is given. With an image store, each is then pushed there, after checking your docker login for its registry.",
     )
@@ -120,10 +128,11 @@ export function createBuildCommand(): Command {
     .addOption(imagePrefixOption())
     .addOption(jsonOption())
     .action(
-      reportingConfigErrors(async (name: string, options: { dryRun?: boolean; imagePrefix: string; json?: boolean; local?: boolean }) => {
-        if (options.dryRun && options.json) printJson(await prerunDockerfiles(process.cwd(), name, options.imagePrefix));
-        else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter()));
-        else await build(process.cwd(), name, options.imagePrefix, options.json, options.local);
+      reportingConfigErrors(async (name: string, options: Overrides & { dryRun?: boolean; imagePrefix: string; json?: boolean; local?: boolean }) => {
+        const overrides = overridesOf(options);
+        if (options.dryRun && options.json) printJson(await prerunDockerfiles(process.cwd(), name, options.imagePrefix, overrides));
+        else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter(), overrides));
+        else await build(process.cwd(), name, options.imagePrefix, options.json, options.local, overrides);
       }),
     );
 }
