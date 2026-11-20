@@ -1,9 +1,9 @@
 import { Command, InvalidArgumentError, Option } from "commander";
-import type { TestCaseDeclaration } from "../../../api/declarations.ts";
 import { RUN_SCRIPT_PATH } from "../../../api/files.ts";
 import { ConfigError, FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import { AXES } from "../../../config/permutations.ts";
 import { checkBuildSecrets, isConcurrency, loadProjectConfig } from "../../../config/projectConfig.ts";
+import { givenOverrides, type Overrides } from "../../../config/overrides.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { DockerUnavailableError } from "../../../docker/docker.ts";
@@ -23,6 +23,7 @@ import { dataDirOption, displayPath, type OpenStore, openStore } from "../../dat
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { envEntry } from "../../format.ts";
 import { jsonOption } from "../../json.ts";
+import { overridesOf, withOverrideOptions } from "../../overrides.ts";
 import { print, printError as error, printJson, printWarning } from "../../output.ts";
 import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.ts";
 import { runDisplay, showSecrets, showTimings, showUnclean, showUnsearched, storeFailure } from "./runDisplay.ts";
@@ -67,13 +68,14 @@ export function renderExecution({ executionId, permutations }: PlannedExecution,
 }
 
 /**
- * A dry run as `run --dry-run --json` prints it: what `renderExecution` shows, and each
- * permutation's parameters. Each permutation's `env` is its harness's variables' names; its test
- * case's are `testCaseEnv`, with their values, and `secretEnv`, names only.
+ * A dry run as `run --dry-run --json` prints it: what `renderExecution` shows, the overrides
+ * given, and each permutation's parameters. Each permutation's `env` is its harness's variables'
+ * names; its test case's are `testCaseEnv`, with their values, and `secretEnv`, names only.
  */
-export function executionPlanJson({ executionId, permutations }: PlannedExecution) {
+export function executionPlanJson({ executionId, permutations }: PlannedExecution, overrides: Overrides = {}) {
   return {
     executionId,
+    overrides: givenOverrides(overrides),
     permutations: permutations.map(({ number, permutation, prerunImage, env, testCaseEnv, secretEnv, runOptions, timeoutSeconds, version, iterations }) => ({
       number,
       parameters: Object.fromEntries(AXES.map((axis) => [axis, permutation[axis]])) as Record<(typeof AXES)[number], string>,
@@ -92,22 +94,21 @@ export function executionPlanJson({ executionId, permutations }: PlannedExecutio
   };
 }
 
-/** `testCase`, with `iterations` in place of its own, if given. */
-const withIterations = (testCase: TestCaseDeclaration, iterations?: number): TestCaseDeclaration =>
-  iterations === undefined ? testCase : { ...testCase, iterations };
-
-/** What an execution of test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it, would do. */
-export async function planDryRun(cwd: string, name: string, imagePrefix?: string, iterations?: number): Promise<PlannedExecution> {
+/**
+ * What an execution of test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it,
+ * would do, each list `overrides` gives in place of its own.
+ */
+export async function planDryRun(cwd: string, name: string, imagePrefix?: string, overrides: Overrides = {}): Promise<PlannedExecution> {
   const root = await findThunderjarRoot(cwd);
   const executionId = ulid();
-  const testCase = withIterations(await loadTestCase(root, name), iterations);
+  const testCase = await loadTestCase(root, name, overrides);
   await checkRequiredEnv(root, testCase);
   return planExecution(root, testCase, executionId, imagePrefix);
 }
 
 /** What an execution of test case `name` would do, as text. See `planDryRun`. */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string, iterations?: number, paint: Paint = plain): Promise<string> {
-  return renderExecution(await planDryRun(cwd, name, imagePrefix, iterations), paint);
+export async function dryRun(cwd: string, name: string, imagePrefix?: string, overrides: Overrides = {}, paint: Paint = plain): Promise<string> {
+  return renderExecution(await planDryRun(cwd, name, imagePrefix, overrides), paint);
 }
 
 /** How long an interrupted `run` waits for its execution to be recorded as failed, before it runs afterExecution. */
@@ -129,7 +130,7 @@ const INTERRUPT_SETTLE_MS = 15_000;
  * prerun image has one line instead, rewritten in place as it goes, with how long its current
  * step has taken counting up.
  *
- * Runs `iterations` of each permutation, if given, instead of the test case's.
+ * Each list `overrides` gives, or its iterations, replaces the test case's own.
  *
  * With `json`, once the execution is recorded, prints it as JSON, with where it's recorded and each
  * of its container runs' records, whether it's complete or failed. If it stops on an error, prints
@@ -142,7 +143,7 @@ async function run(
   dataDir?: string,
   local = false,
   concurrencyOption?: number,
-  iterations?: number,
+  overrides: Overrides = {},
   json = false,
   showsTimings = false,
 ): Promise<void> {
@@ -158,7 +159,7 @@ async function run(
   }
   const concurrency = concurrencyOption ?? runtime?.concurrency ?? 1;
   const concurrent = runsConcurrently(concurrency, build);
-  const testCase = withIterations(await loadTestCase(root, name), iterations);
+  const testCase = await loadTestCase(root, name, overrides);
   await checkRequiredEnv(root, testCase);
   checkBuildSecrets(build);
   try {
@@ -317,7 +318,7 @@ async function run(
 }
 
 export function createRunCommand(): Command {
-  return new Command("run")
+  return withOverrideOptions(new Command("run"))
     .description(
       "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, builds the prerun images on it and runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency. Builds up to the config's build concurrency of prerun images at once. With more than one of either, each iteration starts as soon as its own prerun image is ready. --iterations overrides the test case's iterations.",
     )
@@ -334,12 +335,6 @@ export function createRunCommand(): Command {
         return n;
       }),
     )
-    .addOption(
-      new Option("--iterations <n>", "run <n> iterations of each permutation, instead of the test case's iterations").argParser((value: string) => {
-        if (!/^\d+$/.test(value) || Number(value) < 1) throw new InvalidArgumentError("It must be a whole number, 1 or more.");
-        return Number(value);
-      }),
-    )
     .option("--timings", "once the execution ends, print how long each of its phases took: builds, pushes, pulls, agents, commits and measuring")
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())
@@ -348,11 +343,12 @@ export function createRunCommand(): Command {
       reportingConfigErrors(
         async (
           name: string,
-          options: { dryRun?: boolean; local?: boolean; concurrency?: number; iterations?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean },
+          options: Overrides & { dryRun?: boolean; local?: boolean; concurrency?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean },
         ) => {
-          if (options.dryRun && options.json) printJson(executionPlanJson(await planDryRun(process.cwd(), name, options.imagePrefix, options.iterations)));
-          else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, options.iterations, painter()));
-          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, options.iterations, options.json, options.timings);
+          const overrides = overridesOf(options);
+          if (options.dryRun && options.json) printJson(executionPlanJson(await planDryRun(process.cwd(), name, options.imagePrefix, overrides), overrides));
+          else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, overrides, painter()));
+          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, overrides, options.json, options.timings);
         },
       ),
     );
