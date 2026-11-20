@@ -640,4 +640,13 @@ Matrix shape: 1/1/1/1/1 (1 permutation)
     expect(stdout).toContain("\noverrides:     --initial-prompt plain,terse\n");
     expect(stdout).toContain("Matrix shape: 1/1/1/1/2 (2 permutations)");
   });
+
+
+  test("--iterations replaces the test case's iterations", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example", "--iterations", "3"], { env: KEY });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("\noverrides:     --iterations 3\n");
+  });
 });
