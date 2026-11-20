@@ -621,4 +621,13 @@ Matrix shape: 1/1/1/1/1 (1 permutation)
     expect(exitCode).toBe(0);
     expect(stdout).toContain("\noverrides:     --iterations 3\n");
   });
+
+
+  test("an unknown name fails, listing the known ones", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0209"), ["plan", "follow-main", "--code-state", "nope"]);
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe('Error: Unknown code state "nope". Known: baseline, follow-main.\n');
+    expect(exitCode).toBe(1);
+  });
 });
