@@ -56,6 +56,12 @@ export async function remeasureContainerRun(
   );
 }
 
+/** Why `record` can't be remeasured, or undefined if it can. */
+export function skipReason(record: ContainerRunRecord): string | undefined {
+  if (record.postrunPurge !== undefined) return "postrun image purged";
+  return undefined;
+}
+
 /** `record` with `result` its latest measures, and those it had kept beside them, as an earlier version. */
 export const withNewResult = (record: ContainerRunRecord, result: Record<string, RecordedMeasure>): ContainerRunRecord => ({
   ...record,
