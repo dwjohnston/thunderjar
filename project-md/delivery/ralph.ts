@@ -17,19 +17,17 @@
 // A single-node ralph loop over the delivery tasks. Each iteration:
 //
 //   1. Picks the lowest-numbered task file in tasks/: not in archive/, done/ or draft/.
-//   2. Makes a worktree from origin/<base> on ralph/<task>. <base> is --base, or the branch ralph runs from.
+//   2. Makes a worktree on ralph/<task>, from the previous task's branch, so tasks stack; the first
+//      from origin/<base>. <base> is --base, or the branch ralph runs from.
 //   3. Runs `claude -p` on it, with capture on the branch store, under a session ID made here.
-//   4. Moves the task file to done/, as its own commit.
-//   5. Checks it: no error, at least one commit by the agent, lint, typecheck and tests pass.
-//   6. Saves the run's state in .git/ralph/<task>.json, then force-pushes ralph/<task>, which ralph owns.
-//   7. Opens a draft PR, whose description is the agent's final message, or updates the branch's open one.
-//   8. Pushes the session's capture branch, thunderjar/capture/<session>, and only that one. A failure only warns.
+//   4. Moves the task file to done/, with the run in its frontmatter, as its own commit.
+//   5. Force-pushes ralph/<task>, which ralph owns.
+//   6. Opens a draft PR into the branch it started from, whose description is the agent's final message.
+//   7. Pushes the session's capture branch, thunderjar/capture/<session>, and only that one.
 //
 // GitHub is reached over REST (`gh api`), never GraphQL, which Claude Code cloud sessions block.
 // A task is done once its file is in done/ on the base branch, i.e. once its PR is merged. Until then a
-// rerun runs it again.
-// A failed task still gets its branch, capture and PR, titled "❌ ralph failed: …", then the loop stops:
-// tasks are ordered by prerequisite, so later ones would build on a gap.
+// new run of ralph runs it again.
 import { $ } from "bun";
 import { Command, InvalidArgumentError } from "commander";
 
@@ -102,7 +100,6 @@ export async function main(options: Options): Promise<void> {
   const base = await defaultBase(root, options.base);
   await $`git -C ${root} fetch --quiet ${REMOTE} ${base}`;
   const repo = await remoteRepo(root);
-  const stateDir = `${(await $`git -C ${root} rev-parse --path-format=absolute --git-common-dir`.text()).trim()}/ralph`;
   // A task moves to done/ on its own branch, so this checkout still has it until its PR is merged.
   const ran = new Set<string>();
   let previous: Task | null = null;
@@ -115,9 +112,7 @@ export async function main(options: Options): Promise<void> {
     }
     ran.add(task.name);
     console.log(`[${iteration}/${options.max}] ${task.name} (${task.harness}, ${task.model}, effort ${task.effort})`);
-    if (!(await runTask(root, repo, stateDir, task, branchFrom(base, previous), options))) {
-      throw new Error(`${task.name} failed: see its draft PR. Stopping, since later tasks may depend on it.`);
-    }
+    await runTask(root, repo, task, branchFrom(base, previous), options);
     previous = task;
   }
 }
@@ -177,106 +172,74 @@ export function claudeArgs(task: Task, sessionId: string, budgetUsd: number): st
   ];
 }
 
-/** What a run left, saved before anything is pushed, so it isn't lost if ralph stops before the PR opens. */
-export type RunState = { sessionId: string; base: string; result: string; failures: string[] };
-
-function statePath(stateDir: string, task: Task): string {
-  return `${stateDir}/${task.name}.json`;
-}
-
-/** Runs one task through to its PR. Returns whether it passed its checks. */
-async function runTask(root: string, repo: Repo, stateDir: string, task: Task, base: string, options: Options): Promise<boolean> {
+/** Runs one task through to its draft PR, branched from `from`, the base or the previous task's branch. */
+async function runTask(root: string, repo: Repo, task: Task, from: string, options: Options): Promise<void> {
   const sessionId = crypto.randomUUID();
   const branch = branchFor(task);
+  const capture = `${CAPTURE_BRANCH_PREFIX}/${sessionId}`;
   const args = claudeArgs(task, sessionId, options.budgetUsd);
   if (options.dryRun) {
-    console.log(`branch: ${branch} from ${REMOTE}/${base}\nsession: ${sessionId}\nclaude ${args.map((arg) => JSON.stringify(arg)).join(" ")}`);
-    return true;
+    console.log(`branch: ${branch} from ${REMOTE}/${from}\nsession: ${sessionId}\nclaude ${args.map((arg) => JSON.stringify(arg)).join(" ")}`);
+    return;
   }
 
   const worktree = `${Bun.env.TMPDIR ?? "/tmp"}/thunderjar-ralph/${task.name}`;
-  await $`git -C ${root} worktree add -B ${branch} ${worktree} ${REMOTE}/${base}`;
+  await $`git -C ${root} worktree add -B ${branch} ${worktree} ${REMOTE}/${from}`;
   try {
     await $`bun install --frozen-lockfile`.cwd(worktree);
 
     // The capture hooks in .claude/settings.json record the session; the branch store makes it a branch.
+    const date = new Date().toISOString();
     const run = await $`claude ${args}`.cwd(worktree).env({ ...Bun.env, THUNDERJAR_CAPTURE_STORE: "branch" }).nothrow().quiet();
     const output = parseClaudeOutput(run.stdout.toString());
-    const commits = Number((await $`git -C ${worktree} rev-list --count ${REMOTE}/${base}..HEAD`.text()).trim());
-    await moveTaskToDone(worktree, task);
-    const failures = await check(worktree, run.exitCode, output, commits);
+    await moveTaskToDone(worktree, task, {
+      session: sessionId,
+      capture,
+      branchedFrom: from,
+      date,
+      costUsd: output.costUsd,
+      durationMs: output.durationMs,
+      isError: output.isError || run.exitCode !== 0,
+    });
 
-    const state: RunState = { sessionId, base, result: output.result, failures };
-    await Bun.write(statePath(stateDir, task), `${JSON.stringify(state, null, 2)}\n`);
     // --force: ralph owns ralph/<task>, and a rerun replaces the last run's branch.
     await $`git -C ${worktree} push --no-verify --force --set-upstream ${REMOTE} ${branch}`;
-    console.log(`  saved the run in ${statePath(stateDir, task)}`);
-    return await finish(root, repo, task, state);
+    const captureLink = `https://github.com/${repo.owner}/${repo.repo}/tree/${capture}`;
+    const pr = { title: task.name, head: branch, base: from, body: prBody(task, output.result, captureLink) };
+    console.log(`  PR: ${(await $`gh ${pullRequestArgs(repo, pr)}`.text()).trim()}`);
+    // `thunderjar capture push` pushes every capture; this pushes just this session's.
+    await $`git -C ${root} push --no-verify ${REMOTE} ${capture}`;
   } finally {
     await $`git -C ${root} worktree remove --force ${worktree}`.nothrow();
   }
 }
 
-/**
- * Opens the PR of a pushed run, or updates the open one for its branch, then pushes its capture. The
- * capture goes last, and only warns when it fails, so the PR is never lost to it.
- */
-async function finish(root: string, repo: Repo, task: Task, state: RunState): Promise<boolean> {
-  const branch = branchFor(task);
-  const capture = `${CAPTURE_BRANCH_PREFIX}/${state.sessionId}`;
-  const hasCapture = (await $`git -C ${root} rev-parse --verify --quiet refs/heads/${capture}`.nothrow().quiet()).exitCode === 0;
-  if (!hasCapture) console.warn(`  no capture branch ${capture}: are the capture hooks installed?`);
-  const captureLink = hasCapture ? `https://github.com/${repo.owner}/${repo.repo}/tree/${capture}` : null;
-
-  const body = prBody(task, state.result, captureLink, state.failures);
-  const title = state.failures.length === 0 ? task.name : `❌ ralph failed: ${task.name}`;
-  const pr = { title, head: branch, base: state.base, body };
-  // REST, not `gh pr list`: GraphQL is blocked in Claude Code cloud sessions.
-  const open = (await $`gh api ${`repos/${repo.owner}/${repo.repo}/pulls?head=${repo.owner}:${branch}&state=open`} --jq ${".[0].number // empty"}`.text()).trim();
-  const url = open
-    ? (await $`gh api -X PATCH ${`repos/${repo.owner}/${repo.repo}/pulls/${open}`} -f ${`title=${title}`} -f ${`body=${body}`} --jq .html_url`.text()).trim()
-    : (await $`gh ${pullRequestArgs(repo, pr)}`.text()).trim();
-  console.log(state.failures.length === 0 ? `  PR: ${url}` : `  failed (${state.failures.join("; ")}). PR: ${url}`);
-
-  if (hasCapture) {
-    // `thunderjar capture push` pushes every capture; this pushes just this session's.
-    const pushed = await $`git -C ${root} push --no-verify ${REMOTE} ${capture}`.nothrow();
-    if (pushed.exitCode !== 0) console.warn(`  couldn't push ${capture}: push it by hand, the PR links to it`);
-  }
-  return state.failures.length === 0;
-}
-
-type ClaudeOutput = { isError: boolean; result: string };
+type ClaudeOutput = { isError: boolean; result: string; costUsd: number | null; durationMs: number | null };
 
 /** Reads `claude -p --output-format json`'s result. Anything unreadable counts as an error. */
 export function parseClaudeOutput(stdout: string): ClaudeOutput {
   try {
-    const json = JSON.parse(stdout) as { is_error?: boolean; result?: unknown };
-    return { isError: json.is_error === true, result: typeof json.result === "string" ? json.result : "" };
+    const json = JSON.parse(stdout) as { is_error?: boolean; result?: unknown; total_cost_usd?: unknown; duration_ms?: unknown };
+    return {
+      isError: json.is_error === true,
+      result: typeof json.result === "string" ? json.result : "",
+      costUsd: typeof json.total_cost_usd === "number" ? json.total_cost_usd : null,
+      durationMs: typeof json.duration_ms === "number" ? json.duration_ms : null,
+    };
   } catch {
-    return { isError: true, result: stdout };
+    return { isError: true, result: stdout, costUsd: null, durationMs: null };
   }
 }
 
-/** Why the task failed; empty when it passed. */
-async function check(worktree: string, exitCode: number, output: ClaudeOutput, commits: number): Promise<string[]> {
-  const failures: string[] = [];
-  if (exitCode !== 0) failures.push(`claude exited ${exitCode}`);
-  if (output.isError) failures.push("claude reported an error");
-  if (commits === 0) failures.push("no commits");
-  for (const script of ["lint", "typecheck", "test"]) {
-    const result = await $`bun run ${script}`.cwd(worktree).nothrow().quiet();
-    if (result.exitCode !== 0) failures.push(`bun run ${script} failed`);
-  }
-  return failures;
-}
-
-export function prBody(task: Task, result: string, captureLink: string | null, failures: string[]): string {
-  const lines = [result.trim() || "_The agent gave no final message._", "", "---", ""];
-  if (failures.length > 0) lines.push(`**Ralph checks failed:** ${failures.join("; ")}`, "");
-  lines.push(`Ralph loop task: \`${task.name}\` (${task.harness}, ${task.model}, effort ${task.effort})`);
-  lines.push(captureLink ? `Capture: ${captureLink}` : "Capture: none was recorded.");
-  return lines.join("\n");
+export function prBody(task: Task, result: string, captureLink: string): string {
+  return [
+    result.trim() || "_The agent gave no final message._",
+    "",
+    "---",
+    "",
+    `Ralph loop task: \`${task.name}\` (${task.harness}, ${task.model}, effort ${task.effort})`,
+    `Capture: ${captureLink}`,
+  ].join("\n");
 }
 
 function positiveNumber(value: string): number {
@@ -332,19 +295,24 @@ export type RunInfo = {
   isError: boolean;
 };
 
-/** Moves the task file to done/ in the worktree, as its own commit, so the PR closes the task. */
-export async function moveTaskToDone(worktree: string, task: Task, _run?: RunInfo): Promise<void> {
+/** Moves the task file to done/ in the worktree, with the run added to its frontmatter, as its own commit. */
+export async function moveTaskToDone(worktree: string, task: Task, run: RunInfo): Promise<void> {
   const from = `${TASKS_RELATIVE}/${task.name}.md`;
   const to = `${TASKS_RELATIVE}/done/${task.name}.md`;
-  if (await Bun.file(`${worktree}/${to}`).exists()) return;
-  if (await Bun.file(`${worktree}/${from}`).exists()) {
-    await $`mkdir -p ${TASKS_RELATIVE}/done && git mv ${from} ${to}`.cwd(worktree);
-  } else {
-    // The base branch doesn't have the task file: add it, as done.
-    await Bun.write(`${worktree}/${to}`, task.text);
-    await $`git add ${to}`.cwd(worktree);
-  }
+  // The base branch may not have the task file, or the agent may have moved it: use what's there.
+  const moved = !(await Bun.file(`${worktree}/${from}`).exists());
+  const existing = moved ? Bun.file(`${worktree}/${to}`) : Bun.file(`${worktree}/${from}`);
+  const text = (await existing.exists()) ? await existing.text() : task.text;
+  if (!moved) await $`mkdir -p ${TASKS_RELATIVE}/done && git mv ${from} ${to}`.cwd(worktree);
+  await Bun.write(`${worktree}/${to}`, withRun(text, run));
+  await $`git add ${to}`.cwd(worktree);
   await $`git commit --quiet --no-verify -m ${`🤖 ralph: Move task ${task.name} to done`}`.cwd(worktree);
+}
+
+/** The task file's text, with `ralph:` and the run's fields appended to its frontmatter. */
+function withRun(text: string, run: RunInfo): string {
+  const fields = Object.entries(run).map(([key, value]) => `  ${key}: ${JSON.stringify(value)}`);
+  return text.replace(/^(---\n[\s\S]*?)\n---\n/, (_, head: string) => `${head}\nralph:\n${fields.join("\n")}\n---\n`);
 }
 
 /** The lowest-numbered task file in `tasksDir`, not in done/ or draft/; or null when there's none. */
