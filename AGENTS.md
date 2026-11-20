@@ -189,7 +189,7 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
 | `show`       | Show recorded results for an execution or a container run.                         |
 | `compare`    | Compare two executions.                                                            |
 | `remeasure`  | Apply the current measurements to past runs.                                       |
-| `restore`    | Bring a container run's end state into the current repository.                     |
+| `checkout`   | Bring a container run's end state back, as a branch or a shell, to inspect it.        |
 
 ## Test types
 
