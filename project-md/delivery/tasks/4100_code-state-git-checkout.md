@@ -46,9 +46,21 @@ export default codeStateGitCheckout({ repo, tag: "v0.4.0" });
    - Tags are peeled (`refs/tags/<tag>^{}`), so annotated tags give their commit.
 3. Fetches the commit directly (`git fetch origin <sha>`), not a plain clone.
    - Squash-merged commits work, on hosts that allow it (GitHub does).
-4. Then replaces the hand-written fragments in `.thunderjar/parameters/codeStates/`.
 
 Out of scope: a subfolder to start in, installing dependencies.
+
+## Migrate the evals
+
+Convert this repository's code states in `.thunderjar/parameters/codeStates/` to `codeStateGitCheckout`.
+
+- Keep each one's tag or commit, and its comment saying why, so the image stays the same.
+- Today all 9 clone this repository at a tag and remove `origin`. Some also need things this task leaves out of scope:
+  - Installs dependencies: `thunderjar-main`, `thunderjar-gauntlet`, `thunderjar-security-assessment`, `tj-eval-blacksheepcode-start`, `tj-eval-blacksheepcode-new-skills`.
+  - Starts in a subfolder: `thunderjar-nested-skills-a`, `thunderjar-nested-skills-root`.
+  - So expect `thunderjar-start` and `thunderjar-humans-md` to convert, if the helper also removes `origin`.
+- Check: `bun run tj plan <test case>` is unchanged for every test case that uses a converted code state.
+
+"If appropriate" means: convert it only where the new helper gives the same result. Leave the rest as they are, and list each one in the PR description with the reason. Leave `fixtures/` alone: tests rely on its files as written.
 
 ## Example CLI Output
 

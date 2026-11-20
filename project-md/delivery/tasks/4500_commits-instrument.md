@@ -59,6 +59,14 @@ export type Commit = {
 2. The count is `v.length`.
 3. The author is left out: in a run it's always the agent.
 
+## Migrate the evals
+
+Convert the measurements in `.thunderjar/parameters/tasks/*/measurements/` that read the agent's commits, e.g. with `git log` or `git rev-list` in a `shell` instrument, to `commits`.
+
+- None do today. Search again when doing the task, and say "none" in the PR if that's still true.
+
+"If appropriate" means: convert it only where the new helper gives the same result. Leave the rest as they are, and list each one in the PR description with the reason. Leave `fixtures/` alone: tests rely on its files as written.
+
 ## Example CLI Output
 
 A measurement that scores red/green TDD:

@@ -31,8 +31,17 @@ minor
 ## Artifacts
 
 - Adds `opencode()` to `src/api`, exported like `claudeCode`.
-- The harness declarations in `.thunderjar/parameters/harnessModels/` use it instead of their own parsing.
 - `init`'s starter harnesses use it too.
+
+## Migrate the evals
+
+Convert every harness declaration for this harness in `.thunderjar/parameters/harnessModels/` to the helper, e.g. `opencode-1.19.5`.
+
+- Replace its own JSONL parsing of the reply and token costs with the helper.
+- Keep its version, install fragment and run command.
+- Check: `bun run tj plan compare-harnesses` is unchanged.
+
+"If appropriate" means: convert it only where the new helper gives the same result. Leave the rest as they are, and list each one in the PR description with the reason. Leave `fixtures/` alone: tests rely on its files as written.
 
 ## Example CLI Output
 
