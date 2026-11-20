@@ -101,7 +101,7 @@ async function purgeCapture(cwd: string, sessions: string[], options: CaptureOpt
   if (options.dryRun) return void print(`${plural(targets.length, "session")} would be deleted.`);
   if (!options.yes) {
     if (!process.stdin.isTTY) return fail("Not deleting without asking, and there's no terminal to ask on. Pass --yes to delete, or --dry-run to see what would be.");
-    const where = places.local ? "" : ` from ${remote}`;
+    const where = !places.remote ? "" : places.local ? `, here and from ${remote}` : ` from ${remote}`;
     if (!(await confirm(`Delete them${where}?`))) return void print("Nothing was deleted.");
   }
   try {
@@ -120,8 +120,8 @@ export function createPurgeCaptureCommand(): Command {
     .addOption(olderThanOption("sessions"))
     .option("--all", "every captured session")
     .addOption(new Option("--verdict <verdict>", "only sessions with this verdict, as `capture list` shows it").choices(VERDICTS))
-    .addOption(new Option("--from <place>", "where from: this repository, the remote, or both").choices(PURGE_FROM.filter((place) => place !== "all")).default("local"))
-    .option("--remote <name>", "the remote, with --from remote", "origin")
+    .addOption(new Option("--from <place>", "where from: this repository, the remote, or both").choices(PURGE_FROM).default("local"))
+    .option("--remote <name>", "the remote, with --from remote or all", "origin")
     .option("-y, --yes", "don't ask first")
     .option("--dry-run", "only say what would be deleted")
     .action(async (sessions: string[], options: CaptureOptions) => {
