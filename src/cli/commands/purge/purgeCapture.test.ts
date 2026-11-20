@@ -167,3 +167,25 @@ test("--from all deletes the session here and on the remote", async () => {
   expect(localRefs()).toEqual(others);
   expect(remoteRefs()).toEqual(others);
 });
+
+test("--json: the sessions, with their refs in each place, and nothing else on stdout", async () => {
+  const { stdout, stderr, exitCode } = await purge(["--verdict", "one-shot", "--dry-run", "--json"]);
+
+  expect(exitCode).toBe(0);
+  expect(stderr).toEndWith("1 session would be deleted.\n");
+  expect(JSON.parse(stdout)).toEqual({
+    dryRun: true,
+    from: "local",
+    remote: null,
+    sessions: [
+      {
+        session: "new-one-shot",
+        verdict: "one-shot",
+        startedAt: expect.any(String),
+        prompt: "Add a --json flag to show\nand more",
+        local: ["refs/heads/thunderjar/capture/new-one-shot"],
+        remote: [],
+      },
+    ],
+  });
+});
