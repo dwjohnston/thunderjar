@@ -43,11 +43,35 @@ In each run, the ref is then in the prerun image, and still in the postrun image
 
 ## Example CLI Output
 
-None: no command changes. Inside a measurement container:
+`build --dry-run` prints the new step in each prerun Dockerfile, after the code state and prompt set fragments. The image's hash changes with it.
+
+e.g. the first permutation of this repository's `humans-md` test case, whose prompt set adds nothing:
+
+```diff
+ $ thunderjar build humans-md --dry-run
+-# thunderjar-prerun:f5e1f12c
++# thunderjar-prerun:<new hash>
+ FROM node:20-bookworm
+ RUN npm install --global bun@1.3.14
+ RUN git config --system user.name "Thunderjar agent" \
+   && git config --system user.email agent@thunderjar.invalid
+ WORKDIR /workspace
+ RUN git clone --quiet https://github.com/dwjohnston/thunderjar.git /workspace \
+   && git -C /workspace fetch --quiet origin 3e614b510673f25596579be65c41cab611becd32 \
+   && git -C /workspace checkout --quiet --detach 3e614b510673f25596579be65c41cab611becd32 \
+   && git -C /workspace remote remove origin
+ WORKDIR /workspace
++RUN if git -C /workspace rev-parse --git-dir >/dev/null 2>&1; then git -C /workspace update-ref refs/thunderjar/start HEAD; fi
+ RUN npm install -g @anthropic-ai/claude-code@2.1.311
+ RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
+ …
+```
+
+Then, inside a measurement container:
 
 ```sh
 $ git rev-parse thunderjar/start
-530f477c1d2e…
+3e614b510673f25596579be65c41cab611becd32
 ```
 
 ## Tests
