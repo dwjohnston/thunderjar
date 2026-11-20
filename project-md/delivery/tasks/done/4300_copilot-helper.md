@@ -2,6 +2,14 @@
 harness: claude-code
 model: sonnet
 effort: medium
+ralph:
+  session: "6bfca5b4-d9c1-49de-821c-c6753aa0d8fe"
+  capture: "thunderjar/capture/6bfca5b4-d9c1-49de-821c-c6753aa0d8fe"
+  branchedFrom: "ralph/4200_codex-helper"
+  date: "2026-11-20T05:52:35.966Z"
+  costUsd: 0.38355849999999997
+  durationMs: 5737
+  isError: false
 ---
 
 <!--
