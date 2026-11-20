@@ -18,6 +18,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { abbreviateHash } from "../../../config/permutations.ts";
 import { type ContainerRunRecord, sqliteStore } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, type ProjectCopy, thunderjar } from "../../../testing/cli.ts";
+import { fakeDocker } from "../../../testing/fakeDocker.ts";
 
 /** Two-harnesses: 2 container runs, 1-1 and 2-1. */
 const TWO_HARNESSES = "01m3ygz4g89aqh8yey8em0twpq";
@@ -48,5 +49,16 @@ describe("checkout", () => {
       stderr: `Error: Can't check out ${runId(run!).replace(TWO_HARNESSES, "<ULID>")}: its postrun image was purged.\n`,
       exitCode: 1,
     });
+  });
+
+  test("--shell runs an interactive shell in the run's postrun image, removed when it ends", async () => {
+    const copy = await project();
+    const [run] = await storeOf(copy).containerRunsOf(TWO_HARNESSES);
+    const fake = await fakeDocker({ images: [run!.postrunImage] });
+    cleanups.push(fake.remove);
+    await thunderjar(copy.dir, ["checkout", runId(run!), "--shell"], { env: fake.env });
+    expect(await fake.commands()).toContain(
+      `docker run --rm --interactive --tty --pull missing --entrypoint sh ${run!.postrunImage} -c command -v bash >/dev/null && exec bash || exec sh`,
+    );
   });
 });
