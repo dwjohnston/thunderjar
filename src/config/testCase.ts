@@ -7,6 +7,7 @@ import { foldersIn, PARAMETERS } from "./folders.ts";
 import { ConfigError, existsIn, FOLDER, loadDeclaration, type Problem, problemsError } from "./loader.ts";
 import { modelsProblem, splitPair } from "./harnessModels.ts";
 import { checkMeasurements } from "./measurements.ts";
+import { type Overrides, withOverrides } from "./overrides.ts";
 import { requiredEnvProblem } from "./requiredEnv.ts";
 import { runOptionsProblem } from "./runOptions.ts";
 import { testCaseEnvProblems } from "./testCaseEnv.ts";
@@ -208,15 +209,19 @@ class TestCaseChecker {
   }
 }
 
-/** The test case declared in `<root>/test-cases/<name>.ts`, checked against the declarations it names. */
-export async function loadTestCase(root: string, name: string): Promise<TestCaseDeclaration> {
+/**
+ * The test case declared in `<root>/test-cases/<name>.ts`, each list `overrides` gives in place of
+ * its own, checked against the declarations it names.
+ */
+export async function loadTestCase(root: string, name: string, overrides: Overrides = {}): Promise<TestCaseDeclaration> {
   await checkParameterFolders(root);
   const file = `test-cases/${name}.ts`;
   if (!(await existsIn(root, file))) {
     throw new ConfigError(`No test case named "${name}": expected ${FOLDER}/${file}.`);
   }
   const checker = new TestCaseChecker(root, file);
-  const testCase = await loadDeclaration(root, file, "declareTestCase", checker.problems);
+  const declared = await loadDeclaration(root, file, "declareTestCase", checker.problems);
+  const testCase = declared && withOverrides(declared as Record<string, unknown>, overrides);
   if (testCase) await checker.check(testCase as Record<string, unknown>);
   if (checker.problems.length > 0) throw problemsError(checker.problems);
   return testCase as TestCaseDeclaration;
