@@ -48,18 +48,19 @@ Basically changes are merged to main, they will be installable via `bunx skills 
 
 ## Dogfooding
 
-The repo runs thunderjar on itself from [`.thunderjar/`](./.thunderjar/), with the code in this repo.
+We have thunderjar evals in the [`.thunderjar/`](./.thunderjar/) folder. 
 
-- `.thunderjar/` imports `thunderjar`, which resolves to this repo's source through the root package.json's `exports`.
-- There's no dependency on a published release. Changesets would rewrite it to the unreleased version and break `bun install` on the release PR.
+These files do `import {x} from "thunderjar"` regular [self references](https://nodejs.org/api/packages.html#self-referencing-a-package-using-its-name).
 
-To run it, with Docker and `ANTHROPIC_API_KEY`:
+
+### Running dog food tests 
+
+Needs an ANTHROPIC_API_KEY or CLAUDE_CLOUD_OAUTH_TOKEN
 
 ```sh
 bun run dogfood:local
 ```
 
-It runs the `compare-models` test case with the CLI from source, on the local Docker daemon. The Dogfood workflow runs it on every pull request, with the `ANTHROPIC_API_KEY` repository secret, and keeps the run data as an artifact. See [.thunderjar/AGENTS.md](./.thunderjar/AGENTS.md).
 
 ### Remote runs
 
