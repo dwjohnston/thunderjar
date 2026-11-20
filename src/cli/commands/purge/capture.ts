@@ -17,6 +17,7 @@ import {
   type CaptureSelection,
   deleteLocal,
   deleteRemote,
+  fetchObjects,
   PURGE_FROM,
   type PurgeFrom,
   type PurgeTarget,
@@ -84,6 +85,12 @@ async function purgeCapture(cwd: string, sessions: string[], options: CaptureOpt
   try {
     const local = places.local ? localCaptureRefs(root) : [];
     const remoteRefs = places.remote ? remoteCaptureRefs(root, remote) : [];
+    // --verdict and --older-than read the records, so fetch those of sessions never pulled.
+    const needsRecords = selection.verdict !== undefined || selection.olderThanMs !== undefined;
+    if (needsRecords) {
+      const present = new Set(readable(root, remoteRefs));
+      fetchObjects(root, remote, remoteRefs.filter((ref) => !present.has(ref)));
+    }
     targets = selectTargets(root, { local, remote: remoteRefs }, [...local, ...readable(root, remoteRefs)], selection, now);
   } catch (error) {
     if (error instanceof UnknownSessionError) return fail(error.message);
