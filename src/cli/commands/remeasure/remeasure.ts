@@ -22,11 +22,15 @@ import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadMeasurements } from "../../../config/measurements.ts";
 import { remeasureContainerRun, skipReason, withNewResult } from "../../../execution/remeasure.ts";
 import { runName } from "../../../execution/executionSummary.ts";
+import { moduleLogger } from "../../../log/logger.ts";
+import type { RecordedMeasure } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, openStore } from "../../dataDir.ts";
 import { plural } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { print, printError } from "../../output.ts";
+
+const log = moduleLogger("remeasure");
 
 /** Why runs were skipped: the reason, if they share one, else how many each, e.g. `2 postrun image purged, 1 never started`. */
 function reasons(skipped: { reason: string }[]): string {
@@ -50,6 +54,7 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix }: 
     return;
   }
   let remeasured = 0;
+  let failed = 0;
   const skipped: { executionId: string; run: string; reason: string }[] = [];
   for (const execution of executions) {
     const measurements = await loadMeasurements(root, execution.task);
@@ -59,12 +64,27 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix }: 
         skipped.push({ executionId: execution.executionId, run: runName(run), reason });
         continue;
       }
-      const result = await remeasureContainerRun(run, measurements, imagePrefix);
+      const at = { executionId: execution.executionId, run: runName(run), postrunImage: run.postrunImage };
+      let result: Record<string, RecordedMeasure>;
+      try {
+        result = await remeasureContainerRun(run, measurements, imagePrefix);
+      } catch (error) {
+        // Docker couldn't start its measurement container, e.g. its postrun image was deleted
+        // without being marked purged: the others may still be measured.
+        const message = error instanceof Error ? error.message : String(error);
+        log.warn({ ...at, error: message }, "couldn't remeasure");
+        printError(`Couldn't remeasure ${execution.executionId} ${runName(run)}: ${message}`);
+        failed++;
+        continue;
+      }
+      log.info({ ...at, result }, "remeasured");
       await store.recordContainerRun(withNewResult(run, result));
       remeasured++;
     }
   }
-  print(`remeasured ${plural(remeasured, "run")}${skipped.length === 0 ? "" : `, skipped ${skipped.length} (${reasons(skipped)})`}`);
+  if (failed > 0) process.exitCode = 1;
+  const skips = skipped.length === 0 ? "" : `, skipped ${skipped.length} (${reasons(skipped)})`;
+  print(`remeasured ${plural(remeasured, "run")}${skips}${failed === 0 ? "" : `, ${failed} failed`}`);
   for (const { executionId, run, reason } of skipped) print(`  ${executionId} ${run}  ${reason}`);
 }
 
