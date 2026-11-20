@@ -60,7 +60,9 @@ describe("filesChanged", () => {
   test("fails in a workspace that isn't a git repository", async () => {
     const dir = `${TMP_DIR}/files-changed-${crypto.randomUUID().slice(0, 8)}`;
     await $`mkdir -p ${dir}`;
-    const result = await filesChanged.evaluate({}, ctxIn(dir));
+    // The scratch folder sits inside this repository: stop git looking above it.
+    const ctx = { workdir: dir, exec: (c: string) => sh(dir, `GIT_CEILING_DIRECTORIES=$(dirname ${dir}) ${c}`) } as unknown as MeasurementContext;
+    const result = await filesChanged.evaluate({}, ctx);
     expect(result.outcome).toBe("erroredWhileMeasuring");
     expect((result as { error: Error }).error.message).toContain("not a git repository");
   });
