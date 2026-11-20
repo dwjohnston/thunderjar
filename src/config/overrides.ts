@@ -15,20 +15,22 @@
 // Parameter overrides: lists given on the command line, each replacing one of a test case's lists
 // for one execution, without editing its file.
 import type { TestCaseDeclaration } from "../api/declarations.ts";
-import type { Axis } from "./permutations.ts";
+import { foldersIn, PARAMETERS, tsFilesIn } from "./folders.ts";
+import { ConfigError } from "./loader.ts";
+import { type Axis, parsePair } from "./permutations.ts";
 
 /**
- * The fields an override can replace, each with its flag and what its names are, in the order
- * `showOverrides` lists them.
+ * The fields an override can replace, each with its flag, what its names are, plural and singular,
+ * and the folder its names are in, in the order `showOverrides` lists them.
  */
 export const OVERRIDES = {
-  baseImage: { flag: "--base-image", what: "base images" },
-  codeState: { flag: "--code-state", what: "code states" },
-  promptSet: { flag: "--prompt-set", what: "prompt sets" },
-  harnessModel: { flag: "--harness-model", what: "harness model pairs" },
-  initialPrompt: { flag: "--initial-prompt", what: "initial prompts" },
-  iterations: { flag: "--iterations", what: "iterations" },
-} as const satisfies Partial<Record<Axis | "iterations", { flag: string; what: string }>>;
+  baseImage: { flag: "--base-image", what: "base images", one: "base image", folder: "baseImages" },
+  codeState: { flag: "--code-state", what: "code states", one: "code state", folder: "codeStates" },
+  promptSet: { flag: "--prompt-set", what: "prompt sets", one: "prompt set", folder: "promptSets" },
+  harnessModel: { flag: "--harness-model", what: "harness model pairs", one: "harness", folder: "harnessModels" },
+  initialPrompt: { flag: "--initial-prompt", what: "initial prompts", one: "initial prompt", folder: "initial-prompts" },
+  iterations: { flag: "--iterations", what: "iterations", one: "iteration", folder: undefined },
+} as const satisfies Partial<Record<Axis | "iterations", { flag: string; what: string; one: string; folder?: string }>>;
 
 export type OverridableField = keyof typeof OVERRIDES;
 
@@ -56,3 +58,27 @@ export const showOverrides = (overrides: Overrides): string =>
   Object.entries(givenOverrides(overrides))
     .map(([field, value]) => `${OVERRIDES[field as OverridableField].flag} ${Array.isArray(value) ? value.join(",") : String(value)}`)
     .join(" ");
+
+/** The names `field`'s override can give: the folders of its parameter folder, or `task`'s initial prompts. */
+function knownNames(root: string, field: Exclude<OverridableField, "iterations">, task: unknown): Promise<string[]> {
+  if (field !== "initialPrompt") return foldersIn(root, `${PARAMETERS}/${OVERRIDES[field].folder}`);
+  return typeof task === "string" ? tsFilesIn(root, `${PARAMETERS}/tasks/${task}/initial-prompts`) : Promise.resolve([]);
+}
+
+/**
+ * Fails if an override names a parameter `root` (the `.thunderjar/` folder) doesn't declare, or,
+ * for initial prompts, one test case task `task` doesn't have, listing those it does.
+ */
+export async function checkOverrides(root: string, overrides: Overrides, task: unknown): Promise<void> {
+  const problems: string[] = [];
+  for (const field of OVERRIDABLE) {
+    const given = overrides[field];
+    if (field === "iterations" || !Array.isArray(given)) continue;
+    const known = await knownNames(root, field, task);
+    for (const name of given) {
+      const declared = field === "harnessModel" ? parsePair(name).harness : name;
+      if (!known.includes(declared)) problems.push(`Unknown ${OVERRIDES[field].one} ${JSON.stringify(declared)}. Known: ${known.join(", ")}.`);
+    }
+  }
+  if (problems.length > 0) throw new ConfigError(...problems);
+}
