@@ -92,28 +92,43 @@ Example:
 export async function main(options: Options): Promise<void> {
   const root = (await $`git -C ${import.meta.dirname} rev-parse --show-toplevel`.text()).trim();
   await $`git -C ${root} fetch --quiet ${REMOTE} ${BASE}`;
+  const repo = await remoteRepo(root);
+  const stateDir = `${(await $`git -C ${root} rev-parse --path-format=absolute --git-common-dir`.text()).trim()}/ralph`;
 
   for (let iteration = 1; iteration <= options.max; iteration++) {
-    const task = await nextTask(root);
-    if (!task) {
+    const next = await nextTask(root, repo, stateDir);
+    if (!next) {
       console.log("No tasks left.");
       return;
     }
+    const { task, action } = next;
     console.log(`[${iteration}/${options.max}] ${task.name} (${task.harness}, ${task.model}, effort ${task.effort})`);
-    const ok = await runTask(root, task, options);
+    if (action === "orphan") {
+      throw new Error(
+        `${branchFor(task)} is on ${REMOTE} with no PR and no saved run. Open a PR for it, or delete the branch, then run ralph again.`,
+      );
+    }
+    const ok =
+      action === "resume"
+        ? await finish(root, repo, stateDir, task, await loadState(stateDir, task))
+        : await runTask(root, repo, stateDir, task, options);
     if (!ok) {
       throw new Error(`${task.name} failed: see its draft PR. Stopping, since later tasks may depend on it.`);
     }
   }
 }
 
-/** The lowest-numbered task that has no branch on the remote yet, or null when there's none. */
-export async function nextTask(root: string): Promise<Task | null> {
+/** The lowest-numbered task that isn't skipped, and what to do with it; or null when there's none. */
+export async function nextTask(root: string, repo: Repo, stateDir: string): Promise<{ task: Task; action: Action } | null> {
   const files = [...new Bun.Glob("*.md").scanSync(TASKS_DIR)].sort();
   for (const file of files) {
     const task = parseTask(file.replace(/\.md$/, ""), `${TASKS_DIR}/${file}`, await Bun.file(`${TASKS_DIR}/${file}`).text());
-    const remote = await $`git -C ${root} ls-remote --heads ${REMOTE} ${branchFor(task)}`.text();
-    if (remote.trim() === "") return task;
+    const branch = branchFor(task);
+    // REST, not `gh pr list`: GraphQL is blocked in Claude Code cloud sessions.
+    const prs = await $`gh api ${`repos/${repo.owner}/${repo.repo}/pulls?head=${repo.owner}:${branch}&state=all`} --jq length`.text();
+    const onRemote = (await $`git -C ${root} ls-remote --heads ${REMOTE} ${branch}`.text()).trim() !== "";
+    const action = nextAction({ hasPr: prs.trim() !== "0", hasState: await Bun.file(statePath(stateDir, task)).exists(), onRemote });
+    if (action !== "skip") return { task, action };
   }
   return null;
 }
@@ -173,8 +188,19 @@ export function claudeArgs(task: Task, sessionId: string, budgetUsd: number): st
   ];
 }
 
+/** What a run left, saved before anything is pushed, so a rerun can open its PR if ralph stops before it. */
+export type RunState = { sessionId: string; base: string; result: string; failures: string[] };
+
+function statePath(stateDir: string, task: Task): string {
+  return `${stateDir}/${task.name}.json`;
+}
+
+async function loadState(stateDir: string, task: Task): Promise<RunState> {
+  return (await Bun.file(statePath(stateDir, task)).json()) as RunState;
+}
+
 /** Runs one task through to its PR. Returns whether it passed its checks. */
-async function runTask(root: string, task: Task, options: Options): Promise<boolean> {
+async function runTask(root: string, repo: Repo, stateDir: string, task: Task, options: Options): Promise<boolean> {
   const sessionId = crypto.randomUUID();
   const branch = branchFor(task);
   const args = claudeArgs(task, sessionId, options.budgetUsd);
@@ -184,7 +210,7 @@ async function runTask(root: string, task: Task, options: Options): Promise<bool
   }
 
   const worktree = `${Bun.env.TMPDIR ?? "/tmp"}/thunderjar-ralph/${task.name}`;
-  await $`git -C ${root} worktree add -b ${branch} ${worktree} ${REMOTE}/${BASE}`;
+  await $`git -C ${root} worktree add -B ${branch} ${worktree} ${REMOTE}/${BASE}`;
   try {
     await $`bun install --frozen-lockfile`.cwd(worktree);
 
@@ -193,17 +219,38 @@ async function runTask(root: string, task: Task, options: Options): Promise<bool
     const output = parseClaudeOutput(run.stdout.toString());
     const failures = await check(worktree, run.exitCode, output);
 
+    const state: RunState = { sessionId, base: BASE, result: output.result, failures };
+    await Bun.write(statePath(stateDir, task), `${JSON.stringify(state, null, 2)}\n`);
     await $`git -C ${worktree} push --no-verify --set-upstream ${REMOTE} ${branch}`;
-    const captureLink = await pushCapture(root, sessionId);
-    const body = prBody(task, output.result, captureLink, failures);
-    const title = failures.length === 0 ? task.name : `❌ ralph failed: ${task.name}`;
-    const prArgs = pullRequestArgs(await remoteRepo(root), { title, head: branch, base: BASE, body });
-    const url = (await $`gh ${prArgs}`.text()).trim();
-    console.log(failures.length === 0 ? `  PR: ${url}` : `  failed (${failures.join("; ")}). PR: ${url}`);
-    return failures.length === 0;
+    return await finish(root, repo, stateDir, task, state);
   } finally {
     await $`git -C ${root} worktree remove --force ${worktree}`.nothrow();
   }
+}
+
+/**
+ * Opens the PR of a pushed run, then pushes its capture, then forgets its saved state. The capture
+ * goes last, and only warns when it fails, so the PR is never lost to it.
+ */
+async function finish(root: string, repo: Repo, stateDir: string, task: Task, state: RunState): Promise<boolean> {
+  const branch = branchFor(task);
+  const capture = `${CAPTURE_BRANCH_PREFIX}/${state.sessionId}`;
+  const hasCapture = (await $`git -C ${root} rev-parse --verify --quiet refs/heads/${capture}`.nothrow().quiet()).exitCode === 0;
+  if (!hasCapture) console.warn(`  no capture branch ${capture}: are the capture hooks installed?`);
+  const captureLink = hasCapture ? `https://github.com/${repo.owner}/${repo.repo}/tree/${capture}` : null;
+
+  const body = prBody(task, state.result, captureLink, state.failures);
+  const title = state.failures.length === 0 ? task.name : `❌ ralph failed: ${task.name}`;
+  const url = (await $`gh ${pullRequestArgs(repo, { title, head: branch, base: state.base, body })}`.text()).trim();
+  console.log(state.failures.length === 0 ? `  PR: ${url}` : `  failed (${state.failures.join("; ")}). PR: ${url}`);
+
+  if (hasCapture) {
+    // `thunderjar capture push` pushes every capture; this pushes just this session's.
+    const pushed = await $`git -C ${root} push --no-verify ${REMOTE} ${capture}`.nothrow();
+    if (pushed.exitCode !== 0) console.warn(`  couldn't push ${capture}: push it by hand, the PR links to it`);
+  }
+  await Bun.file(statePath(stateDir, task)).delete();
+  return state.failures.length === 0;
 }
 
 type ClaudeOutput = { isError: boolean; result: string };
@@ -230,20 +277,6 @@ async function check(worktree: string, exitCode: number, output: ClaudeOutput): 
     if (result.exitCode !== 0) failures.push(`bun run ${script} failed`);
   }
   return failures;
-}
-
-/** Pushes the session's capture branch alone. Returns a link to it, or null when there's no capture. */
-async function pushCapture(root: string, sessionId: string): Promise<string | null> {
-  const branch = `${CAPTURE_BRANCH_PREFIX}/${sessionId}`;
-  const exists = await $`git -C ${root} rev-parse --verify --quiet refs/heads/${branch}`.nothrow().quiet();
-  if (exists.exitCode !== 0) {
-    console.warn(`  no capture branch ${branch}: are the capture hooks installed?`);
-    return null;
-  }
-  // `thunderjar capture push` pushes every capture; this pushes just this session's.
-  await $`git -C ${root} push --no-verify ${REMOTE} ${branch}`;
-  const { owner, repo } = await remoteRepo(root);
-  return `https://github.com/${owner}/${repo}/tree/${branch}`;
 }
 
 export function prBody(task: Task, result: string, captureLink: string | null, failures: string[]): string {
@@ -306,5 +339,8 @@ export function pullRequestArgs(repo: Repo, pr: PullRequest): string[] {
 export type Action = "skip" | "resume" | "run" | "orphan";
 
 export function nextAction(found: { hasPr: boolean; hasState: boolean; onRemote: boolean }): Action {
+  if (found.hasPr) return "skip";
+  if (found.onRemote) return found.hasState ? "resume" : "orphan";
+  // Saved but never pushed: ralph stopped before the push, so run it again.
   return "run";
 }
