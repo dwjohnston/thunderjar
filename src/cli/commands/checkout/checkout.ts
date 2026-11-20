@@ -18,10 +18,22 @@
 // commit of what it left uncommitted, or, with `--shell`, a shell in its postrun image.
 import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
-import { findContainerRun, parseContainerRunId, unavailableReason } from "../../../execution/checkout.ts";
+import { loadProjectConfig } from "../../../config/projectConfig.ts";
+import { DockerContainerError, remoteRuntime } from "../../../docker/docker.ts";
+import {
+  CheckoutError,
+  checkoutBundle,
+  endStateBundle,
+  findContainerRun,
+  gitDir,
+  parseContainerRunId,
+  runBranch,
+  unavailableReason,
+} from "../../../execution/checkout.ts";
+import { remeasureRuntime } from "../../../execution/remeasure.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, openStore } from "../../dataDir.ts";
-import { printError } from "../../output.ts";
+import { print, printError } from "../../output.ts";
 
 type Options = { dataDir?: string; shell?: boolean };
 
@@ -39,6 +51,18 @@ async function checkout(cwd: string, runId: string, { dataDir }: Options): Promi
   }
   const reason = unavailableReason(run);
   if (reason !== undefined) return fail(reason);
+  // Through the configured runtime, so a postrun image on a remote Docker host can be checked out too.
+  const { runtime: configured } = await loadProjectConfig(root);
+  const runtime = configured === null ? remeasureRuntime() : remoteRuntime(configured.command);
+  if ((await gitDir(cwd)) === undefined) return fail(`checkout makes a branch in the git repository it's run in, and ${cwd} isn't in one. Use --shell to look inside its postrun image instead`);
+  const branch = runBranch(run);
+  try {
+    await checkoutBundle(cwd, await endStateBundle(run, runtime), branch);
+  } catch (error) {
+    if (!(error instanceof DockerContainerError || error instanceof CheckoutError)) throw error;
+    return fail(error.message);
+  }
+  print(`Checked out ${branch}`);
 }
 
 export function createCheckoutCommand(): Command {
