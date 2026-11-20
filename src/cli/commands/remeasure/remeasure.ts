@@ -12,10 +12,11 @@
  *
  */
 
-// `thunderjar remeasure <execution>`: takes the task's measurements, as they are on disk now, of
-// each past container run, in a new measurement container from its postrun image, without
-// running its agent again. The new measures become the run's `result`; those it had are kept
-// beside them, in `earlierResults`.
+// `thunderjar remeasure <test case | execution>`: takes the task's measurements, as they are on
+// disk now, of past container runs, each in a new measurement container from its postrun image,
+// without running its agent again: an execution's runs, or a test case's, of every past execution
+// of it. The new measures become the run's `result`; those it had are kept beside them, in
+// `earlierResults`.
 import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadMeasurements } from "../../../config/measurements.ts";
@@ -31,7 +32,10 @@ type Options = { dataDir?: string; imagePrefix: string };
 async function remeasure(cwd: string, target: string, { dataDir, imagePrefix }: Options): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const { store } = await openStore(cwd, dataDir, root);
-  const executions = (await store.listExecutions()).filter((execution) => execution.executionId === target);
+  // An execution by its ID, or else every execution of a test case, oldest first.
+  const recorded = (await store.listExecutions()).toReversed();
+  const byId = recorded.filter((execution) => execution.executionId === target);
+  const executions = byId.length > 0 ? byId : recorded.filter((execution) => execution.testCase === target);
   let remeasured = 0;
   for (const execution of executions) {
     const measurements = await loadMeasurements(root, execution.task);
@@ -49,7 +53,7 @@ export function createRemeasureCommand(): Command {
     .description(
       "Take the task's measurements, as they are on disk now, of past container runs, without running their agents again: each run is measured in a new measurement container from its postrun image. The new measures are what `show` shows; the earlier ones are kept beside them.",
     )
-    .argument("<test case | execution>", "an execution's ID, as listed by `thunderjar executions`")
+    .argument("<test case | execution>", "an execution's ID, as listed by `thunderjar executions`, or a test case's name, for every past execution of it")
     .addOption(dataDirOption())
     .addOption(imagePrefixOption())
     .action(
