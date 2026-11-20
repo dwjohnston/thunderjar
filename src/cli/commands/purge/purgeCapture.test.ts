@@ -1,0 +1,191 @@
+/*
+ * 🤖 This file was created with AI
+ *
+ * Harness: Claude Code
+ * Model: claude-opus-5-5
+ * Session Id: session_01LCLeLiw2YB851n82Y1sd8t
+ *
+ * Humans: add your notes here
+ */
+
+// `thunderjar purge capture`, through the CLI, on a temporary git repository with captures in both
+// stores, and a bare repository as its remote, `origin`.
+import { $ } from "bun";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { git, snapshotTree, treeOf } from "../../../capture/git.ts";
+import type { StartRecord, TurnRecord } from "../../../capture/records.ts";
+import { type StoreKind, writeRecordIn } from "../../../capture/store.ts";
+import { REPO_ROOT } from "../../../testing/scenario.ts";
+
+const CLI = `${REPO_ROOT}/src/cli/index.ts`;
+const DAY = 86_400_000;
+
+let dir: string;
+let repo: string;
+let remote: string;
+
+/** `thunderjar purge capture <args…>` in `cwd`, the repository unless given. */
+async function purge(args: string[], cwd = repo) {
+  const result = await $`bun ${CLI} purge capture ${args}`.cwd(cwd).env({ ...Bun.env, CLAUDE_CODE_REMOTE: "" }).quiet().nothrow();
+  return { stdout: result.stdout.toString(), stderr: result.stderr.toString(), exitCode: result.exitCode };
+}
+
+const agent = (session: string) => ({
+  harness: "claude-code" as const,
+  harnessVersion: null,
+  harnessSurface: null,
+  effort: null,
+  sessionId: session,
+  transcriptPath: null,
+  permissionMode: null,
+});
+
+/** Writes a session's start, `daysAgo` days ago, and a turn per tree in `turns`, into `store`. */
+async function capture(store: StoreKind, session: string, prompt: string, daysAgo: number, turns: string[]) {
+  const capturedAt = new Date(Date.now() - daysAgo * DAY).toISOString();
+  const start: StartRecord = { schemaVersion: 1, kind: "start", capturedAt, prompt, agent: agent(session), repository: { root: repo, branch: "main", headAtStart: null, dirty: false } };
+  writeRecordIn(repo, store, session, "start", treeOf(repo, null), null, start);
+  turns.forEach((tree, i) => {
+    const turn: TurnRecord = {
+      schemaVersion: 1,
+      kind: "turn",
+      capturedAt,
+      turn: i + 1,
+      prompt: null,
+      laterPrompts: [],
+      agent: { ...agent(session), model: null, models: [], turnId: null },
+      repository: { branch: "main", headAtStop: null, agentCommits: [], leftUncommitted: [], historyRewritten: false },
+      lastAssistantMessage: null,
+    };
+    writeRecordIn(repo, store, session, `turn-${i + 1}`, tree, null, turn);
+  });
+}
+
+/** The capture refs in `cwd`, or on the remote. */
+const localRefs = (cwd = repo) => git(cwd, ["for-each-ref", "--format=%(refname)", "refs/thunderjar/capture/", "refs/heads/thunderjar/capture/"]).split("\n").filter(Boolean);
+const remoteRefs = () => localRefs(remote);
+const pushAll = () => git(repo, ["push", "-q", "origin", "refs/thunderjar/capture/*:refs/thunderjar/capture/*", "refs/heads/thunderjar/capture/*:refs/heads/thunderjar/capture/*"]);
+
+beforeEach(async () => {
+  dir = `${Bun.env.TMPDIR ?? "/tmp"}/tj-purge-capture-test-${crypto.randomUUID()}`;
+  repo = `${dir}/repo`;
+  remote = `${dir}/remote.git`;
+  await $`mkdir -p ${repo} && git init -q -b main ${repo} && git init -q --bare ${remote} && git -C ${repo} remote add origin ${remote}`.quiet();
+  await Bun.write(`${repo}/a.txt`, "a");
+  const changed = await snapshotTree(repo);
+  const empty = treeOf(repo, null);
+  // incomplete, in refs, 40 days ago
+  await capture("refs", "old-incomplete", "Fix the old bug", 40, []);
+  // question, in refs, 2 days ago: its turn's tree is its start's
+  await capture("refs", "a-question", "What does this do?", 2, [empty]);
+  // one-shot, in the branch store, today
+  await capture("branch", "new-one-shot", "Add a --json flag to show\nand more", 0, [changed]);
+});
+
+afterEach(async () => {
+  await $`rm -rf ${dir}`.quiet();
+});
+
+test("--verdict --dry-run lists the sessions it would delete, with verdict, age and prompt, and deletes nothing", async () => {
+  const before = localRefs();
+
+  expect(await purge(["--verdict", "incomplete", "--dry-run"])).toEqual({
+    stdout: 'old-incomplete  incomplete  40d  "Fix the old bug"\n1 session would be deleted.\n',
+    stderr: "",
+    exitCode: 0,
+  });
+  expect(localRefs()).toEqual(before);
+});
+
+test("session IDs with --yes delete their refs in both stores, and leave the rest", async () => {
+  const { stdout, stderr, exitCode } = await purge(["old-incomplete", "new-one-shot", "--yes"]);
+
+  expect(stderr).toBe("");
+  expect(stdout).toEndWith("2 sessions deleted.\n");
+  expect(exitCode).toBe(0);
+  expect(localRefs()).toEqual(["refs/thunderjar/capture/a-question/start", "refs/thunderjar/capture/a-question/turn-1"]);
+});
+
+test("refuses a bare purge, session IDs with --all, an unknown session, and deleting without asking", async () => {
+  const before = localRefs();
+  const refusals: [string[], string][] = [
+    [[], "Say which captures to purge: session IDs, --older-than <age>, --verdict <verdict>, or --all."],
+    [["a-question", "--all"], "Give session IDs or --all: only one of them."],
+    [["a-question", "nope"], "No capture of session nope. `thunderjar capture list` shows the captures."],
+    [["a-question"], "Not deleting without asking, and there's no terminal to ask on. Pass --yes to delete, or --dry-run to see what would be."],
+  ];
+
+  for (const [args, message] of refusals) {
+    const { stderr, exitCode } = await purge(args);
+    expect(stderr).toBe(`Error: ${message}\n`);
+    expect(exitCode).toBe(1);
+  }
+  expect(localRefs()).toEqual(before);
+});
+
+test("--older-than picks sessions by when they started, oldest first", async () => {
+  expect((await purge(["--older-than", "1d", "--dry-run"])).stdout).toBe(
+    'old-incomplete  incomplete  40d  "Fix the old bug"\na-question      question    2d   "What does this do?"\n2 sessions would be deleted.\n',
+  );
+  expect((await purge(["--all", "--older-than", "a month"])).stderr).toContain('"a month" is not an age');
+});
+
+test("--from remote deletes on the remote, in both stores, even sessions not here, and leaves the local refs", async () => {
+  pushAll();
+  git(repo, ["update-ref", "-d", "refs/heads/thunderjar/capture/new-one-shot"]);
+  const before = localRefs();
+
+  const { stdout, stderr, exitCode } = await purge(["--from", "remote", "--all", "--yes"]);
+
+  expect(stderr).toBe("");
+  expect(stdout).toEndWith("3 sessions deleted.\n");
+  expect(exitCode).toBe(0);
+  expect(remoteRefs()).toEqual([]);
+  expect(localRefs()).toEqual(before);
+});
+
+test("--from remote with --verdict fetches the records to read the verdicts, and creates no refs here", async () => {
+  pushAll();
+  const other = `${dir}/other`;
+  await $`git init -q -b main ${other} && git -C ${other} remote add origin ${remote}`.quiet();
+
+  const { stdout, exitCode } = await purge(["--from", "remote", "--verdict", "one-shot", "--dry-run"], other);
+
+  expect(stdout).toBe('new-one-shot  one-shot  0m  "Add a --json flag to show"\n1 session would be deleted.\n');
+  expect(exitCode).toBe(0);
+  expect(localRefs(other)).toEqual([]);
+});
+
+test("--from all deletes the session here and on the remote", async () => {
+  pushAll();
+
+  const { stdout, exitCode } = await purge(["--from", "all", "a-question", "--yes"]);
+
+  expect(stdout).toEndWith("1 session deleted.\n");
+  expect(exitCode).toBe(0);
+  const others = ["refs/heads/thunderjar/capture/new-one-shot", "refs/thunderjar/capture/old-incomplete/start"];
+  expect(localRefs()).toEqual(others);
+  expect(remoteRefs()).toEqual(others);
+});
+
+test("--json: the sessions, with their refs in each place, and nothing else on stdout", async () => {
+  const { stdout, stderr, exitCode } = await purge(["--verdict", "one-shot", "--dry-run", "--json"]);
+
+  expect(exitCode).toBe(0);
+  expect(stderr).toEndWith("1 session would be deleted.\n");
+  expect(JSON.parse(stdout)).toEqual({
+    dryRun: true,
+    from: "local",
+    remote: null,
+    sessions: [
+      {
+        session: "new-one-shot",
+        verdict: "one-shot",
+        startedAt: expect.any(String),
+        prompt: "Add a --json flag to show\nand more",
+        local: ["refs/heads/thunderjar/capture/new-one-shot"],
+        remote: [],
+      },
+    ],
+  });
+});
