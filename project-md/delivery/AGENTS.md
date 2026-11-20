@@ -12,6 +12,16 @@ All stories have a 0000_story-name.md format.
 
 By default increment stories by 0100. 
 
+Ready tasks start with frontmatter, which `ralph.ts` reads to run them:
+
+```yaml
+---
+harness: claude-code   # the only harness ralph.ts runs so far
+model: sonnet
+effort: low            # low | medium | high
+---
+```
+
 
 Format 
 ```markdown 
