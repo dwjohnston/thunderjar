@@ -40,7 +40,9 @@ Thunderjar is a TypeScript/Bun CLI for
   - `research`: preserved unstructured investigations
   - `prd` - product requirements docs
   - `delivery`: concreted planned work goes here 
+    - `ralph.ts`: runs the ready tasks one at a time with `claude -p`, each to a draft PR
     - `tasks`
+      - `archive`: tasks from before the ralph loop
       - `done`: completed tasks go here
       - `draft`: draft tasks here 
       - `<task-number>_<task-name>.md`: ready tasks here 

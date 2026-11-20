@@ -12,6 +12,62 @@ All stories have a 0000_story-name.md format.
 
 By default increment stories by 0100. 
 
+Ready tasks start with frontmatter, which `ralph.ts` reads to run them:
+
+```yaml
+---
+harness: claude-code   # the only harness ralph.ts runs so far
+model: sonnet
+effort: low            # low | medium | high
+---
+```
+
+## The ralph loop
+
+`ralph.ts` runs the ready tasks one at a time, each to its own draft PR.
+
+```sh
+bun project-md/delivery/ralph.ts --dry-run   # show the next task and its claude command
+bun project-md/delivery/ralph.ts --max 3
+```
+
+```mermaid
+flowchart TD
+    S["git fetch --quiet origin #lt;base#gt;"] --> A
+    A[Pick the lowest-numbered file in tasks/<br/>not done/, draft/ or archive/] --> B{Any left?}
+    B -- No --> Z[Stop: no tasks left]
+    B -- Yes --> C["git worktree add -B ralph/#lt;task#gt; #lt;worktree#gt; origin/#lt;from#gt;"]
+    C --> D[claude -p with the task's model and effort<br/>capture on, as a branch]
+    D --> E[Move the task file to done/<br/>with the run in its frontmatter]
+    E --> F[Force-push ralph/#lt;task#gt;]
+    F --> G[Open a draft PR<br/>into the branch it started from]
+    G --> H[Push the capture branch]
+    H --> I{Reached --max?}
+    I -- No --> A
+    I -- Yes --> X[Stop]
+```
+
+Placeholders:
+
+- `<base>`: `--base`, else the current branch, else on a detached HEAD the one origin branch at it.
+- `<from>`: `<base>` for the first task of a run; after that, `ralph/<previous task>`.
+  - `origin/ralph/<previous task>` is up to date without a fetch: the previous task's push updated it.
+- `<worktree>`: `$TMPDIR/thunderjar-ralph/<task>`, or `/tmp/…` without `TMPDIR`.
+
+- Tasks stack: each PR targets the previous task's branch.
+- The run in the done file's frontmatter:
+  ```yaml
+  ralph:
+    session: "0f7a5cac-…"
+    capture: "thunderjar/capture/0f7a5cac-…"
+    branchedFrom: "main"
+    date: "2026-11-20T10:00:00.000Z"
+    costUsd: 0.42
+    durationMs: 61000
+    isError: false
+  ```
+- A task is done once its PR, which moves its file to done/, is merged. Until then, a new run of ralph runs it again.
+
 
 Format 
 ```markdown 
