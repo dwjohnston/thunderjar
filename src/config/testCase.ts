@@ -6,7 +6,7 @@ import type { TestCaseDeclaration } from "../api/declarations.ts";
 import { foldersIn, PARAMETERS } from "./folders.ts";
 import { ConfigError, existsIn, FOLDER, loadDeclaration, type Problem, problemsError } from "./loader.ts";
 import { checkMeasurements } from "./measurements.ts";
-import { type Overrides, withOverrides } from "./overrides.ts";
+import { checkOverrides, type Overrides, withOverrides } from "./overrides.ts";
 import { requiredEnvProblem } from "./requiredEnv.ts";
 import { runOptionsProblem } from "./runOptions.ts";
 import { testCaseEnvProblems } from "./testCaseEnv.ts";
@@ -213,6 +213,7 @@ export async function loadTestCase(root: string, name: string, overrides: Overri
   }
   const checker = new TestCaseChecker(root, file);
   const declared = await loadDeclaration(root, file, "declareTestCase", checker.problems);
+  await checkOverrides(root, overrides, (declared as Record<string, unknown> | undefined)?.task);
   const testCase = declared && withOverrides(declared as Record<string, unknown>, overrides);
   if (testCase) await checker.check(testCase as Record<string, unknown>);
   if (checker.problems.length > 0) throw problemsError(checker.problems);
