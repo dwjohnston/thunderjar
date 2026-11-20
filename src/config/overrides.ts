@@ -23,6 +23,7 @@ import type { Axis } from "./permutations.ts";
  */
 export const OVERRIDES = {
   baseImage: { flag: "--base-image", what: "base images" },
+  codeState: { flag: "--code-state", what: "code states" },
   promptSet: { flag: "--prompt-set", what: "prompt sets" },
 } as const satisfies Partial<Record<Axis | "iterations", { flag: string; what: string }>>;
 
