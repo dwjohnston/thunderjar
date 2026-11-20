@@ -5,6 +5,7 @@
 //   WORKDIR /workspace         Thunderjar's
 //   code state fragment        gets the codebase into /workspace, e.g. by cloning it at a commit
 //   prompt set fragment        puts its prompt files in /workspace
+//   start tag                  tags the starting commit as refs/thunderjar/start, if /workspace is a git repository
 //   harness fragment           installs the agent, and writes /thunderjar/thunderjar-run.sh and
 //                              /thunderjar/model.txt; ctx.version and ctx.modelId are the pair's
 //   initial prompt fragment    writes /thunderjar/prompt.txt; may set WORKDIR, for where the agent runs
@@ -120,9 +121,12 @@ export function renderFragment<R extends Role>(
   return result.trim();
 }
 
+/** Tags the workspace's starting commit, for measurements to compare against. Does nothing outside a git repository. */
+const START_TAG = "RUN if git -C /workspace rev-parse --git-dir >/dev/null 2>&1; then git -C /workspace update-ref refs/thunderjar/start HEAD; fi";
+
 /** The prerun Dockerfile of a permutation's fragments, each already rendered, in build order. An empty one adds no line. */
 export function joinFragments(fragments: Record<Role, string>): string {
-  const steps = [fragments.baseImage, "WORKDIR /workspace", fragments.codeState, fragments.promptSet, fragments.harness, fragments.initialPrompt];
+  const steps = [fragments.baseImage, "WORKDIR /workspace", fragments.codeState, fragments.promptSet, START_TAG, fragments.harness, fragments.initialPrompt];
   return `${steps.filter((step) => step !== "").join("\n")}\n`;
 }
 

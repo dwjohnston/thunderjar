@@ -60,7 +60,7 @@ describe("renderPrerun", () => {
         baseImage: { file: "baseImages/node20/index.ts", declaration: declareBaseImage({ applyParameter: () => "\nFROM node:20\nRUN apt-get update\n" }) },
       }),
     );
-    expect(dockerfile).toBe("FROM node:20\nRUN apt-get update\nWORKDIR /workspace\nRUN npm install -g claude\n");
+    expect(dockerfile).toBe("FROM node:20\nRUN apt-get update\nWORKDIR /workspace\nRUN if git -C /workspace rev-parse --git-dir >/dev/null 2>&1; then git -C /workspace update-ref refs/thunderjar/start HEAD; fi\nRUN npm install -g claude\n");
   });
 
   test("each fragment gets its declaration's config, and a ctx with its role's dir", () => {
@@ -103,6 +103,7 @@ describe("renderPrerun", () => {
         "WORKDIR /workspace",
         "COPY parameters/codeState/ /workspace/",
         "RUN npm ci",
+        'RUN if git -C /workspace rev-parse --git-dir >/dev/null 2>&1; then git -C /workspace update-ref refs/thunderjar/start HEAD; fi',
         "RUN npm install -g @anthropic-ai/claude-code@2.1.283",
         "",
       ].join("\n"),
@@ -201,6 +202,7 @@ RUN git clone --quiet https://github.com/acme/widgets.git /workspace \\
   && git -C /workspace checkout --quiet --detach 24dc11c26e2716a12cf33b82fec895a7f02b3e8a \\
   && git -C /workspace remote remove origin
 COPY CLAUDE.md /workspace/
+RUN if git -C /workspace rev-parse --git-dir >/dev/null 2>&1; then git -C /workspace update-ref refs/thunderjar/start HEAD; fi
 RUN npm install -g claude
 `);
   });
