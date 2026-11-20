@@ -18,8 +18,9 @@ import { type Paint, padEnd, painter, visibleLength } from "../../colour.ts";
 import { confirm } from "../../confirm.ts";
 import { plural } from "../../format.ts";
 import { print, printError } from "../../output.ts";
+import { olderThanOption } from "./age.ts";
 
-type CaptureOptions = { all?: boolean; verdict?: Verdict; yes?: boolean; dryRun?: boolean };
+type CaptureOptions = { olderThan?: number; all?: boolean; verdict?: Verdict; yes?: boolean; dryRun?: boolean };
 
 /** Prints `message` as an error, with exit code 1. */
 function fail(message: string): void {
@@ -54,7 +55,12 @@ function targetLines(targets: PurgeTarget[], paint: Paint, now: number): string[
 }
 
 async function purgeCapture(cwd: string, sessions: string[], options: CaptureOptions): Promise<void> {
-  const selection: CaptureSelection = { sessions, all: options.all === true, ...(options.verdict !== undefined && { verdict: options.verdict }) };
+  const selection: CaptureSelection = {
+    sessions,
+    all: options.all === true,
+    ...(options.olderThan !== undefined && { olderThanMs: options.olderThan }),
+    ...(options.verdict !== undefined && { verdict: options.verdict }),
+  };
   const problem = selectionProblem(selection);
   if (problem) return fail(problem);
   const root = repoRoot(cwd);
@@ -83,6 +89,7 @@ export function createPurgeCaptureCommand(): Command {
   return new Command("capture")
     .description("Delete captured sessions, from both stores: refs/thunderjar/capture/<session>/* and the thunderjar/capture/<session> branches. Says what it would delete, and asks first.")
     .argument("[sessions...]", "the full IDs of the sessions to delete, as `capture list` shows them")
+    .addOption(olderThanOption("sessions"))
     .option("--all", "every captured session")
     .addOption(new Option("--verdict <verdict>", "only sessions with this verdict, as `capture list` shows it").choices(VERDICTS))
     .option("-y, --yes", "don't ask first")
