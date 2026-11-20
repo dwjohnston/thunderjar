@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-11T05:00:27Z",
+  "complaint": "failed to do the bun link stuff",
+  "capturedBy": null,
+
+  "agent": {
+    "harness": "Claude Code",
+    "harnessVersion": "2.1.322",
+    "harnessSurface": "VS Code extension",
+    "model": "claude-opus-5-5",
+    "sessionId": "7c2e8a3e-7fd7-45d8-b2ff-e53f94f22a18",
+    "transcriptPath": "~/.claude/projects/-workspace/7c2e8a3e-7fd7-45d8-b2ff-e53f94f22a18.jsonl",
+    "permissionMode": "auto"
+  },
+
+  "repository": {
+    "root": "/workspace/thunderjar",
+    "branch": "david-session-nov-11",
+    "headCommit": "38f7731c5f80c5d1a0f70fd7a159d82dd2c2c181",
+    "commitAtSessionStart": "825a5db",
+    "hasUncommittedChanges": true,
+    "uncommittedFiles": ["?? .claude/worktrees/"],
+    "diffStat": "",
+    "commitsMadeThisSession": ["38f7731 Show time, tokens and cost in thunderjar view"]
+  },
+
+  "conversation": {
+    "initialTask": { "text": "The `thunderjar view` does not currently show token costs or time. Update it", "verbatim": true },
+    "subsequentUserTurns": [
+      { "text": "Don't act. Did you do the bun link stuff?", "verbatim": true }
+    ]
+  },
+
+  "context": {
+    "instructionFiles": ["/workspace/CLAUDE.md", "/workspace/AGENTS.md"],
+    "instructionFilesNotLoaded": ["/workspace/thunderjar/CLAUDE.local.md"],
+    "primaryWorkingDirectoryAtStart": "/workspace",
+    "skillsAvailable": [
+      "cross-repo-changes", "git-always-commit", "thunderjar:git-always-commit", "tj-config", "tj-eval",
+      "tj-meta-pull-request-description", "tj-quick-capture", "write-for-the-human", "concise-output",
+      "ai-generated-content-header", "markdown-general", "run", "simplify", "code-review"
+    ],
+    "skillsInvoked": [],
+    "filesChanged": [
+      ".changeset/view-tokens-and-time.md",
+      "src/cli/format.ts",
+      "src/cli/commands/show/show.ts",
+      "src/cli/commands/view/view.ts",
+      "src/cli/commands/view/view.test.ts",
+      "src/cli/commands/view/app/App.tsx"
+    ],
+    "keyActions": [
+      "Read view.ts, App.tsx, format.ts, show.ts, runDataStore.ts",
+      "Edited the files directly in the main checkout on branch david-session-nov-11, not in a worktree",
+      "Ran typecheck, lint and the full test suite: all passed",
+      "Committed 38f7731 directly on david-session-nov-11",
+      "Did not run `bun run build`, `bun link`, or check the sandbox's node_modules/thunderjar symlink",
+      "When asked, answered that it had not run bun link or rebuilt, and had not checked how the CLI was linked"
+    ]
+  },
+
+  "agentAnalysis": {
+    "expected": "Follow /workspace/thunderjar/CLAUDE.local.md: work in a worktree, merge into david-session-nov-11, then run `bun run build` in /workspace/thunderjar and verify the `bun link` symlink from /workspace/thunderjar-evaluation-sandbox/node_modules/thunderjar so the sandbox picks up the change.",
+    "actual": "Edited and committed in the main checkout without a worktree, and never built or checked the bun link. The sandbox's dist/ CLI still lacks the change.",
+    "suspectedCause": "/workspace/thunderjar/CLAUDE.local.md was never loaded into context. The session started in /workspace, so only /workspace/CLAUDE.md and AGENTS.md loaded at start. Nested instruction files load when the Read, Edit or Write tools touch a file in their folder, but the agent read every file with Bash (cat, sed, grep) and made every edit with Python scripts run through Bash, so the harness never saw it work in thunderjar/. The first instruction file to load mid-session was /workspace/thunderjar/.thunderjar/CLAUDE.md, right after the agent used the Write tool to create this capture. Auto mode's guidance that the agent may use Bash in place of Read, Edit and Write probably encouraged this. The thunderjar:git-always-commit skill was also not invoked.",
+    "notes": [
+      "Added after the user pointed out that CLAUDE.local.md should have loaded once the agent worked in thunderjar/. Reading files through Bash instead of the Read tool silently skips loading nested CLAUDE.md and CLAUDE.local.md files. An eval could compare a run that reads with Bash against one that reads with the Read tool."
+    ]
+  }
+}
