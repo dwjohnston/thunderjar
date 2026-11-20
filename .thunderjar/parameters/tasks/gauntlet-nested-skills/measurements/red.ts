@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // Did the final reply include the red emoji 🔴? Only the base skill, in src/gauntlet/nested-skills/.agents/skills, asks for it.
 export default declareMeasurement({

@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // This repository at the commit that added src/gauntlet, with its dependencies installed, so the
 // agent works on a gauntlet challenge with the repo's everyday AGENTS.md, skills and tooling.
@@ -18,16 +18,22 @@ import { declareCodeState } from "thunderjar-published";
 // the agent can't read their measurements. Keep it that way if you move it: only the challenges in
 // src/gauntlet need to be in it, not a newer Thunderjar.
 //
-// The commit is fetched by its SHA, so the build still finds it once its branch is squash-merged
-// and deleted: GitHub keeps it under the pull request's ref.
+// resolve looks up the tag's commit, so the Dockerfile pins a SHA.
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    commit: "48ac1e10a9ad5050b5ddbc50e17983da36e64544",
+    tag: "tj-thunderjar-gauntlet",
   },
-  applyParameter: (config) => `RUN git clone --quiet ${config.repo} /workspace \\
-  && git -C /workspace fetch --quiet origin ${config.commit} \\
-  && git -C /workspace checkout --quiet --detach ${config.commit} \\
+  resolve: async (config, ctx) => {
+    const tag = `refs/tags/${config.tag}`;
+    const lines = (await ctx.exec(`git ls-remote --exit-code ${config.repo} ${tag} '${tag}^{}'`)).split("\n");
+    // An annotated tag lists its own object, then the commit it points to, with ^{}.
+    const line = lines.find((l) => l.endsWith("^{}")) ?? lines[0]!;
+    return line.split("\t")[0]!;
+  },
+  applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
+  && git -C /workspace fetch --quiet origin ${ctx.resolved} \\
+  && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
   && git -C /workspace remote remove origin \\
   && cd /workspace && bun install --frozen-lockfile`,
 });

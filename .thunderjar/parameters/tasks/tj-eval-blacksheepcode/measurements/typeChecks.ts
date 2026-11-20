@@ -1,4 +1,4 @@
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // Does the repository still type-check with the new test case in it?
 export default declareMeasurement({

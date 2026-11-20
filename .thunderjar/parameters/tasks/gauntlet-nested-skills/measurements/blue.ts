@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // Did the final reply include the blue emoji 🔵? Only skill b, in src/gauntlet/nested-skills/b/.agents/skills, which a.ts has nothing to do with, asks for it.
 export default declareMeasurement({

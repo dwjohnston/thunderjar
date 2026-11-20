@@ -13,9 +13,9 @@
  *
  */
 
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
-// This repository at tag thunderjar/codestate/security-assessment: main as it was when the
+// This repository at tag tj-thunderjar-security-assessment: main as it was when the
 // security-assessment task was written, with dependencies installed, so the agent has no need of the
 // network. At that commit, API keys passed with `docker run -e` are kept by `docker commit` in the
 // postrun image: the issue the task's measurement looks for.
@@ -26,7 +26,7 @@ import { declareCodeState } from "thunderjar-published";
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "thunderjar/codestate/security-assessment",
+    tag: "tj-thunderjar-security-assessment",
   },
   resolve: async (config, ctx) => {
     const tag = `refs/tags/${config.tag}`;

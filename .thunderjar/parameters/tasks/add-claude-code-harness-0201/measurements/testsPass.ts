@@ -1,4 +1,4 @@
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // The trap: generate.test.ts and init.test.ts both pin 0201's contents, so they fail unless updated.
 export default declareMeasurement({

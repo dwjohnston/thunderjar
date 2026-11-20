@@ -20,7 +20,9 @@
     "node_modules",
     "dist",
     "fixtures/.tmp",
-    "src/gauntlet"
+    "src/gauntlet",
+    ".agents/skills",
+    ".claude/skills"
   ],
   "overrides": [
     {

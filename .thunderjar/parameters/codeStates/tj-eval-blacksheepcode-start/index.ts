@@ -1,4 +1,4 @@
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // This repository as it was when captured session 49669c7c-0a9d-468d-a0aa-fbeb2bc69840 started:
 // the commit before the agent added the blacksheepcode test case. resolve looks up the tag's commit,
@@ -6,7 +6,7 @@ import { declareCodeState } from "thunderjar-published";
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "thunderjar/codestate/tj-eval-blacksheepcode-start",
+    tag: "tj-tj-eval-blacksheepcode-start",
   },
   resolve: async (config, ctx) => {
     const tag = `refs/tags/${config.tag}`;

@@ -146,12 +146,12 @@ jobs:
           TEST_CASE: ${{ needs.target.outputs.test-case }}
         run: |
           set +e
-          ./node_modules/.bin/thunderjar run "$TEST_CASE" 2>&1 | tee run.log
+          bun run tj run "$TEST_CASE" 2>&1 | tee run.log
           status=${PIPESTATUS[0]}
           id=$(grep -m1 -oP '^Execution \K\S+' run.log)
           if [ -n "$id" ]; then
             # Nothing is recorded if the execution stopped before its first container, e.g. on a failed build.
-            if ./node_modules/.bin/thunderjar show "$id" > show.log 2>&1; then
+            if bun run tj show "$id" > show.log 2>&1; then
               echo "execution=$id" >> "$GITHUB_OUTPUT"
             fi
           fi
@@ -194,7 +194,7 @@ jobs:
               body: lines.join("\n"),
             });
 
-  # .thunderjar/'s compare-models, run with the installed thunderjar-published on the local Docker
+  # .thunderjar/'s compare-models, run with the CLI from source on the local Docker
   # daemon, as `bun run dogfood:local` does.
   dogfood:
     needs: target
@@ -216,7 +216,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       - name: Show the execution
         if: always()
-        run: bunx thunderjar executions
+        run: bun run tj executions
       - name: Keep the run data and log
         if: always()
         uses: actions/upload-artifact@v7

@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareInitialPrompt, writePrompt } from "thunderjar-published";
+import { declareInitialPrompt, writePrompt } from "thunderjar";
 
 // The plain prompt, but invoking the base skill by name with /base. From the fixture's root, @a.ts
 // is a/a.ts.

@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declarePromptSet } from "thunderjar-published";
+import { declarePromptSet } from "thunderjar";
 
 // The nested-skills fixture's skills as they are at a git tag, checked out over the code state's
 // and committed. At gauntlet-nested-skills-reading-files their descriptions say "Invoke this skill

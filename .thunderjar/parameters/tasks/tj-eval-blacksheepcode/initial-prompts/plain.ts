@@ -1,4 +1,4 @@
-import { declareInitialPrompt, writePrompt } from "thunderjar-published";
+import { declareInitialPrompt, writePrompt } from "thunderjar";
 
 // Word for word, from captured session 49669c7c-0a9d-468d-a0aa-fbeb2bc69840.
 export default declareInitialPrompt({

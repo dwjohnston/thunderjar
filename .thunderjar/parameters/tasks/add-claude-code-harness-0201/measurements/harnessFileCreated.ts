@@ -1,4 +1,4 @@
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // Any claude-code harness folder in the fixture. fake-harness-alpha is already there.
 export default declareMeasurement({
