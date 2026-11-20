@@ -26,7 +26,7 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, openStore } from "../../dataDir.ts";
 import { plural } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
-import { print } from "../../output.ts";
+import { print, printError } from "../../output.ts";
 
 /** Why runs were skipped: the reason, if they share one, else how many each, e.g. `2 postrun image purged, 1 never started`. */
 function reasons(skipped: { reason: string }[]): string {
@@ -44,6 +44,11 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix }: 
   const recorded = (await store.listExecutions()).toReversed();
   const byId = recorded.filter((execution) => execution.executionId === target);
   const executions = byId.length > 0 ? byId : recorded.filter((execution) => execution.testCase === target);
+  if (executions.length === 0) {
+    printError(`No execution or test case ${target} recorded. List the executions with \`thunderjar executions\`.`);
+    process.exitCode = 1;
+    return;
+  }
   let remeasured = 0;
   const skipped: { executionId: string; run: string; reason: string }[] = [];
   for (const execution of executions) {
