@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-11-05T22:05:00Z",
+  "complaint": "Did not invoke /write-for-the-human or /concise-output",
+  "capturedBy": {
+    "sessionId": "09203808-4422-4924-9ab7-99fc465f136c",
+    "note": "Captured from another session's transcript, after the fact. Repository fields describe the state when the captured session made its commit, not the state at capture time."
+  },
+
+  "agent": {
+    "harness": "Claude Code",
+    "harnessVersion": "2.1.318",
+    "harnessSurface": "VS Code extension",
+    "model": "claude-sonnet-5-5",
+    "sessionId": "7d415040-1ed5-4557-91ca-8b727f3c299c",
+    "transcriptPath": "/home/vscode/.claude/projects/-workspace-thunderjar/7d415040-1ed5-4557-91ca-8b727f3c299c.jsonl",
+    "permissionMode": "auto"
+  },
+
+  "repository": {
+    "root": "/workspace/thunderjar",
+    "branch": "start-dog-fooding-thunderjar",
+    "headCommit": "9839823292ef9397c546c42d69f1c2cdceba6941",
+    "commitAtSessionStart": "59d0e41e15cc81fc94cfdb516680f5eb36eb5ac2",
+    "hasUncommittedChanges": null,
+    "uncommittedFiles": null,
+    "diffStat": null,
+    "commitsMadeThisSession": [
+      "9839823 🤖 Claude: Add tj-meta-pull-request-description skill"
+    ]
+  },
+
+  "conversation": {
+    "initialTask": {
+      "text": "Help me populate this skill. \n\n\nRules: \n\nNeeds to differentiate by 'installed skills' (skills that get added to .agents) \n\nand 'published skills' skills that are added to the ./skills directory. \n\nWhen updating or adding installed skills, just list them by name.",
+      "verbatim": true
+    },
+    "subsequentUserTurns": [
+      { "text": "Did you invoke /write-for-the-human ?", "verbatim": true },
+      { "text": "What's your session id", "verbatim": true }
+    ]
+  },
+
+  "context": {
+    "instructionFiles": ["/workspace/CLAUDE.md", "/workspace/thunderjar/AGENTS.md"],
+    "skillsAvailable": [
+      "ai-generated-content-header",
+      "concise-output",
+      "git-always-commit",
+      "markdown-general",
+      "markdown-writing-markdown-blocks",
+      "markdown-writing-prompts",
+      "tj-config",
+      "tj-eval",
+      "ts-write-script",
+      "user-get-attention",
+      "write-for-the-human"
+    ],
+    "skillsInvoked": [],
+    "filesChanged": [
+      ".agents/skills/tj-meta-pull-request-description/SKILL.md"
+    ],
+    "keyActions": [
+      "Read the empty skill, AGENTS.md, skills/tj-config and the body of PR 93 for conventions",
+      "Read .agents/skills/ai-generated-content-header/SKILL.md with cat, rather than invoking it",
+      "Wrote .agents/skills/tj-meta-pull-request-description/SKILL.md without invoking any skill",
+      "Edited it with a Python script, leaving a stray 'Users of thunderjar.' in a table row",
+      "Committed 9839823",
+      "When asked, confirmed it had not invoked write-for-the-human, markdown-writing-prompts, markdown-general, concise-output or git-always-commit"
+    ]
+  },
+
+  "agentAnalysis": {
+    "expected": "Invoke write-for-the-human and concise-output (and markdown-writing-prompts) before writing a SKILL.md, as their descriptions cover SKILL.md files.",
+    "actual": "Invoked no skills at all. It modelled the new skill on existing skills it had read instead.",
+    "suspectedCause": "Copying the style of neighbouring files felt like enough, so the general writing skills never triggered. The captured agent's own words: \"I wrote it from the existing skills I'd read and didn't load any of them first.\""
+  }
+}

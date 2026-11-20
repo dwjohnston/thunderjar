@@ -1,0 +1,136 @@
+// One container run: its prerun image's `thunderjar-run.sh`, run in a container from the image,
+// in the image's working directory, then committed into its postrun image. The container is
+// removed afterwards, whatever happens.
+import {
+  commitContainer,
+  DockerContainerError,
+  type DockerRuntime,
+  localRuntime,
+  readContainerFile,
+  removeContainer,
+  runContainer,
+} from "../docker/docker.ts";
+import type { Execution } from "../store/runDataStore.ts";
+import { RESULT_PATH, RUN_PATH, START_MARKER, STDERR_PATH, timedRun } from "./runScript.ts";
+import { type SecretSearch, searchableSecrets, searchForSecrets } from "./secretSearch.ts";
+import { type Timer, untimed } from "./timings.ts";
+
+export { NOW_MS_FUNCTION, RUN_PATH, STDERR_PATH } from "./runScript.ts";
+
+export type ContainerRun = {
+  prerunImage: string;
+  postrunImage: string;
+  /** The names of the environment variables passed into the container, from Thunderjar's own. */
+  env: string[];
+  /** More `docker run` options, from its base image. */
+  runOptions: string[];
+  /** Variables set with these values, from its test case's `env`: its postrun image keeps them. */
+  testCaseEnv?: Record<string, string>;
+  /** The names of more variables passed in, from its test case's `secretEnv`, as `env`'s are. */
+  secretEnv?: string[];
+  /** How long its run script may run before it's killed. */
+  timeoutSeconds: number;
+  /** The container's name. */
+  container: string;
+  /** Where it runs: the local Docker daemon by default. */
+  runtime?: DockerRuntime;
+  /** Times its phases: the agent, collecting what it left, and the commit. */
+  time?: Timer;
+};
+
+export type ContainerRunOutcome = {
+  execution: Execution;
+  /** The text of its result file, or null if it left none. */
+  harnessResult: string | null;
+  /** The run script's standard error, or null if it never ran. */
+  stderr: string | null;
+  /** Whether its container was committed into its postrun image: not if it never started. */
+  committed: boolean;
+  /** What searching its postrun image's files for its secret values came to. Absent if it had none to search for. */
+  secrets?: SecretSearch;
+};
+
+/** Whether `value` is plausibly ms since the epoch: from 2001-09-09 (13 digits) up to 2286. */
+const isEpochMs = (value: unknown): value is number =>
+  Number.isInteger(value) && (value as number) >= 1e12 && (value as number) < 1e13;
+
+/** Whether `value` is how one turn ran, as the run script records it. */
+const isTurn = (value: unknown): value is { startedAt: number; finishedAt: number; exitCode: number } => {
+  const { startedAt, finishedAt, exitCode } = (value ?? {}) as Record<string, unknown>;
+  return isEpochMs(startedAt) && isEpochMs(finishedAt) && typeof exitCode === "number";
+};
+
+/**
+ * The Execution in the text of RUN_PATH, of a run with a limit of `timeoutSeconds`. If it was
+ * killed at `killedAt`, RUN_PATH holds only its start, and it finished when it was killed. Throws
+ * a DockerContainerError if it isn't a valid one.
+ */
+export function parseExecution(text: string | undefined, timeoutSeconds: number, killedAt?: number): Execution {
+  let parsed: Partial<Execution> | undefined;
+  try {
+    parsed = text === undefined ? undefined : (JSON.parse(text) as Partial<Execution>);
+  } catch {
+    parsed = undefined;
+  }
+  const { startedAt, finishedAt, exitCode, turns } = parsed ?? {};
+  const invalid = () =>
+    new DockerContainerError(`The run script left no valid ${RUN_PATH}: ${text === undefined ? "there is none" : text.trim()}`);
+  if (!isEpochMs(startedAt)) throw invalid();
+  // The times are wall-clock times, so a clock stepped back mid-run, e.g. by time sync on a VM
+  // that has just booted, can put the finish before the start. A run never takes less than nothing.
+  const notBeforeStart = (at: number) => Math.max(at, startedAt);
+  if (killedAt !== undefined) return { startedAt, finishedAt: notBeforeStart(killedAt), exitCode: null, timedOut: true, timeoutSeconds };
+  if (!isEpochMs(finishedAt) || typeof exitCode !== "number") throw invalid();
+  if (turns !== undefined && (!Array.isArray(turns) || !turns.every(isTurn))) throw invalid();
+  return { startedAt, finishedAt: notBeforeStart(finishedAt), exitCode, timedOut: false, timeoutSeconds, ...(turns && { turns }) };
+}
+
+/**
+ * Runs `run`, commits its container into its postrun image, even when the agent exits
+ * non-zero or is killed for taking longer than its timeout, and removes the container. A container
+ * that never started is an outcome too, with `failedToStart`, and nothing to commit. Throws a
+ * DockerContainerError if Docker fails otherwise.
+ */
+export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
+  const runtime = run.runtime ?? localRuntime();
+  const time = run.time ?? untimed;
+  try {
+    const stop = await time("agent", () =>
+      runContainer(run.prerunImage, run.container, timedRun(), {
+        env: run.env,
+        runOptions: run.runOptions,
+        setEnv: run.testCaseEnv,
+        secretEnv: run.secretEnv,
+        timeoutSeconds: run.timeoutSeconds,
+        startMarker: START_MARKER,
+        runtime,
+      }),
+    );
+    if (stop.outcome === "notStarted") {
+      const execution: Execution = {
+        startedAt: stop.spawnedAt,
+        finishedAt: stop.gaveUpAt,
+        exitCode: null,
+        timedOut: false,
+        timeoutSeconds: run.timeoutSeconds,
+        failedToStart: stop.reason,
+      };
+      return { execution, harnessResult: null, stderr: null, committed: false };
+    }
+    const killedAt = stop.outcome === "timedOut" ? stop.killedAt : undefined;
+    const [execution, harnessResult, stderr] = await time("collect", async () => [
+      parseExecution(await readContainerFile(run.container, RUN_PATH, runtime), run.timeoutSeconds, killedAt),
+      (await readContainerFile(run.container, RESULT_PATH, runtime)) ?? null,
+      (await readContainerFile(run.container, STDERR_PATH, runtime)) ?? null,
+    ] as const);
+    await time("commit", () => commitContainer(run.container, run.postrunImage, run.prerunImage, runtime, run.testCaseEnv));
+    // Before the postrun image is pushed: in the files it would push, for the values of the
+    // variables the agent was given by name. Not at all, and not timed, if there are none.
+    const secretNames = searchableSecrets([...run.env, ...(run.secretEnv ?? [])]);
+    const secrets =
+      secretNames.length === 0 ? undefined : await time("secretSearch", () => searchForSecrets(run.postrunImage, `${run.container}-secrets`, secretNames, runtime));
+    return { execution, harnessResult, stderr, committed: true, ...(secrets !== undefined && { secrets }) };
+  } finally {
+    await removeContainer(run.container, runtime).catch(() => {});
+  }
+}
