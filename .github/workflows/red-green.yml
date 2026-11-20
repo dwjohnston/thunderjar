@@ -1,0 +1,49 @@
+# 🤖 This file was created with AI
+# Harness: Claude Code
+# Session Id: session_01LCLeLj17bvjTxKwnG6HoJE
+# Supervising engineer: David Johnston
+#
+# Humans: add your notes here
+
+# Enforces the red/green TDD commit workflow on each commit of a PR, with scripts/red-green.ts.
+# See "Red/green commits" in AGENTS.md. Its own workflow, so adding or removing the
+# multi-red-approved label re-runs only this.
+name: Red/green
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  red-green:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Every commit of the PR, not the merge commit.
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # As ci.yml's docker job: a 🔴 commit's test may be a Docker test.
+      - name: Let containers make user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull or build the sample repo image
+        run: bun run di:build:sample-repo --registry ghcr.io/${{ github.repository_owner }}/thunderjar-sample-repo --push
+      - name: Check each commit against the red/green rules
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          MULTI_RED_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'multi-red-approved') }}
+        run: |
+          flags=(--docker)
+          if [ "$MULTI_RED_APPROVED" = "true" ]; then flags+=(--multi-red-approved); fi
+          bun run red-green --base "$BASE" --head "$HEAD" "${flags[@]}"

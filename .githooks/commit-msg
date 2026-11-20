@@ -1,0 +1,29 @@
+#!/bin/sh
+# 🤖 This file was created with AI
+# Harness: Claude Code
+# Session Id: session_01LCLeLj17bvjTxKwnG6HoJE
+# Supervising engineer: David Johnston
+#
+# Humans: add your notes here
+
+# Checks the commit being made against the red/green rules: see "Red/green commits" in AGENTS.md.
+# `bun install` turns it on, with the package's prepare script.
+#
+# Set THUNDERJAR_SKIP_RED_GREEN_HOOK=1 to turn it off.
+
+[ "$THUNDERJAR_SKIP_RED_GREEN_HOOK" = "1" ] && exit 0
+
+# Merges, rebases and cherry-picks replay commits, which CI checks.
+git_dir=$(git rev-parse --git-dir)
+for state in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply; do
+  [ -e "$git_dir/$state" ] && exit 0
+done
+
+# git commit --amend: check the amended commit as a whole. Git doesn't tell the hook it's an amend,
+# so it reads the parent git process's command line. See "Red/green commits" in AGENTS.md for its limits.
+amend=""
+case "$(ps -o args= -p "$PPID" 2>/dev/null)" in
+  *--amend*) amend="--amend" ;;
+esac
+
+exec bun scripts/red-green.ts --staged "$1" $amend

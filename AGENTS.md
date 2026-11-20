@@ -233,6 +233,67 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
    - `bun run test:package` packs Thunderjar, installs the tarball into an empty project in a temporary folder, and runs `init`, `generate`, `plan example` and `run example --dry-run` there with the installed `thunderjar`.
    - Every other test runs Thunderjar from source. This one catches what only the package gets wrong, such as a file left out of `files`.
 
+## Red/green commits
+
+Commits follow the red/green TDD workflow of the [red-green-tdd skill](https://github.com/dwjohnston/agent-skills/blob/main/skills/red-green-tdd/red-green-tdd.md). Start the subject with a marker, after a `prefix: ` such as `🤖 Claude: ` if it has one. A marker later in the subject doesn't count.
+
+```text
+♻️ Refactor format handling into a reporters map
+🔴 Add test demonstrating --format json outputs problems as JSON
+🟢 Add functionality solving --format json output
+```
+
+The `Red/green` workflow (`red-green.yml`) checks every commit of a PR with `scripts/red-green.ts`:
+
+| Marker | May change test files | Test files run, which must... |
+|---|---|---|
+| 🔴 | Yes | Its own: exactly one fails, and the commit added or changed it |
+| 🔴🔴 | Yes, but adds no tests | Its own: at least one fails, and the commit changed each one. Needs the `multi-red-approved` label |
+| 🟢 | No | The 🔴 commit's before it: all pass |
+| ♻️ | Yes | Its own: all pass |
+| None | No | Not run |
+
+- Only the commit's own test files run, or for a 🟢, its 🔴's. The CI check job runs the whole suite at the head.
+- A 🔴 or 🔴🔴 commit must be followed by a 🟢 commit.
+- A test file that fails to load fails the commit, whatever its marker.
+- Test files are `*.test.*` and `*.result.json`, outside `src/gauntlet/`.
+
+Run it locally before pushing. Add `--docker` if the branch changes a `.docker.test.ts` file:
+
+```sh
+bun run red-green --base origin/main --head HEAD
+```
+
+**Why:** each 🔴 is a claim that one behaviour was missing. One failing test per red makes the claim checkable, and the 🟢 after it shows exactly what made it pass.
+
+### The commit hook
+
+`bun install` turns on `.githooks/commit-msg`, which checks each commit as it's made.
+
+- It checks the test-file rule at once. For a marked commit, it also runs the tests on the staged files.
+- It can't see the next commit, or the PR's labels. So "followed by a 🟢" and `multi-red-approved` are left to CI.
+- Merges, rebases and cherry-picks aren't checked. CI checks them.
+- To skip it:
+  ```sh
+  THUNDERJAR_SKIP_RED_GREEN_HOOK=1 git commit …
+  ```
+
+#### Amends
+
+Git doesn't tell the hook a commit is an amend. Without knowing, the hook compares the staged files against `HEAD`, the commit being replaced.
+
+- e.g. amending only the message of a 🔴 commit:
+  - Against `HEAD`, nothing changed, so the commit seems to touch no test file.
+  - The red test still fails, so the hook rejects it: "failing test the commit didn't change".
+  - Judged as a whole, against `HEAD^`, the commit is fine.
+- The workaround: the hook reads the command line of the `git commit` process that started it (`ps -o args= -p $PPID`). If it contains `--amend`, the hook compares against `HEAD^`.
+- Where it falls short:
+  1. It needs `ps`. That works on Linux and macOS. Where `ps` is missing or different, e.g. some Windows shells or minimal containers, an amend is checked like a normal commit, with the false rejection above.
+  2. It only sees the flag on the command line. A git alias, or a tool that amends some other way, isn't detected.
+  3. Escape hatch: `THUNDERJAR_SKIP_RED_GREEN_HOOK=1 git commit --amend …`. CI still checks the commit afterwards.
+
+**Why not a `post-rewrite` hook:** git runs it after an amend, and says so. But the commit already exists by then, so it could only warn, not block.
+
 ## Fixtures 
 
 Fixtures are example projects with sample thunderjar configurations. 

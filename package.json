@@ -26,6 +26,7 @@
     "access": "public"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "tj": "bun src/cli/index.ts",
     "build": "rm -rf dist && bun build src/cli/index.ts --target bun --outdir dist --entry-naming [name].[ext] --production",
     "lint": "bun scripts/lint-layers.ts --check && oxlint",
@@ -38,6 +39,7 @@
     "test:package": "bun scripts/package-smoke-test.ts",
     "di:build:sample-repo": "bun scripts/build-sample-repo-image.ts",
     "fixture": "bun scripts/fixture.ts",
+    "red-green": "bun scripts/red-green.ts",
     "dogfood:local": "thunderjar run compare-models --local",
     "dogfood:remote": "THUNDERJAR_REMOTE=1 thunderjar run compare-models",
     "docs:dev": "bun --bun vitepress dev docs",
