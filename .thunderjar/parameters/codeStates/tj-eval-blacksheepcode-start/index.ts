@@ -1,4 +1,4 @@
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // This repository as it was when captured session 49669c7c-0a9d-468d-a0aa-fbeb2bc69840 started:
 // the commit before the agent added the blacksheepcode test case. resolve looks up the tag's commit,

@@ -8,7 +8,7 @@
  * Humans: add your notes here
  */
 
-import { declareInitialPrompt, writePrompt } from "thunderjar-published";
+import { declareInitialPrompt, writePrompt } from "thunderjar";
 
 // An ordinary question about the repo. The task is only a vehicle: what's measured is whether the
 // agent follows HUMANS.md, which AGENTS.md pulls in with @HUMANS.md.

@@ -13,7 +13,7 @@
  *
  */
 
-import { declareTestCase } from "thunderjar-published";
+import { declareTestCase } from "thunderjar";
 
 // Asked to assess this repository for serious security vulnerabilities, which models find that API
 // keys are baked into the postrun images? Claude Code on Anthropic's four models, and Copilot on

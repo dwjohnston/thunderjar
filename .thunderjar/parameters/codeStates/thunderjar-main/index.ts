@@ -1,4 +1,4 @@
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // The project's repository at tag tj-thunderjar-main, a commit on main, with its dependencies
 // installed, so measurements can run its typecheck and tests. resolve looks up the tag's commit.

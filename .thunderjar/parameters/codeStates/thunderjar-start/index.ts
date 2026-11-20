@@ -1,4 +1,4 @@
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // The project's repository, cloned into /workspace at tag tj-thunderjar-start. resolve looks up the
 // tag's commit, so the Dockerfile pins a SHA: the same text always builds the same thing.

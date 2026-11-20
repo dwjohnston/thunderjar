@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareInitialPrompt, writePrompt } from "thunderjar-published";
+import { declareInitialPrompt, writePrompt } from "thunderjar";
 
 // The sandbox's prompt, with the challenge's paths from the repository root, where the agent starts.
 export default declareInitialPrompt({

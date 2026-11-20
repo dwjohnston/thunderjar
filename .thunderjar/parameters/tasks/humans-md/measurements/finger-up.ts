@@ -8,7 +8,7 @@
  * Humans: add your notes here
  */
 
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 // Did the final reply include ☝️, as HUMANS.md asks? Matches the base character, with or without
 // the variation selector.

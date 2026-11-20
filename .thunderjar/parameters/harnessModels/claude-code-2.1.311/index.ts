@@ -1,4 +1,4 @@
-import { claudeCode } from "thunderjar-published";
+import { claudeCode } from "thunderjar";
 
 // Claude Code, installed as root, then run as the image's non-root `node` user: it won't skip its
 // permission prompts as root, and nobody is there to answer them. It needs ANTHROPIC_API_KEY.

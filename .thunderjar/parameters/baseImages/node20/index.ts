@@ -1,4 +1,4 @@
-import { declareBaseImage } from "thunderjar-published";
+import { declareBaseImage } from "thunderjar";
 
 // With bun, which the bunTestFile measurement runs its tests with, and a git identity, so the
 // agent and a prompt set can commit. `--system`, so a harness that runs as another user has it too.

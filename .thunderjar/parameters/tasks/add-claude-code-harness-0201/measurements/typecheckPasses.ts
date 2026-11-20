@@ -1,4 +1,4 @@
-import { declareMeasurement } from "thunderjar-published";
+import { declareMeasurement } from "thunderjar";
 
 export default declareMeasurement({
   instrument: "shell",

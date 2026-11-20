@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // This repository at the commit that added src/gauntlet, with its dependencies installed, so the
 // agent works on a gauntlet challenge with the repo's everyday AGENTS.md, skills and tooling.

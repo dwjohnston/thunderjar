@@ -1,4 +1,4 @@
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // This repository at #198 (9f656df), which replaced the tj-eval skill with one skill per parameter,
 // tj-test-case and tj-create-from-capture, and updated HUMANS.md and .thunderjar/AGENTS.md. Compare

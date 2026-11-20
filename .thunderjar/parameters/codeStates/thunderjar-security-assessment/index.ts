@@ -13,7 +13,7 @@
  *
  */
 
-import { declareCodeState } from "thunderjar-published";
+import { declareCodeState } from "thunderjar";
 
 // This repository at tag tj-thunderjar-security-assessment: main as it was when the
 // security-assessment task was written, with dependencies installed, so the agent has no need of the

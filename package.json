@@ -38,8 +38,8 @@
     "test:package": "bun scripts/package-smoke-test.ts",
     "di:build:sample-repo": "bun scripts/build-sample-repo-image.ts",
     "fixture": "bun scripts/fixture.ts",
-    "dogfood:local": "thunderjar run compare-models --local",
-    "dogfood:remote": "THUNDERJAR_REMOTE=1 thunderjar run compare-models",
+    "dogfood:local": "bun src/cli/index.ts run compare-models --local",
+    "dogfood:remote": "THUNDERJAR_REMOTE=1 bun src/cli/index.ts run compare-models",
     "docs:dev": "bun --bun vitepress dev docs",
     "docs:build": "bun --bun vitepress build docs",
     "docs:build:versions": "bun scripts/build-versioned-docs.ts",
@@ -62,7 +62,6 @@
     "react-dom": "19"
   },
   "devDependencies": {
-    "thunderjar-published": "npm:thunderjar@0.4.0",
     "@changesets/cli": "^2.31.0",
     "@changesets/get-release-plan": "^4.0.16",
     "@types/bun": "^1.4.3",

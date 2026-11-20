@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareTestCase } from "thunderjar-published";
+import { declareTestCase } from "thunderjar";
 import { gauntletHarnessModels } from "../shared/gauntletHarnessModels.ts";
 
 // gauntlet-wrong-failing-test, on one harness only: to rerun the part of it that failed, or that

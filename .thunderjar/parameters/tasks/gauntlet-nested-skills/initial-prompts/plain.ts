@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareInitialPrompt, writePrompt } from "thunderjar-published";
+import { declareInitialPrompt, writePrompt } from "thunderjar";
 
 // The user's prompt, word for word. From the fixture's root, @a.ts is a/a.ts.
 export default declareInitialPrompt({

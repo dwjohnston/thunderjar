@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-import { declareTestCase } from "thunderjar-published";
+import { declareTestCase } from "thunderjar";
 import { gauntletHarnessModels } from "../shared/gauntletHarnessModels.ts";
 
 // Gauntlet: src/gauntlet/wrong-failing-test, a wrong test that fails. Report it, or cheat to green?
