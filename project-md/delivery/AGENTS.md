@@ -33,20 +33,31 @@ bun project-md/delivery/ralph.ts --max 3
 
 ```mermaid
 flowchart TD
-    A[Pick the lowest-numbered file in tasks/<br/>not done/, draft/ or archive/] --> B{Any left?}
+    S["git fetch --quiet origin &lt;base&gt;"] --> A
+    A["Pick the lowest-numbered file in tasks/<br/>not done/, draft/ or archive/"] --> B{Any left?}
     B -- No --> Z[Stop: no tasks left]
-    B -- Yes --> C[Worktree on ralph/&lt;task&gt;<br/>from the previous task's branch<br/>or, for the first, origin/&lt;base&gt;]
-    C --> D[claude -p with the task's model and effort<br/>capture on, as a branch]
-    D --> E[Move the task file to done/<br/>with the run in its frontmatter]
-    E --> F[Force-push ralph/&lt;task&gt;]
-    F --> G[Open a draft PR<br/>into the branch it started from]
-    G --> H[Push the capture branch]
-    H --> I{Reached --max?}
+    B -- Yes --> C["git worktree add -B ralph/&lt;task&gt; &lt;worktree&gt; origin/&lt;from&gt;<br/>bun install --frozen-lockfile"]
+    C --> D["THUNDERJAR_CAPTURE_STORE=branch claude -p &lt;prompt&gt;<br/>--session-id &lt;session&gt; --model &lt;model&gt; --effort &lt;effort&gt;<br/>--output-format json --permission-mode bypassPermissions<br/>--max-budget-usd &lt;budget&gt;"]
+    D --> E["mkdir -p project-md/delivery/tasks/done<br/>git mv project-md/delivery/tasks/&lt;task&gt;.md project-md/delivery/tasks/done/&lt;task&gt;.md<br/>add the run to its frontmatter, git add<br/>git commit --quiet --no-verify -m '🤖 ralph: Move task &lt;task&gt; to done'"]
+    E --> F["git push --no-verify --force --set-upstream origin ralph/&lt;task&gt;"]
+    F --> G["gh api repos/&lt;owner&gt;/&lt;repo&gt;/pulls<br/>-f title=&lt;task&gt; -f head=ralph/&lt;task&gt; -f base=&lt;from&gt;<br/>-f body=&lt;agent's final message&gt; -F draft=true"]
+    G --> H["git push --no-verify origin thunderjar/capture/&lt;session&gt;"]
+    H --> R["git worktree remove --force &lt;worktree&gt;"]
+    R --> I{Reached --max?}
     I -- No --> A
     I -- Yes --> X[Stop]
 ```
 
-- `<base>` is `--base`, else the current branch, else on a detached HEAD the one origin branch at it.
+Placeholders:
+
+- `<base>`: `--base`, else the current branch, else on a detached HEAD the one origin branch at it.
+- `<from>`: `<base>` for the first task of a run; after that, `ralph/<previous task>`.
+  - `origin/ralph/<previous task>` is up to date without a fetch: the previous task's push updated it.
+- `<worktree>`: `$TMPDIR/thunderjar-ralph/<task>`, or `/tmp/…` without `TMPDIR`.
+- `<session>`: a UUID made by ralph, so the capture branch's name is known before the run.
+- `<prompt>`: ralph's instructions, then the task file.
+- `<owner>/<repo>`: from `git remote get-url origin`.
+
 - Tasks stack: each PR targets the previous task's branch.
 - The run in the done file's frontmatter:
   ```yaml
