@@ -23,6 +23,10 @@ import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
 
 /** Two-harnesses: 2 container runs, 1-1 and 2-1, started 2026-10-02. */
 const TWO_HARNESSES = "01m3ygz4g89aqh8yey8em0twpq";
+/** Two-harnesses again: 2 container runs, 1-1 and 2-1, started 2026-10-04. */
+const TWO_HARNESSES_AGAIN = "01m430hgt00w0g80g80m3g2102";
+/** Is-prime-baseline: 40 container runs. */
+const BASELINE = "01m3vf68s54p5eyn5s3t1ygkdj";
 const postrun = (id: string, run: string) => `thunderjar-postrun:${id}-${run}`;
 const MEASUREMENTS = ".thunderjar/parameters/tasks/is-prime/measurements";
 
@@ -81,5 +85,18 @@ describe("remeasure", () => {
     const { result: _3, ...restBefore } = before1;
     expect(rest).toEqual(restBefore);
     expect(await $`ls ${fake.env.FAKE_DOCKER_DIR}/containers`.quiet().nothrow().text()).toBe("");
+  });
+
+  test("a test case: the runs of every past execution of it are measured again, and no other's", async () => {
+    const copy = await project();
+    const fake = await docker([TWO_HARNESSES, TWO_HARNESSES_AGAIN].flatMap((id) => [postrun(id, "1-1"), postrun(id, "2-1")]));
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["remeasure", "two-harnesses"], { env: fake.env });
+
+    expect({ stdout, stderr, exitCode }).toEqual({ stdout: "remeasured 4 runs\n", stderr: "", exitCode: 0 });
+    for (const id of [TWO_HARNESSES, TWO_HARNESSES_AGAIN]) {
+      expect((await runsOf(copy, id)).map((run) => run.earlierResults?.length)).toEqual([1, 1]);
+    }
+    expect((await runsOf(copy, BASELINE)).filter((run) => run.earlierResults !== undefined)).toEqual([]);
   });
 });
