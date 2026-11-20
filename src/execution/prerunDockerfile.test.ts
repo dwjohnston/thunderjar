@@ -44,6 +44,7 @@ describe("renderPrerun", () => {
         "WORKDIR /workspace",
         "RUN npm ci",
         "COPY CLAUDE.md /workspace/",
+        'RUN if git -C /workspace rev-parse --git-dir >/dev/null 2>&1; then git -C /workspace update-ref refs/thunderjar/start HEAD; fi',
         "RUN npm install -g claude",
         "RUN touch /workspace/PROMPT",
         "",
