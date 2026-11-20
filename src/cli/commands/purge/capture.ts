@@ -25,7 +25,6 @@ import {
   remoteCaptureRefs,
   selectionProblem,
   selectTargets,
-  UnknownSessionError,
 } from "../../../capture/purge.ts";
 import { type Paint, padEnd, painter, visibleLength } from "../../colour.ts";
 import { confirm } from "../../confirm.ts";
@@ -94,7 +93,7 @@ async function purgeCapture(cwd: string, sessions: string[], options: CaptureOpt
     }
     targets = selectTargets(root, { local, remote: remoteRefs }, [...local, ...readable(root, remoteRefs)], selection, now);
   } catch (error) {
-    if (error instanceof UnknownSessionError) return fail(error.message);
+    // An unknown session, or git failing to reach the remote.
     return fail(error instanceof Error ? error.message : String(error));
   }
   const report = (sessions: PurgeTarget[]) => options.json && printJson({ dryRun: options.dryRun === true, from, remote: places.remote ? remote : null, sessions });
