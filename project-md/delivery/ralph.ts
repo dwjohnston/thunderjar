@@ -295,3 +295,16 @@ export function pullRequestArgs(repo: Repo, pr: PullRequest): string[] {
     ".html_url",
   ];
 }
+
+/**
+ * What to do with a task:
+ * - skip: it has a PR.
+ * - resume: its run was saved and its branch pushed, but its PR never opened. Open it from the saved state.
+ * - run: run it, afresh.
+ * - orphan: its branch is on the remote with no PR and no saved state. A human decides.
+ */
+export type Action = "skip" | "resume" | "run" | "orphan";
+
+export function nextAction(found: { hasPr: boolean; hasState: boolean; onRemote: boolean }): Action {
+  return "run";
+}

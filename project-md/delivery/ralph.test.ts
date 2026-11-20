@@ -13,7 +13,7 @@
  *
  */
 import { expect, test } from "bun:test";
-import { parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
+import { nextAction, parseRemote, parseTask, pullRequestArgs } from "./ralph.ts";
 
 test("parseTask reads harness, model and effort from the frontmatter", () => {
   const text = "---\nharness: claude-code\nmodel: sonnet\neffort: medium\n---\n\n# 3900: A task\n";
@@ -57,4 +57,13 @@ test("pullRequestArgs opens a draft PR over REST, not GraphQL", () => {
     "--jq",
     ".html_url",
   ]);
+});
+
+test("nextAction skips tasks with a PR, and resumes a pushed run that has no PR", () => {
+  expect(nextAction({ hasPr: true, hasState: true, onRemote: true })).toBe("skip");
+  expect(nextAction({ hasPr: true, hasState: false, onRemote: true })).toBe("skip");
+  expect(nextAction({ hasPr: false, hasState: true, onRemote: true })).toBe("resume");
+  expect(nextAction({ hasPr: false, hasState: true, onRemote: false })).toBe("run");
+  expect(nextAction({ hasPr: false, hasState: false, onRemote: true })).toBe("orphan");
+  expect(nextAction({ hasPr: false, hasState: false, onRemote: false })).toBe("run");
 });
