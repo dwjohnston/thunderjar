@@ -96,3 +96,12 @@ test("--verdict --dry-run lists the sessions it would delete, with verdict, age 
   });
   expect(localRefs()).toEqual(before);
 });
+
+test("session IDs with --yes delete their refs in both stores, and leave the rest", async () => {
+  const { stdout, stderr, exitCode } = await purge(["old-incomplete", "new-one-shot", "--yes"]);
+
+  expect(stderr).toBe("");
+  expect(stdout).toEndWith("2 sessions deleted.\n");
+  expect(exitCode).toBe(0);
+  expect(localRefs()).toEqual(["refs/thunderjar/capture/a-question/start", "refs/thunderjar/capture/a-question/turn-1"]);
+});
