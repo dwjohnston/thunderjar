@@ -140,4 +140,14 @@ describe("openMeasurementContext's transcript", () => {
       await ctx.close();
     }
   });
+
+  test("is unavailable, saying why, when its parse throws", async () => {
+    await using _ = await postrunImage(`${SESSION} && echo 'not JSON' >> "$HOME/.fake/sessions/main/a.jsonl"`);
+    const ctx = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", RECORDED, undefined, [], FAKE_TRANSCRIPT);
+    try {
+      await expect(ctx.transcript()).resolves.toEqual({ outcome: "unavailable", reason: expect.stringMatching(/^unparseable: .*JSON/) });
+    } finally {
+      await ctx.close();
+    }
+  });
 });
