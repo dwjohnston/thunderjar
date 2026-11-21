@@ -31,6 +31,15 @@ export type SplitPair = { harness: string; modelId: string; model: Record<string
  * `pair`, split by `models`, its harness's declared models: the harness folder, then the longest
  * declared model ID that matches, then one part per variant setting. A problem if it names none.
  */
-export function splitPair(pair: string, _models: HarnessModels): SplitPair | { problem: string } {
-  return { problem: pair };
+export function splitPair(pair: string, models: HarnessModels): SplitPair | { problem: string } {
+  const slash = pair.indexOf("/");
+  const harness = pair.slice(0, slash);
+  const rest = pair.slice(slash + 1);
+  const modelId = Object.keys(models)
+    .filter((id) => rest === id || rest.startsWith(`${id}/`))
+    .toSorted((a, b) => b.length - a.length)[0];
+  if (modelId === undefined) return { problem: pair };
+  const variant = modelVariants(modelId, models[modelId] ?? []).find((candidate) => candidate.name === rest);
+  if (variant === undefined) return { problem: pair };
+  return { harness, modelId, model: variant.model };
 }
