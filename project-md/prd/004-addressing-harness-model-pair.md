@@ -67,12 +67,15 @@ parameters/harnessModels/
 - **To try another version, copy the folder.** The copy is a few lines, or one, with a
   helper like `claudeCode({ version })`. Name the folder after its version, so a pair reads as
   what it runs.
-- **Any model ID.** A pair splits at its first `/`, and the rest is the model ID, as the
-  agent takes it, `/`s and all: `opencode-1.19.5/opencode/claude-haiku-5-5`. There is no map
-  from a model's name to its ID, so nothing to keep in step with the agent's own list.
-- **No compatibility machinery.** `thunderjar generate` lists the harness folders, and the
-  pair type is `` `${HarnessName}/${string}` ``: a harness that isn't declared is a type
-  error. Whether the agent knows the model is the agent's to say.
+- **Declared models only.** A harness declares the models it runs, by their real IDs, in
+  `models`, and a pair may only name those. Corrected by task 3851: before it, any model ID was
+  accepted. A pair splits at its first `/` for the harness folder, then at the longest declared
+  model ID that matches, `/`s and all: `opencode-1.19.5/opencode/claude-haiku-5-5`. A variant
+  setting, e.g. `{ reasoningEffort: { values: ["low", "high"] } }`, adds one required part:
+  `codex-0.166.0/openai/gpt-6.1-sol/high`.
+- **Generated names.** `thunderjar generate` loads each harness, and the pair type is the union
+  of the names its models make: an undeclared model is a type error. A harness that fails to load
+  gets a warning, and takes any model, `` `<harness>/${string}` ``.
 - **`collectTokenCosts` sits beside `collectReply`** in the declaration. Both read the result
   file after the run, so neither is in the hash.
 

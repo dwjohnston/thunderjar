@@ -25,13 +25,31 @@ First, read the tj-general skill: the order parameters are applied in, and the o
 
 A harness is one agent at one version, in `.thunderjar/parameters/harnessModels/<agent>-<version>/index.ts`.
 
-A test case pairs it with a model: `<folder>/<model ID>`.
+It declares the models it runs, by the IDs its agent takes, in `models`. A test case pairs it with one of them: `<folder>/<model ID>`, plus one part per variant setting.
 
 e.g.
 
 ```ts
-harnessModel: ["claude-code-2.1.311/claude-haiku-5-5", "codex-0.166.0/openai/gpt-6-luna"],
+// harnessModels/codex-0.166.0/index.ts
+models: {
+  "openai/gpt-5.5": [],
+  "openai/gpt-6-luna": [{ reasoningEffort: { values: ["low", "medium", "high"] } }],
+},
+
+// a test case
+harnessModel: ["claude-code-2.1.311/claude-haiku-5-5", "codex-0.166.0/openai/gpt-6-luna/medium"],
 ```
+
+- A fixed setting, e.g. `{ reasoningEffort: "low" }`, adds nothing to the name.
+- A variant setting adds one required part. Several make their cross product, parts in array order.
+- The fragment reads `ctx.modelId`, the model ID alone, and `ctx.model`, the settings with each variant's value, e.g. `ctx.model.reasoningEffort`.
+- Run `thunderjar generate` after changing `models`, so test cases type-check against them.
+
+✅ **Do** pass a variant to the agent, e.g. `-c model_reasoning_effort=${ctx.model.reasoningEffort}`.
+
+❌ **Don't** declare a variant the fragment ignores.
+
+**Why:** each variant is its own permutation. One that changes nothing reruns the same agent under another name.
 
 
 ## Any other agent
@@ -48,12 +66,13 @@ const OPENROUTER =
 
 export default declareHarness({
   version: "0.166.0",
+  models: { "openai/gpt-6-luna": [{ reasoningEffort: { values: ["low", "medium", "high"] } }] },
   applyParameter: (_config, ctx) =>
     [
       `RUN npm install -g @openai/codex@${ctx.version}`,
       "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
       writeModel(ctx.modelId),
-      writeRunScript(`codex exec ${OPENROUTER} --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`),
+      writeRunScript(`codex exec ${OPENROUTER} -c model_reasoning_effort=${ctx.model.reasoningEffort} --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`),
       "USER node",
     ].join("\n"),
   requiredEnv: ["OPENROUTER_API_KEY"],
@@ -62,15 +81,16 @@ export default declareHarness({
 
 What each part must do:
 
-1. Install the agent at `ctx.version`, as root.
-2. Give the agent's user `/workspace` and `/thunderjar`.
-3. Write the model ID with `writeModel(ctx.modelId)`.
-4. Write the run script with `writeRunScript`.
+1. Declare its `models`.
+2. Install the agent at `ctx.version`, as root.
+3. Give the agent's user `/workspace` and `/thunderjar`.
+4. Write the model ID with `writeModel(ctx.modelId)`.
+5. Write the run script with `writeRunScript`.
    - It reads the prompt and model from their files, so quotes and newlines arrive intact.
    - It leaves the agent's output in `/thunderjar/result.json`.
    - It skips every approval prompt: nobody is there to answer.
-5. Switch to a non-root user, e.g. `USER node`.
-6. List the keys it needs in `requiredEnv`.
+6. Switch to a non-root user, e.g. `USER node`.
+7. List the keys it needs in `requiredEnv`.
 
 To measure the agent's reply and token costs, add `collectReply` and `collectTokenCosts`, which read `result.json`. See the Copilot harness in this repo's `.thunderjar/` for a full one.
 
