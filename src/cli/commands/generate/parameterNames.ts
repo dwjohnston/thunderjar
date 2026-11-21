@@ -1,6 +1,9 @@
 // Reads the names declared under `.thunderjar/parameters/`, and renders them as the
 // global types of `_generated/parameterNames.d.ts`.
+import type { HarnessDeclaration } from "../../../api/declarations.ts";
 import { foldersIn, PARAMETERS as P, tsFilesIn } from "../../../config/folders.ts";
+import { modelVariants } from "../../../config/harnessModels.ts";
+import { loadDeclaration, type Problem } from "../../../config/loader.ts";
 
 export const GENERATED_PATH = "_generated/parameterNames.d.ts";
 
@@ -17,8 +20,28 @@ export type ParameterNames = {
   harnesses: Record<string, string[] | undefined>;
 };
 
-/** The names declared in the `.thunderjar/` folder `root`, from its folders and files alone: nothing is loaded. */
-export async function collectParameterNames(root: string): Promise<ParameterNames> {
+/**
+ * The names each harness's models make, by harness folder: undefined, any model, for one that
+ * declares none, or fails to load, adding to `problems`.
+ */
+async function harnessNames(root: string, problems: Problem[]): Promise<Record<string, string[] | undefined>> {
+  const names: Record<string, string[] | undefined> = {};
+  for (const harness of await foldersIn(root, `${P}/harnessModels`)) {
+    const declaration = (await loadDeclaration(root, `${P}/harnessModels/${harness}/index.ts`, "declareHarness", problems)) as
+      | Partial<HarnessDeclaration>
+      | undefined;
+    const models = declaration?.models;
+    names[harness] =
+      models === undefined ? undefined : Object.entries(models).flatMap(([modelId, settings]) => modelVariants(modelId, settings).map(({ name }) => name));
+  }
+  return names;
+}
+
+/**
+ * The names declared in the `.thunderjar/` folder `root`, from its folders and files, and the
+ * harnesses' models, which are loaded. A harness that fails to load adds to `problems`.
+ */
+export async function collectParameterNames(root: string, problems: Problem[] = []): Promise<ParameterNames> {
   const tasks: Record<string, string[]> = {};
   for (const task of await foldersIn(root, `${P}/tasks`)) {
     tasks[task] = await tsFilesIn(root, `${P}/tasks/${task}/initial-prompts`);
@@ -28,7 +51,7 @@ export async function collectParameterNames(root: string): Promise<ParameterName
     codeStates: await foldersIn(root, `${P}/codeStates`),
     promptSets: await foldersIn(root, `${P}/promptSets`),
     tasks,
-    harnesses: Object.fromEntries((await foldersIn(root, `${P}/harnessModels`)).map((harness) => [harness, undefined])),
+    harnesses: await harnessNames(root, problems),
   };
 }
 
