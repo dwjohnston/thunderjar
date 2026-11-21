@@ -262,7 +262,7 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
     });
   // Rendered for the model only once it rendered for the sample, so a broken fragment is one problem.
   const harnessForModel = (parameter: Parameter<HarnessDeclaration> & { version: string; modelId: string }): string | undefined => {
-    const ctx = { dir: PARAMETER_DIRS.harness, version: parameter.version, modelId: parameter.modelId, resolved: resolved.get(parameter.key) };
+    const ctx = { dir: PARAMETER_DIRS.harness, version: parameter.version, modelId: parameter.modelId, model: {}, resolved: resolved.get(parameter.key) };
     return renderFragment("harness", parameter, ctx, problems);
   };
 
