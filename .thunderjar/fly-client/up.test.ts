@@ -16,6 +16,28 @@ afterEach(async () => {
 const guest = async () => (await f.machines()).map((machine) => machine.config.guest);
 
 describe("up", () => {
+  test("says the machine is stopped, then that it started and how long that took", async () => {
+    const machine = await machineFixture({ state: "stopped" });
+    await f.setMachines([machine]);
+
+    const result = await f.run(["up"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain(`machine ${machine.name} (m-1) is stopped. Starting it…`);
+    expect(result.stderr).toMatch(new RegExp(`machine ${machine.name} \\(m-1\\) started \\(\\d+s\\)`));
+  });
+
+  test("says there's no machine, then that it created and started one and how long that took", async () => {
+    const result = await f.run(["up"]);
+
+    const [machine] = await f.machines();
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toContain(`no machine in ${APP}. Creating ${machine?.name}…`);
+    expect(result.stderr).toMatch(
+      new RegExp(`machine ${machine?.name} \\(${machine?.id}\\) created and started \\(\\d+s\\)`),
+    );
+  });
+
   test("resizes an idle machine to FLYIO_INSTANCE_SIZE CPUs, with 2 GB a CPU", async () => {
     await f.setMachines([await machineFixture({ state: "started", cpus: 16 })]);
 
