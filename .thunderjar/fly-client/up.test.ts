@@ -25,4 +25,17 @@ describe("up", () => {
       guest: [{ cpu_kind: "performance", cpus: 8, memory_mb: 16384 }],
     });
   });
+
+  test("skips resizing while the machine is busy, as that restarts it", async () => {
+    await f.setMachines([await machineFixture({ state: "started", cpus: 16 })]);
+    await f.setRunning(["c0ffee"]);
+
+    const result = await f.run(["up"], { env: { FLYIO_INSTANCE_SIZE: "8" } });
+
+    expect({ exitCode: result.exitCode, guest: await guest() }).toEqual({
+      exitCode: 0,
+      guest: [{ cpu_kind: "performance", cpus: 16, memory_mb: 32768 }],
+    });
+    expect(result.stderr).toContain("not resizing m-1: 1 container is running");
+  });
 });
