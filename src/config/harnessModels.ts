@@ -38,7 +38,7 @@ export function splitPair(pair: string, models: HarnessModels): SplitPair | { pr
   const modelId = Object.keys(models)
     .filter((id) => rest === id || rest.startsWith(`${id}/`))
     .toSorted((a, b) => b.length - a.length)[0];
-  if (modelId === undefined) return { problem: pair };
+  if (modelId === undefined) return { problem: `${JSON.stringify(pair)} is not a model of ${harness}. Its models: ${Object.keys(models).join(", ")}` };
   const variant = modelVariants(modelId, models[modelId] ?? []).find((candidate) => candidate.name === rest);
   if (variant === undefined) return { problem: pair };
   return { harness, modelId, model: variant.model };
