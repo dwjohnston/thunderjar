@@ -234,6 +234,25 @@ Recorded in <DATA>/runs.sqlite
     for (const value of Object.values(secrets)) expect(JSON.stringify(postrunEnv)).not.toContain(value);
   }, 600_000);
 
+  test("0206 transcript: toolCalled reads the agent's transcript from its postrun image, in the home of the image's user", async () => {
+    const prefix = `${PREFIX}-transcript`;
+    const data = `${DATA_DIR}/transcript`;
+    const { stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "transcript", "--image-prefix", prefix, "--data-dir", data], { docker: "real" });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [transcriber, reader] = (await storedRuns(data)).containerRuns as [ContainerRunRecord, ContainerRunRecord];
+    // Left in root's home, as alpine runs as root.
+    expect(await inImage(transcriber.postrunImage, "find ~/.claude -type f | sort")).toBe(
+      "/root/.claude/projects/-workspace/fake-session.jsonl\n/root/.claude/projects/-workspace/fake-session/subagents/agent-fake.jsonl",
+    );
+    const outcomes = (record: ContainerRunRecord) => Object.fromEntries(Object.entries(record.result).map(([name, { outcome }]) => [name, outcome]));
+    // `bun test` with Bash, by the agent, then by its sub-agent; no Read.
+    expect(outcomes(transcriber)).toEqual({ ranTests: { outcome: "measured", data: 2 }, readFiles: { outcome: "measured", data: 0 } });
+    const skipped = { outcome: "skipped", reason: "no transcript: its harness declares no transcript" } as const;
+    expect(outcomes(reader)).toEqual({ ranTests: skipped, readFiles: skipped });
+  }, 600_000);
+
   test("0206 leaked-secret: the secrets the agent wrote into files are found in its postrun image, by name and path, and the search container is removed", async () => {
     const prefix = `${PREFIX}-leaked`;
     const data = `${DATA_DIR}/leaked`;
