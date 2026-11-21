@@ -9,7 +9,7 @@
  *
  * Humans: add your notes here
  */
-import type { Instrument } from "../instrument.ts";
+import { type Instrument, checkPattern, checkString } from "../instrument.ts";
 
 /**
  * How many times the agent, or a sub-agent it started, called `tool`, read from its harness's
@@ -27,7 +27,11 @@ export const toolCalled: Instrument<{ tool: string; inputMatches?: string }, num
     );
     return { outcome: "measured", data: calls.length };
   },
-  checkConfig() {
-    return [];
+  checkConfig(config) {
+    const { tool, inputMatches } = (config ?? {}) as { tool?: unknown; inputMatches?: unknown };
+    return [
+      ...checkString("config.tool", tool, `the harness's name for a tool, e.g. "Bash"`),
+      ...(inputMatches === undefined ? [] : checkPattern(inputMatches, "config.inputMatches")),
+    ];
   },
 };
