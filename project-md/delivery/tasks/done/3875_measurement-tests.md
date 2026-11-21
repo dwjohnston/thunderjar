@@ -2,6 +2,14 @@
 harness: claude-code
 model: sonnet
 effort: medium
+ralph:
+  session: "b1850daa-e940-4130-bc44-13ded7184b74"
+  capture: "thunderjar/capture/b1850daa-e940-4130-bc44-13ded7184b74"
+  branchedFrom: "claude/tender-volta-i5znhj"
+  date: "2026-11-21T01:42:45.439Z"
+  costUsd: 0.8537857000000003
+  durationMs: 442879
+  isError: false
 ---
 
 <!--
