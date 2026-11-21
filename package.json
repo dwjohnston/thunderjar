@@ -1,0 +1,74 @@
+{
+  "name": "thunderjar",
+  "version": "0.4.0",
+  "type": "module",
+  "description": "Thunderjar",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dwjohnston/thunderjar.git"
+  },
+  "bin": {
+    "thunderjar": "./dist/index.js"
+  },
+  "main": "./src/api/index.ts",
+  "types": "./src/api/index.ts",
+  "exports": {
+    ".": "./src/api/index.ts"
+  },
+  "files": [
+    "dist",
+    "src/api",
+    "!src/**/*.test.ts",
+    "!src/**/*.result.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "tj": "bun src/cli/index.ts",
+    "build": "rm -rf dist && bun build src/cli/index.ts --target bun --outdir dist --entry-naming [name].[ext] --production",
+    "lint": "bun scripts/lint-layers.ts --check && oxlint",
+    "lint:generate": "bun scripts/lint-layers.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --parallel",
+    "test:docker": "THUNDERJAR_DOCKER_TESTS=1 bun test --timeout 600000 .docker.test",
+    "test:docker:parallel": "THUNDERJAR_DOCKER_TESTS=1 bun test --parallel --concurrent --timeout 600000 .docker.test",
+    "test:agent": "THUNDERJAR_AGENT_TESTS=1 bun test --timeout 900000 .agent.test",
+    "test:package": "bun scripts/package-smoke-test.ts",
+    "di:build:sample-repo": "bun scripts/build-sample-repo-image.ts",
+    "fixture": "bun scripts/fixture.ts",
+    "dogfood:local": "bun src/cli/index.ts run compare-models --local",
+    "dogfood:remote": "THUNDERJAR_REMOTE=1 bun src/cli/index.ts run compare-models",
+    "docs:dev": "bun --bun vitepress dev docs",
+    "docs:build": "bun --bun vitepress build docs",
+    "docs:build:versions": "bun scripts/build-versioned-docs.ts",
+    "docs:preview": "bun --bun vitepress preview docs",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset publish",
+    "skills:update": "bunx skills update -p -y $(jq -r '.skills | to_entries[] | select(.value.source == \"dwjohnston/agent-skills\") | .key' skills-lock.json)",
+    "skills:add": "bunx skills add dwjohnston/agent-skills",
+    "fly": "./.thunderjar/fly-machine.sh",
+    "fly:start": "./.thunderjar/fly-machine.sh start",
+    "fly:stop": "./.thunderjar/fly-machine.sh stop"
+  },
+  "dependencies": {
+    "bun": "1.3.14",
+    "commander": "^15.0.0",
+    "pino": "^10.4.0",
+    "pino-pretty": "^13.2.0",
+    "react": "19",
+    "react-dom": "19"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.31.0",
+    "@changesets/get-release-plan": "^4.0.16",
+    "@types/bun": "^1.4.3",
+    "@types/react": "19",
+    "@types/react-dom": "19",
+    "oxlint": "^1.88.0",
+    "typescript": "^7.0.2",
+    "vitepress": "^2.0.0-alpha.18"
+  }
+}
