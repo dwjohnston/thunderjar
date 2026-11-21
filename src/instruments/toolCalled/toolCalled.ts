@@ -17,7 +17,7 @@ import { type Instrument, checkPattern, checkString } from "../instrument.ts";
  */
 export const toolCalled: Instrument<{ tool: string; inputMatches?: string }, number> = {
   version: 1,
-  defaultScore: { kind: "boolean", score: () => false },
+  defaultScore: { kind: "boolean", score: (value) => value > 0 },
   async evaluate({ tool, inputMatches }, ctx) {
     const transcript = await ctx.transcript();
     if (transcript.outcome !== "collected") return { outcome: "skipped", reason: `no transcript: ${transcript.reason}` };
