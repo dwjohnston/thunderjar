@@ -59,6 +59,7 @@
     "fly:stop": "./.thunderjar/fly-machine.sh stop"
   },
   "dependencies": {
+    "@types/esquery": "^1.5.4",
     "bun": "1.3.14",
     "commander": "^15.0.0",
     "esquery": "^1.7.0",
@@ -72,7 +73,6 @@
     "@changesets/cli": "^2.31.0",
     "@changesets/get-release-plan": "^4.0.16",
     "@types/bun": "^1.4.3",
-    "@types/esquery": "^1.5.4",
     "@types/react": "19",
     "@types/react-dom": "19",
     "oxlint": "^1.88.0",
