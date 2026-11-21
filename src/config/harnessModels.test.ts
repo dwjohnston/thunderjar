@@ -43,4 +43,10 @@ describe("splitPair", () => {
       problem: '"codex-0.166.0/openai/gpt-6.1/sol" names no reasoningEffort. Its names: openai/gpt-6.1/sol/low, openai/gpt-6.1/sol/high',
     });
   });
+
+  test("names the model's names when a variant part is not one of its values", () => {
+    expect(splitPair("codex-0.166.0/openai/gpt-6.1/sol/xhigh", models)).toEqual({
+      problem: '"codex-0.166.0/openai/gpt-6.1/sol/xhigh": "xhigh" is not a reasoningEffort of openai/gpt-6.1/sol. Its names: openai/gpt-6.1/sol/low, openai/gpt-6.1/sol/high',
+    });
+  });
 });
