@@ -1,6 +1,6 @@
 import esquery from "esquery";
 import { parseSync, visitorKeys } from "oxc-parser";
-import type { Instrument } from "../instrument.ts";
+import { type Instrument, checkString, show } from "../instrument.ts";
 
 export type JsAstValue = { file: string; matches: Record<string, number>; parseError?: string }[];
 
@@ -41,7 +41,25 @@ export const jsAst: Instrument<{ glob: string; selectors: Record<string, string>
     }
     return { outcome: "measured", data: value };
   },
-  checkConfig() {
-    return [];
+  checkConfig(config) {
+    const { glob, selectors } = (config ?? {}) as { glob?: unknown; selectors?: unknown };
+    const problems = checkString("config.glob", glob, "a glob pattern");
+    if (typeof selectors !== "object" || selectors === null || Object.keys(selectors).length === 0) {
+      return [...problems, ["config.selectors", `must name at least one esquery selector, got ${show(selectors)}`]];
+    }
+    for (const [name, selector] of Object.entries(selectors)) {
+      const field = `config.selectors.${name}`;
+      const notString = checkString(field, selector, "an esquery selector");
+      if (notString.length > 0) {
+        problems.push(...notString);
+        continue;
+      }
+      try {
+        esquery.parse(selector as string);
+      } catch (error) {
+        problems.push([field, `${show(selector)} is not a valid esquery selector: ${(error as Error).message}`]);
+      }
+    }
+    return problems;
   },
 };
