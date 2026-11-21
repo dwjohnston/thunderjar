@@ -1,6 +1,7 @@
 // The `thunderjar` library: what a project's `.thunderjar/` files import.
 export { CLAUDE_CODE_COMMAND, claudeCode, claudeCodeReply, claudeCodeTokenCosts, claudeCodeTranscript } from "./claudeCode.ts";
 export { codexTranscript } from "./codex.ts";
+export { copilotTranscript } from "./copilot.ts";
 export { MODEL_PATH, PROMPT_PATH, RESULT_PATH, RUN_SCRIPT_PATH, writeFile, writeModel, writePrompt, writeRunScript } from "./files.ts";
 export {
   declareBaseImage,
