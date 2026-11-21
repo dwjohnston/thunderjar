@@ -19,5 +19,5 @@ export function migratePair(pair: string): string {
 
 /** A test case's source, each quoted pair in it migrated. */
 export function migrateSource(source: string): string {
-  return source;
+  return source.replace(/(["'`])([a-z0-9][\w.-]*\/[^"'`\s]+)\1/g, (_match, quote: string, pair: string) => `${quote}${migratePair(pair)}${quote}`);
 }
