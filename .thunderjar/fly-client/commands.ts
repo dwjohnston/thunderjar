@@ -3,6 +3,7 @@
 
 // `stop`, `destroy`, `status` and `prune`.
 
+import { dockerCommand, dockerEnv, ensureConnection } from "./connection.ts";
 import { describeSize, findMachine } from "./fly.ts";
 import { busy } from "./idle.ts";
 import { destroyMachine, stopMachine } from "./lifecycle.ts";
@@ -86,5 +87,20 @@ export async function statusCommand(args: string[], settings: Settings): Promise
   console.log(`Stops at             ${timer.stopAt}, if idle`);
   console.log(`Destroyed at         ${timer.destroyAt}, if idle`);
   console.log(`Watcher              ${status.timer?.watcherRunning ? `running, PID ${timer.watcherPid}` : "not running"}`);
+  return 0;
+}
+
+export async function pruneCommand(args: string[], settings: Settings): Promise<number> {
+  flags(args, []);
+  const machine = await findMachine(settings);
+  if (machine?.state !== "started") {
+    throw new Error(`the machine in app ${settings.app} is ${machine?.state ?? "missing"}: there's nothing to prune`);
+  }
+  await ensureConnection(settings, machine.id);
+  for (const prune of [["container", "prune", "--force"], ["image", "prune", "--all", "--force"]]) {
+    const proc = Bun.spawn(dockerCommand(prune), { env: dockerEnv(settings), stdin: "ignore", stdout: "inherit", stderr: "inherit" });
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) return exitCode;
+  }
   return 0;
 }
