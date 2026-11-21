@@ -86,7 +86,7 @@ describe("claudeCode", () => {
   });
 
   test("installs Claude Code as root, writes the model and run script, then runs as node", () => {
-    expect(harness.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "claude-haiku-5-5", resolved: undefined })).toBe(
+    expect(harness.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "claude-haiku-5-5", model: {}, resolved: undefined })).toBe(
       `RUN npm install -g @anthropic-ai/claude-code@2.1.311
 RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
 COPY <<'THUNDERJAR_EOF' /thunderjar/model.txt
@@ -108,7 +108,7 @@ USER node`,
   test("its command can be replaced", () => {
     const custom = claudeCode({ version: "2.1.311", command: "claude -p hi > /thunderjar/result.json" });
 
-    expect(custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", resolved: undefined })).toContain(
+    expect(custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", model: {}, resolved: undefined })).toContain(
       "#!/bin/sh\nclaude -p hi > /thunderjar/result.json\n",
     );
   });
