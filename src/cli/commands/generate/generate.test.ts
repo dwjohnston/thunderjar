@@ -79,7 +79,7 @@ describe("0101 empty project", () => {
   });
 });
 
-// Harnesses are listed by folder, never loaded, so a broken one doesn't stop it.
+// A harness that fails to load is warned about, and takes any model, so it doesn't stop it.
 describe("0403 broken harness family", () => {
   test("lists every harness folder, the broken one too", async () => {
     await using copy = await copyScenarioProject("0403");
@@ -102,5 +102,19 @@ describe("0402 broken declarations", () => {
     expect(await Bun.file(`${copy.dir}/${GENERATED}`).text()).toContain(
       '"fake-harness-efforts/fake/model-small" | "fake-harness-efforts/fake/model-large/low" | "fake-harness-efforts/fake/model-large/high"',
     );
+  });
+});
+
+describe("0402 broken declarations, a harness that fails to load", () => {
+  test("is warned about, and takes any model", async () => {
+    await using copy = await copyScenarioProject("0402");
+
+    const { stderr, exitCode } = await thunderjar(copy.dir, ["generate"]);
+
+    expect(stderr).toBe(
+      "Warning: .thunderjar/parameters/harnessModels/fake-harness-unwrapped/index.ts: default export is not wrapped in declareHarness(...). Its pairs take any model.\n",
+    );
+    expect(exitCode).toBe(0);
+    expect(await Bun.file(`${copy.dir}/${GENERATED}`).text()).toContain("`fake-harness-unwrapped/${string}`");
   });
 });
