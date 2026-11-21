@@ -48,7 +48,7 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
    - Before either, check the machine is idle, e.g. no running containers.
 4. **Watchdog on the machine**
    - The backstop for when the host goes away, e.g. a closed laptop or a finished CI job.
-   - Stops the machine after a hard idle limit, e.g. 2 × `SLEEP_MINUTES`.
+   - Stops the machine after `SLEEP_MINUTES` idle.
      - Idle: no SSH sessions and no running containers.
      - Stops by exiting its main process.
    - Destroy is skipped in this case. A stopped machine only costs storage, so that's acceptable. A started one is the real cost.
@@ -57,8 +57,6 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 
 1. **The create recipe**
    - Image with the Docker daemon, volume, SSH keys, region. Set up by hand today.
-2. **Watchdog limit**
-   - Its own variable, or derived from `SLEEP_MINUTES`.
 
 ## Prior art
 
