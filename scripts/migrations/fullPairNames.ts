@@ -11,5 +11,8 @@ export const DEFAULT_PARTS: Record<string, string[]> = {
 
 /** `pair`, with its harness's default parts appended, unless it has them already. */
 export function migratePair(pair: string): string {
-  return pair;
+  const harness = pair.slice(0, pair.indexOf("/"));
+  const parts = Object.entries(DEFAULT_PARTS).find(([prefix]) => harness.startsWith(prefix))?.[1];
+  if (parts === undefined) return pair;
+  return `${pair}/${parts.join("/")}`;
 }
