@@ -128,6 +128,17 @@ describe("toolCalled", () => {
       expect(await toolCalled.evaluate({ tool: "Bash" }, ctx)).toEqual({ outcome: "skipped", reason: `no transcript: ${reason}` });
     }
   });
+
+  test("checks its config is a tool's name, and inputMatches, if given, a valid regular expression", () => {
+    expect(toolCalled.checkConfig({ tool: "Bash" })).toEqual([]);
+    expect(toolCalled.checkConfig({ tool: "Bash", inputMatches: "bun test" })).toEqual([]);
+    expect(toolCalled.checkConfig({})).toEqual([["config.tool", "must be the harness's name for a tool, e.g. \"Bash\", got undefined"]]);
+    expect(toolCalled.checkConfig({ tool: "" })).toEqual([["config.tool", "must be the harness's name for a tool, e.g. \"Bash\", got \"\""]]);
+    expect(toolCalled.checkConfig({ tool: "Bash", inputMatches: "bun (test" })).toEqual([
+      ["config.inputMatches", '"bun (test" is not a valid regular expression: missing )'],
+    ]);
+    expect(toolCalled.checkConfig({ tool: "Bash", inputMatches: 3 })).toEqual([["config.inputMatches", "must be a JavaScript regular expression, got 3"]]);
+  });
 });
 
 describe("shell", () => {
