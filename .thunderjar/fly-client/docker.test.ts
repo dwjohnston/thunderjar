@@ -2,7 +2,7 @@
 // Supervising engineer: David Johnston. Humans: add your notes here.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { fixture, machineFixture, type Fixture } from "./test/harness.ts";
+import { fixture, machineFixture, type Fixture, type Machine } from "./test/harness.ts";
 
 let f: Fixture;
 beforeEach(async () => {
@@ -38,5 +38,33 @@ describe("docker", () => {
     expect(docker.map((call) => call.args)).toEqual([
       ["-H", "ssh://tjfly", "build", "--network", "host", "-t", "tj-prerun-h1a2b3c", "/tmp/tj-build-x7k2"],
     ]);
+  });
+
+  test("runs up only when the machine is missing or stopped", async () => {
+    // What changes the machine, each as its first two words, e.g. "machine start".
+    const lifecycle = async (machines: Machine[]): Promise<string[]> => {
+      const each = await fixture();
+      try {
+        await each.setMachines(machines);
+        const result = await each.run(["docker", "ps"]);
+        expect(result.exitCode).toBe(0);
+        return (await each.calls())
+          .filter((call) => call.command === "fly")
+          .map((call) => call.args.slice(0, 2).join(" "))
+          .filter((call) => !["machine list", "machine wait", "ssh issue", "volumes list"].includes(call));
+      } finally {
+        await each.cleanup();
+      }
+    };
+
+    expect({
+      started: await lifecycle([await machineFixture({ state: "started" })]),
+      stopped: await lifecycle([await machineFixture({ state: "stopped" })]),
+      missing: await lifecycle([]),
+    }).toEqual({
+      started: [],
+      stopped: ["machine start"],
+      missing: ["deploy --build-only", "volumes create", "machine run"],
+    });
   });
 });
