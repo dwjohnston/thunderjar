@@ -14,7 +14,7 @@
 import { $ } from "bun";
 import { fly } from "./fly.ts";
 import { withLock } from "./lock.ts";
-import type { Settings } from "./settings.ts";
+import { flyEnv, type Settings } from "./settings.ts";
 
 export const HOST = "tjfly";
 // Certificates last 24 hours: get a new one after 20.
@@ -44,7 +44,7 @@ export async function connected(settings: Settings): Promise<boolean> {
   const { config } = paths(settings);
   if (!(await Bun.file(config).exists())) return false;
   // Its input is closed, so it can never read the client's own, which is for the docker command.
-  const proc = Bun.spawn([realSsh(), "-F", config, "-O", "check", HOST], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  const proc = Bun.spawn([realSsh(), "-F", config, "-O", "check", HOST], { env: flyEnv(), stdin: "ignore", stdout: "ignore", stderr: "ignore" });
   return (await proc.exited) === 0;
 }
 
@@ -78,7 +78,7 @@ async function writeConfig(settings: Settings, machineId: string): Promise<void>
 async function open(settings: Settings): Promise<boolean> {
   const proc = Bun.spawn(
     [realSsh(), "-F", paths(settings).config, "-o", "ControlMaster=yes", "-o", "ConnectTimeout=20", "-fN", HOST],
-    { stdin: "ignore", stdout: "ignore", stderr: "ignore", timeout: 40_000 },
+    { env: flyEnv(), stdin: "ignore", stdout: "ignore", stderr: "ignore", timeout: 40_000 },
   );
   return (await proc.exited) === 0;
 }
@@ -107,7 +107,7 @@ export async function ensureConnection(settings: Settings, machineId: string): P
 export async function closeConnection(settings: Settings): Promise<void> {
   const { config } = paths(settings);
   if (!(await Bun.file(config).exists())) return;
-  await Bun.spawn([realSsh(), "-F", config, "-O", "exit", HOST], { stdin: "ignore", stdout: "ignore", stderr: "ignore" }).exited;
+  await Bun.spawn([realSsh(), "-F", config, "-O", "exit", HOST], { env: flyEnv(), stdin: "ignore", stdout: "ignore", stderr: "ignore" }).exited;
 }
 
 /** The local Docker CLI, pointed at the machine's daemon. */
@@ -122,7 +122,8 @@ export function dockerCommand(args: string[]): string[] {
 
 /** The environment the Docker CLI runs in: the stand-in `ssh` first on its PATH. */
 export function dockerEnv(settings: Settings): Record<string, string | undefined> {
-  return { ...Bun.env, PATH: `${paths(settings).bin}:${Bun.env.PATH}` };
+  // FLY_API_TOKEN for ssh's ProxyCommand, `fly ssh console`, should the shared connection drop.
+  return { ...flyEnv(), PATH: `${paths(settings).bin}:${Bun.env.PATH}` };
 }
 
 /** Runs a docker command on the machine, with its output captured. */
