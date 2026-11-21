@@ -28,6 +28,46 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 - One Fly machine only.
 - One client only.
 - Lives in `.thunderjar/fly-client/`.
+- TypeScript on Bun.
+- Replaces `fly-machine.sh`. `fly-docker.sh` can call into it.
+
+## CLI
+
+- e.g.
+  ```sh
+  bun .thunderjar/fly-client/index.ts <command>
+  ```
+
+1. `up`
+   - Creates the machine if it's missing, starts it if stopped, and resizes it if idle and the size differs.
+   - Waits for its Docker daemon.
+2. `exec -- <command…>`
+   - Runs `up`, then the command.
+   - Marks a task as started, and as finished when the command exits, even on Ctrl-C.
+   - Arms the timer.
+   - e.g.
+     ```sh
+     bun .thunderjar/fly-client/index.ts exec -- bun thunderjar run example
+     ```
+3. `stop`
+   - Stops the machine, if idle. `--force` stops it anyway.
+4. `destroy`
+   - Destroys the machine and its volumes, if idle. `--force` destroys it anyway.
+5. `status`
+   - Machine state and size, and the timer: last task finished, stop and destroy deadlines.
+   - Takes `--json`.
+6. `prune`
+   - Removes stopped containers and unused images, as `fly-machine.sh prune` does.
+7. `watch`
+   - The detached process that acts on the timer. `exec` starts it. Not run by hand.
+
+## Environment variables
+
+- `FLYIO_TOKEN`
+- `FLY_APP`
+- `FLYIO_INSTANCE_SIZE`
+- `SLEEP_MINUTES`
+- `DESTROY_MINUTES`
 
 ## Behaviour
 
