@@ -177,6 +177,12 @@ describe("hashPermutations", () => {
     expect(changes([small as HashedPermutation], [large as HashedPermutation])).toEqual([{ parameters: [], hash: true, image: true }]);
   });
 
+  test("a pair with a variant part gives its model ID alone", async () => {
+    const [high] = await hashPermutations(`${scenario("0402")}/${FOLDER}`, { ...ONE, harnessModel: ["fake-harness-efforts/fake/model-large/high"] });
+
+    expect(high?.modelId).toBe("fake/model-large");
+  });
+
   test("changing a harness's version changes its parameter hash and its image", async () => {
     const { copy, root: copied, parameters } = await copy0202();
     await using _ = copy;
