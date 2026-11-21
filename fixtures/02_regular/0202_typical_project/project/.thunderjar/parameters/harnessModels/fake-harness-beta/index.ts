@@ -4,6 +4,7 @@ import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 // says it tested it.
 // It needs nothing, but records in /thunderjar/fake-harness-key whether it saw alpha's FAKE_HARNESS_KEY: "set", or nothing.
 export default declareHarness({
+  models: { "fake-model-small-001": [], "fake-model-large-001": [] },
   version: "1.0.0",
   applyParameter: (_config, ctx) =>
     [
