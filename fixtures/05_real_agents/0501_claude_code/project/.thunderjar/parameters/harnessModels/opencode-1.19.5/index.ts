@@ -1,10 +1,14 @@
 import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 
 // OpenCode, on OpenCode Zen. OPENCODE_API_KEY is an OpenCode Zen key.
-// A test case names a model by the ID the agent takes, e.g. "opencode-1.19.5/opencode/claude-haiku-5-5", "opencode-1.19.5/opencode/gpt-5.5".
-// Models come and go: check https://opencode.ai/zen/v1/models for the current IDs.
 export default declareHarness({
   version: "1.19.5",
+  // The models a test case may name, after the folder. Models come and go: check
+  // https://opencode.ai/zen/v1/models for the current IDs.
+  models: {
+    "opencode/claude-haiku-5-5": [],
+    "opencode/gpt-5.5": [],
+  },
   applyParameter: (_config, ctx) =>
     [
       `RUN npm install -g opencode-ai@${ctx.version}`,
