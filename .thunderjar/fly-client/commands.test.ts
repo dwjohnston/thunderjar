@@ -85,3 +85,17 @@ describe("status", () => {
     });
   });
 });
+
+describe("prune", () => {
+  test("removes the machine's stopped containers and unused images", async () => {
+    await f.setMachines([await machineFixture({ state: "started" })]);
+
+    const result = await f.run(["prune"]);
+
+    const docker = (await f.calls()).filter((call) => call.command === "docker").map((call) => call.args.slice(2).join(" "));
+    expect({ exitCode: result.exitCode, docker }).toEqual({
+      exitCode: 0,
+      docker: ["container prune --force", "image prune --all --force"],
+    });
+  });
+});
