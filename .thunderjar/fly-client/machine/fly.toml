@@ -1,0 +1,7 @@
+# 🤖 This file was created with AI. Harness: Claude Code. Session Id: session_01LCLeLidCEegntrXyRbJufD.
+# Supervising engineer: David Johnston. Humans: add your notes here.
+#
+# Only for `fly deploy --build-only`, which `up` builds the machine's image with. The app is passed
+# with -a. The machine itself is created from recipe.json, not from this.
+[build]
+  dockerfile = "Dockerfile"

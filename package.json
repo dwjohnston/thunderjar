@@ -36,6 +36,7 @@
     "test:docker:parallel": "THUNDERJAR_DOCKER_TESTS=1 bun test --parallel --concurrent --timeout 600000 .docker.test",
     "test:agent": "THUNDERJAR_AGENT_TESTS=1 bun test --timeout 900000 .agent.test",
     "test:package": "bun scripts/package-smoke-test.ts",
+    "test:fly": "bun test ./.thunderjar/fly-client",
     "di:build:sample-repo": "bun scripts/build-sample-repo-image.ts",
     "fixture": "bun scripts/fixture.ts",
     "dogfood:local": "bun src/cli/index.ts run compare-models --local",
