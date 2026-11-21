@@ -21,6 +21,7 @@
     "dist",
     "fixtures/.tmp",
     "src/gauntlet",
+    ".thunderjar/parameters/tasks/*/measurements/tests/fixtures",
     ".agents/skills",
     ".claude/skills"
   ],
