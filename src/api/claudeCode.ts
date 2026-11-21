@@ -134,7 +134,8 @@ export const CLAUDE_CODE_COMMAND =
  * A complete harness declaration for Claude Code `version`. Its fragment installs Claude Code as
  * root, writes the model ID and the run script, then switches to the image's non-root `node`
  * user, which a `node` base image has: Claude Code won't skip its permission prompts as root, and
- * nobody is there to answer them. Its reply and token costs are read from its JSON result. It
+ * nobody is there to answer them. Its reply and token costs are read from its JSON result, and
+ * its transcript from `/home/node/.claude/projects/`, with `claudeCodeTranscript`. It
  * needs `CLAUDE_CODE_OAUTH_TOKEN`, a subscription token from `claude setup-token`, or
  * `ANTHROPIC_API_KEY`: the token if both are set, and only the one, as Claude Code would pick the
  * key if given both.
@@ -157,6 +158,7 @@ export function claudeCode({ version, command = CLAUDE_CODE_COMMAND }: ClaudeCod
       ].join("\n"),
     collectReply: claudeCodeReply,
     collectTokenCosts: claudeCodeTokenCosts,
+    transcript: claudeCodeTranscript,
     requiredEnv: [{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }],
   });
 }
