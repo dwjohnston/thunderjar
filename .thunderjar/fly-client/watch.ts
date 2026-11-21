@@ -6,10 +6,10 @@
 // moves its deadlines too. It exits when the timer goes, or when another watcher takes it over.
 
 import { findMachine } from "./fly.ts";
-import { stopMachine } from "./lifecycle.ts";
+import { destroyMachine, stopMachine } from "./lifecycle.ts";
 import { alive } from "./lock.ts";
 import type { Settings } from "./settings.ts";
-import { readTimer, type Timer } from "./timer.ts";
+import { deleteTimer, readTimer, type Timer } from "./timer.ts";
 
 const log = (message: string) => console.log(`${new Date().toISOString()} ${message}`);
 
@@ -44,13 +44,33 @@ export async function watch(_args: string[], settings: Settings): Promise<number
       return 0;
     }
     if (!timer) continue;
-    const now = Date.now();
-    if (now >= Date.parse(timer.stopAt)) {
-      const machine = await findMachine(settings);
-      if (machine?.state === "started") {
-        log(`stopping ${machine.id}: no docker command since ${timer.lastCommandFinishedAt}`);
-        await stopMachine(settings, machine).catch((error: Error) => log(error.message));
-      }
+    try {
+      if (await act(settings, timer)) return 0;
+    } catch (error) {
+      // e.g. `fly` couldn't reach its API: try again next time round.
+      log(error instanceof Error ? error.message : String(error));
     }
   }
+}
+
+/** Stops or destroys the machine if its deadline has passed. Returns true once the timer's done. */
+async function act(settings: Settings, timer: Timer): Promise<boolean> {
+  const now = Date.now();
+  if (now >= Date.parse(timer.destroyAt)) {
+    const machine = await findMachine(settings);
+    if (machine) {
+      log(`destroying ${machine.id} and its volumes: no docker command since ${timer.lastCommandFinishedAt}`);
+      await destroyMachine(settings, machine);
+    }
+    await deleteTimer(settings);
+    return true;
+  }
+  if (now >= Date.parse(timer.stopAt)) {
+    const machine = await findMachine(settings);
+    if (machine?.state === "started") {
+      log(`stopping ${machine.id}: no docker command since ${timer.lastCommandFinishedAt}`);
+      await stopMachine(settings, machine);
+    }
+  }
+  return false;
 }

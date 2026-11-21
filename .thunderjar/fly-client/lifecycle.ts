@@ -11,3 +11,12 @@ export async function stopMachine(settings: Settings, machine: Machine): Promise
   await closeConnection(settings);
   await fly(["machine", "stop", machine.id, "-a", settings.app]);
 }
+
+/** Destroys the machine and its volumes. */
+export async function destroyMachine(settings: Settings, machine: Machine): Promise<void> {
+  await closeConnection(settings);
+  await fly(["machine", "destroy", machine.id, "-a", settings.app, "--force"]);
+  for (const mount of machine.config.mounts ?? []) {
+    await fly(["volumes", "destroy", mount.volume, "-a", settings.app, "--yes"]);
+  }
+}
