@@ -132,5 +132,9 @@ async function readTranscript(
   if (paths.length === 0) return { outcome: "unavailable", reason: `no file matched its transcript's files: ${declaration.files.join(", ")}` };
   const files = [];
   for (const path of paths) files.push({ path, text: await readFile(path) });
-  return { outcome: "collected", events: declaration.parse(files) };
+  try {
+    return { outcome: "collected", events: declaration.parse(files) };
+  } catch (error) {
+    return { outcome: "unavailable", reason: `unparseable: ${error instanceof Error ? error.message : String(error)}` };
+  }
 }
