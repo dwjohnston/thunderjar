@@ -81,4 +81,19 @@ describe("watch", () => {
 
     expect({ whileRunning, after: await state() }).toEqual({ whileRunning: ["started"], after: [] });
   });
+
+  test("skips stopping while a docker command is still running, e.g. a long build", async () => {
+    await f.setMachines([await machineFixture({ state: "started" })]);
+    const build = f.spawn(["docker", "build", "--fake-hang", "."]);
+    await eventually(() => Bun.file(`${f.dir}/hanging`).exists());
+
+    await watchTimer({ stopIn: -1, destroyIn: 60 });
+    // About 10 of its checks.
+    await Bun.sleep(1000);
+    const whileBuilding = await state();
+    build.kill();
+    await build.exited;
+
+    expect(whileBuilding).toEqual(["started"]);
+  });
 });
