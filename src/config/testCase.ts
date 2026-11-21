@@ -5,7 +5,7 @@ import { RUN_SCRIPT_PATH } from "../api/files.ts";
 import type { HarnessModels, TestCaseDeclaration } from "../api/declarations.ts";
 import { foldersIn, PARAMETERS } from "./folders.ts";
 import { ConfigError, existsIn, FOLDER, loadDeclaration, type Problem, problemsError } from "./loader.ts";
-import { splitPair } from "./harnessModels.ts";
+import { modelsProblem, splitPair } from "./harnessModels.ts";
 import { checkMeasurements } from "./measurements.ts";
 import { requiredEnvProblem } from "./requiredEnv.ts";
 import { runOptionsProblem } from "./runOptions.ts";
@@ -162,6 +162,8 @@ class TestCaseChecker {
     if (typeof declaration.applyParameter !== "function") {
       problem("applyParameter", `must install the agent and write ${RUN_SCRIPT_PATH}, e.g. with writeRunScript(command), got ${show(declaration.applyParameter)}`);
     }
+    const models = modelsProblem(declaration.models);
+    if (models) problem("models", models);
     const envProblem = requiredEnvProblem(declaration.requiredEnv);
     if (envProblem) problem("requiredEnv", envProblem);
     for (const field of ["collectReply", "collectTokenCosts"]) {
@@ -190,7 +192,7 @@ class TestCaseChecker {
       }
       if (!(await this.requires("harnessModel", pair, `${PARAMETERS}/harnessModels/${name}/`))) continue;
       const declaration = await this.checkHarness(name);
-      if (declaration?.models === undefined) continue;
+      if (declaration === undefined || modelsProblem(declaration.models)) continue;
       const split = splitPair(pair, declaration.models as HarnessModels);
       if ("problem" in split) this.problem("harnessModel", split.problem);
     }
