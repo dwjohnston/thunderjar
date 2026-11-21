@@ -48,7 +48,7 @@ export function splitPair(pair: string, models: HarnessModels): SplitPair | { pr
     const variantSettings = settings.flatMap((setting) => Object.entries(setting).filter((entry): entry is [string, { values: readonly SettingValue[] }] => isVariant(entry[1])));
     const unknown = parts.findIndex((part, i) => i < variantSettings.length && !variantSettings[i]?.[1].values.some((value) => String(value) === part));
     if (unknown !== -1) {
-      return { problem: `${JSON.stringify(pair)}: ${JSON.stringify(parts[unknown])} is not a ${variantSettings[unknown]?.[0]} of ${modelId}. Its names: ${names}` };
+      return { problem: `${JSON.stringify(pair)}: ${JSON.stringify(parts[unknown])} is not a value of ${variantSettings[unknown]?.[0]} for ${modelId}. Its names: ${names}` };
     }
     const missing = variantSettings[parts.length];
     if (missing !== undefined) return { problem: `${JSON.stringify(pair)} names no ${missing[0]}. Its names: ${names}` };
