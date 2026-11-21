@@ -56,3 +56,27 @@ export function splitPair(pair: string, models: HarnessModels): SplitPair | { pr
   }
   return { harness, modelId, model: variant.model };
 }
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isSettingValue = (value: unknown) => typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+
+/** What's wrong with a harness's `models`, if anything. */
+export function modelsProblem(models: unknown): string | undefined {
+  const expected = `must be the models the agent runs, by ID, each with its settings, e.g. { "claude-haiku-5-5": [] }, got ${JSON.stringify(models) ?? String(models)}`;
+  if (!isPlainObject(models) || Object.keys(models).length === 0) return expected;
+  for (const [modelId, settings] of Object.entries(models)) {
+    if (!Array.isArray(settings)) return `${JSON.stringify(modelId)}: must be an array of settings, one per entry, got ${JSON.stringify(settings)}`;
+    for (const setting of settings) {
+      const entries = isPlainObject(setting) ? Object.entries(setting) : [];
+      const sound =
+        entries.length === 1 &&
+        entries.every(([, value]) => isSettingValue(value) || (isVariant(value) && value.values.length > 0 && value.values.every(isSettingValue)));
+      if (!sound) {
+        return `${JSON.stringify(modelId)}: each setting must be one name and its value, or its { values: [...] }, got ${JSON.stringify(setting)}`;
+      }
+    }
+  }
+  return undefined;
+}
