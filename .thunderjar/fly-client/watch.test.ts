@@ -66,4 +66,19 @@ describe("watch", () => {
       timer: false,
     });
   });
+
+  test("skips stopping and destroying while containers are running, and acts once they've stopped", async () => {
+    await f.setMachines([await machineFixture({ state: "started" })]);
+    await f.setRunning(["c0ffee"]);
+
+    await watchTimer({ stopIn: -60, destroyIn: -1 });
+    // About 10 of its checks.
+    await Bun.sleep(1000);
+    const whileRunning = await state();
+
+    await f.setRunning([]);
+    await Promise.race([watcher!.exited, Bun.sleep(3000)]);
+
+    expect({ whileRunning, after: await state() }).toEqual({ whileRunning: ["started"], after: [] });
+  });
 });
