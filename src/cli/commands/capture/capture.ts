@@ -18,7 +18,8 @@ import { HARNESSES, type HarnessId } from "../../../capture/adapters.ts";
 import { importBranches } from "../../../capture/branch.ts";
 import { git, repoRoot } from "../../../capture/git.ts";
 import { formatTable, listCaptures } from "../../../capture/list.ts";
-import { localStores, pushArgs } from "../../../capture/push.ts";
+import { localStores, pushArgs, sessionPushArgs } from "../../../capture/push.ts";
+import { startedIn } from "../../../capture/store.ts";
 import { formatCapture, showCapture } from "../../../capture/show.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError, printJson, printWarning } from "../../output.ts";
@@ -116,10 +117,20 @@ export function createCaptureCommand(): Command {
       else print(formatCapture(shown));
     });
   /** Pushes the captures to `remote`, or with `fetch`, fetches them from it. */
-  const transfer = (remote: string, fetch: boolean, dryRun: boolean | undefined) => {
+  const transfer = (remote: string, fetch: boolean, dryRun: boolean | undefined, session?: string) => {
     const dir = root();
     if (dir === undefined) return;
-    const args = pushArgs({ fetch, remote }, localStores(dir));
+    let args: string[] | null;
+    if (session === undefined) args = pushArgs({ fetch, remote }, localStores(dir));
+    else {
+      const store = startedIn(dir, session);
+      if (store === null) {
+        printError(`No capture of session ${session}. \`thunderjar capture list\` shows the captures.`);
+        process.exitCode = 1;
+        return;
+      }
+      args = sessionPushArgs(remote, store, session);
+    }
     if (args === null) return print("No captures to push.");
     if (dryRun) return print(["git", ...args].join(" "));
     try {
@@ -138,8 +149,11 @@ export function createCaptureCommand(): Command {
     .argument("[remote]", "the remote", "origin")
     // Kept for scripts written before `capture pull`.
     .addOption(new Option("--fetch", "fetch the captures instead of pushing them: use `capture pull`").hideHelp())
+    .option("--session <id>", "push only this session's capture")
     .option("--dry-run", "print the git command instead of running it")
-    .action((remote: string, options: { fetch?: boolean; dryRun?: boolean }) => transfer(remote, options.fetch ?? false, options.dryRun));
+    .action((remote: string, options: { fetch?: boolean; dryRun?: boolean; session?: string }) =>
+      transfer(remote, options.fetch ?? false, options.dryRun, options.session),
+    );
   capture
     .command("pull")
     .description("Fetch every capture from a remote, refs and branches alike, e.g. ones pushed from another machine or a cloud session.")
