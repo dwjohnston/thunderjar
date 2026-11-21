@@ -16,7 +16,7 @@ Supervising engineer: David Johnston
 Humans: add your notes here
 -->
 
-# 5100: Test a measurement against fixture files
+# 3875: Test a measurement against fixture files
 
 Let a project write `bun test` tests for its own measurements: put fixture files where the agent would have written them, take the measurement, and assert on its metrics.
 
