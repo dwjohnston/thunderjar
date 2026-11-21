@@ -420,7 +420,7 @@ export default declareTestCase({
       `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness, writeRunScript } from "thunderjar";
 
-export default declareHarness({ version: "1.0.0", applyParameter: () => writeRunScript("echo partial > isPrime.ts && echo 'Error: unknown model' >&2 && exit 3") });
+export default declareHarness({ version: "1.0.0", models: { "fake-model-small-001": [] }, applyParameter: () => writeRunScript("echo partial > isPrime.ts && echo 'Error: unknown model' >&2 && exit 3") });
 `,
     );
     await using docker = await fakeDocker();
@@ -468,7 +468,7 @@ Recorded in <DATA>/runs.sqlite
       `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness, writeRunScript } from "thunderjar";
 
-export default declareHarness({ version: "1.0.0", applyParameter: () => writeRunScript("true") });
+export default declareHarness({ version: "1.0.0", models: { "fake-model-small-001": [] }, applyParameter: () => writeRunScript("true") });
 `,
     );
     await using docker = await fakeDocker();
@@ -518,7 +518,7 @@ Recorded in <DATA>/runs.sqlite
       `${copy.dir}/.thunderjar/parameters/harnessModels/fake-harness-alpha/index.ts`,
       `import { declareHarness, writeRunScript } from "thunderjar";
 
-export default declareHarness({ version: "1.0.0", applyParameter: () => writeRunScript("rm -rf /thunderjar") });
+export default declareHarness({ version: "1.0.0", models: { "fake-model-small-001": [] }, applyParameter: () => writeRunScript("rm -rf /thunderjar") });
 `,
     );
     await using docker = await fakeDocker({ images: ["thunderjar-prerun:577ed2bd"] });
