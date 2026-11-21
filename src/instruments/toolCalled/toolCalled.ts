@@ -18,10 +18,14 @@ import type { Instrument } from "../instrument.ts";
 export const toolCalled: Instrument<{ tool: string; inputMatches?: string }, number> = {
   version: 1,
   defaultScore: { kind: "boolean", score: () => false },
-  async evaluate({ tool }, ctx) {
+  async evaluate({ tool, inputMatches }, ctx) {
     const transcript = await ctx.transcript();
     if (transcript.outcome !== "collected") return { outcome: "measured", data: 0 };
-    return { outcome: "measured", data: transcript.events.filter((event) => event.kind === "toolCall" && event.tool === tool).length };
+    const pattern = inputMatches === undefined ? undefined : new RegExp(inputMatches);
+    const calls = transcript.events.filter(
+      (event) => event.kind === "toolCall" && event.tool === tool && (pattern === undefined || pattern.test(JSON.stringify(event.input) ?? "")),
+    );
+    return { outcome: "measured", data: calls.length };
   },
   checkConfig() {
     return [];
