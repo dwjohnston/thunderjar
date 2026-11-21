@@ -6,6 +6,7 @@
 
 import { dockerCommand, dockerEnv, ensureConnection } from "./connection.ts";
 import { findMachine } from "./fly.ts";
+import { markInFlight } from "./idle.ts";
 import type { Settings } from "./settings.ts";
 import { readTimer, resetTimer, writeTimer } from "./timer.ts";
 import { up } from "./up.ts";
@@ -17,6 +18,7 @@ export async function docker(args: string[], settings: Settings): Promise<number
   let machine = await findMachine(settings);
   if (!machine || machine.state !== "started") machine = await up(settings);
   await ensureConnection(settings, machine.id);
+  const done = await markInFlight(settings);
   const proc = Bun.spawn(dockerCommand(args), {
     env: dockerEnv(settings),
     stdin: "inherit",
@@ -32,6 +34,7 @@ export async function docker(args: string[], settings: Settings): Promise<number
     });
   }
   const exitCode = await proc.exited;
+  await done();
   const previous = await readTimer(settings);
   await writeTimer(settings, { ...resetTimer(settings, machine.id), watcherPid: ensureWatcher(settings, previous) });
   return received ? 128 + SIGNALS[received] : exitCode;
