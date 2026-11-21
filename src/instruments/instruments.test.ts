@@ -129,6 +129,13 @@ describe("toolCalled", () => {
     }
   });
 
+  test("its default score is whether the tool was called at all", () => {
+    expect(toolCalled.defaultScore?.kind).toBe("boolean");
+    expect(toolCalled.defaultScore?.score(0)).toBe(false);
+    expect(toolCalled.defaultScore?.score(1)).toBe(true);
+    expect(toolCalled.defaultScore?.score(7)).toBe(true);
+  });
+
   test("checks its config is a tool's name, and inputMatches, if given, a valid regular expression", () => {
     expect(toolCalled.checkConfig({ tool: "Bash" })).toEqual([]);
     expect(toolCalled.checkConfig({ tool: "Bash", inputMatches: "bun test" })).toEqual([]);
