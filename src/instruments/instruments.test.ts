@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
 import type { MeasurementContext, Reply } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, replyMatches, shell, STDOUT_LIMIT } from "./instruments.ts";
+import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, jsAst, replyMatches, shell, STDOUT_LIMIT } from "./instruments.ts";
 
 const ROOT = `${TMP_DIR}/instruments-${crypto.randomUUID()}`;
 
@@ -325,6 +325,20 @@ ${CASES}`);
     expect(bunTestFile.checkConfig({})).toEqual([
       ["config.subject", "must be a glob pattern, got undefined"],
       ["config.test", "must be a path relative to the measurement's file, got undefined"],
+    ]);
+  });
+});
+
+describe("jsAst", () => {
+  test("checks its config is a glob and a set of valid esquery selectors", () => {
+    expect(jsAst.checkConfig({ glob: "src/**/*.ts", selectors: { calls: "CallExpression" } })).toEqual([]);
+    expect(jsAst.checkConfig({ glob: "", selectors: {} })).toEqual([
+      ["config.glob", 'must be a glob pattern, got ""'],
+      ["config.selectors", "must name at least one esquery selector, got {}"],
+    ]);
+    expect(jsAst.checkConfig({ glob: "*.ts", selectors: { ok: "Identifier", bad: "Call[", empty: "" } })).toEqual([
+      ["config.selectors.bad", expect.stringMatching(/^"Call\[" is not a valid esquery selector: /)],
+      ["config.selectors.empty", 'must be an esquery selector, got ""'],
     ]);
   });
 });
