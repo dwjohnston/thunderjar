@@ -20,10 +20,13 @@ export const jsAst: Instrument<{ glob: string; selectors: Record<string, string>
     const parsed = Object.entries(selectors).map(([name, selector]) => [name, esquery.parse(selector)] as const);
     const value: JsAstValue = [];
     for (const file of await ctx.glob(glob)) {
-      const { program } = parseSync(file, await ctx.readFile(file));
+      const { program, errors } = parseSync(file, await ctx.readFile(file));
       const matches: Record<string, number> = {};
-      for (const [name, selector] of parsed) matches[name] = esquery.match(program as unknown as Node, selector, options).length;
-      value.push({ file, matches });
+      // A file that doesn't parse is the agent's to answer for, not a failed measurement: its
+      // partial tree isn't counted, so a broken file can't pass by accident.
+      const error = errors.find((e) => e.severity === "Error");
+      for (const [name, selector] of parsed) matches[name] = error ? 0 : esquery.match(program as unknown as Node, selector, options).length;
+      value.push(error ? { file, matches, parseError: error.message } : { file, matches });
     }
     return { outcome: "measured", data: value };
   },
