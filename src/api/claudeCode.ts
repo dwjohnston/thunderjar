@@ -80,7 +80,7 @@ export type ClaudeCodeOptions = {
   /** The version of `@anthropic-ai/claude-code` to install, e.g. `"2.1.311"`. */
   version: string;
   /** The models it runs, as `declareHarness`'s `models`, e.g. `{ "claude-haiku-5-5": [] }`. */
-  models?: HarnessModels;
+  models: HarnessModels;
   /** Replaces the command its run script runs: `CLAUDE_CODE_COMMAND` is the default. */
   command?: string;
 };
