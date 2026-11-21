@@ -446,7 +446,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell" | "commits" | "filesChanged"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell" | "commits" | "filesChanged" | "jsAst"}
  * @description
  * What to measure. Each instrument takes its own `config`, and returns its own value, the measure:
  *
@@ -459,6 +459,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
  * | `filesChanged` | `{ glob? }` | `FileChanges`: `{ added, modified, deleted }` paths changed since the start | none: give each metric a `score` |
  * | `commits` | `{}` | `Commit[]`, oldest first: `{ sha, message, files: { added, modified, deleted } }` | none: give each metric a `score` |
+ * | `jsAst` | `{ glob, selectors }` | `{ file, matches, parseError? }[]`: for each matching JS or TS file, how many nodes each esquery selector matches | none: give each metric a `score` |
  *
  * `shell` stores `command`'s stdout as it is, up to 64 KiB, in the run data store. A command that
  * prints secrets or other sensitive data will persist them: nothing transforms its output before
