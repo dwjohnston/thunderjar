@@ -2,8 +2,11 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
-      "mcp__claude-artifacts__publish_files",
-      "mcp__claude-artifacts__edit_version"
+      "mcp__claude-artifacts"
+    ],
+    "ask": [
+      "mcp__claude-artifacts__delete_artifact",
+      "mcp__claude-artifacts__delete_asset"
     ]
   },
   "hooks": {
