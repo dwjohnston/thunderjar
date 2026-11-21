@@ -7,6 +7,7 @@
 import { dockerCommand, dockerEnv, ensureConnection } from "./connection.ts";
 import { findMachine } from "./fly.ts";
 import type { Settings } from "./settings.ts";
+import { resetTimer, writeTimer } from "./timer.ts";
 import { up } from "./up.ts";
 
 export async function docker(args: string[], settings: Settings): Promise<number> {
@@ -19,5 +20,7 @@ export async function docker(args: string[], settings: Settings): Promise<number
     stdout: "inherit",
     stderr: "inherit",
   });
-  return await proc.exited;
+  const exitCode = await proc.exited;
+  await writeTimer(settings, resetTimer(settings, machine.id));
+  return exitCode;
 }
