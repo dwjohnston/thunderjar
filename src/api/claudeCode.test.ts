@@ -1,7 +1,8 @@
 // The Claude Code readers, against a real `claude -p --output-format json` result, from Claude Code
 // 2.1.316 run on DeepSeek's Anthropic-compatible API, whose model its price table doesn't know.
 import { describe, expect, test } from "bun:test";
-import { claudeCode, claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
+import { transcriptFiles } from "../testing/transcripts.ts";
+import { claudeCode, claudeCodeReply, claudeCodeTokenCosts, claudeCodeTranscript } from "./claudeCode.ts";
 import { declaredBy } from "./declarations.ts";
 
 const REAL = await Bun.file(`${import.meta.dir}/claudeCode.deepseek.result.json`).text();
@@ -111,5 +112,61 @@ USER node`,
     expect(custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", resolved: undefined })).toContain(
       "#!/bin/sh\nclaude -p hi > /thunderjar/result.json\n",
     );
+  });
+});
+
+describe("claudeCodeTranscript", () => {
+  // Claude Code 2.1.326, on DeepSeek's Anthropic-compatible API: asked to run a command, start a
+  // sub-agent that runs `ls`, and reply DONE, then, with `claude -c`, to run `cat one.txt`.
+  const SAVED = "claude-code-2.1.326";
+
+  test("reads the session's messages and tool calls, its sub-agent's among them, in the order they happened", async () => {
+    const files = await transcriptFiles(SAVED, claudeCodeTranscript.files);
+    // The session, and its sub-agent's beside it.
+    expect(files.map(({ path }) => path)).toEqual([
+      "/home/node/.claude/projects/-workspace/685673ef-a5a1-4b45-861b-abfa4f300c10.jsonl",
+      "/home/node/.claude/projects/-workspace/685673ef-a5a1-4b45-861b-abfa4f300c10/subagents/agent-a339595684dac7eac.jsonl",
+    ]);
+
+    const events = claudeCodeTranscript.parse(files);
+
+    expect(events).toEqual([
+      {
+        kind: "message",
+        role: "user",
+        text: "First, run the shell command `echo one > one.txt` with your Bash tool. Then use your Agent tool to start a general-purpose sub-agent whose job is to run `ls` with Bash and report the files it sees. Finally reply with the single word DONE.",
+        agent: "main",
+      },
+      { kind: "toolCall", tool: "Bash", input: { command: "echo one > one.txt", description: 'Create one.txt containing "one"' }, agent: "main" },
+      {
+        kind: "toolCall",
+        tool: "Agent",
+        input: {
+          description: "Run ls and report files",
+          prompt: "Run the shell command `ls` with your Bash tool in the current working directory (/workspace) and report the list of files and directories you see in your final message. Do not modify anything.",
+          subagent_type: "general-purpose",
+          run_in_background: false,
+        },
+        agent: "main",
+      },
+      {
+        kind: "message",
+        role: "user",
+        text: "Run the shell command `ls` with your Bash tool in the current working directory (/workspace) and report the list of files and directories you see in your final message. Do not modify anything.",
+        agent: "subagent",
+      },
+      { kind: "toolCall", tool: "Bash", input: { command: "ls -la /workspace", description: "List files in /workspace" }, agent: "subagent" },
+      {
+        kind: "message",
+        role: "assistant",
+        text: "Ran `ls -la /workspace`. The directory contains a single entry:\n\n- `one.txt` — a regular file, 4 bytes, owner `node`, permissions `-rw-r--r--`, last modified Nov 21 04:20.\n\nNo subdirectories are present. Nothing was modified.",
+        agent: "subagent",
+      },
+      { kind: "message", role: "assistant", text: "DONE", agent: "main" },
+      // The second turn, in the same session.
+      { kind: "message", role: "user", text: "Now run `cat one.txt` with Bash and reply with what it printed.", agent: "main" },
+      { kind: "toolCall", tool: "Bash", input: { command: "cat one.txt", description: "Print contents of one.txt" }, agent: "main" },
+      { kind: "message", role: "assistant", text: "It printed:\n\n```\none\n```", agent: "main" },
+    ]);
   });
 });

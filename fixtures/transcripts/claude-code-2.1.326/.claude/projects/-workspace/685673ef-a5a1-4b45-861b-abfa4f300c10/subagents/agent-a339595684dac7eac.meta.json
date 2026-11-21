@@ -1,0 +1,1 @@
+{"agentType":"general-purpose","isBuiltIn":true,"description":"Run ls and report files","toolUseId":"call_00_TFvY8Ubjfaza4ZKIpqtM8017","spawnDepth":1,"requestShape":"foreground","requestNonInteractive":true,"pickedEffortModel":"deepseek-flash","finished":true}

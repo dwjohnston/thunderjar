@@ -5,7 +5,7 @@
 //
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
-import { declareHarness, type HarnessDeclaration, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type ModelTokenCosts, type TokenCosts, type TranscriptDeclaration } from "./declarations.ts";
 import { MODEL_PATH, PROMPT_PATH, RESULT_PATH, writeModel, writeRunScript } from "./files.ts";
 
 type ModelUsage = {
@@ -74,6 +74,16 @@ export function claudeCodeTokenCosts(raw: string): TokenCosts {
   const apiDurationMs = count(result.duration_api_ms);
   return { outcome: "collected", models, ...(apiDurationMs !== undefined && { apiDurationMs }) };
 }
+
+/**
+ * Claude Code's transcript: the JSON lines it keeps of each session in
+ * `~/.claude/projects/<working directory, as a name>/<session ID>.jsonl`, and of each sub-agent's
+ * in `<session ID>/subagents/agent-<ID>.jsonl` beside it.
+ */
+export const claudeCodeTranscript: TranscriptDeclaration = {
+  files: ["~/.claude/projects/**/*.jsonl"],
+  parse: () => [],
+};
 
 /** What `claudeCode` gets. */
 export type ClaudeCodeOptions = {
