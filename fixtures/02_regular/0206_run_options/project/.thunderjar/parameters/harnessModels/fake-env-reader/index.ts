@@ -17,6 +17,7 @@ import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 // value, which isn't secret, and whether it saw FAKE_TEST_CASE_AWKWARD and FAKE_TEST_CASE_SECRET,
 // `set` or nothing, never their values.
 export default declareHarness({
+  models: { "fake-model-small-001": [], "fake-model-large-001": [] },
   version: "1.0.0",
   applyParameter: (_config, ctx) =>
     [

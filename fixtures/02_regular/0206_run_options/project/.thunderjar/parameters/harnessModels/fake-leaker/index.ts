@@ -17,6 +17,7 @@ import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 // files of its workspace: its key into a log line, both into a .env it creates. So its postrun
 // image holds both values in its files. It replies `leaked`.
 export default declareHarness({
+  models: { "fake-model-small-001": [], "fake-model-large-001": [] },
   version: "1.0.0",
   applyParameter: (_config, ctx) =>
     [

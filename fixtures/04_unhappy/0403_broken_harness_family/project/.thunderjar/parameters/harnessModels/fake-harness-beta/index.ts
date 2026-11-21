@@ -3,6 +3,7 @@ import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 // A fake agent: writes a correct isPrime.ts, without a @ts-ignore, and a result file. Broken: it
 // declares no version, which every harness must.
 export default declareHarness({
+  models: { "fake-model-small-001": [], "fake-model-large-001": [] },
   applyParameter: (_config, ctx) =>
     [
       `RUN echo "install fake-harness-beta@${ctx.version}"`,
