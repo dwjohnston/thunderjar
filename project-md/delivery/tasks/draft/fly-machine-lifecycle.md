@@ -50,10 +50,40 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
    - What `fly-docker.sh` does today: forwards the command to the machine's Docker daemon over the shared SSH connection.
    - Runs `up` first, if the machine isn't started.
    - Resets the timer when the command exits, however it exits.
-   - e.g.
+   - What runs on the client machine, for each call:
+     1. `fly machine list -a $FLY_APP --json`
+        - Finds the machine and its state.
+     2. Only if it's missing or stopped: `up`.
+     3. Only if the certificate is over 20 hours old: `fly ssh issue`.
+     4. Only if the shared connection isn't open: `ssh -fN tjfly`.
+        - Stays open in the background, through `fly ssh console … nc <machine IP> 22`.
+     5. The local Docker CLI, pointed at the machine's daemon: `docker -H ssh://tjfly <args…>`.
+        - Its stdin, stdout, stderr and exit code are passed through.
+     6. Writes `.thunderjar/.fly`, and starts `watch` if it isn't running.
+   - e.g. `ps`
      ```sh
      bun .thunderjar/fly-client/index.ts docker ps
      ```
+     ```sh
+     docker -H ssh://tjfly ps
+     ```
+   - e.g. `build`, as Thunderjar builds a prerun image
+     ```sh
+     bun .thunderjar/fly-client/index.ts docker build -t tj-prerun-h1a2b3c /tmp/tj-build-x7k2
+     ```
+     ```sh
+     docker -H ssh://tjfly build --network host -t tj-prerun-h1a2b3c /tmp/tj-build-x7k2
+     ```
+     - `--network host` is added, as `fly-docker.sh` does today, so build steps can resolve names.
+     - The context folder is on the client. The Docker CLI tars it and streams it to the machine.
+   - e.g. `exec`, as Thunderjar measures a container
+     ```sh
+     bun .thunderjar/fly-client/index.ts docker exec -i tj-run-4f2a git -C /workspace log --oneline
+     ```
+     ```sh
+     docker -H ssh://tjfly exec -i tj-run-4f2a git -C /workspace log --oneline
+     ```
+     - The client's stdin goes to the container, so `-i` works.
 3. `stop`
    - Stops the machine, if idle. `--force` stops it anyway.
 4. `destroy`
