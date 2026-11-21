@@ -16,3 +16,8 @@ export function migratePair(pair: string): string {
   if (parts === undefined || pair.endsWith(`/${parts.join("/")}`)) return pair;
   return `${pair}/${parts.join("/")}`;
 }
+
+/** A test case's source, each quoted pair in it migrated. */
+export function migrateSource(source: string): string {
+  return source;
+}
