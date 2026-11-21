@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { modelVariants } from "./harnessModels.ts";
+import { modelVariants, splitPair } from "./harnessModels.ts";
 
 describe("modelVariants", () => {
   test("a model without settings makes its ID alone", () => {
@@ -15,5 +15,20 @@ describe("modelVariants", () => {
       { name: "m/high/8000", modelId: "m", model: { effort: "high", mode: "fast", thinkingTokens: 8000 } },
       { name: "m/high/32000", modelId: "m", model: { effort: "high", mode: "fast", thinkingTokens: 32000 } },
     ]);
+  });
+});
+
+describe("splitPair", () => {
+  const models = {
+    "openai/gpt-6.1": [],
+    "openai/gpt-6.1/sol": [{ reasoningEffort: { values: ["low", "high"] } }],
+  };
+
+  test("takes the harness folder, then the longest declared model ID, then the variant parts", () => {
+    expect(splitPair("codex-0.166.0/openai/gpt-6.1/sol/high", models)).toEqual({
+      harness: "codex-0.166.0",
+      modelId: "openai/gpt-6.1/sol",
+      model: { reasoningEffort: "high" },
+    });
   });
 });
