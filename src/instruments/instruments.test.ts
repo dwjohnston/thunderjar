@@ -116,6 +116,18 @@ describe("toolCalled", () => {
     expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: '"description":"Run' }, ctx)).toEqual({ outcome: "measured", data: 1 });
     expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: "npm test" }, ctx)).toEqual({ outcome: "measured", data: 0 });
   });
+
+  test("a run without a transcript is skipped, saying why, for each reason it has none", async () => {
+    const reasons = [
+      "its harness declares no transcript",
+      "no file matched its transcript's files: ~/.claude/projects/**/*.jsonl",
+      "unparseable: Unexpected token 'x', \"x\" is not valid JSON",
+    ];
+    for (const reason of reasons) {
+      const ctx = await transcribed({ outcome: "unavailable", reason });
+      expect(await toolCalled.evaluate({ tool: "Bash" }, ctx)).toEqual({ outcome: "skipped", reason: `no transcript: ${reason}` });
+    }
+  });
 });
 
 describe("shell", () => {
