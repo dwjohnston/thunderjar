@@ -67,6 +67,34 @@ scripts/gauntlet/bootstrap.sh run run gauntlet-wrong-failing-test
 
 - `THUNDERJAR_RUN_DATA=sqlite`: run data goes to the local SQLite file, for sandboxes that can't reach Postgres. Set it to `postgres` to use Supabase.
 - `THUNDERJAR_GAUNTLET_PAIRS=openrouter`, only when there's no `ANTHROPIC_API_KEY` (or `AAK`): just the Copilot and OpenCode pairs. With a key, all 12 pairs run.
-- `THUNDERJAR_DOCKER` to `fly-docker.sh`: prerun images build on the Fly machine.
+- `THUNDERJAR_DOCKER` to `fly-client/docker`: prerun images build on the Fly machine.
 
 Daemon log and tool-install logs go to `/tmp/gauntlet/`. Never run these with `set -x`.
+
+## The Fly client
+
+`fly-client/` manages the one Fly machine remote runs use: it creates it, starts it, and stops it when idle. Thunderjar knows nothing of it. It's the runtime's command in `thunderjar.config.ts`, so every `docker` command Thunderjar runs goes through it.
+
+```sh
+bun .thunderjar/fly-client/index.ts <up | docker <args…> | stop [--force] | destroy [--force] | status [--json] | prune>
+```
+
+- `docker <args…>`
+  - Starts the machine first, with `up`, if it's missing or stopped.
+  - Forwards the command to its daemon over one shared SSH connection, with stdin, output and exit code passed through.
+  - Adds `--network host` to `build`, so build steps can resolve names.
+  - Resets the timer when it exits, however it exits.
+  - `fly-client/docker` is the same, as one executable, for `THUNDERJAR_DOCKER`.
+- The timer
+  - `.thunderjar/.fly`, git-ignored: when the last `docker` command finished, and the deadlines from it.
+  - A detached `watch` process acts on it: it stops the machine after `FLY_SLEEP_MINUTES`, and destroys it and its volume after `FLY_DESTROY_MINUTES`.
+  - Either only if idle: no running containers, and no `docker` command in flight.
+- The watchdog on the machine
+  - The backstop for when the client has gone, e.g. a closed laptop.
+  - Stops the machine after `FLY_SLEEP_MINUTES` with no running containers and no SSH sessions. It never destroys it.
+- `fly-client/machine/`
+  - The recipe `up` creates the machine from, and its image: a Docker daemon and the watchdog.
+  - `up` builds and pushes the image when a file in it changes, and moves the machine to it once idle.
+- Tests
+  - `bun run test:fly`, with fake `fly`, `docker` and `ssh`. `bun test` skips them, as this folder is hidden.
+  - `bun run test:fly:real` runs `up`, `docker ps` and `stop` on a throwaway app on real Fly. Needs `FLYIO_TOKEN`.

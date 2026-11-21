@@ -26,10 +26,11 @@ name: Slow tests
 #   OPENROUTER_API_KEY for Copilot and OpenCode in fly, only in test cases with those harnesses
 #   OPENROUTER_TOKEN   for Codex, Copilot CLI and OpenCode in capture
 # Repository variables:
-#   FLY_MACHINE                   the name of CI's machine in the Fly app, e.g. tj-ci: not the one
-#                                 used for development. The workflow starts it, and stops it after.
+#   FLY_APP                       CI's Fly app, e.g. thunderjar-runtime-ci: not the one used for
+#                                 development. The Fly client keeps one machine in it, creating it
+#                                 if it's missing. The workflow starts it, and stops it after.
 # Optional repository variables:
-#   FLY_APP, FLY_ORG              the Fly app and org, if not thunderjar-runtime-dwj and personal
+#   FLY_ORG                       the Fly org, if not personal
 #   THUNDERJAR_IMAGE_REPOSITORY   if not ghcr.io/dwjohnston/thunderjar-images
 on:
   issue_comment:
@@ -103,7 +104,7 @@ jobs:
   fly:
     needs: target
     if: github.event_name == 'issue_comment'
-    # One run at a time: they share CI's Fly machine, and each run stops it when it ends.
+    # One run at a time: they share CI's Fly machine, in the FLY_APP app, and each run stops it when it ends.
     concurrency:
       group: slow-tests-fly
       cancel-in-progress: false
@@ -114,7 +115,6 @@ jobs:
       THUNDERJAR_IMAGE_REPOSITORY: ${{ vars.THUNDERJAR_IMAGE_REPOSITORY }}
       FLY_APP: ${{ vars.FLY_APP }}
       FLY_ORG: ${{ vars.FLY_ORG }}
-      FLY_MACHINE: ${{ vars.FLY_MACHINE }}
       FLYIO_TOKEN: ${{ secrets.FLYIO_TOKEN }}
       THUNDERJAR_DB_URL: ${{ secrets.THUNDERJAR_DB_URL }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -127,7 +127,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      # The action installs `flyctl`. The Fly scripts call it as `fly`.
+      # The action installs `flyctl`. The Fly client calls it as `fly`.
       - run: command -v fly || sudo ln -s "$(command -v flyctl)" /usr/local/bin/fly
       - uses: docker/login-action@v4
         with:
@@ -135,10 +135,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Creates it if it's missing. The first docker command would too: this sizes it first.
       - name: Start CI's Fly machine
         run: |
-          [ -n "$FLY_MACHINE" ] || { echo "Set the FLY_MACHINE repository variable to CI's Fly machine" >&2; exit 1; }
-          ./.thunderjar/fly-machine.sh start
+          [ -n "$FLY_APP" ] || { echo "Set the FLY_APP repository variable to CI's Fly app" >&2; exit 1; }
+          bun .thunderjar/fly-client/index.ts up
 
       - name: Run the test case
         id: run
@@ -157,10 +158,11 @@ jobs:
           fi
           exit "$status"
 
+      # The machine's watchdog would stop it too, once idle, but this job is the only thing using it.
       - name: Stop CI's Fly machine
-        # Never without FLY_MACHINE: it could stop the development machine.
-        if: always() && vars.FLY_MACHINE != ''
-        run: ./.thunderjar/fly-machine.sh stop
+        # Never without FLY_APP: it could stop the development machine.
+        if: always() && vars.FLY_APP != ''
+        run: bun .thunderjar/fly-client/index.ts stop --force
 
       - name: Post the outcome
         if: always() && needs.target.outputs.test-case != ''

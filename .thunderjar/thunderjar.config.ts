@@ -12,8 +12,8 @@ const localRunData = Bun.env.THUNDERJAR_RUN_DATA === "sqlite";
 // with GHCR_USER and GHCR_TOKEN, sent to it with the model keys and THUNDERJAR_DB_URL as it starts.
 const onRuntime = Bun.env.THUNDERJAR_ON_RUNTIME === "1";
 const sqlite = sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" });
-// How many containers run at once on the Fly machine: its CPUs, FLYIO_INSTANCE_SIZE (which
-// `fly-machine.sh start` sizes it to), times CONCURRENCY_RATIO. Set both in .env.
+// How many containers run at once on the Fly machine: its CPUs, FLYIO_INSTANCE_SIZE (which the Fly
+// client sizes it to), times CONCURRENCY_RATIO. Set both in .env.
 const positive = (name: string, fallback: number): number => {
   const value = Number(Bun.env[name] || fallback);
   if (!(value > 0)) throw new Error(`${name} must be a positive number, got '${Bun.env[name]}'`);
@@ -29,11 +29,11 @@ export default declareConfig(
       imageStore: { repository: Bun.env.THUNDERJAR_IMAGE_REPOSITORY || "ghcr.io/dwjohnston/thunderjar-images" },
       // Supabase Postgres. Use its pooler URL: the direct one is IPv6 only, and GitHub's runners aren't.
       runDataStore: localRunData ? sqlite : postgresStore({ urlEnv: "THUNDERJAR_DB_URL" }),
-      // Containers run on a Docker daemon on a Fly machine, picked with FLY_MACHINE. It must
-      // already be running: start it with `.thunderjar/fly-machine.sh start` before working, and
-      // stop it with `.thunderjar/fly-machine.sh stop` after. Needs FLYIO_TOKEN.
+      // Containers run on a Docker daemon on the Fly machine in FLY_APP. Every docker command goes
+      // through the Fly client, which creates and starts the machine when needed, and stops it when
+      // idle. See .thunderjar/AGENTS.md. Needs FLYIO_TOKEN.
       runtime: {
-        command: ["./.thunderjar/fly-docker.sh"],
+        command: ["bun", "./.thunderjar/fly-client/index.ts", "docker"],
         concurrency: remoteConcurrency,
         ...(onRuntime && { runner: { registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" } } }),
       },

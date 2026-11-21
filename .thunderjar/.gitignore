@@ -1,3 +1,6 @@
 _generated/
 .data/
 logs/
+# The Fly client timer: see fly-client/.
+.fly
+.fly.*.tmp

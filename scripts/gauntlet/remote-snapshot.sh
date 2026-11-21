@@ -4,7 +4,7 @@
 #
 # Prints the state of the Fly runtime for a gauntlet run: the machine's state and recent events
 # (to spot someone else using it), its Docker disk use, and the containers on it. Read-only, but
-# like any fly-docker.sh command it starts the machine if it's stopped: pass --no-start to only
+# like any Fly client docker command it starts the machine if it's stopped: pass --no-start to only
 # read the events and state then.
 #
 #   scripts/gauntlet/remote-snapshot.sh [--no-start]
@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck source=env.sh
 source "$ROOT/scripts/gauntlet/env.sh"
 APP="${FLY_APP:-thunderjar-runtime-dwj}"
-D="$ROOT/.thunderjar/fly-docker.sh"
+D="$ROOT/.thunderjar/fly-client/docker"
 
 echo "== $(date -u +%FT%TZ) machine"
 fly machine list -a "$APP" --json | jq -r '.[] | "\(.id) \(.state) \(.config.guest.cpu_kind)-\(.config.guest.cpus)x \(.config.guest.memory_mb)MB"'
