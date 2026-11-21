@@ -40,6 +40,24 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
    3. Run the tasks.
 3. **Client timer**
    - A git-ignored file, `.thunderjar/.fly`, records when the last task finished.
+     - JSON.
+       - The machine it's for.
+       - When the last task finished.
+       - The deadlines worked out from it.
+       - The PID of the detached process, so a new command replaces it rather than starting a second one.
+     - e.g.
+       ```json
+       {
+         "app": "thunderjar-runtime-dwj",
+         "machineId": "e784079b449483",
+         "lastTaskFinishedAt": "2026-11-21T00:40:00Z",
+         "stopAt": "2026-11-21T01:10:00Z",
+         "destroyAt": "2026-11-28T00:40:00Z",
+         "watcherPid": 48213
+       }
+       ```
+     - Missing file: no timer is running. Nothing is stopped or destroyed.
+     - Add it to `.gitignore`.
    - New tasks reset it.
    - An interrupted run, e.g. Ctrl-C while following, still writes it.
    - A detached process on the host acts on it:
