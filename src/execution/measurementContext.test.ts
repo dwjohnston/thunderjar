@@ -130,4 +130,14 @@ describe("openMeasurementContext's transcript", () => {
       await ctx.close();
     }
   });
+
+  test("is unavailable, saying why, when no file matches its globs", async () => {
+    await using _ = await postrunImage(`mkdir -p "$HOME/.fake" && echo nope > "$HOME/.fake/notes.txt"`);
+    const ctx = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", RECORDED, undefined, [], FAKE_TRANSCRIPT);
+    try {
+      expect(await ctx.transcript()).toEqual({ outcome: "unavailable", reason: "no file matched its transcript's files: ~/.fake/sessions/**/*.jsonl" });
+    } finally {
+      await ctx.close();
+    }
+  });
 });
