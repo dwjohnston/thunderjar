@@ -86,6 +86,21 @@ describe("measure", () => {
     expect(result.metrics.calls).toBe(2);
   });
 
+  test("jsAst: a file that doesn't parse counts 0 for each selector, with its parse error", async () => {
+    const declaration = declareMeasurement({
+      instrument: "jsAst",
+      config: { glob: "*.ts", selectors: { calls: "CallExpression" } },
+      metrics: { broken: { stat: "rate", score: (v) => v.some((f) => f.parseError !== undefined) } },
+    });
+    const files = { "a.ts": await source("a.ts", "f(1);\n"), "b.ts": await source("b.ts", "const = f(;\n") };
+    const result = await measure(declaration, { files });
+    expect(result.value).toEqual([
+      { file: "a.ts", matches: { calls: 1 } },
+      { file: "b.ts", matches: { calls: 0 }, parseError: expect.any(String) },
+    ]);
+    expect(result.metrics.broken).toBe(true);
+  });
+
   test("bunTestFile: is not supported yet", async () => {
     const declaration = declareMeasurement({
       instrument: "bunTestFile",
