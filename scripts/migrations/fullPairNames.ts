@@ -13,6 +13,6 @@ export const DEFAULT_PARTS: Record<string, string[]> = {
 export function migratePair(pair: string): string {
   const harness = pair.slice(0, pair.indexOf("/"));
   const parts = Object.entries(DEFAULT_PARTS).find(([prefix]) => harness.startsWith(prefix))?.[1];
-  if (parts === undefined) return pair;
+  if (parts === undefined || pair.endsWith(`/${parts.join("/")}`)) return pair;
   return `${pair}/${parts.join("/")}`;
 }
