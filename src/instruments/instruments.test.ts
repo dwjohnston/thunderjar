@@ -107,6 +107,15 @@ describe("toolCalled", () => {
     // Case-sensitive, and a message naming it isn't a call.
     expect(await toolCalled.evaluate({ tool: "bash" }, ctx)).toEqual({ outcome: "measured", data: 0 });
   });
+
+  test("counts only the calls whose input, as JSON, matches inputMatches", async () => {
+    const ctx = await transcribed(SESSION);
+    expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: "bun test" }, ctx)).toEqual({ outcome: "measured", data: 2 });
+    expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: "bun test src/" }, ctx)).toEqual({ outcome: "measured", data: 1 });
+    // Matched against the JSON, keys and all.
+    expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: '"description":"Run' }, ctx)).toEqual({ outcome: "measured", data: 1 });
+    expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: "npm test" }, ctx)).toEqual({ outcome: "measured", data: 0 });
+  });
 });
 
 describe("shell", () => {
