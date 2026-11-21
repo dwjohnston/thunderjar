@@ -20,7 +20,7 @@ export const toolCalled: Instrument<{ tool: string; inputMatches?: string }, num
   defaultScore: { kind: "boolean", score: () => false },
   async evaluate({ tool, inputMatches }, ctx) {
     const transcript = await ctx.transcript();
-    if (transcript.outcome !== "collected") return { outcome: "measured", data: 0 };
+    if (transcript.outcome !== "collected") return { outcome: "skipped", reason: `no transcript: ${transcript.reason}` };
     const pattern = inputMatches === undefined ? undefined : new RegExp(inputMatches);
     const calls = transcript.events.filter(
       (event) => event.kind === "toolCall" && event.tool === tool && (pattern === undefined || pattern.test(JSON.stringify(event.input) ?? "")),
