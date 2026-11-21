@@ -101,6 +101,17 @@ describe("measure", () => {
     expect(result.metrics.broken).toBe(true);
   });
 
+  test("jsAst: a file that isn't JavaScript or TypeScript is an error", async () => {
+    const declaration = declareMeasurement({
+      instrument: "jsAst",
+      config: { glob: "*", selectors: { calls: "CallExpression" } },
+      metrics: { calls: { stat: "sum", score: (v) => v.length } },
+    });
+    const result = await measure(declaration, { files: { "a.py": await source("a.py", "f(1)\n") } });
+    expect(result.outcome).toBe("erroredWhileMeasuring");
+    expect(result.metrics.calls).toBeUndefined();
+  });
+
   test("bunTestFile: is not supported yet", async () => {
     const declaration = declareMeasurement({
       instrument: "bunTestFile",
