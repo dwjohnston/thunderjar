@@ -67,4 +67,13 @@ describe("docker", () => {
       missing: ["deploy --build-only", "volumes create", "machine run"],
     });
   });
+
+  test("gives ssh and docker FLY_API_TOKEN from FLYIO_TOKEN, for the fly ssh console their connection goes through", async () => {
+    await f.setMachines([await machineFixture({ state: "started" })]);
+
+    await f.run(["docker", "ps"]);
+
+    const withoutToken = (await f.calls()).filter((call) => call.command !== "fly" && !call.flyToken);
+    expect(withoutToken).toEqual([]);
+  });
 });

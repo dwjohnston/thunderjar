@@ -11,7 +11,7 @@ import recipe from "../machine/recipe.json";
 const INDEX = `${import.meta.dir}/../index.ts`;
 export const APP = "test-app";
 
-export type Call = { command: "fly" | "docker" | "ssh"; args: string[] };
+export type Call = { command: "fly" | "docker" | "ssh"; args: string[]; flyToken: boolean };
 
 export interface Machine {
   id: string;
@@ -64,7 +64,7 @@ export interface Result {
 }
 
 // Variables the client reads, left out of the environment the tests run it in.
-const CLIENT_VARIABLES = ["FLY_APP", "FLY_ORG", "FLY_REGION", "FLYIO_INSTANCE_SIZE", "FLY_SLEEP_MINUTES", "FLY_DESTROY_MINUTES"];
+const CLIENT_VARIABLES = ["FLY_API_TOKEN", "FLY_APP", "FLY_ORG", "FLY_REGION", "FLYIO_INSTANCE_SIZE", "FLY_SLEEP_MINUTES", "FLY_DESTROY_MINUTES"];
 
 export async function fixture(): Promise<Fixture> {
   const dir = (await $`mktemp -d /tmp/tjfc-XXXXXX`.text()).trim();

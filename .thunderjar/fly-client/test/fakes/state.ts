@@ -19,6 +19,8 @@ export async function writeJson(name: string, value: unknown): Promise<void> {
 }
 
 export async function logCall(command: string, args: string[]): Promise<void> {
+  // Whether `fly`, which ssh's ProxyCommand runs, would find a token.
+  const flyToken = Boolean(Bun.env.FLY_API_TOKEN);
   // >> appends with O_APPEND, so calls from fakes running at once don't overwrite each other.
-  await $`echo ${JSON.stringify({ command, args })} >> ${`${fakeDir}/calls.jsonl`}`;
+  await $`echo ${JSON.stringify({ command, args, flyToken })} >> ${`${fakeDir}/calls.jsonl`}`;
 }
