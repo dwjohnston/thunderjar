@@ -39,7 +39,7 @@ export type PlannedPermutation = {
   runOptions: string[];
   /** How long its run script may run, from its initial prompt, before it's killed. */
   timeoutSeconds: number;
-  /** Its harness, for its `collectReply`. */
+  /** Its harness, for its `collectReply` and `transcript`. */
   harness: HarnessDeclaration;
   /** Its harness's `collectTokenCosts`, or one that reports none. */
   collectTokenCosts: TokenCostCollector;
