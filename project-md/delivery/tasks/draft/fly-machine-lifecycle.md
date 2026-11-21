@@ -29,7 +29,12 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 - One client only.
 - Lives in `.thunderjar/fly-client/`.
 - TypeScript on Bun.
-- Replaces `fly-machine.sh`. `fly-docker.sh` can call into it.
+- Replaces `fly-machine.sh` and `fly-docker.sh`.
+- Thunderjar is unchanged. Every interaction it has with the machine is already a `docker` command through the runtime's command, so that command is the hook.
+  - e.g. in `thunderjar.config.ts`
+    ```ts
+    runtime: { command: ["bun", "./.thunderjar/fly-client/index.ts", "docker"] }
+    ```
 
 ## CLI
 
@@ -41,13 +46,13 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 1. `up`
    - Creates the machine if it's missing, starts it if stopped, and resizes it if idle and the size differs.
    - Waits for its Docker daemon.
-2. `exec -- <command…>`
-   - Runs `up`, then the command.
-   - Marks a task as started, and as finished when the command exits, even on Ctrl-C.
-   - Arms the timer.
+2. `docker <args…>`
+   - What `fly-docker.sh` does today: forwards the command to the machine's Docker daemon over the shared SSH connection.
+   - Runs `up` first, if the machine isn't started.
+   - Resets the timer when the command exits, however it exits.
    - e.g.
      ```sh
-     bun .thunderjar/fly-client/index.ts exec -- bun thunderjar run example
+     bun .thunderjar/fly-client/index.ts docker ps
      ```
 3. `stop`
    - Stops the machine, if idle. `--force` stops it anyway.
@@ -59,7 +64,7 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 6. `prune`
    - Removes stopped containers and unused images, as `fly-machine.sh prune` does.
 7. `watch`
-   - The detached process that acts on the timer. `exec` starts it. Not run by hand.
+   - The detached process that acts on the timer. `docker` starts it. Not run by hand.
 
 ## Environment variables
 
@@ -74,15 +79,16 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 1. **Size**
    - Set by an environment variable, as `FLYIO_INSTANCE_SIZE` does today.
    - Resize only when the machine is idle. Resizing restarts it, and would kill running tasks.
-2. **On each command that runs tasks**
+2. **On each `docker` command**
    1. If the machine doesn't exist, create it.
    2. If it's stopped, start it.
-   3. Run the tasks.
+   3. Forward the command.
+   4. Reset the timer when it exits.
 3. **Client timer**
-   - A git-ignored file, `.thunderjar/.fly`, records when the last task finished.
+   - A git-ignored file, `.thunderjar/.fly`, records when the last `docker` command finished.
      - JSON.
        - The machine it's for.
-       - When the last task finished.
+       - When the last `docker` command finished.
        - The deadlines worked out from it.
        - The PID of the detached process, so a new command replaces it rather than starting a second one.
      - e.g.
@@ -90,7 +96,7 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
        {
          "app": "thunderjar-runtime-dwj",
          "machineId": "e784079b449483",
-         "lastTaskFinishedAt": "2026-11-21T00:40:00Z",
+         "lastCommandFinishedAt": "2026-11-21T00:40:00Z",
          "stopAt": "2026-11-21T01:10:00Z",
          "destroyAt": "2026-11-28T00:40:00Z",
          "watcherPid": 48213
@@ -98,8 +104,8 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
        ```
      - Missing file: no timer is running. Nothing is stopped or destroyed.
      - Add it to `.gitignore`.
-   - New tasks reset it.
-   - An interrupted run, e.g. Ctrl-C while following, still writes it.
+   - A long `docker run` holding an agent's container counts as one command, so the timer resets when it ends.
+   - A container left running detached, e.g. the runner with `THUNDERJAR_ON_RUNTIME=1`, is covered by the idle check below.
    - A detached process on the host acts on it:
      - After `SLEEP_MINUTES`: stop the machine.
      - After `DESTROY_MINUTES`: destroy the machine and its volumes.
