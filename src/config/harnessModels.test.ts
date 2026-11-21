@@ -31,4 +31,10 @@ describe("splitPair", () => {
       model: { reasoningEffort: "high" },
     });
   });
+
+  test("names the declared models when it names none of them", () => {
+    expect(splitPair("codex-0.166.0/openai/gpt-9", models)).toEqual({
+      problem: '"codex-0.166.0/openai/gpt-9" is not a model of codex-0.166.0. Its models: openai/gpt-6.1, openai/gpt-6.1/sol',
+    });
+  });
 });
