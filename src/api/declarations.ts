@@ -283,6 +283,18 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
   requiredEnv?: RequiredEnv[];
 };
 
+/** A model setting's value. */
+export type SettingValue = string | number | boolean;
+
+/**
+ * One setting of a model: fixed, e.g. `{ reasoningEffort: "low" }`, or a variant,
+ * `{ reasoningEffort: { values: ["low", "high"] } }`, which adds one part to the pair's name.
+ */
+export type ModelSetting = Record<string, SettingValue | { values: readonly SettingValue[] }>;
+
+/** A harness's models: each model ID, and its settings, one per entry. */
+export type HarnessModels = Record<string, readonly ModelSetting[]>;
+
 /** A variable a harness needs, by name, or any one of several, the first that's set. */
 export type RequiredEnv = string | { oneOf: string[] };
 
