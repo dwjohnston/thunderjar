@@ -329,11 +329,11 @@ ${CASES}`);
   });
 });
 
-test("every instrument versions its value, and every built-in one but commits and filesChanged have a default score", () => {
+test("every instrument versions its value, and every built-in one but commits, filesChanged and jsAst has a default score", () => {
   for (const [name, instrument] of Object.entries(instruments)) {
     expect(instrument.version).toBeGreaterThanOrEqual(1);
-    // A list of commits has no obvious score: each metric reads it with its own.
-    if (name === "commits" || name === "filesChanged") expect(instrument.defaultScore).toBeUndefined();
+    // Lists of commits or files, and counts per file by selector, have no obvious score: each metric reads them with its own.
+    if (name === "commits" || name === "filesChanged" || name === "jsAst") expect(instrument.defaultScore).toBeUndefined();
     else expect(instrument.defaultScore).toBeDefined();
   }
   // Version 1's value was whether the command exited 0.

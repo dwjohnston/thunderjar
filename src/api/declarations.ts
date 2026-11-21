@@ -492,6 +492,15 @@ export type InstrumentTypes = {
   /** How many lines, across the files matching `glob`, match `pattern`, a JavaScript regular expression? */
   grep: { config: { glob: string; pattern: string }; value: number };
   /**
+   * For each JavaScript or TypeScript file matching `glob`, how many syntax tree nodes each of
+   * `selectors`, esquery selectors by name, matches? Sorted by path. A file that doesn't parse
+   * counts 0 for each, and has `parseError`. A metric needs a `score` of its own.
+   */
+  jsAst: {
+    config: { glob: string; selectors: Record<string, string> };
+    value: { file: string; matches: Record<string, number>; parseError?: string }[];
+  };
+  /**
    * How many tests pass, of all of them, when `test`, a Bun test file at a path relative to the
    * measurement's file, is run with `bun test` against each file matching `subject`? The test
    * finds the subject's absolute path in `Bun.env.THUNDERJAR_SUBJECT`. `total` counts skipped

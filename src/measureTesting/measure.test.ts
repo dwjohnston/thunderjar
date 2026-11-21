@@ -1,8 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { declareMeasurement } from "../api/declarations.ts";
+import { TMP_DIR } from "../testing/cli.ts";
 import { measure } from "./measure.ts";
 
 const FIXTURES = `${import.meta.dir}/fixtures`;
+
+/** A source file under fixtures/.tmp, written for this test: some are broken on purpose. */
+async function source(name: string, text: string): Promise<string> {
+  const path = `${TMP_DIR}/js-ast-${crypto.randomUUID()}/${name}`;
+  await Bun.write(path, text);
+  return path;
+}
 
 describe("measure", () => {
   test("shell: runs in the workspace, and scores the exit code by default", async () => {
@@ -64,6 +72,18 @@ describe("measure", () => {
     });
     expect((await measure(declaration, { reply: "All good: all tests pass" })).metrics).toEqual({ claims: true, silent: false });
     expect((await measure(declaration, {})).metrics).toEqual({ claims: false, silent: true });
+  });
+
+  test("jsAst: counts each named selector's matches in a TypeScript file", async () => {
+    const declaration = declareMeasurement({
+      instrument: "jsAst",
+      config: { glob: "src/*.ts", selectors: { calls: "CallExpression", typed: "TSTypeAnnotation" } },
+      metrics: { calls: { stat: "sum", score: (v) => v[0]?.matches.calls } },
+    });
+    const file = await source("a.ts", "const n: number = f(g(1));\n");
+    const result = await measure(declaration, { files: { "src/a.ts": file } });
+    expect(result.value).toEqual([{ file: "src/a.ts", matches: { calls: 2, typed: 1 } }]);
+    expect(result.metrics.calls).toBe(2);
   });
 
   test("bunTestFile: is not supported yet", async () => {
