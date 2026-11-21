@@ -1,7 +1,7 @@
 // `measure()`: takes a measurement against fixture files, on the host, for a project's own
 // `bun test` tests of its measurements. It ships in the package, as `thunderjar/testing`.
 import { $, Glob } from "bun";
-import type { MeasurementContext, MeasurementDeclaration, Metric, Reply } from "../api/declarations.ts";
+import type { DeclaredMeasurement, MeasurementContext, Metric, Reply } from "../api/declarations.ts";
 import { scoreOf } from "../execution/scoreOf.ts";
 import { type Instrument, instruments } from "../instruments/instruments.ts";
 
@@ -12,12 +12,12 @@ export type MeasureOptions = {
   reply?: string;
 };
 
-export type Measured<M extends MeasurementDeclaration> = {
+export type Measured<Name extends string> = {
   outcome: "measured" | "skipped" | "erroredWhileMeasuring";
   /** The instrument's value, when measured. */
   value?: unknown;
   /** Each metric's score, by name, as `show` and `compare` would read it. */
-  metrics: Record<keyof M["metrics"] & string, number | boolean | undefined>;
+  metrics: Record<Name, number | boolean | undefined>;
 };
 
 /** A MeasurementContext over `dir`: commands run in it with Bun's `$`, files are read from it. */
@@ -48,7 +48,7 @@ function contextOver(dir: string, text: string): MeasurementContext {
  * metrics as a run would. The workspace is removed afterwards. Checks file content only: there is
  * no git state, and no Docker.
  */
-export async function measure<const M extends MeasurementDeclaration>(measurement: M, options: MeasureOptions = {}): Promise<Measured<M>> {
+export async function measure<Name extends string>(measurement: DeclaredMeasurement<Name>, options: MeasureOptions = {}): Promise<Measured<Name>> {
   const instrument = instruments[measurement.instrument] as Instrument<Record<string, string>, unknown>;
   if (instrument.bundledFiles?.length) {
     throw new Error(
@@ -74,7 +74,7 @@ export async function measure<const M extends MeasurementDeclaration>(measuremen
       if ("failed" in scored) throw new Error(`metric ${name}: ${scored.failed}`);
       metrics[name] = "score" in scored ? scored.score : undefined;
     }
-    return { outcome: result.outcome, ...(result.outcome === "measured" ? { value: result.data } : {}), metrics } as Measured<M>;
+    return { outcome: result.outcome, ...(result.outcome === "measured" ? { value: result.data } : {}), metrics } as Measured<Name>;
   } finally {
     await $`rm -rf ${dir}`.quiet();
   }
