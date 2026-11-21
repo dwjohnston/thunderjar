@@ -6,6 +6,7 @@
 // moves its deadlines too. It exits when the timer goes, or when another watcher takes it over.
 
 import { findMachine } from "./fly.ts";
+import { busy } from "./idle.ts";
 import { destroyMachine, stopMachine } from "./lifecycle.ts";
 import { alive } from "./lock.ts";
 import type { Settings } from "./settings.ts";
@@ -58,6 +59,11 @@ async function act(settings: Settings, timer: Timer): Promise<boolean> {
   const now = Date.now();
   if (now >= Date.parse(timer.destroyAt)) {
     const machine = await findMachine(settings);
+    const reason = machine && (await busy(settings, machine));
+    if (reason) {
+      log(`not destroying ${machine.id}: ${reason}`);
+      return false;
+    }
     if (machine) {
       log(`destroying ${machine.id} and its volumes: no docker command since ${timer.lastCommandFinishedAt}`);
       await destroyMachine(settings, machine);
@@ -67,7 +73,9 @@ async function act(settings: Settings, timer: Timer): Promise<boolean> {
   }
   if (now >= Date.parse(timer.stopAt)) {
     const machine = await findMachine(settings);
-    if (machine?.state === "started") {
+    const reason = machine && (await busy(settings, machine));
+    if (reason) log(`not stopping ${machine.id}: ${reason}`);
+    else if (machine?.state === "started") {
       log(`stopping ${machine.id}: no docker command since ${timer.lastCommandFinishedAt}`);
       await stopMachine(settings, machine);
     }
