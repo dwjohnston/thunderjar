@@ -1,0 +1,10 @@
+{
+  "name": "thunderjar-docker",
+  "region": "syd",
+  "volume": { "name": "docker_data", "sizeGb": 80, "path": "/var/lib/docker" },
+  "config": {
+    "guest": { "cpu_kind": "performance", "cpus": 16, "memory_mb": 32768 },
+    "restart": { "policy": "no" },
+    "env": {}
+  }
+}
