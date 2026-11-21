@@ -2,7 +2,7 @@
 // Supervising engineer: David Johnston. Humans: add your notes here.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { APP, fixture, machineFixture, type Fixture } from "./test/harness.ts";
+import { APP, eventually, fixture, machineFixture, type Fixture } from "./test/harness.ts";
 
 let f: Fixture;
 beforeEach(async () => {
@@ -55,5 +55,32 @@ describe("the timer file", () => {
     before = Date.now();
     expect((await f.run(["docker", "run", "busybox", "false"], { env })).exitCode).toBe(1);
     expectReset(await readTimer(), before, Date.now(), 15, 120);
+  });
+
+  test("is written when a docker command is interrupted, which passes the signal on", async () => {
+    const client = f.spawn(["docker", "run", "--fake-hang", "busybox"]);
+    // The fake docker's PID, once it's written it.
+    let dockerPid = 0;
+    await eventually(async () => {
+      const hanging = Bun.file(`${f.dir}/hanging`);
+      dockerPid = (await hanging.exists()) ? Number(await hanging.text()) : 0;
+      return dockerPid > 0;
+    });
+
+    const before = Date.now();
+    client.kill("SIGTERM");
+    const exitCode = await client.exited;
+
+    const dockerAlive = (() => {
+      try {
+        process.kill(dockerPid, 0);
+        process.kill(dockerPid, "SIGKILL");
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+    expect({ exitCode, dockerAlive }).toEqual({ exitCode: 143, dockerAlive: false });
+    expectReset(await readTimer(), before, Date.now(), 30, 7 * 24 * 60);
   });
 });
