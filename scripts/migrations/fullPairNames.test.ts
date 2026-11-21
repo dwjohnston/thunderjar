@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { migratePair } from "./fullPairNames.ts";
+import { migratePair, migrateSource } from "./fullPairNames.ts";
 
 describe("migratePair", () => {
   test("appends its harness's default parts", () => {
@@ -11,5 +11,15 @@ describe("migratePair, run again", () => {
   test("leaves a full name, and a harness without defaults, as they are", () => {
     expect(migratePair("codex-0.166.0/openai/gpt-6-luna/medium")).toBe("codex-0.166.0/openai/gpt-6-luna/medium");
     expect(migratePair("claude-code-2.1.311/claude-haiku-5-5")).toBe("claude-code-2.1.311/claude-haiku-5-5");
+  });
+});
+
+describe("migrateSource", () => {
+  test("migrates each quoted pair, and nothing else", () => {
+    const source = `harnessModel: ["codex-0.166.0/openai/gpt-6-luna", 'claude-code-2.1.311/claude-haiku-5-5'],\n// codex-0.166.0/openai/gpt-6-luna in a comment\n`;
+
+    expect(migrateSource(source)).toBe(
+      `harnessModel: ["codex-0.166.0/openai/gpt-6-luna/medium", 'claude-code-2.1.311/claude-haiku-5-5'],\n// codex-0.166.0/openai/gpt-6-luna in a comment\n`,
+    );
   });
 });
