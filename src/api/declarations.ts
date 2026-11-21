@@ -533,6 +533,14 @@ export type MetricOf<I extends InstrumentName, T extends Stat = Stat> = { stat: 
 /** A metric as loaded at runtime, whatever its instrument. */
 export type Metric = { score?: (value: never) => unknown; stat: Stat; better?: Better };
 
+declare const metricNames: unique symbol;
+
+/**
+ * What `declareMeasurement` returns: the declaration, remembering its metric names for the type
+ * checker only (`measure()` types its metrics by them). There's no such property at runtime.
+ */
+export type DeclaredMeasurement<Name extends string = string> = MeasurementDeclaration & { readonly [metricNames]?: Name };
+
 /** A measurement as loaded at runtime: an instrument, its config, and its metrics, by name. */
 export type MeasurementDeclaration = {
   [I in InstrumentName]: {
@@ -551,8 +559,8 @@ export function declareMeasurement<I extends InstrumentName, T extends Record<st
   instrument: I;
   config: InstrumentTypes[I]["config"];
   metrics: { [K in keyof T]: MetricOf<I, T[K]> };
-}): MeasurementDeclaration {
-  return declared("declareMeasurement", declaration) as unknown as MeasurementDeclaration;
+}): DeclaredMeasurement<keyof T & string> {
+  return declared("declareMeasurement", declaration) as unknown as DeclaredMeasurement<keyof T & string>;
 }
 
 /**

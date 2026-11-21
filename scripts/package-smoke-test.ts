@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // The installed package's smoke test: builds and packs Thunderjar, installs the tarball into an
 // empty JavaScript project in a temporary folder, the way a user would, and runs `init`,
-// `generate`, `plan` of both its test cases, `build` and `run --dry-run` of one, and `capture install`
+// `generate`, a `measure()` test with `bun test`, `plan` of both its test cases, `build` and `run --dry-run` of one, and `capture install`
 // and `capture list`, there with its own `thunderjar`. Then it
 // starts `view`, and fetches its page and the page's script. Every
 // other test runs Thunderjar from source; this one runs only what's published.
@@ -56,6 +56,23 @@ const STEPS: { args: string[]; expect: string[] }[] = [
   { args: ["capture", "install", "--harness", "claude-code"], expect: [".claude/settings.local.json"] },
   { args: ["capture", "list"], expect: ["No captures."] },
 ];
+
+/** A test of a measurement, as a user would write one, run with `bun test` in the installed project. */
+const MEASURE_TEST = `import { expect, test } from "bun:test";
+import { declareMeasurement } from "thunderjar";
+import { measure } from "thunderjar/testing";
+
+test("measure() runs from the installed package", async () => {
+  const hasHello = declareMeasurement({
+    instrument: "grep",
+    config: { glob: "a.txt", pattern: "hello" },
+    metrics: { hello: { stat: "sum" } },
+  });
+  await Bun.write("fixture.txt", "hello\\n");
+  const result = await measure(hasHello, { files: { "a.txt": "fixture.txt" } });
+  expect(result.metrics.hello).toBe(1);
+});
+`;
 
 /** A step that failed, with its output. */
 class StepFailed extends Error {
@@ -122,6 +139,10 @@ try {
     if (missing !== undefined) fail(step, `Expected the output to include ${JSON.stringify(missing)}:\n${output}`);
     console.log(`${step}  ok`);
   }
+  await Bun.write(`${PROJECT}/measure.test.ts`, MEASURE_TEST);
+  const measureStep = "bun test measure()".padEnd(width);
+  await mustRun(measureStep, $`bun test ./measure.test.ts`.cwd(PROJECT));
+  console.log(`${measureStep}  ok`);
   const step = "thunderjar view".padEnd(width);
   await checkView(step);
   console.log(`${step}  ok`);

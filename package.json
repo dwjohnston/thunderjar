@@ -14,10 +14,14 @@
   "main": "./src/api/index.ts",
   "types": "./src/api/index.ts",
   "exports": {
-    ".": "./src/api/index.ts"
+    ".": "./src/api/index.ts",
+    "./testing": "./src/measureTesting/index.ts"
   },
   "files": [
     "dist",
+    "src/measureTesting",
+    "src/instruments",
+    "src/execution/scoreOf.ts",
     "src/api",
     "!src/**/*.test.ts",
     "!src/**/*.result.json"
@@ -32,6 +36,7 @@
     "lint:generate": "bun scripts/lint-layers.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test --parallel",
+    "test:measurements": "bun test ./.thunderjar/parameters/tasks/*/measurements/tests",
     "test:docker": "THUNDERJAR_DOCKER_TESTS=1 bun test --timeout 600000 .docker.test",
     "test:docker:parallel": "THUNDERJAR_DOCKER_TESTS=1 bun test --parallel --concurrent --timeout 600000 .docker.test",
     "test:agent": "THUNDERJAR_AGENT_TESTS=1 bun test --timeout 900000 .agent.test",
