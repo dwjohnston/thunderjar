@@ -4,8 +4,8 @@
 // `docker <args…>`: the runtime command Thunderjar runs every `docker` through. Forwards it to the
 // machine's daemon, with its stdin, output and exit code passed through.
 
-import { dockerCommand, dockerEnv, ensureConnection } from "./connection.ts";
-import { findMachine } from "./fly.ts";
+import { connected, dockerCommand, dockerEnv, ensureConnection } from "./connection.ts";
+import { findMachine, type Machine } from "./fly.ts";
 import { markInFlight } from "./idle.ts";
 import type { Settings } from "./settings.ts";
 import { readTimer, resetTimer, writeTimer } from "./timer.ts";
@@ -14,10 +14,25 @@ import { ensureWatcher } from "./watch.ts";
 
 const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 
-export async function docker(args: string[], settings: Settings): Promise<number> {
-  let machine = await findMachine(settings);
+/** The machine's ID, once it's started. */
+async function startedMachineId(settings: Settings): Promise<string> {
+  let machine: Machine | undefined;
+  try {
+    machine = await findMachine(settings);
+  } catch (error) {
+    // Many commands start at once at the beginning of a run, and Fly's API can turn some away. With
+    // the connection open the machine is started, so carry on.
+    const timer = await readTimer(settings);
+    if (timer?.app === settings.app && (await connected(settings))) return timer.machineId;
+    throw error;
+  }
   if (!machine || machine.state !== "started") machine = await up(settings);
-  await ensureConnection(settings, machine.id);
+  return machine.id;
+}
+
+export async function docker(args: string[], settings: Settings): Promise<number> {
+  const machineId = await startedMachineId(settings);
+  await ensureConnection(settings, machineId);
   const done = await markInFlight(settings);
   const proc = Bun.spawn(dockerCommand(args), {
     env: dockerEnv(settings),
@@ -36,6 +51,6 @@ export async function docker(args: string[], settings: Settings): Promise<number
   const exitCode = await proc.exited;
   await done();
   const previous = await readTimer(settings);
-  await writeTimer(settings, { ...resetTimer(settings, machine.id), watcherPid: ensureWatcher(settings, previous) });
+  await writeTimer(settings, { ...resetTimer(settings, machineId), watcherPid: ensureWatcher(settings, previous) });
   return received ? 128 + SIGNALS[received] : exitCode;
 }
