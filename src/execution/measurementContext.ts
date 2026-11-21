@@ -129,6 +129,7 @@ async function readTranscript(
   const found = await mustRun("can't list the transcript's files", `${listing}; true`);
   const globs = patterns.map((pattern) => new Bun.Glob(pattern));
   const paths = [...new Set(found.split("\n").filter(Boolean))].filter((path) => globs.some((glob) => glob.match(path))).toSorted();
+  if (paths.length === 0) return { outcome: "unavailable", reason: `no file matched its transcript's files: ${declaration.files.join(", ")}` };
   const files = [];
   for (const path of paths) files.push({ path, text: await readFile(path) });
   return { outcome: "collected", events: declaration.parse(files) };
