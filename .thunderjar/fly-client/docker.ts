@@ -10,6 +10,8 @@ import type { Settings } from "./settings.ts";
 import { resetTimer, writeTimer } from "./timer.ts";
 import { up } from "./up.ts";
 
+const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
+
 export async function docker(args: string[], settings: Settings): Promise<number> {
   let machine = await findMachine(settings);
   if (!machine || machine.state !== "started") machine = await up(settings);
@@ -20,7 +22,15 @@ export async function docker(args: string[], settings: Settings): Promise<number
     stdout: "inherit",
     stderr: "inherit",
   });
+  // Interrupted, it passes the signal on, and still resets the timer once docker exits.
+  let received: keyof typeof SIGNALS | undefined;
+  for (const signal of Object.keys(SIGNALS) as (keyof typeof SIGNALS)[]) {
+    process.on(signal, () => {
+      received = signal;
+      proc.kill(signal);
+    });
+  }
   const exitCode = await proc.exited;
   await writeTimer(settings, resetTimer(settings, machine.id));
-  return exitCode;
+  return received ? 128 + SIGNALS[received] : exitCode;
 }
