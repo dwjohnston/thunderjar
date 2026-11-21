@@ -36,6 +36,7 @@ export function recordedContext({ harnessResult, reply, replies }: Recorded): Op
     readFile: noContainer,
     writeFile: noContainer,
     glob: noContainer,
+    transcript: noContainer,
     close: async () => {},
   };
 }
@@ -91,6 +92,7 @@ export async function openMeasurementContext(
         .filter((path) => glob.match(path))
         .toSorted();
     },
+    transcript: async () => ({ outcome: "unavailable", reason: "its harness declares no transcript" }),
     close: () => session.close(),
   };
 }

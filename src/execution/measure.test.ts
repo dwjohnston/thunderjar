@@ -37,6 +37,7 @@ function opener(files: Record<string, string>, log: string[]) {
         written[path] = contents;
       },
       glob: async (pattern) => Object.keys({ ...files, ...written }).filter((path) => new Bun.Glob(pattern).match(path)).toSorted(),
+      transcript: async () => ({ outcome: "unavailable", reason: "its harness declares no transcript" }),
       close: async () => {
         log.push(`close ${n}`);
       },

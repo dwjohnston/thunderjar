@@ -281,7 +281,43 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * file, the postrun image's files are searched for it before it's pushed, and `run` warns.
    */
   requiredEnv?: RequiredEnv[];
+  /**
+   * @docs
+   * @name transcript
+   * @type {{ files: string[]; parse: (files: { path: string; text: string }[]) => TranscriptEvent[] }}
+   * @description
+   * Where the agent's own record of its session is, and how to read it, for instruments such as
+   * `toolCalled`. `files` are globs in the postrun image, `~` being the home of the image's user.
+   * `parse` gets every file they matched, as a session can span several, e.g. a sub-agent's, and
+   * returns its events, in session order. A throw is `unparseable`. Without it, a run has no
+   * transcript. The library has one for each agent it knows: `claudeCodeTranscript`,
+   * `codexTranscript`, `copilotTranscript` and `opencodeTranscript`.
+   */
+  transcript?: TranscriptDeclaration;
 };
+
+/** What a harness's `transcript` is: where its transcript is in the postrun image, and how to read it. */
+export type TranscriptDeclaration = {
+  /** Globs in the postrun image, `~` being the home of the image's user. */
+  files: string[];
+  /** The transcript, from the files the globs matched. A throw is `unparseable`. */
+  parse: (files: TranscriptFile[]) => TranscriptEvent[];
+};
+
+/** One file a transcript's globs matched: its absolute path in the postrun image, and its text. */
+export type TranscriptFile = { path: string; text: string };
+
+/**
+ * One thing that happened in an agent's session, the same shape for every harness: a message, or
+ * a call of a tool, by `tool`, the harness's own name for it, e.g. `Bash` in Claude Code, `bash`
+ * in OpenCode. `agent` is whether the main agent or a sub-agent it started did it.
+ */
+export type TranscriptEvent =
+  | { kind: "message"; role: "user" | "assistant"; text: string; agent: "main" | "subagent" }
+  | { kind: "toolCall"; tool: string; input: unknown; agent: "main" | "subagent" };
+
+/** A container run's transcript, as its harness's `transcript` read it from the postrun image, or why there's none. */
+export type Transcript = { outcome: "collected"; events: TranscriptEvent[] } | { outcome: "unavailable"; reason: string };
 
 /** A variable a harness needs, by name, or any one of several, the first that's set. */
 export type RequiredEnv = string | { oneOf: string[] };
@@ -387,6 +423,8 @@ export type MeasurementContext = {
   reply: Reply;
   /** Its reply to each turn, in order: one, unless its initial prompt has several turns. */
   replies: Reply[];
+  /** The agent's whole session, from its harness's `transcript`, or why there's none. */
+  transcript(): Promise<Transcript>;
   workdir: string;
 };
 
@@ -420,7 +458,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell" | "toolCalled"}
  * @description
  * What to measure. Each instrument takes its own `config`, and returns its own value, the measure:
  *
@@ -431,6 +469,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * | `bunTestFile` | `{ subject, test }` | `{ passed, total }`: tests passed, of all the tests | the pass rate, `passed / total` |
  * | `replyMatches` | `{ pattern, turn? }` | `boolean`: whether the agent's reply matches `pattern` | the value |
  * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
+ * | `toolCalled` | `{ tool, inputMatches? }` | `number`: how many times the agent, or a sub-agent, called `tool` | whether it was called |
  *
  * `shell` stores `command`'s stdout as it is, up to 64 KiB, in the run data store. A command that
  * prints secrets or other sensitive data will persist them: nothing transforms its output before
@@ -482,6 +521,13 @@ export type InstrumentTypes = {
    * image has installed. By default, a metric's score is whether it exited 0.
    */
   shell: { config: { command: string }; value: { exitCode: number; stdout: string; stdoutTruncated: boolean }; defaultScore: boolean };
+  /**
+   * How many times did the agent, or a sub-agent it started, call `tool`, by its harness's own name
+   * for it, e.g. `Bash` in Claude Code? Only calls whose input, as JSON, matches `inputMatches`, a
+   * JavaScript regular expression, if given. Read from its harness's `transcript`: a run without
+   * one is skipped. By default, a metric's score is whether it was called at all.
+   */
+  toolCalled: { config: { tool: string; inputMatches?: string }; value: number; defaultScore: boolean };
 };
 
 export type InstrumentName = keyof InstrumentTypes;

@@ -48,4 +48,8 @@ export type {
   TestCaseDeclaration,
   TokenCostCollector,
   TokenCosts,
+  Transcript,
+  TranscriptDeclaration,
+  TranscriptEvent,
+  TranscriptFile,
 } from "./declarations.ts";
