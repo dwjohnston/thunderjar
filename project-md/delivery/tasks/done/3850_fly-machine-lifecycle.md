@@ -2,6 +2,14 @@
 harness: claude-code
 model: opus
 effort: high
+ralph:
+  session: "42c1f927-a80f-44c9-bfdd-36a207b68feb"
+  capture: "thunderjar/capture/42c1f927-a80f-44c9-bfdd-36a207b68feb"
+  branchedFrom: "claude/charming-cray-wxgcfy"
+  date: "2026-11-21T00:55:12.553Z"
+  costUsd: 6.1194760000000015
+  durationMs: 1302678
+  isError: false
 ---
 
 <!--
