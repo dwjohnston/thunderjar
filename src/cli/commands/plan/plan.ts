@@ -7,6 +7,7 @@ import {
   type HashedPermutation,
   matrixShape,
 } from "../../../config/permutations.ts";
+import { hasOverrides, type Overrides, showOverrides } from "../../../config/overrides.ts";
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
@@ -19,6 +20,7 @@ import { reportingConfigErrors } from "../../configErrors.ts";
 import { envEntry, showResolved } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
+import { overridesOf, withOverrideOptions } from "../../overrides.ts";
 import { print, printJson, printWarning } from "../../output.ts";
 
 /** Whether a permutation's prerun image exists: `unknown` when Docker can't be asked. */
@@ -44,11 +46,15 @@ const ENV_ROWS: [label: string, values: (testCase: TestCaseDeclaration) => strin
   ["secretEnv", (t) => t.secretEnv ?? []],
 ];
 
-/** The parameters `testCase` names, one line each, then its own environment variables, if it has any. */
-export function renderSummary(testCase: TestCaseDeclaration, paint: Paint = plain): string {
+/**
+ * The parameters `testCase` names, one line each, then its own environment variables, if it has
+ * any, then the overrides given, if any, as flags.
+ */
+export function renderSummary(testCase: TestCaseDeclaration, paint: Paint = plain, overrides?: Overrides): string {
   const rows = [
     ...ROWS.map(([label, values]) => [label, values(testCase)] as const),
     ...ENV_ROWS.flatMap(([label, values]) => (values(testCase).length > 0 ? [[label, values(testCase).join(", ")] as const] : [])),
+    ...(hasOverrides(overrides) ? [["overrides", showOverrides(overrides)] as const] : []),
   ];
   return rows.map(([label, value]) => `${paint.dim(`${label}:`.padEnd(LABEL_WIDTH))}${value}`).join("\n");
 }
@@ -135,17 +141,19 @@ export type PlanJson = {
 
 /**
  * The plan of test case `name`, of the nearest `.thunderjar/` folder, in `cwd` or above it, as text
- * and as JSON, and a warning if Docker couldn't say which prerun images exist.
+ * each list `overrides` gives in place of its own, as text and as JSON, and a warning if Docker
+ * couldn't say which prerun images exist.
  */
 export async function plan(
   cwd: string,
   name: string,
   imagePrefix?: string,
   paint: Paint = plain,
+  overrides: Overrides = {},
 ): Promise<{ output: string; json: PlanJson; warning?: string }> {
   const root = await findThunderjarRoot(cwd);
   const { build } = await loadProjectConfig(root);
-  const testCase = await loadTestCase(root, name);
+  const testCase = await loadTestCase(root, name, overrides);
   await checkRequiredEnv(root, testCase);
   checkBuildSecrets(build);
   const permutations = await hashPermutations(root, testCase);
@@ -175,7 +183,7 @@ export async function plan(
   };
   return {
     json,
-    output: [renderSummary(testCase, paint), renderMatrix(testCase, permutations, statuses, paint), renderResolved(permutations, paint).join("\n")]
+    output: [renderSummary(testCase, paint, overrides), renderMatrix(testCase, permutations, statuses, paint), renderResolved(permutations, paint).join("\n")]
       .filter(Boolean)
       .join("\n\n"),
     warning: unavailable && `Docker can't be reached, so whether each prerun image is built is unknown: ${unavailable}`,
@@ -183,7 +191,7 @@ export async function plan(
 }
 
 export function createPlanCommand(): Command {
-  return new Command("plan")
+  return withOverrideOptions(new Command("plan"))
     .description(
       "Show what a test case would run, without running it: the parameters it names, each permutation of them with its hash, and whether its prerun image is built, then what each parameter with a resolve resolved to.",
     )
@@ -191,8 +199,8 @@ export function createPlanCommand(): Command {
     .addOption(imagePrefixOption())
     .addOption(jsonOption())
     .action(
-      reportingConfigErrors(async (name: string, options: { imagePrefix: string; json?: boolean }) => {
-        const { output, json, warning } = await plan(process.cwd(), name, options.imagePrefix, painter());
+      reportingConfigErrors(async (name: string, options: Overrides & { imagePrefix: string; json?: boolean }) => {
+        const { output, json, warning } = await plan(process.cwd(), name, options.imagePrefix, painter(), overridesOf(options));
         if (options.json) printJson(json);
         else print(output);
         if (warning) printWarning(warning);

@@ -542,3 +542,92 @@ describe("--json", () => {
     expect(stderr).toStartWith("Warning: Docker can't be reached");
   });
 });
+
+// Each flag replaces one of the test case's lists for this plan, without editing the file.
+describe("parameter overrides", () => {
+  /** 0202's example, as `plan` shows it with `promptSet`, and `overrides` as given. */
+  const examplePlan = (promptSet: string, overrides: string, permutation: string) => `baseImage:     node20
+codeState:     baseline
+promptSet:     ${promptSet}
+harnessModel:  fake-harness-alpha/fake-model-small-001
+task:          is-prime
+initialPrompt: plain
+overrides:     ${overrides}
+
+Matrix shape: 1/1/1/1/1 (1 permutation)
+
+ 1  ${permutation}
+`;
+
+  test("--prompt-set replaces the test case's prompt sets", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example", "--prompt-set", "glurk"], { env: KEY });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(
+      examplePlan("glurk", "--prompt-set glurk", "node20 | baseline | glurk | fake-harness-alpha/fake-model-small-001 | plain   189377e4  missing"),
+    );
+  });
+
+  test("--base-image replaces the test case's base images", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0206"), ["plan", "sandboxed", "--base-image", "node20"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toStartWith("baseImage:     node20\n");
+    expect(stdout).toContain("\noverrides:     --base-image node20\n");
+    expect(stdout).toContain("Matrix shape: 1/1/1/1/1 (1 permutation)");
+  });
+
+
+  test("--code-state replaces the test case's code states", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0209"), ["plan", "follow-main", "--code-state", "baseline"]);
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("\ncodeState:     baseline\n");
+    expect(stdout).toContain("\noverrides:     --code-state baseline\n");
+    expect(stdout).not.toContain("follow-main");
+  });
+
+
+  test("--harness-model replaces the test case's harness model pairs", async () => {
+    const pairs = "fake-harness-alpha/fake-model-small-001,fake-harness-beta/fake-model-large-001";
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example", "--harness-model", pairs], { env: KEY });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("\nharnessModel:  fake-harness-alpha/fake-model-small-001, fake-harness-beta/fake-model-large-001\n");
+    expect(stdout).toContain(`\noverrides:     --harness-model ${pairs}\n`);
+    expect(stdout).toContain("Matrix shape: 1/1/1/2/1 (2 permutations)");
+  });
+
+
+  test("--initial-prompt replaces the test case's initial prompts", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example", "--initial-prompt", "plain,terse"], { env: KEY });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("\ninitialPrompt: plain, terse\n");
+    expect(stdout).toContain("\noverrides:     --initial-prompt plain,terse\n");
+    expect(stdout).toContain("Matrix shape: 1/1/1/1/2 (2 permutations)");
+  });
+
+
+  test("--iterations replaces the test case's iterations", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "example", "--iterations", "3"], { env: KEY });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("\noverrides:     --iterations 3\n");
+  });
+
+
+  test("an unknown name fails, listing the known ones", async () => {
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0209"), ["plan", "follow-main", "--code-state", "nope"]);
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe('Error: Unknown code state "nope". Known: baseline, follow-main.\n');
+    expect(exitCode).toBe(1);
+  });
+});
