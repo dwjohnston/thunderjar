@@ -8,7 +8,11 @@ type InitialPromptNames = {
   "is-prime": "plain" | "terse";
 };
 type HarnessName = "fake-harness-alpha" | "fake-harness-beta";
-type HarnessModelName = "fake-harness-alpha/fake-model-small-001" | "fake-harness-alpha/fake-model-large-001" | "fake-harness-beta/fake-model-small-001" | "fake-harness-beta/fake-model-large-001";
+type HarnessModelName =
+  | "fake-harness-alpha/fake-model-small-001"
+  | "fake-harness-alpha/fake-model-large-001"
+  | "fake-harness-beta/fake-model-small-001"
+  | "fake-harness-beta/fake-model-large-001";
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;
