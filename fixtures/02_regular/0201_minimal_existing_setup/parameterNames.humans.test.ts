@@ -39,12 +39,12 @@ describe("generated parameter names", () => {
 
   it("HarnessModelName", () => {
     assertType<HarnessModelName>("fake-harness-alpha/fake-model-small-001");
-    // Any model ID: the agent decides which it takes.
-    assertType<HarnessModelName>("fake-harness-alpha/fake-model-large-001");
+    // @ts-expect-error - not a declared model
+    assertType<HarnessModelName>("fake-harness-alpha/nonexistent-model-large-001");
     // @ts-expect-error - no model ID
     assertType<HarnessModelName>("fake-harness-alpha");
     // @ts-expect-error - not a declared harness
-    assertType<HarnessModelName>("claude-code/fake-model-small-001");
+    assertType<HarnessModelName>("nonexistent-harness/fake-model-small-001");
   });
 });
 
