@@ -6,6 +6,7 @@
 
 import { closeConnection, dockerOutput, ensureConnection } from "./connection.ts";
 import { describeSize, findMachine, fly, type Guest, type Machine, type MachineConfig, type Volume } from "./fly.ts";
+import { busy } from "./idle.ts";
 import { imageRef, machineDir } from "./image.ts";
 import { withLock } from "./lock.ts";
 import recipe from "./machine/recipe.json";
@@ -77,6 +78,11 @@ async function updateIfChanged(settings: Settings, machine: Machine): Promise<bo
   const guest = desiredGuest(settings);
   // Unset, FLYIO_INSTANCE_SIZE leaves the size as it is.
   if (!settings.cpus || sameGuest(machine.config.guest, guest)) return false;
+  const reason = await busy(settings, machine);
+  if (reason) {
+    say(`not resizing ${machine.id}: ${reason}. Run up again once it's idle`);
+    return false;
+  }
   say(`resizing ${machine.id} from ${describeSize(machine.config.guest)} to ${describeSize(guest)}`);
   await closeConnection(settings);
   const config: MachineConfig = { ...machine.config, guest };
