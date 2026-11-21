@@ -1,0 +1,7 @@
+#!/bin/sh
+# 🤖 This file was created with AI. Harness: Claude Code. Session Id: session_01LCLeLidCEegntrXyRbJufD.
+# Supervising engineer: David Johnston. Humans: add your notes here.
+#
+# `docker`, on the Fly machine, as one executable: for THUNDERJAR_DOCKER, which takes a path, not a
+# command with arguments. The same as `bun .thunderjar/fly-client/index.ts docker <args…>`.
+exec bun "$(dirname "$0")/index.ts" docker "$@"
