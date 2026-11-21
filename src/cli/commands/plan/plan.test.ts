@@ -276,7 +276,7 @@ describe("0402 broken declarations", () => {
       "a variant part that isn't one of the setting's values",
       "unknown-variant",
       [
-        `${testCase("unknown-variant")}: harnessModel: "fake-harness-efforts/fake/model-large/medium": "medium" is not a effort of fake/model-large. Its names: fake/model-large/low, fake/model-large/high`,
+        `${testCase("unknown-variant")}: harnessModel: "fake-harness-efforts/fake/model-large/medium": "medium" is not a value of effort for fake/model-large. Its names: fake/model-large/low, fake/model-large/high`,
       ],
     ],
     [
