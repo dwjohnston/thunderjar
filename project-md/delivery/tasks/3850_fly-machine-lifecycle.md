@@ -12,16 +12,20 @@ Harness: Claude Code
 Session Id: session_01LCLeLidCEegntrXyRbJufD
 Supervising engineer: David Johnston
 
-From an ideation session. Not specced yet.
+From an ideation session, reviewed on PR #247.
 
 Humans: add your notes here
 -->
 
-# Fly machine lifecycle
+# 3850: Fly machine lifecycle
 
-Thunderjar manages the Fly machine itself: it creates it, starts it, and stops it when idle.
+A client for the Fly machine that remote runs use: it creates the machine, starts it, and stops it when idle.
 
-Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
+Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand, and `.thunderjar/fly-docker.sh` fails if the machine isn't started.
+
+## Version bump type
+
+None. It's this repository's own tooling in `.thunderjar/`, not part of the package.
 
 ## Scope
 
@@ -147,10 +151,39 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
      - Stops by exiting its main process.
    - Destroy is skipped in this case. A stopped machine only costs storage, so that's acceptable. A started one is the real cost.
 
-## Open questions
+## Creating the machine
 
-1. **The create recipe**
-   - Image with the Docker daemon, volume, SSH keys, region. Set up by hand today.
+The current machine was set up by hand.
+
+- Take its config from Fly (`fly machine status --display-config`): image, size, volume, region, services.
+- Check it in to `.thunderjar/fly-client/` as the recipe `up` creates from.
+- SSH needs nothing extra: `fly ssh issue` already gives certificates for the org.
+- The watchdog goes in the machine's image, so the recipe changes the image. `up` builds and pushes it when it changes.
+
+## Update the callers
+
+Replace `fly-machine.sh` and `fly-docker.sh` everywhere, then delete them and `fly-lib.sh`.
+
+- `.thunderjar/thunderjar.config.ts`: the runtime command.
+- `.github/workflows/slow-tests.yml`
+- `scripts/gauntlet/`
+- `package.json` scripts
+- `.env.template`: add `FLY_SLEEP_MINUTES` and `FLY_DESTROY_MINUTES`.
+- `.thunderjar/AGENTS.md`, `CONTRIBUTORS.md`
+
+## Tests
+
+- Unit tests with fake `fly` and `docker` commands:
+  - `docker` forwards its arguments, stdin, output and exit code, and adds `--network host` to `build`.
+  - `docker` runs `up` only when the machine is missing or stopped.
+  - The timer file is written when a command exits, including when it fails or is interrupted.
+  - `watch` stops and destroys at the deadlines, and skips both while containers are running.
+  - Resizing is skipped while the machine is busy.
+- One test against real Fly, skipped without `FLYIO_TOKEN`: `up`, `docker ps`, `stop`, on a throwaway app.
+
+## Human interventions
+
+- The real-Fly test needs `FLYIO_TOKEN`, and creates and destroys a machine. A human runs it once before merging.
 
 ## Prior art
 
