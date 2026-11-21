@@ -27,6 +27,8 @@ jobs:
       - run: bun run test
         env:
           THUNDERJAR_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+      # bun test doesn't look in .thunderjar/, a hidden folder.
+      - run: bun run test:measurements
       - name: Installed package smoke test
         run: bun run test:package
 

@@ -4,10 +4,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
 import type { ContainerRunRecord, ExecutionRecord } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, thunderjar, TMP_DIR } from "../../../testing/cli.ts";
+import { instruments } from "../../../instruments/instruments.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { FAKE_DOCKER, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
 import { KEY, TEST_CASE_SECRET, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
+
+const KNOWN_INSTRUMENTS = Object.keys(instruments).join(", ");
 
 afterEach(removeDataDirs);
 
@@ -528,7 +531,7 @@ describe("0402 broken declarations", () => {
 
     expect(stdout).toBe("");
     expect(stderr).toBe(
-      'Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell\n',
+      `Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: ${KNOWN_INSTRUMENTS}\n`,
     );
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual([]);

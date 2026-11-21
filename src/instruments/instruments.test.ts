@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
 import type { MeasurementContext, Reply } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, replyMatches, shell, STDOUT_LIMIT } from "./instruments.ts";
+import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, jsAst, replyMatches, shell, STDOUT_LIMIT } from "./instruments.ts";
 
 const ROOT = `${TMP_DIR}/instruments-${crypto.randomUUID()}`;
 
@@ -329,10 +329,26 @@ ${CASES}`);
   });
 });
 
-test("every instrument versions its value, and every built-in one has a default score", () => {
-  for (const instrument of Object.values(instruments)) {
+describe("jsAst", () => {
+  test("checks its config is a glob and a set of valid esquery selectors", () => {
+    expect(jsAst.checkConfig({ glob: "src/**/*.ts", selectors: { calls: "CallExpression" } })).toEqual([]);
+    expect(jsAst.checkConfig({ glob: "", selectors: {} })).toEqual([
+      ["config.glob", 'must be a glob pattern, got ""'],
+      ["config.selectors", "must name at least one esquery selector, got {}"],
+    ]);
+    expect(jsAst.checkConfig({ glob: "*.ts", selectors: { ok: "Identifier", bad: "Call[", empty: "" } })).toEqual([
+      ["config.selectors.bad", expect.stringMatching(/^"Call\[" is not a valid esquery selector: /)],
+      ["config.selectors.empty", 'must be an esquery selector, got ""'],
+    ]);
+  });
+});
+
+test("every instrument versions its value, and every built-in one but jsAst has a default score", () => {
+  for (const [name, instrument] of Object.entries(instruments)) {
     expect(instrument.version).toBeGreaterThanOrEqual(1);
-    expect(instrument.defaultScore).toBeDefined();
+    // Counts per file, by selector, have no obvious score: each metric reads them with its own.
+    if (name === "jsAst") expect(instrument.defaultScore).toBeUndefined();
+    else expect(instrument.defaultScore).toBeDefined();
   }
   // Version 1's value was whether the command exited 0.
   expect(shell.version).toBe(2);
