@@ -4,7 +4,7 @@
 # Only sets a target when it is unset and the source is set. Prints nothing. Never run with `set -x`.
 #
 #   THUNDERJAR_DB_CONNECTION -> THUNDERJAR_DB_URL   (thunderjar.config.ts: postgresStore urlEnv)
-#   FLYIO_TOKEN              -> FLY_API_TOKEN       (flyctl; fly-*.sh also read FLYIO_TOKEN)
+#   FLYIO_TOKEN              -> FLY_API_TOKEN       (flyctl; the Fly client also reads FLYIO_TOKEN)
 #   OPENROUTER_TOKEN         -> OPENROUTER_API_KEY  (harnesses)
 #   AAK                      -> ANTHROPIC_API_KEY   (Claude Code harness; cloud sessions filter the real name)
 #   GHCR_TOKEN / GHCR_USER   -> used by bootstrap.sh for `docker login ghcr.io`
@@ -24,7 +24,7 @@ export THUNDERJAR_REMOTE=1
 # where the containers run. Docker's client still uses this machine's `docker login`.
 # THUNDERJAR_DOCKER is every `docker` Thunderjar runs locally, not only builds: with it set,
 # `run --local` runs its containers on the Fly machine too. Unset it to use the local daemon.
-[ -z "${THUNDERJAR_DOCKER:-}" ] && export THUNDERJAR_DOCKER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.thunderjar/fly-docker.sh"
+[ -z "${THUNDERJAR_DOCKER:-}" ] && export THUNDERJAR_DOCKER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.thunderjar/fly-client/docker"
 # Without ANTHROPIC_API_KEY, gauntlet test cases run only their OpenRouter pairs (Copilot, OpenCode).
 [ -z "${THUNDERJAR_GAUNTLET_PAIRS:-}" ] && [ -z "${ANTHROPIC_API_KEY:-}" ] && export THUNDERJAR_GAUNTLET_PAIRS=openrouter
 case ":$PATH:" in *":$HOME/.fly/bin:"*) ;; *) export PATH="$HOME/.fly/bin:$PATH" ;; esac

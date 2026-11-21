@@ -72,23 +72,24 @@ bun run dogfood:remote
 
 It needs `fly`, `docker login ghcr.io`, `FLYIO_TOKEN`, `THUNDERJAR_DB_URL` and `ANTHROPIC_API_KEY`.
 
-Thunderjar doesn't start, stop or clear down the Fly machine. You do, with `.thunderjar/fly-machine.sh`:
+Thunderjar runs every `docker` command through the Fly client, `.thunderjar/fly-client/`. It manages the machine for you:
+
+- The first `docker` command creates the machine if it's missing, and starts it if it's stopped.
+- Once idle for `FLY_SLEEP_MINUTES` (default 30), it's stopped.
+- Once idle for `FLY_DESTROY_MINUTES` (default a week), it and its volume are destroyed.
+- `FLYIO_INSTANCE_SIZE` sets its CPUs. It's resized only when idle, as resizing restarts it.
+
+You can also run it by hand:
 
 ```sh
-.thunderjar/fly-machine.sh start      # before working; `start 8` sizes it performance-8x first
+bun run fly:up                                   # create, start or resize it now
+bun run fly:status                               # its state, size and timer
+bun run fly prune                                # when its disk fills: removes stopped containers and unused images
+bun run fly:stop                                 # stop it now, if idle; `stop --force` stops it anyway
 ```
 
-```sh
-.thunderjar/fly-machine.sh prune      # when its disk fills: removes stopped containers and unused images
-```
-
-```sh
-.thunderjar/fly-machine.sh stop       # when you're done
-```
-
-- The app `thunderjar-runtime-dwj` (`FLY_APP`) holds one machine per purpose, e.g. one for development and one for CI.
-- `FLY_MACHINE` picks one, by name or ID. Unset, the app must have only one.
-- A run against a stopped machine fails, saying to start it.
+- The app `thunderjar-runtime-dwj` (`FLY_APP`) holds one machine. CI uses its own app.
+- See [`.thunderjar/AGENTS.md`](./.thunderjar/AGENTS.md#the-fly-client) for how it works.
 
 With `THUNDERJAR_ON_RUNTIME=1` as well, the whole execution runs on the Fly machine, in a runner (`runtime.runner`):
 

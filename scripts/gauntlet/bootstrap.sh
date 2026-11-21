@@ -35,8 +35,6 @@ install_tools() {
   local pkgs=()
   command -v ssh >/dev/null || pkgs+=(openssh-client)
   command -v jq >/dev/null || pkgs+=(jq)
-  command -v flock >/dev/null || pkgs+=(util-linux)
-  command -v nc >/dev/null || pkgs+=(netcat-openbsd)
   command -v curl >/dev/null || pkgs+=(curl ca-certificates)
   if [ "${#pkgs[@]}" -gt 0 ]; then
     say "apt install: ${pkgs[*]}"
@@ -115,7 +113,7 @@ ghcr_login() {
 preflight() {
   local missing=0 n
   say "preflight (names only)"
-  for n in fly ssh jq flock nc docker bun; do
+  for n in fly ssh jq docker bun; do
     if command -v "$n" >/dev/null; then echo "  ok       tool $n"; else echo "  MISSING  tool $n"; missing=1; fi
   done
   for n in FLYIO_TOKEN THUNDERJAR_DB_CONNECTION OPENROUTER_TOKEN AAK GHCR_USER GHCR_TOKEN; do
