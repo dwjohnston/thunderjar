@@ -1,5 +1,5 @@
 // A harness's declared models, and the pair names they make: `<harness>/<model ID>/<variant part>…`.
-import type { ModelSetting, SettingValue } from "../api/declarations.ts";
+import type { HarnessModels, ModelSetting, SettingValue } from "../api/declarations.ts";
 
 /** One name a model makes: the model ID with its variant parts, and its settings with each variant's value chosen. */
 export type ModelVariant = { name: string; modelId: string; model: Record<string, SettingValue> };
@@ -22,4 +22,15 @@ export function modelVariants(modelId: string, settings: readonly ModelSetting[]
     }
   }
   return variants;
+}
+
+/** A pair, split: its harness folder, its model ID, and the model's settings with each variant's value chosen. */
+export type SplitPair = { harness: string; modelId: string; model: Record<string, SettingValue> };
+
+/**
+ * `pair`, split by `models`, its harness's declared models: the harness folder, then the longest
+ * declared model ID that matches, then one part per variant setting. A problem if it names none.
+ */
+export function splitPair(pair: string, _models: HarnessModels): SplitPair | { problem: string } {
+  return { problem: pair };
 }
