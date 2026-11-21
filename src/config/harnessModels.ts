@@ -8,6 +8,6 @@ export type ModelVariant = { name: string; modelId: string; model: Record<string
  * Every name `modelId` makes with `settings`: a fixed setting adds no part, a variant setting one
  * part per value, and several variant settings their cross product, parts in array order.
  */
-export function modelVariants(_modelId: string, _settings: readonly ModelSetting[]): ModelVariant[] {
-  return [];
+export function modelVariants(modelId: string, _settings: readonly ModelSetting[]): ModelVariant[] {
+  return [{ name: modelId, modelId, model: {} }];
 }
