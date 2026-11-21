@@ -380,7 +380,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       const secretEnv = [...new Set([...permutation.env, ...permutation.secretEnv])];
       const open = async (usesContainer: boolean) =>
         usesContainer
-          ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime, secretEnv)
+          ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime, secretEnv, permutation.harness.transcript)
           : recordedContext(recorded);
       log.debug({ ...at, measurements: measurements.length }, "measuring");
       const measuringAt = Date.now();

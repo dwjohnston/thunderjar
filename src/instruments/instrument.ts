@@ -39,15 +39,15 @@ export const show = (value: unknown) => JSON.stringify(value) ?? String(value);
 export const checkString = (field: string, value: unknown, what: string): [string, string][] =>
   typeof value === "string" && value !== "" ? [] : [[field, `must be ${what}, got ${show(value)}`]];
 
-/** Why `pattern` isn't a JavaScript regular expression, as a config problem, if it isn't one. */
-export function checkPattern(pattern: unknown): [string, string][] {
-  if (typeof pattern !== "string") return [["config.pattern", `must be a JavaScript regular expression, got ${show(pattern)}`]];
+/** Why `pattern` isn't a JavaScript regular expression, as a problem with `field`, if it isn't one. */
+export function checkPattern(pattern: unknown, field = "config.pattern"): [string, string][] {
+  if (typeof pattern !== "string") return [[field, `must be a JavaScript regular expression, got ${show(pattern)}`]];
   try {
     new RegExp(pattern);
     return [];
   } catch (error) {
     const reason = (error as Error).message.replace(/^Invalid regular expression: /, "");
-    return [["config.pattern", `${show(pattern)} is not a valid regular expression: ${reason}`]];
+    return [[field, `${show(pattern)} is not a valid regular expression: ${reason}`]];
   }
 }
 

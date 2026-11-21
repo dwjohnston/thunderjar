@@ -1,6 +1,7 @@
 // The measurement context, over the fake Docker: a measurement container from a postrun image
 // the fake made by running and committing a container, as `run` does.
 import { afterEach, describe, expect, test } from "bun:test";
+import type { TranscriptDeclaration, TranscriptEvent, TranscriptFile } from "../api/declarations.ts";
 import { commitContainer, DockerContainerError, removeContainer, runContainer } from "../docker/docker.ts";
 import { fakeDocker } from "../testing/fakeDocker.ts";
 import { openMeasurementContext } from "./measurementContext.ts";
@@ -80,5 +81,73 @@ describe("openMeasurementContext", () => {
     expect(error).toBeInstanceOf(DockerContainerError);
     expect((error as Error).message).toBe("docker: Error response from daemon: No such image: tj-postrun:missing");
     expect(await docker.containers()).toEqual([]);
+  });
+});
+
+describe("openMeasurementContext's transcript", () => {
+  /** A transcript of sessions as JSON lines, one message per line, the lines of each file in turn. */
+  const FAKE_TRANSCRIPT: TranscriptDeclaration = {
+    files: ["~/.fake/sessions/**/*.jsonl"],
+    parse: (files) =>
+      files.flatMap(({ text }) =>
+        text
+          .split("\n")
+          .filter(Boolean)
+          .map((line): TranscriptEvent => ({ kind: "message", role: "assistant", text: (JSON.parse(line) as { said: string }).said, agent: "main" })),
+      ),
+  };
+  /** The agent's session, in the image user's home: two files the glob matches, and one it doesn't. */
+  const SESSION =
+    `mkdir -p "$HOME/.fake/sessions/main/sub" && echo '{"said":"one"}' > "$HOME/.fake/sessions/main/a.jsonl"` +
+    ` && printf '{"said":"two"}\\n{"said":"three"}\\n' > "$HOME/.fake/sessions/main/sub/b.jsonl" && echo nope > "$HOME/.fake/sessions/notes.txt"`;
+
+  test("is unavailable, saying why, when its harness declares no transcript", async () => {
+    await using _ = await postrunImage(SESSION);
+    const ctx = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", RECORDED);
+    try {
+      expect(await ctx.transcript()).toEqual({ outcome: "unavailable", reason: "its harness declares no transcript" });
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test("is parsed from every file its globs match in the postrun image, `~` being the home of the image's user", async () => {
+    await using _ = await postrunImage(SESSION);
+    const parsed: string[] = [];
+    const transcript = { ...FAKE_TRANSCRIPT, parse: (files: TranscriptFile[]) => (parsed.push(...files.map(({ path }) => path)), FAKE_TRANSCRIPT.parse(files)) };
+    const ctx = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", RECORDED, undefined, [], transcript);
+    try {
+      expect(await ctx.transcript()).toEqual({
+        outcome: "collected",
+        events: ["one", "two", "three"].map((text) => ({ kind: "message", role: "assistant", text, agent: "main" })),
+      });
+      // Absolute paths, sorted.
+      expect(parsed).toHaveLength(2);
+      expect(parsed[0]).toEndWith("/.fake/sessions/main/a.jsonl");
+      expect(parsed[1]).toEndWith("/.fake/sessions/main/sub/b.jsonl");
+      expect(parsed[0]).toStartWith("/");
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test("is unavailable, saying why, when no file matches its globs", async () => {
+    await using _ = await postrunImage(`mkdir -p "$HOME/.fake" && echo nope > "$HOME/.fake/notes.txt"`);
+    const ctx = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", RECORDED, undefined, [], FAKE_TRANSCRIPT);
+    try {
+      expect(await ctx.transcript()).toEqual({ outcome: "unavailable", reason: "no file matched its transcript's files: ~/.fake/sessions/**/*.jsonl" });
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test("is unavailable, saying why, when its parse throws", async () => {
+    await using _ = await postrunImage(`${SESSION} && echo 'not JSON' >> "$HOME/.fake/sessions/main/a.jsonl"`);
+    const ctx = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", RECORDED, undefined, [], FAKE_TRANSCRIPT);
+    try {
+      await expect(ctx.transcript()).resolves.toEqual({ outcome: "unavailable", reason: expect.stringMatching(/^unparseable: .*JSON/) });
+    } finally {
+      await ctx.close();
+    }
   });
 });

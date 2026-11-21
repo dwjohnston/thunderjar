@@ -25,18 +25,25 @@ const applyParameter = (install: string, command: string) => `  applyParameter: 
       "USER node",
     ].join("\\n"),`;
 
-/** Comments on `collectReply` and `collectTokenCosts`, for an agent the library has no reader for yet. */
-const stubReaders = `  // Thunderjar has no reader for this agent's output yet. To measure its reply, and its token
+/**
+ * Comments on `collectReply` and `collectTokenCosts`, for an agent the library has no reader for
+ * yet, then its `transcript`, the library's parser of what the agent keeps of its session.
+ */
+const readers = (transcript: string) => `  // Thunderjar has no reader for this agent's output yet. To measure its reply, and its token
   // costs, read them from what the run script wrote to /thunderjar/result.json:
   // collectReply: (raw) => …,
-  // collectTokenCosts: (raw, ctx) => ({ outcome: "collected", models: [{ model: ctx.modelId, … }] }),`;
+  // collectTokenCosts: (raw, ctx) => ({ outcome: "collected", models: [{ model: ctx.modelId, … }] }),
+  // What the agent kept of its session, for instruments such as toolCalled.
+  transcript: ${transcript},`;
 
 /** A comment on where to find the agent's model IDs, which a test case names after the folder. */
 const modelIds = (folder: string, where: string, examples: string[]) =>
   `// A test case names a model by the ID the agent takes, e.g. ${examples.map((id) => `"${folder}/${id}"`).join(", ")}.
 // Models come and go: check ${where} for the current IDs.`;
 
-const IMPORTS = `import { declareHarness, writeModel, writeRunScript } from "thunderjar";`;
+/** The imports of a harness that reads its transcript with `transcript`, and uses `also`. */
+const imports = (transcript: string, ...also: string[]) =>
+  `import { ${[...also, transcript, "declareHarness", "writeModel", "writeRunScript"].toSorted((a, b) => a.localeCompare(b)).join(", ")} } from "thunderjar";`;
 
 const claudeCode = `import { claudeCode } from "thunderjar";
 
@@ -49,7 +56,7 @@ ${modelIds(STARTER_FOLDERS.claudeCode, "https://docs.claude.com/en/docs/about-cl
 export default claudeCode({ version: "2.1.311" });
 `;
 
-const copilot = `${IMPORTS}
+const copilot = `${imports("copilotTranscript")}
 
 // GitHub Copilot CLI. COPILOT_GITHUB_TOKEN is a GitHub token with Copilot access: a fine-grained
 // personal access token with the "Copilot Requests" permission.
@@ -58,31 +65,36 @@ ${modelIds(STARTER_FOLDERS.copilot, "`copilot --help`, or GitHub's supported mod
 export default declareHarness({
   version: "1.0.105",
 ${applyParameter("npm install -g @github/copilot@${ctx.version}", 'copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color > /thunderjar/result.json')}
-${stubReaders}
+${readers("copilotTranscript")}
   requiredEnv: ["COPILOT_GITHUB_TOKEN"],
 });
 `;
 
-const codex = `${IMPORTS}
+const codex = `${imports("codexTranscript")}
 
 // OpenAI's Codex CLI, without its sandbox or approvals: the container is the sandbox.
 ${modelIds(STARTER_FOLDERS.codex, "https://developers.openai.com/codex/models", ["gpt-6.1-sol", "gpt-5.5"])}
 export default declareHarness({
   version: "0.166.0",
 ${applyParameter("npm install -g @openai/codex@${ctx.version}", 'codex exec --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json')}
-${stubReaders}
+${readers("codexTranscript")}
   requiredEnv: ["OPENAI_API_KEY"],
 });
 `;
 
-const opencode = `${IMPORTS}
+const opencode = `${imports("opencodeTranscript", "OPENCODE_TRANSCRIPT_COMMAND")}
 
-// OpenCode, on OpenCode Zen. OPENCODE_API_KEY is an OpenCode Zen key.
+// OpenCode, on OpenCode Zen. OPENCODE_API_KEY is an OpenCode Zen key. OpenCode keeps its sessions in a
+// database, so once it's done, the run script writes them out as JSON, for opencodeTranscript to read,
+// and exits as OpenCode did.
 ${modelIds(STARTER_FOLDERS.opencode, "https://opencode.ai/zen/v1/models", ["opencode/claude-haiku-5-5", "opencode/gpt-5.5"])}
 export default declareHarness({
   version: "1.19.5",
-${applyParameter("npm install -g opencode-ai@${ctx.version}", 'opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json')}
-${stubReaders}
+${applyParameter(
+  "npm install -g opencode-ai@${ctx.version}",
+  'opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json; code=$?; ${OPENCODE_TRANSCRIPT_COMMAND}; exit $code',
+)}
+${readers("opencodeTranscript")}
   requiredEnv: ["OPENCODE_API_KEY"],
 });
 `;

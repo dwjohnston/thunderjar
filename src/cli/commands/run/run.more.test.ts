@@ -8,6 +8,10 @@ import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { FAKE_DOCKER, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
 import { KEY, TEST_CASE_SECRET, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
+import { instruments } from "../../../instruments/instruments.ts";
+
+/** Every built-in instrument, as the error for an unknown one lists them. */
+const KNOWN_INSTRUMENTS = Object.keys(instruments).join(", ");
 
 afterEach(removeDataDirs);
 
@@ -412,6 +416,24 @@ describe("0206 measured-env: a run's variables reach its measurement containers"
   });
 });
 
+describe("0206 transcript: toolCalled reads the agent's tool calls from its harness's transcript", () => {
+  test("counts the calls of the agent and its sub-agent in the postrun image's transcript, and skips a harness without one", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stderr, exitCode } = await thunderjar(scenario("0206"), ["run", "transcript", "--data-dir", data], { env: docker.env });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const [transcriber, reader] = (await readStore(data)).containerRuns as [ContainerRunRecord, ContainerRunRecord];
+    const outcomes = (record: ContainerRunRecord) => Object.fromEntries(Object.entries(record.result).map(([name, { outcome }]) => [name, outcome]));
+    // `bun test` with Bash, by the agent, then by its sub-agent; no Read.
+    expect(outcomes(transcriber)).toEqual({ ranTests: { outcome: "measured", data: 2 }, readFiles: { outcome: "measured", data: 0 } });
+    const skipped = { outcome: "skipped", reason: "no transcript: its harness declares no transcript" } as const;
+    expect(outcomes(reader)).toEqual({ ranTests: skipped, readFiles: skipped });
+  });
+});
+
 describe("0206 leaked-secret: a run's secret values, written into files, are found in its postrun image", () => {
   const secrets = { FAKE_HARNESS_KEY: "secret-harness-key", ...TEST_CASE_SECRET };
 
@@ -528,7 +550,7 @@ describe("0402 broken declarations", () => {
 
     expect(stdout).toBe("");
     expect(stderr).toBe(
-      'Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell\n',
+      `Error: .thunderjar/parameters/tasks/unknown-instrument/measurements/isPrimeTsExists.ts: instrument: "fileCraeted" is not a known instrument. Known instruments: ${KNOWN_INSTRUMENTS}\n`,
     );
     expect(exitCode).toBe(1);
     expect(await docker.commands()).toEqual([]);
