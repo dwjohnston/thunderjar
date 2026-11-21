@@ -5,7 +5,7 @@ const declarations = (text: string) => text.slice(text.indexOf("type BaseImageNa
 
 describe("renderParameterNames", () => {
   test("a kind with no names is never, and an empty task list is {}", () => {
-    const text = renderParameterNames({ baseImages: [], codeStates: [], promptSets: [], tasks: {}, harnesses: [] });
+    const text = renderParameterNames({ baseImages: [], codeStates: [], promptSets: [], tasks: {}, harnesses: {} });
 
     expect(declarations(text)).toBe(`type BaseImageName = never;
 type CodeStateName = never;
@@ -23,7 +23,7 @@ type HarnessModelName = \`\${HarnessName}/\${string}\`;
       codeStates: ["baseline"],
       promptSets: ["glurk", "snerk"],
       tasks: { "fizz-buzz": ["fizzy"], "is-prime": ["plain", "terse"], "no-prompts": [] },
-      harnesses: ["claude-code-2.1.311", "fake-harness-alpha"],
+      harnesses: { "claude-code-2.1.311": undefined, "fake-harness-alpha": undefined },
     });
 
     expect(declarations(text)).toBe(`type BaseImageName = "node20" | "node22";
