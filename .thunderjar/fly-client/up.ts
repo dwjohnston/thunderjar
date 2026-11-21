@@ -4,7 +4,7 @@
 // `up`: creates the machine if it's missing, starts it if it's stopped, and waits for its Docker
 // daemon.
 
-import { dockerOutput, ensureConnection } from "./connection.ts";
+import { closeConnection, dockerOutput, ensureConnection } from "./connection.ts";
 import { describeSize, findMachine, fly, type Guest, type Machine, type MachineConfig, type Volume } from "./fly.ts";
 import { imageRef, machineDir } from "./image.ts";
 import { withLock } from "./lock.ts";
@@ -69,6 +69,21 @@ async function create(settings: Settings): Promise<void> {
   ]);
 }
 
+const sameGuest = (a: Guest | undefined, b: Guest) =>
+  a?.cpu_kind === b.cpu_kind && a.cpus === b.cpus && a.memory_mb === b.memory_mb;
+
+/** Resizes the machine if its size differs. Returns whether it did: that restarts it. */
+async function updateIfChanged(settings: Settings, machine: Machine): Promise<boolean> {
+  const guest = desiredGuest(settings);
+  // Unset, FLYIO_INSTANCE_SIZE leaves the size as it is.
+  if (!settings.cpus || sameGuest(machine.config.guest, guest)) return false;
+  say(`resizing ${machine.id} from ${describeSize(machine.config.guest)} to ${describeSize(guest)}`);
+  await closeConnection(settings);
+  const config: MachineConfig = { ...machine.config, guest };
+  await fly(["machine", "update", machine.id, "-a", settings.app, "--machine-config", JSON.stringify(config), "--yes"]);
+  return true;
+}
+
 /** Waits until the machine's Docker daemon answers, twice in a row: after a start it can answer
  * once and then go away as the machine restarts. */
 async function waitForDaemon(settings: Settings, machine: Machine): Promise<void> {
@@ -95,8 +110,9 @@ export async function up(settings: Settings): Promise<Machine> {
     } else if (machine.state === "stopping" || machine.state === "suspending") {
       await fly(["machine", "wait", machine.id, "-a", settings.app, "--state", "stopped", "-w", "90s"]).catch(() => "");
     }
-    // A new machine starts by itself.
-    if (!missing && machine.state !== "started") {
+    const updated = !missing && (await updateIfChanged(settings, machine));
+    // A new machine starts by itself, as does an updated one.
+    if (!missing && !updated && machine.state !== "started") {
       say(`starting ${machine.id}`);
       await fly(["machine", "start", machine.id, "-a", settings.app]);
     }
