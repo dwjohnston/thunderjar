@@ -59,3 +59,29 @@ describe("destroy", () => {
     });
   });
 });
+
+describe("status", () => {
+  const timer = {
+    app: APP,
+    machineId: "m-1",
+    lastCommandFinishedAt: "2026-11-21T00:40:00.000Z",
+    stopAt: "2026-11-21T01:10:00.000Z",
+    destroyAt: "2026-11-28T00:40:00.000Z",
+    // No process has this PID: Linux's PIDs stop at 2^22.
+    watcherPid: 99999999,
+  };
+
+  test("--json gives the machine's state and size, and the timer", async () => {
+    await f.setMachines([await machineFixture({ state: "started", cpus: 8 })]);
+    await Bun.write(f.timerFile, JSON.stringify(timer));
+
+    const result = await f.run(["status", "--json"]);
+
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      app: APP,
+      machine: { id: "m-1", state: "started", region: "syd", size: { cpu_kind: "performance", cpus: 8, memory_mb: 16384 } },
+      timer: { ...timer, watcherRunning: false },
+    });
+  });
+});
