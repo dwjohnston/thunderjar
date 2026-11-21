@@ -2,7 +2,8 @@
 // Supervising engineer: David Johnston. Humans: add your notes here.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { fixture, machineFixture, type Fixture } from "./test/harness.ts";
+import { imageRef } from "./image.ts";
+import { APP, fixture, machineFixture, type Fixture } from "./test/harness.ts";
 
 let f: Fixture;
 beforeEach(async () => {
@@ -37,5 +38,25 @@ describe("up", () => {
       guest: [{ cpu_kind: "performance", cpus: 16, memory_mb: 32768 }],
     });
     expect(result.stderr).toContain("not resizing m-1: 1 container is running");
+  });
+
+  test("builds and pushes the image when the recipe has changed, and moves an idle machine to it", async () => {
+    const machine = await machineFixture({ state: "stopped" });
+    await f.setMachines([{ ...machine, config: { ...machine.config, image: `registry.fly.io/${APP}:tj-000000000000` } }]);
+
+    const result = await f.run(["up"]);
+
+    const image = await imageRef(APP);
+    expect({
+      exitCode: result.exitCode,
+      builds: (await f.callLines()).filter((line) => line.startsWith("fly deploy")),
+      images: (await f.machines()).map((m) => m.config.image),
+    }).toEqual({
+      exitCode: 0,
+      builds: [
+        `fly deploy --build-only --push --image-label ${image.split(":")[1]} -a ${APP} --config fly.toml --dockerfile Dockerfile`,
+      ],
+      images: [image],
+    });
   });
 });
