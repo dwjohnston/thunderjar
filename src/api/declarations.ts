@@ -247,7 +247,7 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * `codex-0.166.0/openai/gpt-6.1-sol/high`. Several make their cross product, parts in array
    * order. A test case may only name these. `ctx.model` is the settings, each variant's value chosen.
    */
-  models?: HarnessModels;
+  models: HarnessModels;
   /**
    * @docs
    * @name applyParameter
