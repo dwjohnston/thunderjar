@@ -2,9 +2,9 @@
 // host, standing in for a measurement container.
 import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
-import type { MeasurementContext, Reply } from "../api/declarations.ts";
+import type { MeasurementContext, Reply, Transcript, TranscriptEvent } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, replyMatches, shell, STDOUT_LIMIT } from "./instruments.ts";
+import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, replyMatches, shell, STDOUT_LIMIT, toolCalled } from "./instruments.ts";
 
 const ROOT = `${TMP_DIR}/instruments-${crypto.randomUUID()}`;
 
@@ -40,6 +40,7 @@ async function contextWith(files: string[] | Record<string, string>, reply: Repl
       await Bun.write(`${workdir}/${path}`, contents);
     },
     glob: async (pattern) => (await Array.fromAsync(new Glob(pattern).scan({ cwd: workdir, dot: true }))).toSorted(),
+    transcript: async () => ({ outcome: "unavailable", reason: "its harness declares no transcript" }),
   };
 }
 
@@ -78,6 +79,72 @@ describe("replyMatches", () => {
     expect(replyMatches.checkConfig({ pattern: "Eli(" })).toEqual([["config.pattern", '"Eli(" is not a valid regular expression: missing )']]);
     expect(replyMatches.checkConfig({})).toEqual([["config.pattern", "must be a JavaScript regular expression, got undefined"]]);
     expect(replyMatches.checkConfig({ pattern: "Eli" })).toEqual([]);
+  });
+});
+
+describe("toolCalled", () => {
+  /** A context of a run whose transcript is `transcript`. */
+  const transcribed = async (transcript: Transcript) => ({ ...(await contextWith([])), transcript: async () => transcript });
+  const call = (tool: string, input: unknown, agent: "main" | "subagent" = "main"): TranscriptEvent => ({ kind: "toolCall", tool, input, agent });
+  /** A session that runs the tests, starts a sub-agent that runs them again, and reads a file. */
+  const SESSION: Transcript = {
+    outcome: "collected",
+    events: [
+      { kind: "message", role: "user", text: "Fix the failing test. Run Bash when you're done.", agent: "main" },
+      call("Bash", { command: "bun test", description: "Run the tests" }),
+      call("Agent", { prompt: "Run the tests with Bash", subagent_type: "general-purpose" }),
+      { kind: "message", role: "user", text: "Run the tests with Bash", agent: "subagent" },
+      call("Bash", { command: "bun test src/isPrime.test.ts" }, "subagent"),
+      call("Read", { file_path: "/workspace/src/isPrime.ts" }),
+      { kind: "message", role: "assistant", text: "Fixed. I ran Bash.", agent: "main" },
+    ],
+  };
+
+  test("counts the calls of the tool, by the harness's name for it, a sub-agent's too", async () => {
+    const ctx = await transcribed(SESSION);
+    expect(await toolCalled.evaluate({ tool: "Bash" }, ctx)).toEqual({ outcome: "measured", data: 2 });
+    expect(await toolCalled.evaluate({ tool: "Read" }, ctx)).toEqual({ outcome: "measured", data: 1 });
+    // Case-sensitive, and a message naming it isn't a call.
+    expect(await toolCalled.evaluate({ tool: "bash" }, ctx)).toEqual({ outcome: "measured", data: 0 });
+  });
+
+  test("counts only the calls whose input, as JSON, matches inputMatches", async () => {
+    const ctx = await transcribed(SESSION);
+    expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: "bun test" }, ctx)).toEqual({ outcome: "measured", data: 2 });
+    expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: "bun test src/" }, ctx)).toEqual({ outcome: "measured", data: 1 });
+    // Matched against the JSON, keys and all.
+    expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: '"description":"Run' }, ctx)).toEqual({ outcome: "measured", data: 1 });
+    expect(await toolCalled.evaluate({ tool: "Bash", inputMatches: "npm test" }, ctx)).toEqual({ outcome: "measured", data: 0 });
+  });
+
+  test("a run without a transcript is skipped, saying why, for each reason it has none", async () => {
+    const reasons = [
+      "its harness declares no transcript",
+      "no file matched its transcript's files: ~/.claude/projects/**/*.jsonl",
+      "unparseable: Unexpected token 'x', \"x\" is not valid JSON",
+    ];
+    for (const reason of reasons) {
+      const ctx = await transcribed({ outcome: "unavailable", reason });
+      expect(await toolCalled.evaluate({ tool: "Bash" }, ctx)).toEqual({ outcome: "skipped", reason: `no transcript: ${reason}` });
+    }
+  });
+
+  test("its default score is whether the tool was called at all", () => {
+    expect(toolCalled.defaultScore?.kind).toBe("boolean");
+    expect(toolCalled.defaultScore?.score(0)).toBe(false);
+    expect(toolCalled.defaultScore?.score(1)).toBe(true);
+    expect(toolCalled.defaultScore?.score(7)).toBe(true);
+  });
+
+  test("checks its config is a tool's name, and inputMatches, if given, a valid regular expression", () => {
+    expect(toolCalled.checkConfig({ tool: "Bash" })).toEqual([]);
+    expect(toolCalled.checkConfig({ tool: "Bash", inputMatches: "bun test" })).toEqual([]);
+    expect(toolCalled.checkConfig({})).toEqual([["config.tool", "must be the harness's name for a tool, e.g. \"Bash\", got undefined"]]);
+    expect(toolCalled.checkConfig({ tool: "" })).toEqual([["config.tool", "must be the harness's name for a tool, e.g. \"Bash\", got \"\""]]);
+    expect(toolCalled.checkConfig({ tool: "Bash", inputMatches: "bun (test" })).toEqual([
+      ["config.inputMatches", '"bun (test" is not a valid regular expression: missing )'],
+    ]);
+    expect(toolCalled.checkConfig({ tool: "Bash", inputMatches: 3 })).toEqual([["config.inputMatches", "must be a JavaScript regular expression, got 3"]]);
   });
 });
 

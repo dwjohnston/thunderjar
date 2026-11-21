@@ -3,12 +3,13 @@
 type BaseImageName = "alpine" | "node20" | "node20-env" | "node20-unconfined";
 type CodeStateName = "baseline";
 type PromptSetName = "snerk";
-type TaskName = "env-measured" | "sandbox";
+type TaskName = "env-measured" | "sandbox" | "tools-used";
 type InitialPromptNames = {
   "env-measured": "plain";
   "sandbox": "plain";
+  "tools-used": "plain";
 };
-type HarnessName = "fake-env-reader" | "fake-keyed" | "fake-leaker" | "fake-sandboxer";
+type HarnessName = "fake-env-reader" | "fake-keyed" | "fake-leaker" | "fake-sandboxer" | "fake-transcriber";
 type HarnessModelName = `${HarnessName}/${string}`;
 
 interface ThunderjarParameterNames {

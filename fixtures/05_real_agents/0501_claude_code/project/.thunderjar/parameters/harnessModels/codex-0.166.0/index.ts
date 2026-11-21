@@ -1,4 +1,4 @@
-import { declareHarness, writeModel, writeRunScript } from "thunderjar";
+import { codexTranscript, declareHarness, writeModel, writeRunScript } from "thunderjar";
 
 // OpenAI's Codex CLI, without its sandbox or approvals: the container is the sandbox.
 // A test case names a model by the ID the agent takes, e.g. "codex-0.166.0/gpt-6.1-sol", "codex-0.166.0/gpt-5.5".
@@ -18,5 +18,7 @@ export default declareHarness({
   // costs, read them from what the run script wrote to /thunderjar/result.json:
   // collectReply: (raw) => …,
   // collectTokenCosts: (raw, ctx) => ({ outcome: "collected", models: [{ model: ctx.modelId, … }] }),
+  // What the agent kept of its session, for instruments such as toolCalled.
+  transcript: codexTranscript,
   requiredEnv: ["OPENAI_API_KEY"],
 });

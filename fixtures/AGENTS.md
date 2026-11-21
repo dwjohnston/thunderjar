@@ -12,6 +12,7 @@ fixtures/
   04_unhappy/                  projects broken on purpose
   05_real_agents/              projects that run a real agent
   06_capture/                  codebases for `thunderjar capture`, in Docker
+  transcripts/                 not scenarios: transcripts saved from real runs, see below
     <NNNN>_<what it is>/       a scenario, e.g. 0201_minimal_existing_setup
       project/                 the user's project: the CLI runs here
       tsconfig.json            optional: type-checks the scenario, see below
@@ -62,6 +63,23 @@ bun run fixture 0202 plan is-prime-baseline
 - A scenario in `04_unhappy/` must fail, with exactly the errors the test lists for it.
 - Any other scenario must pass.
 - The test doesn't run `generate`, so a checked scenario checks in its `_generated/` folder. A test of `generate` keeps it up to date.
+
+## Saved transcripts
+
+`transcripts/<harness>-<version>/` holds what one real run of that harness left of its session, laid out as the home folder of the image's user, `/home/node`, was. The tests of each harness's transcript parser read them with `transcriptFiles` from `src/testing/transcripts.ts`.
+
+- Each is one session, on DeepSeek: the agent runs `echo one > one.txt`, starts a sub-agent that runs `ls`, and replies `DONE`; then a second prompt, continuing the session, has it run `cat one.txt`.
+  - `claude-code-2.1.326/`: `~/.claude/projects/-workspace/<session>.jsonl`, and its sub-agent's in `<session>/subagents/`.
+  - `codex-0.166.0/`: `~/.codex/sessions/2026/11/21/`, a rollout for the main thread and one for its sub-agent.
+  - `copilot-1.0.105/`: `~/.copilot/session-state/<session>/events.jsonl`.
+  - `opencode-1.19.5/`: `~/.local/share/opencode/thunderjar-transcript.json`, as `OPENCODE_TRANSCRIPT_COMMAND` wrote it from OpenCode's database.
+- Only the transcript's files are kept, as the harness wrote them.
+
+✅ **Do** save a new folder from a real run when a harness's version changes how it keeps its sessions.
+
+❌ **Don't** edit a saved transcript by hand.
+
+**Why:** a parser is only as right as the transcript it's tested against. One written by hand tests what we think the harness writes.
 
 ## Add a variation as a scenario
 
@@ -129,6 +147,9 @@ bun run fixture 0202 plan is-prime-baseline
     - Test case `measured-env`: `fake-keyed` on `alpine`, task `env-measured`, with `env` `FAKE_TEST_CASE_SETTING=test` and `secretEnv` `FAKE_TEST_CASE_SECRET`, so a test can check the measurement container sees all three.
     - `fake-leaker` needs `FAKE_HARNESS_KEY`, and writes it into `/workspace/agent.log`, and it and `FAKE_TEST_CASE_SECRET` into `/workspace/.env`, then replies `leaked`.
     - Test case `leaked-secret`: `fake-leaker` on `alpine`, task `sandbox`, with `secretEnv` `FAKE_TEST_CASE_SECRET`, so a test can check both secrets are found in its postrun image's files.
+    - `fake-transcriber` leaves a transcript shaped like Claude Code's in `~/.claude/projects/-workspace/`, read by the library's `claudeCodeTranscript`: it ran `bun test` with Bash, started a sub-agent with Agent, which ran `bun test --bail` with Bash, and replied `The tests pass.`
+    - Task `tools-used`, with initial prompt `plain`, `Run the tests.`, and two `toolCalled` measurements: `ranTests` (Bash, `inputMatches` `bun test`; 2 of `fake-transcriber`'s calls), with metrics `ranTests` and `testRuns`, and `readFiles` (Read; none).
+    - Test case `transcript`: `fake-transcriber` and `fake-env-reader`, whose harness declares no transcript, so its measures are skipped, on `alpine`, task `tools-used`.
   - `0207_image_store`: the shared setup, with `imageStore: { repository: "ghcr.io/acme/thunderjar-images" }`, so `run` and `build` check the `docker login` for `ghcr.io`, then push each image. The fake Docker has a login only when a test gives it one: `fakeDocker({ loggedIn: ["ghcr.io"] })`.
   - `0208_parameter_files`: the shared setup, with a fake agent whose script is kept in its `files/` folder.
     - `fake-scripted`, version `1.0.0`, on `fake-model-small-001`, copies `files/scripts/` from `ctx.dir` to `/opt/fake-scripted/`, and its `cli` runs `agent.sh` from there, which writes a correct `isPrime.ts` and replies `Ran from /opt/fake-scripted.` Its `notes.md`, beside `index.ts` but not in `files/`, never reaches the build.

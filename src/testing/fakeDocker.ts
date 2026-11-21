@@ -28,7 +28,7 @@
 // `build` takes `--secret id=<id>,env=<env>`, failing as Docker does if `<env>` is unset in its own
 // environment, and `--ssh default`.
 //
-// `run` runs the container's script on the host, with /workspace and /thunderjar in it mapped to
+// `run` runs the container's script on the host, with /workspace and /thunderjar in it mapped, where a path starts with them, to
 // the container's root/, as is a lone `/`, e.g. in `cd /`, and root/workspace its working directory. Its environment is only the
 // container's (see below), beside PATH and HOME, as a container sees only what it's given. While it runs, `kill` stops it, and everything it started, as if the
 // container had been killed. A built image's container
@@ -289,7 +289,7 @@ if (import.meta.main) {
    * container's root/, in root/workspace.
    */
   const inContainer = (container: string, program: string[], stdin?: string, env?: Record<string, string>) => {
-    const mapped = program.map((arg) => arg.replace(/\/(workspace|thunderjar)(?![\w.-])/g, (_, folder: string) => `${container}/root/${folder}`));
+    const mapped = program.map((arg) => arg.replace(/(?<![\w.-])\/(workspace|thunderjar)(?![\w.-])/g, (_, folder: string) => `${container}/root/${folder}`));
     const shell = $`${mapped} < ${new Response(stdin ?? "")}`.cwd(`${container}/root/workspace`).quiet().nothrow();
     return env ? shell.env(env) : shell;
   };
@@ -421,7 +421,7 @@ if (import.meta.main) {
       // A lone `/`, e.g. `cd /`, is the container's root, its root/.
       const map = (text: string) =>
         text
-          .replace(/\/(workspace|thunderjar)(?![\w.-])/g, (_, folder: string) => `${container}/root/${folder}`)
+          .replace(/(?<![\w.-])\/(workspace|thunderjar)(?![\w.-])/g, (_, folder: string) => `${container}/root/${folder}`)
           .replace(/(?<=^|[\s;&|('"])\/(?=$|[\s;&|)'"])/g, `${container}/root/`);
       let mapped = map(script);
       const runScript = `${container}/root/thunderjar/thunderjar-run.sh`;

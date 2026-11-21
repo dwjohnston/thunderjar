@@ -1,4 +1,4 @@
-import { declareHarness, writeModel, writeRunScript } from "thunderjar";
+import { copilotTranscript, declareHarness, writeModel, writeRunScript } from "thunderjar";
 
 // GitHub Copilot CLI. COPILOT_GITHUB_TOKEN is a GitHub token with Copilot access: a fine-grained
 // personal access token with the "Copilot Requests" permission.
@@ -20,5 +20,7 @@ export default declareHarness({
   // costs, read them from what the run script wrote to /thunderjar/result.json:
   // collectReply: (raw) => …,
   // collectTokenCosts: (raw, ctx) => ({ outcome: "collected", models: [{ model: ctx.modelId, … }] }),
+  // What the agent kept of its session, for instruments such as toolCalled.
+  transcript: copilotTranscript,
   requiredEnv: ["COPILOT_GITHUB_TOKEN"],
 });

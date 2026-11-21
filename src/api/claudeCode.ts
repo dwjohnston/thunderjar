@@ -5,8 +5,9 @@
 //
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
-import { declareHarness, type HarnessDeclaration, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type ModelTokenCosts, type TokenCosts, type TranscriptDeclaration } from "./declarations.ts";
 import { MODEL_PATH, PROMPT_PATH, RESULT_PATH, writeModel, writeRunScript } from "./files.ts";
+import { type TimedEvent, inSessionOrder, jsonLines } from "./transcript.ts";
 
 type ModelUsage = {
   inputTokens?: unknown;
@@ -75,6 +76,45 @@ export function claudeCodeTokenCosts(raw: string): TokenCosts {
   return { outcome: "collected", models, ...(apiDurationMs !== undefined && { apiDurationMs }) };
 }
 
+/**
+ * Claude Code's transcript: the JSON lines it keeps of each session in
+ * `~/.claude/projects/<working directory, as a name>/<session ID>.jsonl`, and of each sub-agent's
+ * in `<session ID>/subagents/agent-<ID>.jsonl` beside it.
+ */
+export const claudeCodeTranscript: TranscriptDeclaration = {
+  files: ["~/.claude/projects/**/*.jsonl"],
+  parse: (files) => inSessionOrder(files.map(({ text }) => jsonLines(text).flatMap(claudeCodeEvents))),
+};
+
+type ContentBlock = { type?: unknown; text?: unknown; name?: unknown; input?: unknown };
+
+/**
+ * The events of one line of a Claude Code transcript. Only its `user` and `assistant` lines are
+ * the conversation: of those, its text and tool calls, not its thinking or tool results, nor the
+ * `isMeta` lines Claude Code adds itself, e.g. a skill's instructions. A sub-agent's lines are
+ * `isSidechain`.
+ */
+function claudeCodeEvents(line: Record<string, unknown>): TimedEvent[] {
+  const { type, message, isMeta, isSidechain, timestamp } = line as {
+    type?: unknown;
+    message?: { role?: unknown; content?: unknown };
+    isMeta?: unknown;
+    isSidechain?: unknown;
+    timestamp?: unknown;
+  };
+  if ((type !== "user" && type !== "assistant") || isMeta === true || typeof message !== "object" || message === null) return [];
+  const role = message.role === "user" ? "user" : "assistant";
+  const agent = isSidechain === true ? "subagent" : "main";
+  const at = typeof timestamp === "string" ? Date.parse(timestamp) : Number.NaN;
+  const { content } = message;
+  const blocks: ContentBlock[] = typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? content : [];
+  return blocks.flatMap((block): TimedEvent[] => {
+    if (block.type === "text" && typeof block.text === "string" && block.text !== "") return [{ at, event: { kind: "message", role, text: block.text, agent } }];
+    if (block.type === "tool_use" && typeof block.name === "string") return [{ at, event: { kind: "toolCall", tool: block.name, input: block.input, agent } }];
+    return [];
+  });
+}
+
 /** What `claudeCode` gets. */
 export type ClaudeCodeOptions = {
   /** The version of `@anthropic-ai/claude-code` to install, e.g. `"2.1.311"`. */
@@ -94,7 +134,8 @@ export const CLAUDE_CODE_COMMAND =
  * A complete harness declaration for Claude Code `version`. Its fragment installs Claude Code as
  * root, writes the model ID and the run script, then switches to the image's non-root `node`
  * user, which a `node` base image has: Claude Code won't skip its permission prompts as root, and
- * nobody is there to answer them. Its reply and token costs are read from its JSON result. It
+ * nobody is there to answer them. Its reply and token costs are read from its JSON result, and
+ * its transcript from `/home/node/.claude/projects/`, with `claudeCodeTranscript`. It
  * needs `CLAUDE_CODE_OAUTH_TOKEN`, a subscription token from `claude setup-token`, or
  * `ANTHROPIC_API_KEY`: the token if both are set, and only the one, as Claude Code would pick the
  * key if given both.
@@ -117,6 +158,7 @@ export function claudeCode({ version, command = CLAUDE_CODE_COMMAND }: ClaudeCod
       ].join("\n"),
     collectReply: claudeCodeReply,
     collectTokenCosts: claudeCodeTokenCosts,
+    transcript: claudeCodeTranscript,
     requiredEnv: [{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }],
   });
 }

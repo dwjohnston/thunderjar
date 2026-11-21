@@ -74,6 +74,8 @@ What each part must do:
 
 To measure the agent's reply and token costs, add `collectReply` and `collectTokenCosts`, which read `result.json`. See the Copilot harness in this repo's `.thunderjar/` for a full one.
 
+For `toolCalled` to see what it did, set `transcript` to the library's parser for the agent: `claudeCodeTranscript` (`claudeCode()` sets it), `codexTranscript`, `copilotTranscript` or `opencodeTranscript`. OpenCode's run script must also end with `OPENCODE_TRANSCRIPT_COMMAND`, keeping OpenCode's exit code, e.g. `opencode run … > /thunderjar/result.json; code=$?; ${OPENCODE_TRANSCRIPT_COMMAND}; exit $code`.
+
 ## A new version
 
 Copy the folder, rename it to the new version, and change `version`.
