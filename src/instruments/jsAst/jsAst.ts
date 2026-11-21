@@ -6,6 +6,11 @@ export type JsAstValue = { file: string; matches: Record<string, number>; parseE
 
 type Node = Parameters<typeof esquery.match>[0];
 
+/** The extensions oxc parses, which give each file's language: JavaScript or TypeScript, with or without JSX. */
+export const EXTENSIONS = [".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"] as const;
+
+const isSupported = (file: string) => EXTENSIONS.some((extension) => file.endsWith(extension));
+
 /** Where esquery finds each node's children: oxc's own keys, which cover TypeScript's nodes. */
 const options = { visitorKeys: visitorKeys as Record<string, readonly string[]> } as esquery.ESQueryOptions;
 
@@ -18,8 +23,14 @@ export const jsAst: Instrument<{ glob: string; selectors: Record<string, string>
   version: 1,
   async evaluate({ glob, selectors }, ctx) {
     const parsed = Object.entries(selectors).map(([name, selector]) => [name, esquery.parse(selector)] as const);
+    const files = await ctx.glob(glob);
+    const unsupported = files.filter((file) => !isSupported(file));
+    if (unsupported.length > 0) {
+      const reason = `jsAst parses only ${EXTENSIONS.join(", ")} files; ${glob} matches ${unsupported.join(", ")}`;
+      return { outcome: "erroredWhileMeasuring", error: new Error(reason) };
+    }
     const value: JsAstValue = [];
-    for (const file of await ctx.glob(glob)) {
+    for (const file of files) {
       const { program, errors } = parseSync(file, await ctx.readFile(file));
       const matches: Record<string, number> = {};
       // A file that doesn't parse is the agent's to answer for, not a failed measurement: its
