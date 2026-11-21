@@ -112,6 +112,11 @@ export async function closeConnection(settings: Settings): Promise<void> {
 
 /** The local Docker CLI, pointed at the machine's daemon. */
 export function dockerCommand(args: string[]): string[] {
+  // A build on the machine's daemon runs its steps on the host network: on the bridge network they
+  // can't resolve any name, because the machine's only DNS server, fdaa::3, is IPv6 and the bridge
+  // has no IPv6 ("wget: bad address 'registry.npmjs.org'"). Containers run on the bridge are given
+  // public DNS servers instead (machine/daemon.json), so they're fine.
+  if (args[0] === "build") return ["docker", "-H", `ssh://${HOST}`, "build", "--network", "host", ...args.slice(1)];
   return ["docker", "-H", `ssh://${HOST}`, ...args];
 }
 
