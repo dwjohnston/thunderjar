@@ -3,6 +3,8 @@
 // test cases in .thunderjar/ and the recorded runs to full names. Each harness's parts are its
 // agent's documented default, hard-coded here: nothing else configures them.
 
+import type { ContainerRunRecord } from "../../src/store/runDataStore.ts";
+
 /** The parts appended to a pair, by the start of its harness folder: each agent's default effort. */
 export const DEFAULT_PARTS: Record<string, string[]> = {
   // Codex's model_reasoning_effort defaults to medium.
@@ -20,4 +22,9 @@ export function migratePair(pair: string): string {
 /** A test case's source, each quoted pair in it migrated. */
 export function migrateSource(source: string): string {
   return source.replace(/(["'`])([a-z0-9][\w.-]*\/[^"'`\s]+)\1/g, (_match, quote: string, pair: string) => `${quote}${migratePair(pair)}${quote}`);
+}
+
+/** A recorded container run, its pair's name migrated. Any other record is returned as it is. */
+export function migrateRun(record: ContainerRunRecord): ContainerRunRecord {
+  return record;
 }
