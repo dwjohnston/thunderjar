@@ -27,6 +27,7 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 
 - One Fly machine only.
 - One client only.
+- Lives in `.thunderjar/fly-client/`.
 
 ## Behaviour
 
@@ -38,7 +39,7 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
    2. If it's stopped, start it.
    3. Run the tasks.
 3. **Client timer**
-   - A git-ignored file on the host records when the last task finished.
+   - A git-ignored file, `.thunderjar/.fly`, records when the last task finished.
    - New tasks reset it.
    - An interrupted run, e.g. Ctrl-C while following, still writes it.
    - A detached process on the host acts on it:
@@ -56,9 +57,7 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 
 1. **The create recipe**
    - Image with the Docker daemon, volume, SSH keys, region. Set up by hand today.
-2. **Where it lives**
-   - In `src/`, or extending the shell scripts in `.thunderjar/`.
-3. **Watchdog limit**
+2. **Watchdog limit**
    - Its own variable, or derived from `SLEEP_MINUTES`.
 
 ## Prior art
