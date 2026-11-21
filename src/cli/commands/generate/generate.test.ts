@@ -91,3 +91,16 @@ describe("0403 broken harness family", () => {
     expect(await Bun.file(`${copy.dir}/${GENERATED}`).text()).toContain('type HarnessName = "fake-harness-alpha" | "fake-harness-beta";\n');
   });
 });
+
+describe("0402 broken declarations", () => {
+  test("a harness that declares its models gives each name they make", async () => {
+    await using copy = await copyScenarioProject("0402");
+
+    const { exitCode } = await thunderjar(copy.dir, ["generate"]);
+
+    expect(exitCode).toBe(0);
+    expect(await Bun.file(`${copy.dir}/${GENERATED}`).text()).toContain(
+      '"fake-harness-efforts/fake/model-small" | "fake-harness-efforts/fake/model-large/low" | "fake-harness-efforts/fake/model-large/high"',
+    );
+  });
+});

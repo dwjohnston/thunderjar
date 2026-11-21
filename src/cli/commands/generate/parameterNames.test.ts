@@ -39,4 +39,18 @@ type HarnessName = "claude-code-2.1.311" | "fake-harness-alpha";
 type HarnessModelName = \`\${HarnessName}/\${string}\`;
 `);
   });
+
+  test("a harness with declared models gives each of its names; one without, any model", () => {
+    const text = renderParameterNames({
+      baseImages: [],
+      codeStates: [],
+      promptSets: [],
+      tasks: {},
+      harnesses: { "codex-0.166.0": ["openai/gpt-5.5", "openai/gpt-6.1-sol/low"], "fake-harness-beta": undefined },
+    });
+
+    expect(declarations(text)).toContain(
+      'type HarnessModelName = "codex-0.166.0/openai/gpt-5.5" | "codex-0.166.0/openai/gpt-6.1-sol/low" | `fake-harness-beta/${string}`;\n',
+    );
+  });
 });
