@@ -18,8 +18,10 @@ import type { Instrument } from "../instrument.ts";
 export const toolCalled: Instrument<{ tool: string; inputMatches?: string }, number> = {
   version: 1,
   defaultScore: { kind: "boolean", score: () => false },
-  async evaluate() {
-    return { outcome: "measured", data: 0 };
+  async evaluate({ tool }, ctx) {
+    const transcript = await ctx.transcript();
+    if (transcript.outcome !== "collected") return { outcome: "measured", data: 0 };
+    return { outcome: "measured", data: transcript.events.filter((event) => event.kind === "toolCall" && event.tool === tool).length };
   },
   checkConfig() {
     return [];
