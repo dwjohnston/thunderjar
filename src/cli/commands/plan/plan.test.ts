@@ -280,6 +280,13 @@ describe("0402 broken declarations", () => {
       ],
     ],
     [
+      "a harness that declares no models",
+      "modelless",
+      [
+        `${parameter("harnessModels/fake-harness-modelless/index.ts")}: models: must be the models the agent runs, by ID, each with its settings, e.g. { "claude-haiku-5-5": [] }, got undefined`,
+      ],
+    ],
+    [
       "an empty array, and iterations that isn't an integer",
       "empty-code-states",
       [
