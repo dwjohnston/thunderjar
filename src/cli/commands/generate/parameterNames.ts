@@ -93,7 +93,12 @@ interface ThunderjarParameterNames {
 `;
 }
 
-/** Writes `<root>/_generated/parameterNames.d.ts` from the names declared in `root`. */
-export async function writeParameterNames(root: string): Promise<void> {
-  await Bun.write(`${root}/${GENERATED_PATH}`, renderParameterNames(await collectParameterNames(root)));
+/**
+ * Writes `<root>/_generated/parameterNames.d.ts` from the names declared in `root`. Returns the
+ * problems of each harness that failed to load, whose pairs then take any model.
+ */
+export async function writeParameterNames(root: string): Promise<Problem[]> {
+  const problems: Problem[] = [];
+  await Bun.write(`${root}/${GENERATED_PATH}`, renderParameterNames(await collectParameterNames(root, problems)));
+  return problems;
 }
