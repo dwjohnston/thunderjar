@@ -66,8 +66,9 @@ function initialPromptType(tasks: Record<string, string[]>): string {
 /** Each harness's pairs: its models' names, or any model if it has none. */
 function harnessModelType(harnesses: Record<string, string[] | undefined>): string {
   const entries = Object.entries(harnesses);
-  if (entries.every(([, names]) => names === undefined)) return "`${HarnessName}/${string}`";
-  return entries.flatMap(([harness, names]) => (names === undefined ? [`\`${harness}/\${string}\``] : names.map((name) => JSON.stringify(`${harness}/${name}`)))).join(" | ") || "never";
+  if (entries.every(([, names]) => names === undefined)) return " `${HarnessName}/${string}`";
+  const pairs = entries.flatMap(([harness, names]) => (names === undefined ? [`\`${harness}/\${string}\``] : names.map((name) => JSON.stringify(`${harness}/${name}`))));
+  return pairs.length === 0 ? " never" : pairs.map((pair) => `\n  | ${pair}`).join("");
 }
 
 /** The contents of `_generated/parameterNames.d.ts`. */
@@ -80,7 +81,7 @@ type PromptSetName = ${union(names.promptSets)};
 type TaskName = ${union(Object.keys(names.tasks))};
 type InitialPromptNames = ${initialPromptType(names.tasks)};
 type HarnessName = ${union(Object.keys(names.harnesses))};
-type HarnessModelName = ${harnessModelType(names.harnesses)};
+type HarnessModelName =${harnessModelType(names.harnesses)};
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;
