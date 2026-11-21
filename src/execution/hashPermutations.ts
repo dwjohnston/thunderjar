@@ -22,6 +22,7 @@ import type {
   PromptSetDeclaration,
   Resolved,
   ResolveCtx,
+  SettingValue,
   TestCaseDeclaration,
 } from "../api/declarations.ts";
 import { FILES, PARAMETERS } from "../config/folders.ts";
@@ -177,8 +178,7 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
     const declaration = await load<HarnessDeclaration>(file, "declareHarness");
     if (!declaration) return undefined;
     // loadTestCase already checked the pair names one of its models.
-    const split = declaration.models === undefined ? parsePair(pair) : (splitPair(pair, declaration.models) as SplitPair);
-    const { modelId } = split;
+    const { modelId, model } = declaration.models === undefined ? { ...parsePair(pair), model: {} } : (splitPair(pair, declaration.models) as SplitPair);
     return {
       key: `harnessModel\0${name}`,
       label: `${ROLE_NAMES.harnessModel} ${JSON.stringify(name)}`,
@@ -187,6 +187,7 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
       declaration,
       version: declaration.version,
       modelId,
+      model,
     };
   };
   const initialPromptParameter = async (name: string) => {
@@ -261,8 +262,8 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
       return { fragment, files, hash: sha256(JSON.stringify({ fragment, requiredEnv: parameter.declaration.requiredEnv ?? [], files })) };
     });
   // Rendered for the model only once it rendered for the sample, so a broken fragment is one problem.
-  const harnessForModel = (parameter: Parameter<HarnessDeclaration> & { version: string; modelId: string }): string | undefined => {
-    const ctx = { dir: PARAMETER_DIRS.harness, version: parameter.version, modelId: parameter.modelId, model: {}, resolved: resolved.get(parameter.key) };
+  const harnessForModel = (parameter: Parameter<HarnessDeclaration> & { version: string; modelId: string; model: Record<string, SettingValue> }): string | undefined => {
+    const ctx = { dir: PARAMETER_DIRS.harness, version: parameter.version, modelId: parameter.modelId, model: parameter.model, resolved: resolved.get(parameter.key) };
     return renderFragment("harness", parameter, ctx, problems);
   };
 
