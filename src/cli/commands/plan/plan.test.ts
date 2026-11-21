@@ -259,6 +259,13 @@ describe("0402 broken declarations", () => {
       ],
     ],
     [
+      "a model its harness doesn't declare",
+      "undeclared-model",
+      [
+        `${testCase("undeclared-model")}: harnessModel: "fake-harness-efforts/fake/model-medium" is not a model of fake-harness-efforts. Its models: fake/model-small, fake/model-large`,
+      ],
+    ],
+    [
       "an empty array, and iterations that isn't an integer",
       "empty-code-states",
       [
