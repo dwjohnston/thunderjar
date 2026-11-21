@@ -6,7 +6,7 @@
 // with why. A recorded measure the task no longer declares is ignored.
 import type { Better, Stat } from "../api/declarations.ts";
 import type { Measurement } from "../config/measurements.ts";
-import { type ScoreKind, instruments, STATS } from "../instruments/instruments.ts";
+import { type ScoreKind, STATS } from "../instruments/instruments.ts";
 import { type Scored, scoreOf } from "./scoreOf.ts";
 import type { ContainerRunRecord, RecordedOutcome } from "../store/runDataStore.ts";
 
