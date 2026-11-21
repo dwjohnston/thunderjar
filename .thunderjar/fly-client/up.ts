@@ -130,9 +130,11 @@ async function waitForDaemon(settings: Settings, machine: Machine): Promise<void
 export async function up(settings: Settings): Promise<Machine> {
   // Several commands can find it stopped at once: one brings it up, the rest wait.
   return await withLock(settings, "up", async () => {
+    const began = Date.now();
     let machine = await findMachine(settings);
     const missing = !machine;
     if (!machine) {
+      say(`no machine in ${settings.app}. Creating ${recipe.name}…`);
       await create(settings);
       machine = await findMachine(settings);
       if (!machine) throw new Error(`the machine in app ${settings.app} wasn't created`);
@@ -142,11 +144,14 @@ export async function up(settings: Settings): Promise<Machine> {
     const updated = !missing && (await updateIfChanged(settings, machine));
     // A new machine starts by itself, as does an updated one.
     if (!missing && !updated && machine.state !== "started") {
-      say(`starting ${machine.id}`);
+      say(`machine ${machine.name} (${machine.id}) is ${machine.state}. Starting it…`);
       await fly(["machine", "start", machine.id, "-a", settings.app]);
     }
     await fly(["machine", "wait", machine.id, "-a", settings.app, "--state", "started", "-w", "120s"]);
     await waitForDaemon(settings, machine);
+    const took = `${Math.round((Date.now() - began) / 1000)}s`;
+    if (missing) say(`machine ${machine.name} (${machine.id}) created and started (${took})`);
+    else if (machine.state !== "started") say(`machine ${machine.name} (${machine.id}) started (${took})`);
     return machine;
   });
 }
