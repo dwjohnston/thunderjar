@@ -7,8 +7,9 @@
 import { dockerCommand, dockerEnv, ensureConnection } from "./connection.ts";
 import { findMachine } from "./fly.ts";
 import type { Settings } from "./settings.ts";
-import { resetTimer, writeTimer } from "./timer.ts";
+import { readTimer, resetTimer, writeTimer } from "./timer.ts";
 import { up } from "./up.ts";
+import { ensureWatcher } from "./watch.ts";
 
 const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 
@@ -31,6 +32,7 @@ export async function docker(args: string[], settings: Settings): Promise<number
     });
   }
   const exitCode = await proc.exited;
-  await writeTimer(settings, resetTimer(settings, machine.id));
+  const previous = await readTimer(settings);
+  await writeTimer(settings, { ...resetTimer(settings, machine.id), watcherPid: ensureWatcher(settings, previous) });
   return received ? 128 + SIGNALS[received] : exitCode;
 }

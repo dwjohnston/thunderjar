@@ -18,6 +18,7 @@
 import { docker } from "./docker.ts";
 import { readSettings, type Settings } from "./settings.ts";
 import { upCommand } from "./up.ts";
+import { watch } from "./watch.ts";
 
 const USAGE = "usage: index.ts <up | docker <args…> | stop [--force] | destroy [--force] | status [--json] | prune | watch>";
 
@@ -32,7 +33,7 @@ const commands: Record<string, (args: string[], settings: Settings) => Promise<n
   destroy: notImplemented("destroy"),
   status: notImplemented("status"),
   prune: notImplemented("prune"),
-  watch: notImplemented("watch"),
+  watch,
 };
 
 const [name, ...args] = Bun.argv.slice(2);
