@@ -5,8 +5,9 @@
 
 import { findMachine } from "./fly.ts";
 import { busy } from "./idle.ts";
-import { stopMachine } from "./lifecycle.ts";
+import { destroyMachine, stopMachine } from "./lifecycle.ts";
 import type { Settings } from "./settings.ts";
+import { deleteTimer } from "./timer.ts";
 
 /** The flags a command was given, out of those it takes. */
 function flags(args: string[], allowed: string[]): Set<string> {
@@ -34,5 +35,24 @@ export async function stopCommand(args: string[], settings: Settings): Promise<n
   }
   await stopMachine(settings, machine);
   console.log(`${machine.id} stopped`);
+  return 0;
+}
+
+export async function destroyCommand(args: string[], settings: Settings): Promise<number> {
+  const force = flags(args, ["--force"]).has("--force");
+  const machine = await findMachine(settings);
+  if (!machine) {
+    console.log(`Fly app ${settings.app} has no machine`);
+    await deleteTimer(settings);
+    return 0;
+  }
+  const reason = force ? undefined : await busy(settings, machine);
+  if (reason) {
+    console.error(`fly-client: not destroying ${machine.id}: ${reason}. --force destroys it anyway`);
+    return 1;
+  }
+  await destroyMachine(settings, machine);
+  await deleteTimer(settings);
+  console.log(`${machine.id} and its volumes destroyed`);
   return 0;
 }

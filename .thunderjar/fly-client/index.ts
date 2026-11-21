@@ -15,7 +15,7 @@
 //   prune                 remove its stopped containers and unused images
 //   watch                 the detached process that acts on the timer: `docker` starts it
 
-import { stopCommand } from "./commands.ts";
+import { destroyCommand, stopCommand } from "./commands.ts";
 import { docker } from "./docker.ts";
 import { readSettings, type Settings } from "./settings.ts";
 import { upCommand } from "./up.ts";
@@ -31,7 +31,7 @@ const commands: Record<string, (args: string[], settings: Settings) => Promise<n
   up: upCommand,
   docker,
   stop: stopCommand,
-  destroy: notImplemented("destroy"),
+  destroy: destroyCommand,
   status: notImplemented("status"),
   prune: notImplemented("prune"),
   watch,
