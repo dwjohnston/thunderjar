@@ -13,7 +13,10 @@ describe("measure", () => {
     });
     const good = await measure(declaration, { files: { "a.txt": `${FIXTURES}/hello.txt` } });
     expect(good).toMatchObject({ outcome: "measured", metrics: { ok: true } });
-    expect((await measure(declaration, {})).metrics.ok).toBe(false);
+    const bad = await measure(declaration, {});
+    expect(bad.metrics.ok).toBe(false);
+    // @ts-expect-error metrics are typed by the declaration's metric names
+    expect(bad.metrics.nope).toBeUndefined();
   });
 
   test("shell: a metric's own score reads the value", async () => {

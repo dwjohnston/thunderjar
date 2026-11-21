@@ -615,8 +615,8 @@ export function declareMeasurement<I extends InstrumentName, T extends Record<st
   instrument: I;
   config: InstrumentTypes[I]["config"];
   metrics: { [K in keyof T]: MetricOf<I, T[K]> };
-}): MeasurementDeclaration {
-  return declared("declareMeasurement", declaration) as unknown as MeasurementDeclaration;
+}): MeasurementDeclaration & { metrics: Record<keyof T & string, Metric> } {
+  return declared("declareMeasurement", declaration) as unknown as MeasurementDeclaration & { metrics: Record<keyof T & string, Metric> };
 }
 
 /**
