@@ -43,7 +43,10 @@ Thunderjar comes with these instruments
 | How many lines match? | `grep` | `{ glob, pattern }` |
 | Does the code behave? | `bunTestFile` | `{ subject, test }` |
 | What did the agent say? | `replyMatches` | `{ pattern, turn? }` |
+| Which tools did it call, and how often? | `toolCalled` | `{ tool, inputMatches? }` |
 | Anything else | `shell` | `{ command }` |
+
+`toolCalled` reads the agent's own transcript, sub-agents' included, from its postrun image. `tool` is the harness's own name for it, e.g. `Bash` in Claude Code, `bash` in OpenCode, `exec_command` in Codex. A run whose harness declares no `transcript` is skipped.
 
 `shell` runs in the agent's container after it finishes, in the folder it started in. Its value is the exit code and stdout.
 
@@ -63,6 +66,9 @@ e.g. one of each, as the object passed to `declareMeasurement`:
 
 // replyMatches: did its last reply include ☝️?
 { instrument: "replyMatches", config: { pattern: "☝️" }, metrics: { followedHumansMd: { stat: "rate", better: "higher" } } }
+
+// toolCalled: did it run the tests, and how many times? Claude Code calls its shell tool Bash.
+{ instrument: "toolCalled", config: { tool: "Bash", inputMatches: "bun test" }, metrics: { ranTests: { stat: "rate", better: "higher" }, testRuns: { score: (v) => v, stat: "mean" } } }
 
 // shell: does the project still typecheck?
 { instrument: "shell", config: { command: "bun run typecheck" }, metrics: { typeChecks: { stat: "rate", better: "higher" } } }
