@@ -106,6 +106,10 @@ USER node`,
     expect(harness.collectTokenCosts?.(REAL, { version: "2.1.311", modelId: "deepseek-v4-pro" })).toEqual(claudeCodeTokenCosts(REAL));
   });
 
+  test("reads its transcript with the library's parser, from the home of the node user it runs as", () => {
+    expect(harness.transcript).toBe(claudeCodeTranscript);
+  });
+
   test("its command can be replaced", () => {
     const custom = claudeCode({ version: "2.1.311", command: "claude -p hi > /thunderjar/result.json" });
 
