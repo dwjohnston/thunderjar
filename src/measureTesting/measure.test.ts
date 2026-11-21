@@ -101,6 +101,25 @@ describe("measure", () => {
     expect(result.metrics.broken).toBe(true);
   });
 
+  test("jsAst: parses TSX, with JSX nodes", async () => {
+    const declaration = declareMeasurement({
+      instrument: "jsAst",
+      config: { glob: "*.tsx", selectors: { elements: "JSXElement" } },
+      metrics: { elements: { stat: "sum", score: (v) => v[0]?.matches.elements } },
+    });
+    const file = await source("a.tsx", "export const A = (p: { n: number }) => <ul><li>{p.n}</li></ul>;\n");
+    expect((await measure(declaration, { files: { "a.tsx": file } })).metrics.elements).toBe(2);
+  });
+
+  test("jsAst: no matching file is measured as no files, for the score to decide", async () => {
+    const declaration = declareMeasurement({
+      instrument: "jsAst",
+      config: { glob: "*.ts", selectors: { calls: "CallExpression" } },
+      metrics: { any: { stat: "rate", score: (v) => v.length > 0 } },
+    });
+    expect(await measure(declaration, {})).toEqual({ outcome: "measured", value: [], metrics: { any: false } });
+  });
+
   test("jsAst: a file that isn't JavaScript or TypeScript is an error", async () => {
     const declaration = declareMeasurement({
       instrument: "jsAst",
