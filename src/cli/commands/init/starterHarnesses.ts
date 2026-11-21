@@ -63,16 +63,13 @@ ${stubReaders}
 });
 `;
 
-const codex = `${IMPORTS}
+const codex = `import { codex } from "thunderjar";
 
-// OpenAI's Codex CLI, without its sandbox or approvals: the container is the sandbox.
+// OpenAI's Codex CLI, without its sandbox or approvals: the container is the sandbox. Its fragment
+// installs Codex as root, writes the model ID and the run script, then switches to the image's
+// non-root \`node\` user. It needs OPENAI_API_KEY.
 ${modelIds(STARTER_FOLDERS.codex, "https://developers.openai.com/codex/models", ["gpt-6.1-sol", "gpt-5.5"])}
-export default declareHarness({
-  version: "0.166.0",
-${applyParameter("npm install -g @openai/codex@${ctx.version}", 'codex exec --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json')}
-${stubReaders}
-  requiredEnv: ["OPENAI_API_KEY"],
-});
+export default codex({ version: "0.166.0" });
 `;
 
 const opencode = `${IMPORTS}
