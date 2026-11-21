@@ -15,6 +15,7 @@
 //   prune                 remove its stopped containers and unused images
 //   watch                 the detached process that acts on the timer: `docker` starts it
 
+import { docker } from "./docker.ts";
 import { readSettings, type Settings } from "./settings.ts";
 
 const USAGE = "usage: index.ts <up | docker <args…> | stop [--force] | destroy [--force] | status [--json] | prune | watch>";
@@ -25,7 +26,7 @@ const notImplemented = (command: string) => async (_args: string[], _settings: S
 
 const commands: Record<string, (args: string[], settings: Settings) => Promise<number>> = {
   up: notImplemented("up"),
-  docker: notImplemented("docker"),
+  docker,
   stop: notImplemented("stop"),
   destroy: notImplemented("destroy"),
   status: notImplemented("status"),
