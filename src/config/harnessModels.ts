@@ -39,7 +39,16 @@ export function splitPair(pair: string, models: HarnessModels): SplitPair | { pr
     .filter((id) => rest === id || rest.startsWith(`${id}/`))
     .toSorted((a, b) => b.length - a.length)[0];
   if (modelId === undefined) return { problem: `${JSON.stringify(pair)} is not a model of ${harness}. Its models: ${Object.keys(models).join(", ")}` };
-  const variant = modelVariants(modelId, models[modelId] ?? []).find((candidate) => candidate.name === rest);
-  if (variant === undefined) return { problem: pair };
+  const settings = models[modelId] ?? [];
+  const variants = modelVariants(modelId, settings);
+  const variant = variants.find((candidate) => candidate.name === rest);
+  if (variant === undefined) {
+    const names = variants.map(({ name }) => name).join(", ");
+    const parts = rest === modelId ? [] : rest.slice(modelId.length + 1).split("/");
+    const keys = settings.flatMap((setting) => Object.entries(setting).filter(([, value]) => isVariant(value)).map(([key]) => key));
+    const missing = keys[parts.length];
+    if (missing !== undefined) return { problem: `${JSON.stringify(pair)} names no ${missing}. Its names: ${names}` };
+    return { problem: pair };
+  }
   return { harness, modelId, model: variant.model };
 }
