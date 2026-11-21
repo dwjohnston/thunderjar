@@ -213,6 +213,8 @@ export function declarePromptSet<C = undefined, R extends ResolvedOf = undefined
 export type HarnessApplyCtx = ApplyParameterCtx & {
   version: string;
   modelId: string;
+  /** The model's settings, from `models`, with each variant's value the pair names, e.g. `{ reasoningEffort: "high" }`. */
+  model: Record<string, SettingValue>;
 };
 
 /**

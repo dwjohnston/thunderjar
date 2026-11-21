@@ -8,5 +8,5 @@ export default declareHarness({
     "fake/model-large": [{ effort: { values: ["low", "high"] } }],
   },
   applyParameter: (_config, ctx) =>
-    [writeModel(ctx.modelId), writeRunScript(`echo '{"model":"${ctx.modelId}"}' > /thunderjar/result.json`)].join("\n"),
+    [`RUN echo "effort=${ctx.model?.effort ?? "none"}"`, writeModel(ctx.modelId), writeRunScript(`echo '{"model":"${ctx.modelId}"}' > /thunderjar/result.json`)].join("\n"),
 });

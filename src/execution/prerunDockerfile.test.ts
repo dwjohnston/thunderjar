@@ -110,7 +110,7 @@ describe("renderPrerun", () => {
       baseImage: { dir: PARAMETER_DIRS.baseImage },
       codeState: { dir: "parameters/codeState" },
       promptSet: [undefined, { dir: "parameters/promptSet" }],
-      harness: { dir: "parameters/harness", version: "2.1.283", modelId: "claude-haiku-5-5" },
+      harness: { dir: "parameters/harness", version: "2.1.283", modelId: "claude-haiku-5-5", model: {} },
       initialPrompt: {},
     });
   });
