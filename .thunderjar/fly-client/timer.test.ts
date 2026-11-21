@@ -83,4 +83,28 @@ describe("the timer file", () => {
     expect({ exitCode, dockerAlive }).toEqual({ exitCode: 143, dockerAlive: false });
     expectReset(await readTimer(), before, Date.now(), 30, 7 * 24 * 60);
   });
+
+  test("records the watch process docker starts, and a later command keeps it", async () => {
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    await f.run(["docker", "ps"]);
+    const first = (await readTimer()).watcherPid;
+    // It's had time to fail, if it was going to.
+    await Bun.sleep(300);
+    await f.run(["docker", "ps"]);
+    const second = (await readTimer()).watcherPid;
+
+    expect({ first: typeof first, alive: alive(first), same: second === first }).toEqual({
+      first: "number",
+      alive: true,
+      same: true,
+    });
+  });
 });
