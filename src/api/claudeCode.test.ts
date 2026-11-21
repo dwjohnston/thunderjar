@@ -77,7 +77,7 @@ describe("claudeCodeTokenCosts", () => {
 });
 
 describe("claudeCode", () => {
-  const harness = claudeCode({ version: "2.1.311" });
+  const harness = claudeCode({ version: "2.1.311", models: {} });
 
   test("is a harness declaration, pinning its version", () => {
     expect(declaredBy(harness)).toBe("declareHarness");
@@ -106,7 +106,7 @@ USER node`,
   });
 
   test("its command can be replaced", () => {
-    const custom = claudeCode({ version: "2.1.311", command: "claude -p hi > /thunderjar/result.json" });
+    const custom = claudeCode({ version: "2.1.311", models: {}, command: "claude -p hi > /thunderjar/result.json" });
 
     expect(custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", model: {}, resolved: undefined })).toContain(
       "#!/bin/sh\nclaude -p hi > /thunderjar/result.json\n",
