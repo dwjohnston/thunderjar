@@ -27,6 +27,7 @@ import type {
 import { FILES, PARAMETERS } from "../config/folders.ts";
 import { ConfigError, existsIn, loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
 import { AXES, type Axis, expandPermutations, type HashedPermutation, parsePair } from "../config/permutations.ts";
+import { type SplitPair, splitPair } from "../config/harnessModels.ts";
 import { RUN_SCRIPT_PATH } from "./runScript.ts";
 import { type Ctxs, type FolderRole, joinFragments, PARAMETER_DIRS, renderFragment, type Role } from "./prerunDockerfile.ts";
 
@@ -170,11 +171,14 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
     return declaration && { key: `${axis}\0${name}`, label: `${ROLE_NAMES[axis]} ${JSON.stringify(name)}`, file, dir, declaration };
   };
   const harnessParameter = async (pair: string) => {
-    const { harness: name, modelId } = parsePair(pair);
+    const { harness: name } = parsePair(pair);
     const dir = `${PARAMETERS}/harnessModels/${name}`;
     const file = `${dir}/index.ts`;
     const declaration = await load<HarnessDeclaration>(file, "declareHarness");
     if (!declaration) return undefined;
+    // loadTestCase already checked the pair names one of its models.
+    const split = declaration.models === undefined ? parsePair(pair) : (splitPair(pair, declaration.models) as SplitPair);
+    const { modelId } = split;
     return {
       key: `harnessModel\0${name}`,
       label: `${ROLE_NAMES.harnessModel} ${JSON.stringify(name)}`,
