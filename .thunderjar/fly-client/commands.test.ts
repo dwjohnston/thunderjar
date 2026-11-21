@@ -4,7 +4,7 @@
 // stop, destroy, status and prune.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { fixture, machineFixture, type Fixture } from "./test/harness.ts";
+import { APP, fixture, machineFixture, type Fixture } from "./test/harness.ts";
 
 let f: Fixture;
 beforeEach(async () => {
@@ -32,5 +32,30 @@ describe("stop", () => {
       after: ["stopped"],
     });
     expect(busy.stderr).toContain("1 container is running");
+  });
+});
+
+describe("destroy", () => {
+  test("destroys the machine and its volumes if it's idle, and a busy one only with --force", async () => {
+    await f.setMachines([await machineFixture({ state: "started" })]);
+    await f.setRunning(["c0ffee"]);
+
+    const busy = await f.run(["destroy"]);
+    const whileBusy = await states();
+    const forced = await f.run(["destroy", "--force"]);
+
+    expect({
+      busy: busy.exitCode,
+      whileBusy,
+      forced: forced.exitCode,
+      after: await states(),
+      volumesDestroyed: (await f.callLines()).filter((line) => line.startsWith("fly volumes destroy")),
+    }).toEqual({
+      busy: 1,
+      whileBusy: ["started"],
+      forced: 0,
+      after: [],
+      volumesDestroyed: [`fly volumes destroy vol_1 -a ${APP} --yes`],
+    });
   });
 });
