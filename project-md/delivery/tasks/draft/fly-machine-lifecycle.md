@@ -59,7 +59,7 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 4. `destroy`
    - Destroys the machine and its volumes, if idle. `--force` destroys it anyway.
 5. `status`
-   - Machine state and size, and the timer: last task finished, stop and destroy deadlines.
+   - Machine state and size, and the timer: last `docker` command, stop and destroy deadlines.
    - Takes `--json`.
 6. `prune`
    - Removes stopped containers and unused images, as `fly-machine.sh prune` does.
