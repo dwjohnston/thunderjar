@@ -136,10 +136,17 @@ secret instead: see [060](060-experiment-parameters.md#build-secrets).
 
 ## Models
 
-There is no list of the models a harness runs. A pair names any model ID, which the
-harness's fragment is given as `ctx.modelId`, and whether the agent knows it is the agent's to say.
-Different agents spell the same model differently, so a pair names it as its agent does:
-`claude-code-2.1.311/claude-sonnet-5-5`, `opencode-1.19.5/anthropic/claude-sonnet-5-5`.
+A harness declares the models it runs, by their real IDs, in `models`, and a pair may only name
+those: `plan` and `run` reject any other, listing the declared ones. Corrected by task 3851: before
+it, any model ID was accepted. Different agents spell the same model differently, so a harness
+declares it as its agent does: `claude-code-2.1.311/claude-sonnet-5-5`,
+`opencode-1.19.5/anthropic/claude-sonnet-5-5`.
+
+Each model maps to an array of its settings, one per entry. A fixed setting, e.g.
+`{ reasoningEffort: "low" }`, adds nothing to the name. A variant setting,
+`{ reasoningEffort: { values: ["low", "high"] } }`, adds one required part, and several make their
+cross product, parts in array order. `ctx.modelId` is the model ID alone; `ctx.model` holds the
+settings, each variant's chosen value. The permutation hash includes the settings.
 
 ## Hashing
 
