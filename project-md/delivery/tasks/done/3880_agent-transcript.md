@@ -2,6 +2,14 @@
 harness: claude-code
 model: opus
 effort: high
+ralph:
+  session: "ebd24e4d-7755-4464-9c6c-d05433f54461"
+  capture: "thunderjar/capture/ebd24e4d-7755-4464-9c6c-d05433f54461"
+  branchedFrom: "claude/elegant-ride-pp64l6"
+  date: "2026-11-21T04:09:57.219Z"
+  costUsd: 9.239688400000002
+  durationMs: 1867587
+  isError: false
 ---
 
 <!--
