@@ -101,8 +101,8 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 - `FLYIO_TOKEN`
 - `FLY_APP`
 - `FLYIO_INSTANCE_SIZE`
-- `SLEEP_MINUTES`
-- `DESTROY_MINUTES`
+- `FLY_SLEEP_MINUTES`
+- `FLY_DESTROY_MINUTES`
 
 ## Behaviour
 
@@ -137,12 +137,12 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
    - A long `docker run` holding an agent's container counts as one command, so the timer resets when it ends.
    - A container left running detached, e.g. the runner with `THUNDERJAR_ON_RUNTIME=1`, is covered by the idle check below.
    - A detached process on the host acts on it:
-     - After `SLEEP_MINUTES`: stop the machine.
-     - After `DESTROY_MINUTES`: destroy the machine and its volumes.
+     - After `FLY_SLEEP_MINUTES`: stop the machine.
+     - After `FLY_DESTROY_MINUTES`: destroy the machine and its volumes.
    - Before either, check the machine is idle, e.g. no running containers.
 4. **Watchdog on the machine**
    - The backstop for when the host goes away, e.g. a closed laptop or a finished CI job.
-   - Stops the machine after `SLEEP_MINUTES` idle.
+   - Stops the machine after `FLY_SLEEP_MINUTES` idle.
      - Idle: no SSH sessions and no running containers.
      - Stops by exiting its main process.
    - Destroy is skipped in this case. A stopped machine only costs storage, so that's acceptable. A started one is the real cost.
