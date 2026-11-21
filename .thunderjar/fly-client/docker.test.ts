@@ -76,4 +76,17 @@ describe("docker", () => {
     const withoutToken = (await f.calls()).filter((call) => call.command !== "fly" && !call.flyToken);
     expect(withoutToken).toEqual([]);
   });
+
+  test("carries on when fly can't list the machines, if the connection is already open", async () => {
+    await f.setMachines([await machineFixture({ state: "started" })]);
+    expect((await f.run(["docker", "ps"])).exitCode).toBe(0);
+    await Bun.write(`${f.dir}/fail-list`, "");
+
+    const result = await f.run(["docker", "ps"]);
+
+    expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({
+      exitCode: 0,
+      stderr: "fake docker ran: ps\n",
+    });
+  });
 });

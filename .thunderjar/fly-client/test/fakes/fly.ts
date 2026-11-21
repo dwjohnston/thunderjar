@@ -4,7 +4,7 @@
 // A stand-in for `fly`, for the client's tests. It keeps the app's machines and volumes in
 // $FAKE_DIR, as JSON in the shape `fly … --json` prints, and logs every call.
 
-import { logCall, readJson, writeJson } from "./state.ts";
+import { fakeDir, logCall, readJson, writeJson } from "./state.ts";
 
 const args = Bun.argv.slice(2);
 await logCall("fly", args);
@@ -31,6 +31,11 @@ const machine = (id: string | undefined) => {
 const [group, verb, target] = args;
 switch (`${group} ${verb}`) {
   case "machine list":
+    // e.g. rate limited, as when many commands start at once.
+    if (await Bun.file(`${fakeDir}/fail-list`).exists()) {
+      console.error("Error: rate limit exceeded");
+      process.exit(1);
+    }
     console.log(JSON.stringify(machines));
     break;
   case "machine start":
