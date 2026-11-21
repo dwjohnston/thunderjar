@@ -236,6 +236,18 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
   version: string;
   /**
    * @docs
+   * @name models
+   * @type {Record<string, ModelSetting[]>}
+   * @description
+   * The models the agent runs, by their real IDs, each with its settings, one setting per entry. A
+   * fixed setting, e.g. `{ reasoningEffort: "low" }`, adds nothing to the pair's name. A variant
+   * setting, `{ reasoningEffort: { values: ["low", "high"] } }`, adds one required part, e.g.
+   * `codex-0.166.0/openai/gpt-6.1-sol/high`. Several make their cross product, parts in array
+   * order. A test case may only name these. `ctx.model` is the settings, each variant's value chosen.
+   */
+  models?: HarnessModels;
+  /**
+   * @docs
    * @name applyParameter
    * @type {(config, ctx: HarnessApplyCtx) => string}
    * @description
