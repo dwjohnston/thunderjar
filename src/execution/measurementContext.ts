@@ -1,7 +1,7 @@
 // The measurement context over a measurement container: one started from a postrun image, for
 // a container run's measurements, and removed once they're taken. The instrument's logic runs on the host; what it
 // asks of the context runs in the container, so nothing it writes reaches the postrun image.
-import type { MeasurementContext } from "../api/declarations.ts";
+import type { MeasurementContext, TranscriptDeclaration } from "../api/declarations.ts";
 import { type DockerRuntime, localRuntime } from "../docker/docker.ts";
 import { openShellSession } from "../docker/shellSession.ts";
 
@@ -61,6 +61,7 @@ export async function openMeasurementContext(
   { harnessResult, reply, replies }: Recorded,
   runtime: DockerRuntime = localRuntime(),
   secretEnv: string[] = [],
+  _transcript?: TranscriptDeclaration,
 ): Promise<OpenedMeasurementContext> {
   // Safe to give secrets to: a measurement container is removed once its measurements are taken,
   // and never committed, so nothing it's given can reach an image.
