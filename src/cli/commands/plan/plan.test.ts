@@ -266,6 +266,20 @@ describe("0402 broken declarations", () => {
       ],
     ],
     [
+      "a model with its variant part missing",
+      "missing-variant",
+      [
+        `${testCase("missing-variant")}: harnessModel: "fake-harness-efforts/fake/model-large" names no effort. Its names: fake/model-large/low, fake/model-large/high`,
+      ],
+    ],
+    [
+      "a variant part that isn't one of the setting's values",
+      "unknown-variant",
+      [
+        `${testCase("unknown-variant")}: harnessModel: "fake-harness-efforts/fake/model-large/medium": "medium" is not a effort of fake/model-large. Its names: fake/model-large/low, fake/model-large/high`,
+      ],
+    ],
+    [
       "an empty array, and iterations that isn't an integer",
       "empty-code-states",
       [
