@@ -74,4 +74,13 @@ USER node`,
     expect(custom.applyParameter(undefined, ctx)).toContain("#!/bin/sh\ncodex exec hi > /thunderjar/result.json\n");
     expect(custom.requiredEnv).toEqual(["OPENROUTER_API_KEY"]);
   });
+
+  test("openRouter: true runs it on OpenRouter's Responses API, needing OPENROUTER_API_KEY", () => {
+    const openRouter = codex({ version: "0.166.0", openRouter: true });
+
+    expect(openRouter.applyParameter(undefined, ctx)).toContain(
+      `#!/bin/sh\ncodex exec -c model_provider=openrouter -c 'model_providers.openrouter={name="OpenRouter",base_url="https://openrouter.ai/api/v1",env_key="OPENROUTER_API_KEY",wire_api="responses"}' --model "$(cat /thunderjar/model.txt)" --json`,
+    );
+    expect(openRouter.requiredEnv).toEqual(["OPENROUTER_API_KEY"]);
+  });
 });

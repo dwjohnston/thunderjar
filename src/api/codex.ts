@@ -61,6 +61,8 @@ export type CodexOptions = {
   command?: string;
   /** Replaces the environment variables it needs: `["OPENAI_API_KEY"]` is the default. */
   requiredEnv?: RequiredEnv[];
+  /** Runs it on OpenRouter, with OpenRouter's model IDs, needing `OPENROUTER_API_KEY`. */
+  openRouter?: boolean;
 };
 
 /**
