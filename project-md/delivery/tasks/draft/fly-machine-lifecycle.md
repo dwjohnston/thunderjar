@@ -26,6 +26,7 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 ## Scope
 
 - One Fly machine only.
+- One client only.
 
 ## Behaviour
 
@@ -40,11 +41,10 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
    - A git-ignored file on the host records when the last task finished.
    - New tasks reset it.
    - An interrupted run, e.g. Ctrl-C while following, still writes it.
-   - Each host has its own timer. That's acceptable.
    - A detached process on the host acts on it:
      - After `SLEEP_MINUTES`: stop the machine.
      - After `DESTROY_MINUTES`: destroy the machine and its volumes.
-   - Before either, check the machine is idle, e.g. no running containers. Another host may be using it.
+   - Before either, check the machine is idle, e.g. no running containers.
 4. **Watchdog on the machine**
    - The backstop for when the host goes away, e.g. a closed laptop or a finished CI job.
    - Stops the machine after a hard idle limit, e.g. 2 × `SLEEP_MINUTES`.
@@ -54,13 +54,11 @@ Today `.thunderjar/fly-machine.sh` does start, stop and resize, run by hand.
 
 ## Open questions
 
-1. **Two clients creating at once**
-   - A lock, or a fixed machine name with "already exists" treated as success.
-2. **The create recipe**
+1. **The create recipe**
    - Image with the Docker daemon, volume, SSH keys, region. Set up by hand today.
-3. **Where it lives**
+2. **Where it lives**
    - In `src/`, or extending the shell scripts in `.thunderjar/`.
-4. **Watchdog limit**
+3. **Watchdog limit**
    - Its own variable, or derived from `SLEEP_MINUTES`.
 
 ## Prior art
