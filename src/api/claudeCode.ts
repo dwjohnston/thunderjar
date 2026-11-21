@@ -7,6 +7,7 @@
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
 import { declareHarness, type HarnessDeclaration, type ModelTokenCosts, type TokenCosts, type TranscriptDeclaration } from "./declarations.ts";
 import { MODEL_PATH, PROMPT_PATH, RESULT_PATH, writeModel, writeRunScript } from "./files.ts";
+import { type TimedEvent, inSessionOrder, jsonLines } from "./transcript.ts";
 
 type ModelUsage = {
   inputTokens?: unknown;
@@ -82,8 +83,37 @@ export function claudeCodeTokenCosts(raw: string): TokenCosts {
  */
 export const claudeCodeTranscript: TranscriptDeclaration = {
   files: ["~/.claude/projects/**/*.jsonl"],
-  parse: () => [],
+  parse: (files) => inSessionOrder(files.map(({ text }) => jsonLines(text).flatMap(claudeCodeEvents))),
 };
+
+type ContentBlock = { type?: unknown; text?: unknown; name?: unknown; input?: unknown };
+
+/**
+ * The events of one line of a Claude Code transcript. Only its `user` and `assistant` lines are
+ * the conversation: of those, its text and tool calls, not its thinking or tool results, nor the
+ * `isMeta` lines Claude Code adds itself, e.g. a skill's instructions. A sub-agent's lines are
+ * `isSidechain`.
+ */
+function claudeCodeEvents(line: Record<string, unknown>): TimedEvent[] {
+  const { type, message, isMeta, isSidechain, timestamp } = line as {
+    type?: unknown;
+    message?: { role?: unknown; content?: unknown };
+    isMeta?: unknown;
+    isSidechain?: unknown;
+    timestamp?: unknown;
+  };
+  if ((type !== "user" && type !== "assistant") || isMeta === true || typeof message !== "object" || message === null) return [];
+  const role = message.role === "user" ? "user" : "assistant";
+  const agent = isSidechain === true ? "subagent" : "main";
+  const at = typeof timestamp === "string" ? Date.parse(timestamp) : Number.NaN;
+  const { content } = message;
+  const blocks: ContentBlock[] = typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? content : [];
+  return blocks.flatMap((block): TimedEvent[] => {
+    if (block.type === "text" && typeof block.text === "string" && block.text !== "") return [{ at, event: { kind: "message", role, text: block.text, agent } }];
+    if (block.type === "tool_use" && typeof block.name === "string") return [{ at, event: { kind: "toolCall", tool: block.name, input: block.input, agent } }];
+    return [];
+  });
+}
 
 /** What `claudeCode` gets. */
 export type ClaudeCodeOptions = {
