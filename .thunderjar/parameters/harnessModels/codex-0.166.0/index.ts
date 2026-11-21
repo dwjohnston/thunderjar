@@ -2,7 +2,7 @@ import { declareHarness, type TokenCosts, writeModel, writeRunScript } from "thu
 
 // OpenAI's Codex CLI, on OpenRouter, without its sandbox or approvals: the container is the sandbox.
 // A custom model provider points Codex at OpenRouter's Responses API. It needs OPENROUTER_API_KEY.
-// A test case names a model by its OpenRouter ID, e.g. "codex-0.166.0/openai/gpt-5.5".
+// A test case names a model it declares, by its OpenRouter ID, e.g. "codex-0.166.0/openai/gpt-5.5".
 // Models come and go: check https://openrouter.ai/models for the current IDs.
 const OPENROUTER_PROVIDER =
   `-c model_provider=openrouter` +
@@ -55,6 +55,9 @@ function codexTokenCosts(raw: string, modelId: string): TokenCosts {
 
 export default declareHarness({
   version: "0.166.0",
+  models: {
+    "openai/gpt-6-luna": [],
+  },
   applyParameter: (_config, ctx) =>
     [
       `RUN npm install -g @openai/codex@${ctx.version}`,
