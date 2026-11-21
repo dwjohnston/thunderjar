@@ -73,19 +73,42 @@ async function create(settings: Settings): Promise<void> {
 const sameGuest = (a: Guest | undefined, b: Guest) =>
   a?.cpu_kind === b.cpu_kind && a.cpus === b.cpus && a.memory_mb === b.memory_mb;
 
-/** Resizes the machine if its size differs. Returns whether it did: that restarts it. */
-async function updateIfChanged(settings: Settings, machine: Machine): Promise<boolean> {
+/** What differs between the machine and what it should be: its size, its image, or the watchdog's
+ * idle time. Empty when nothing does. */
+function changes(settings: Settings, machine: Machine, image: string): Partial<MachineConfig> {
+  const changed: Partial<MachineConfig> = {};
   const guest = desiredGuest(settings);
   // Unset, FLYIO_INSTANCE_SIZE leaves the size as it is.
-  if (!settings.cpus || sameGuest(machine.config.guest, guest)) return false;
+  if (settings.cpus && !sameGuest(machine.config.guest, guest)) changed.guest = guest;
+  if (machine.config.image !== image) changed.image = image;
+  const sleep = String(settings.sleepMinutes);
+  if (machine.config.env?.FLY_SLEEP_MINUTES !== sleep) changed.env = { ...machine.config.env, FLY_SLEEP_MINUTES: sleep };
+  return changed;
+}
+
+/** Updates the machine if it differs from what it should be, and it's idle: updating restarts
+ * it. Returns whether it did. */
+async function updateIfChanged(settings: Settings, machine: Machine): Promise<boolean> {
+  const image = await imageRef(settings.app);
+  const changed = changes(settings, machine, image);
+  // e.g. "resizing", for "not resizing m-1: 1 container is running"
+  const what = [
+    changed.guest && "resizing",
+    changed.image && "updating the image of",
+    changed.env && "updating the watchdog of",
+  ].filter(Boolean);
+  if (what.length === 0) return false;
   const reason = await busy(settings, machine);
   if (reason) {
-    say(`not resizing ${machine.id}: ${reason}. Run up again once it's idle`);
+    say(`not ${what.join(" or ")} ${machine.id}: ${reason}. Run up again once it's idle`);
     return false;
   }
-  say(`resizing ${machine.id} from ${describeSize(machine.config.guest)} to ${describeSize(guest)}`);
+  if (changed.guest) say(`resizing ${machine.id} from ${describeSize(machine.config.guest)} to ${describeSize(changed.guest)}`);
+  if (changed.image) say(`moving ${machine.id} to ${image}`);
+  if (changed.env) say(`setting the watchdog of ${machine.id} to ${settings.sleepMinutes} minutes`);
+  if (changed.image) await buildImage(settings, image);
   await closeConnection(settings);
-  const config: MachineConfig = { ...machine.config, guest };
+  const config: MachineConfig = { ...machine.config, ...changed };
   await fly(["machine", "update", machine.id, "-a", settings.app, "--machine-config", JSON.stringify(config), "--yes"]);
   return true;
 }
