@@ -50,7 +50,11 @@ type HarnessModelName = \`\${HarnessName}/\${string}\`;
     });
 
     expect(declarations(text)).toContain(
-      'type HarnessModelName = "codex-0.166.0/openai/gpt-5.5" | "codex-0.166.0/openai/gpt-6.1-sol/low" | `fake-harness-beta/${string}`;\n',
+      `type HarnessModelName =
+  | "codex-0.166.0/openai/gpt-5.5"
+  | "codex-0.166.0/openai/gpt-6.1-sol/low"
+  | \`fake-harness-beta/\${string}\`;
+`,
     );
   });
 });

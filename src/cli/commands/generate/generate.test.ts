@@ -100,7 +100,7 @@ describe("0402 broken declarations", () => {
 
     expect(exitCode).toBe(0);
     expect(await Bun.file(`${copy.dir}/${GENERATED}`).text()).toContain(
-      '"fake-harness-efforts/fake/model-small" | "fake-harness-efforts/fake/model-large/low" | "fake-harness-efforts/fake/model-large/high"',
+      '\n  | "fake-harness-efforts/fake/model-small"\n  | "fake-harness-efforts/fake/model-large/low"\n  | "fake-harness-efforts/fake/model-large/high"\n',
     );
   });
 });
