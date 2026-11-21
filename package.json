@@ -14,10 +14,14 @@
   "main": "./src/api/index.ts",
   "types": "./src/api/index.ts",
   "exports": {
-    ".": "./src/api/index.ts"
+    ".": "./src/api/index.ts",
+    "./testing": "./src/measureTesting/index.ts"
   },
   "files": [
     "dist",
+    "src/measureTesting",
+    "src/instruments",
+    "src/execution/scoreOf.ts",
     "src/api",
     "!src/**/*.test.ts",
     "!src/**/*.result.json"
