@@ -1,4 +1,4 @@
-import { declareHarness, type ModelTokenCosts, type TokenCosts, writeModel, writeRunScript } from "thunderjar";
+import { copilotTranscript, declareHarness, type ModelTokenCosts, type TokenCosts, writeModel, writeRunScript } from "thunderjar";
 
 // GitHub Copilot CLI, in BYOK mode on OpenRouter: setting COPILOT_PROVIDER_BASE_URL makes it skip
 // GitHub auth and Copilot's model routing. It needs OPENROUTER_API_KEY.
@@ -99,5 +99,7 @@ export default declareHarness({
     ].join("\n"),
   collectReply: copilotReply,
   collectTokenCosts: copilotTokenCosts,
+  // Its events, in ~/.copilot/session-state/, a sub-agent's among them.
+  transcript: copilotTranscript,
   requiredEnv: ["OPENROUTER_API_KEY"],
 });

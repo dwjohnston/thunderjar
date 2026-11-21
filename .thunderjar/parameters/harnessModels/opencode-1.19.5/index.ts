@@ -1,4 +1,4 @@
-import { declareHarness, type TokenCosts, writeModel, writeRunScript } from "thunderjar";
+import { declareHarness, OPENCODE_TRANSCRIPT_COMMAND, opencodeTranscript, type TokenCosts, writeModel, writeRunScript } from "thunderjar";
 
 // OpenCode, on OpenRouter. OpenCode's built-in openrouter provider reads OPENROUTER_API_KEY itself.
 // A test case names a model as "openrouter/" plus its OpenRouter ID, e.g. "opencode-1.19.5/openrouter/anthropic/claude-haiku-5.5".
@@ -81,12 +81,16 @@ export default declareHarness({
       // The prompt and model are read from their files, so quotes and newlines reach the agent intact.
       // OPENCODE_PERMISSION: with nobody to ask, `opencode run` rejects a command that touches a path
       // outside /workspace (the external_directory permission), and then stops, exiting 0 with no reply.
+      // OpenCode keeps its sessions in a database, so once it's done, the run script writes them out
+      // as JSON, sub-agents' too, for opencodeTranscript to read, and exits as OpenCode did.
       writeRunScript(
-        `OPENCODE_PERMISSION='{"external_directory":"allow"}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
+        `OPENCODE_PERMISSION='{"external_directory":"allow"}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json; ` +
+          `code=$?; ${OPENCODE_TRANSCRIPT_COMMAND}; exit $code`,
       ),
       "USER node",
     ].join("\n"),
   collectReply: opencodeReply,
   collectTokenCosts: opencodeTokenCosts,
+  transcript: opencodeTranscript,
   requiredEnv: ["OPENROUTER_API_KEY"],
 });
