@@ -7,12 +7,11 @@
 import { dockerCommand, dockerEnv, ensureConnection } from "./connection.ts";
 import { findMachine } from "./fly.ts";
 import type { Settings } from "./settings.ts";
+import { up } from "./up.ts";
 
 export async function docker(args: string[], settings: Settings): Promise<number> {
-  const machine = await findMachine(settings);
-  if (!machine || machine.state !== "started") {
-    throw new Error(`the Fly machine in app ${settings.app} is ${machine?.state ?? "missing"}`);
-  }
+  let machine = await findMachine(settings);
+  if (!machine || machine.state !== "started") machine = await up(settings);
   await ensureConnection(settings, machine.id);
   const proc = Bun.spawn(dockerCommand(args), {
     env: dockerEnv(settings),

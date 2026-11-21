@@ -17,6 +17,7 @@
 
 import { docker } from "./docker.ts";
 import { readSettings, type Settings } from "./settings.ts";
+import { upCommand } from "./up.ts";
 
 const USAGE = "usage: index.ts <up | docker <args…> | stop [--force] | destroy [--force] | status [--json] | prune | watch>";
 
@@ -25,7 +26,7 @@ const notImplemented = (command: string) => async (_args: string[], _settings: S
 };
 
 const commands: Record<string, (args: string[], settings: Settings) => Promise<number>> = {
-  up: notImplemented("up"),
+  up: upCommand,
   docker,
   stop: notImplemented("stop"),
   destroy: notImplemented("destroy"),
