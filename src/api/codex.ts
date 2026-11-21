@@ -72,18 +72,29 @@ export type CodexOptions = {
 export const CODEX_COMMAND =
   `codex exec --model "$(cat ${MODEL_PATH})" --json --dangerously-bypass-approvals-and-sandbox "$(cat ${PROMPT_PATH})" > ${RESULT_PATH}`;
 
+/** The flags that point Codex at OpenRouter's Responses API, as a custom model provider. */
+export const CODEX_OPENROUTER_PROVIDER =
+  `-c model_provider=openrouter` +
+  ` -c 'model_providers.openrouter={name="OpenRouter",base_url="https://openrouter.ai/api/v1",env_key="OPENROUTER_API_KEY",wire_api="responses"}'`;
+
 /**
  * A complete harness declaration for Codex `version`. Its fragment installs Codex as root, writes
  * the model ID and the run script, then switches to the image's non-root `node` user. Its reply
- * and token costs are read from its JSON lines. It needs `OPENAI_API_KEY`; to run it on another
- * provider, pass its `command` and `requiredEnv`.
+ * and token costs are read from its JSON lines. It needs `OPENAI_API_KEY`, or with `openRouter`,
+ * `OPENROUTER_API_KEY`. To run it on another provider, pass its `command` and `requiredEnv`.
  *
  * ```ts
  * // harnessModels/codex-0.166.0/index.ts
  * export default codex({ version: "0.166.0" });
+ * export default codex({ version: "0.166.0", openRouter: true }); // models such as "openai/gpt-5.5"
  * ```
  */
-export function codex({ version, command = CODEX_COMMAND, requiredEnv = ["OPENAI_API_KEY"] }: CodexOptions): HarnessDeclaration<undefined, undefined> {
+export function codex({
+  version,
+  openRouter = false,
+  command = openRouter ? CODEX_COMMAND.replace("codex exec ", `codex exec ${CODEX_OPENROUTER_PROVIDER} `) : CODEX_COMMAND,
+  requiredEnv = [openRouter ? "OPENROUTER_API_KEY" : "OPENAI_API_KEY"],
+}: CodexOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     applyParameter: (_config, ctx) =>
