@@ -329,10 +329,12 @@ ${CASES}`);
   });
 });
 
-test("every instrument versions its value, and every built-in one has a default score", () => {
-  for (const instrument of Object.values(instruments)) {
+test("every instrument versions its value, and every built-in one but jsAst has a default score", () => {
+  for (const [name, instrument] of Object.entries(instruments)) {
     expect(instrument.version).toBeGreaterThanOrEqual(1);
-    expect(instrument.defaultScore).toBeDefined();
+    // Counts per file, by selector, have no obvious score: each metric reads them with its own.
+    if (name === "jsAst") expect(instrument.defaultScore).toBeUndefined();
+    else expect(instrument.defaultScore).toBeDefined();
   }
   // Version 1's value was whether the command exited 0.
   expect(shell.version).toBe(2);
