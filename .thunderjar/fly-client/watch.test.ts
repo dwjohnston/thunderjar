@@ -47,4 +47,23 @@ describe("watch", () => {
     }, 3000).catch(() => {});
     expect(states).toEqual(["stopped"]);
   });
+
+  test("destroys the machine and its volume once the destroy deadline has passed, and ends the timer", async () => {
+    await f.setMachines([await machineFixture({ state: "stopped" })]);
+
+    await watchTimer({ stopIn: -60, destroyIn: -1 });
+
+    const exited = await Promise.race([watcher!.exited.then(() => true), Bun.sleep(3000).then(() => false)]);
+    expect({
+      exited,
+      machines: await f.machines(),
+      volumesDestroyed: (await f.callLines()).filter((line) => line.startsWith("fly volumes destroy")),
+      timer: await Bun.file(f.timerFile).exists(),
+    }).toEqual({
+      exited: true,
+      machines: [],
+      volumesDestroyed: [`fly volumes destroy vol_1 -a ${APP} --yes`],
+      timer: false,
+    });
+  });
 });
