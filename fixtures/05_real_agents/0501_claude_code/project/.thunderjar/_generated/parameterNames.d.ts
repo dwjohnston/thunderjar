@@ -9,9 +9,11 @@ type InitialPromptNames = {
 };
 type HarnessName = "claude-code-2.1.311" | "codex-0.166.0" | "copilot-1.0.105" | "opencode-1.19.5";
 type HarnessModelName =
-  | "claude-code-2.1.311/claude-haiku-4-5-20251001"
-  | "claude-code-2.1.311/claude-haiku-5-5"
+  | "claude-code-2.1.311/claude-fable-5-2"
+  | "claude-code-2.1.311/claude-opus-5-5"
   | "claude-code-2.1.311/claude-sonnet-5-5"
+  | "claude-code-2.1.311/claude-haiku-5-5"
+  | "claude-code-2.1.311/claude-haiku-4-5-20251001"
   | "codex-0.166.0/gpt-6.1-sol"
   | "codex-0.166.0/gpt-5.5"
   | "copilot-1.0.105/claude-haiku-5.5"
