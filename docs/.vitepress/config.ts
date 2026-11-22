@@ -39,7 +39,7 @@ export default defineConfig({
           { text: ".thunderjar/", link: "/configuration/" },
           {
             text: "Declaration reference",
-            collapsed: true,
+            collapsed: false,
             items: [
               { text: "Base image", link: "/configuration/reference/base-image" },
               { text: "Code state", link: "/configuration/reference/code-state" },
@@ -47,7 +47,7 @@ export default defineConfig({
               { text: "Harness models", link: "/configuration/reference/harness-models" },
               {
                 text: "Tasks",
-                collapsed: true,
+                collapsed: false,
                 items: [
                   { text: "Initial prompt", link: "/configuration/reference/tasks/initial-prompt" },
                   { text: "Measurement", link: "/configuration/reference/tasks/measurement" },
