@@ -3,6 +3,7 @@ import pkg from "../../package.json" with { type: "json" };
 import { createAttachCommand } from "./commands/attach/attach.ts";
 import { createBuildCommand } from "./commands/build/build.ts";
 import { createCaptureCommand } from "./commands/capture/capture.ts";
+import { createCheckoutCommand } from "./commands/checkout/checkout.ts";
 import { createDoctorCommand } from "./commands/doctor/doctor.ts";
 import { createExecutionsCommand } from "./commands/executions/executions.ts";
 import { createGenerateCommand } from "./commands/generate/generate.ts";
@@ -99,6 +100,7 @@ export function createProgram(): Command {
     .addCommand(createShowCommand())
     .addCommand(createViewCommand())
     .addCommand(createRemeasureCommand())
+    .addCommand(createCheckoutCommand())
     .addCommand(createPurgeCommand())
     .addCommand(createCaptureCommand());
   // Commands made on their own and added don't inherit the program's help settings.
