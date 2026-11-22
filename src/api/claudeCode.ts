@@ -75,6 +75,15 @@ export function claudeCodeTokenCosts(raw: string): TokenCosts {
   return { outcome: "collected", models, ...(apiDurationMs !== undefined && { apiDurationMs }) };
 }
 
+/** The models `claudeCode` declares unless given others: Anthropic's current IDs, as Claude Code takes them. */
+export const CLAUDE_CODE_MODELS: HarnessModels = {
+  "claude-fable-5-2": [],
+  "claude-opus-5-5": [],
+  "claude-sonnet-5-5": [],
+  "claude-haiku-5-5": [],
+  "claude-haiku-4-5-20251001": [],
+};
+
 /** What `claudeCode` gets. */
 export type ClaudeCodeOptions = {
   /** The version of `@anthropic-ai/claude-code` to install, e.g. `"2.1.311"`. */
@@ -103,13 +112,13 @@ export const CLAUDE_CODE_COMMAND =
  *
  * ```ts
  * // harnessModels/claude-code-2.1.311/index.ts
- * export default claudeCode({ version: "2.1.311", models: { "claude-haiku-5-5": [] } });
+ * export default claudeCode({ version: "2.1.311" });
  * ```
  */
-export function claudeCode({ version, models, command = CLAUDE_CODE_COMMAND }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
+export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
-    models: models ?? {},
+    models,
     applyParameter: (_config, ctx) =>
       [
         `RUN npm install -g @anthropic-ai/claude-code@${ctx.version}`,
