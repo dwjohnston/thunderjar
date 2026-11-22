@@ -3,6 +3,7 @@
 //   export default codeStateGitCheckout({ repo, commit: "530f477…" });
 //   export default codeStateGitCheckout({ repo, branch: "main" });
 //   export default codeStateGitCheckout({ repo, tag: "v0.4.0" });
+//   export default codeStateGitCheckout({ repo, tag: "v0.4.0", install: "bun install --frozen-lockfile" });
 //
 // A branch or tag is pinned to a commit by `resolve`, with `git ls-remote` on the host, so the
 // Dockerfile names a SHA: a moved branch changes the hash, and a stale image is never reused. The
@@ -38,6 +39,6 @@ export function codeStateGitCheckout(config: CodeStateGitCheckoutConfig): CodeSt
     applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
   && git -C /workspace fetch --quiet origin ${ctx.resolved} \\
   && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
-  && git -C /workspace remote remove origin`,
+  && git -C /workspace remote remove origin${config.install !== undefined ? `\nRUN ${config.install}` : ""}`,
   });
 }
