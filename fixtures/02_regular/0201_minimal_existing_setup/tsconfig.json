@@ -1,5 +1,11 @@
 {
   "extends": "./project/.thunderjar/tsconfig.json",
-  "compilerOptions": { "types": ["bun"] },
-  "files": ["parameterNames.test.ts"]
+  "compilerOptions": {
+    "types": [
+      "bun"
+    ]
+  },
+  "files": [
+    "parameterNames.humans.test.ts"
+  ]
 }

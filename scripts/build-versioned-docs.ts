@@ -8,9 +8,10 @@ const DOCS_DIR = "docs";
 const THEME_DIR = `${DOCS_DIR}/.vitepress/theme`;
 // Older tags' copies that use the CLI bundle src/, which Vite can't do. The current copies read each tag's own src/.
 const RUNTIME_FILES = [`${DOCS_DIR}/.vitepress/config.ts`, `${DOCS_DIR}/cli/[command].paths.ts`];
-// The docs import the CLI from src/ (which reads package.json) to generate the CLI reference pages,
-// and scripts/docgen.ts to generate the declaration reference.
-const SOURCE_DIRS = [DOCS_DIR, "src", "scripts/docgen.ts"];
+// The docs' data is generated from the CLI in src/ (which reads package.json), with
+// scripts/docs-data.ts, and the declaration reference with scripts/docgen.ts.
+const DATA_SCRIPT = "scripts/docs-data.ts";
+const SOURCE_DIRS = [DOCS_DIR, "src", "scripts/docgen.ts", DATA_SCRIPT];
 // Left out of the docs hash, because its version changes with every release.
 const SOURCE_FILES = ["package.json"];
 const TEST_FILE = /\.test\.ts$/;
@@ -142,6 +143,7 @@ async function docsHash(repoRoot: string, tag: string) {
   return new CryptoHasher("sha256").update(entries.join("\n")).digest("hex");
 }
 
+/** The tag's docs, ready to build, and whether they need Bun: tags from before docs-data.ts read src/ themselves. */
 async function prepareSource(repoRoot: string, workDir: string, tag: string) {
   const dir = `${workDir}/src/${tag}`;
   await $`mkdir -p ${dir}`;
@@ -152,17 +154,27 @@ async function prepareSource(repoRoot: string, workDir: string, tag: string) {
   await $`git archive ${tag} ${present} | tar -x -C ${dir}`.cwd(repoRoot);
   await $`rm -rf ${dir}/${THEME_DIR}`;
   await $`cp -R ${repoRoot}/${THEME_DIR} ${dir}/${THEME_DIR}`;
+  let replaced = false;
   for (const file of RUNTIME_FILES) {
     const old = Bun.file(`${dir}/${file}`);
     if (!(await old.exists()) || !(await old.text()).includes("src/cli/program")) continue;
     await $`cp ${repoRoot}/${file} ${dir}/${file}`;
+    replaced = true;
   }
-  return `${dir}/${DOCS_DIR}`;
+  // The current runtime files read data.generated.json, so older tags they replaced get it from the
+  // current script. The oldest tags' docs read nothing from src/.
+  const ownScript = await Bun.file(`${dir}/${DATA_SCRIPT}`).exists();
+  if (ownScript || replaced) {
+    await $`bun ${ownScript ? `${dir}/${DATA_SCRIPT}` : `${repoRoot}/${DATA_SCRIPT}`} ${dir}`.cwd(repoRoot);
+  }
+  return { docs: `${dir}/${DOCS_DIR}`, needsBun: !ownScript };
 }
 
-async function build(repoRoot: string, source: string, base: string, dest: string) {
-  console.log(`Building ${source} with base ${base}`);
-  await $`bun --bun x vitepress build ${source} --base ${base} --outDir ${dest}`.cwd(repoRoot);
+async function build(repoRoot: string, source: { docs: string; needsBun: boolean }, base: string, dest: string) {
+  console.log(`Building ${source.docs} with base ${base}${source.needsBun ? " under Bun" : ""}`);
+  // Older tags' declaration reference reads its source with Bun's API, so they still build under Bun.
+  const runtime = source.needsBun ? ["--bun"] : [];
+  await $`bun ${runtime} x vitepress build ${source.docs} --base ${base} --outDir ${dest}`.cwd(repoRoot);
   return dest;
 }
 

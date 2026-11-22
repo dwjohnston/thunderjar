@@ -1,60 +1,57 @@
-import type { Command } from "commander";
+// Read from the data `bun run docs:data` writes: see the note in .vitepress/config.ts.
+import data from "../.vitepress/data.generated.json" with { type: "json" };
+import type { CommandData, DocsData } from "../../scripts/docs-data.ts";
 
-// Imported at runtime, not bundled: see the note in .vitepress/config.ts.
-const programPath = new URL("../../src/cli/program.ts", import.meta.url).href;
-const { createProgram } = (await import(/* @vite-ignore */ programPath)) as {
-  createProgram: () => Command;
-};
+const { program, commands } = data as DocsData;
 
 // Descriptions go into markdown, which Vue compiles: `<session>` would be read as an unclosed tag.
 function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function commandPage(cmd: Command, parent: Command): string {
+function commandPage(cmd: CommandData): string {
   return [
-    `# ${parent.name()} ${cmd.name()}`,
+    `# ${program.name} ${cmd.name}`,
     "",
     "<AiPlaceholder />",
     "",
-    escapeHtml(cmd.description()),
+    escapeHtml(cmd.description),
     "",
     "```text",
-    cmd.helpInformation().trimEnd(),
+    cmd.help,
     "```",
   ].join("\n");
 }
 
-function overviewPage(program: Command): string {
+function overviewPage(): string {
   return [
     "# CLI reference",
     "",
     "<AiPlaceholder />",
     "",
-    escapeHtml(program.description()),
+    escapeHtml(program.description),
     "",
     "## Commands",
     "",
-    ...program.commands.map(
-      (cmd) => `- [\`${cmd.name()}\`](./${cmd.name()}) — ${escapeHtml(cmd.description())}`,
+    ...commands.map(
+      (cmd) => `- [\`${cmd.name}\`](./${cmd.name}) — ${escapeHtml(cmd.description)}`,
     ),
     "",
     "## Usage",
     "",
     "```text",
-    program.helpInformation().trimEnd(),
+    program.help,
     "```",
   ].join("\n");
 }
 
 export default {
   paths() {
-    const program = createProgram();
     return [
-      { params: { command: "index" }, content: overviewPage(program) },
-      ...program.commands.map((cmd) => ({
-        params: { command: cmd.name() },
-        content: commandPage(cmd, program),
+      { params: { command: "index" }, content: overviewPage() },
+      ...commands.map((cmd) => ({
+        params: { command: cmd.name },
+        content: commandPage(cmd),
       })),
     ];
   },

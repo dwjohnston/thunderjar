@@ -4,7 +4,7 @@
 import { describe, it } from "bun:test";
 import { declareTestCase } from "thunderjar";
 
-function assertType<T>(_value: T) {}
+function assertType<T>(_value: T) { }
 
 describe("generated parameter names", () => {
   it("BaseImageName", () => {

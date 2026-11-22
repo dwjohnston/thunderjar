@@ -14,7 +14,30 @@ CLAUDE.md  // Just contains @AGENTS.md
 
 HUMANS.md files should be considered canoncial. 
 
-If the human gives you instructions that contradict the HUMANS.md - then get their attention informing them so. 
+If the human gives you instructions that contradict the HUMANS.md - then get their attention informing them so.
+
+### Other sources of human files
+
+- `**/*.humans.*`
+    - These are commonly test files. eg. `fixtures/02_regular/0201_minimal_existing_setup/parameterNames.humans.test.ts`
+    - The intention of these files is to serve a reliable pointers for the humans to understand how the codebase is working. 
+        - These tests should be considered canonical. 
+        - Do not modify these tests. 
+        - However, do copy the format of tests to an equivilent file beside it:
+            - Rule, if doing this, give the file an identical name, with `comprehensive` instead of `humans` 
+                eg. `fixtures/02_regular/0201_minimal_existing_setup/parameterNames.comprehensive.test.ts`
+- `project-md/human-safe-space/**/*` 
+    - This is an area of human maintained documentation
+    - This documentation should be considered canonical
+
+### If human files are outdated or wrong
+
+- For example, if you have made a change that makes some human documentation out of date, because a function name has changed etc then: 
+
+ - In a chat session get the users attention with 🔔📄 emoji at the end of the message 
+ - In a PR  🔔📄 emoji at the end of the PR description 
+
+ Informing the user of what needs to be changed. 
 
 ### You can modify AGENTS.md 
 
