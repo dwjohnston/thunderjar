@@ -18,7 +18,7 @@ import { declareCodeState } from "thunderjar";
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "tj-thunderjar-implement-4100-no-workdir",
+    tag: "thunderjar/codestate/thunderjar-implement-4100-no-workdir",
   },
   resolve: async (config, ctx) => {
     const tag = `refs/tags/${config.tag}`;
