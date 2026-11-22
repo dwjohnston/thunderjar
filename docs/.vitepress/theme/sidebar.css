@@ -13,4 +13,16 @@
     min-height: 100%;
     overflow-y: visible;
   }
+
+  /* VitePress paints the nav bar's background only right of the sidebar column, and relies on
+     the fixed sidebar to fill in behind the title. Here the sidebar scrolls away, so the nav
+     paints its whole width, or the sidebar links show through behind the title. */
+  .Layout .VPNavBar.has-sidebar.has-sidebar {
+    --vp-nav-col-offset: 0px;
+  }
+
+  /* The sidebar column's segment of the bottom rule: the full-width rule replaces it. */
+  .Layout .VPNavBar.has-sidebar .divider::before {
+    display: none;
+  }
 }
