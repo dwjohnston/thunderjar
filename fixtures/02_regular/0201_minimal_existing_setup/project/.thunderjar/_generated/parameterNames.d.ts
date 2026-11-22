@@ -7,8 +7,24 @@ type TaskName = "is-prime";
 type InitialPromptNames = {
   "is-prime": "plain";
 };
-type HarnessName = "fake-harness-alpha";
-type HarnessModelName = `${HarnessName}/${string}`;
+type HarnessName = "claude-code-2.1.311" | "fake-harness-alpha";
+type HarnessModelName =
+  | "claude-code-2.1.311/claude-fable-5-2"
+  | "claude-code-2.1.311/claude-opus-5-5"
+  | "claude-code-2.1.311/claude-sonnet-5-5"
+  | "claude-code-2.1.311/claude-haiku-5-5"
+  | "claude-code-2.1.311/claude-haiku-4-5-20251001"
+  | "fake-harness-alpha/fake-model-small-001"
+  | "fake-harness-alpha/fake-model-effort-001/low"
+  | "fake-harness-alpha/fake-model-effort-001/high"
+  | "fake-harness-alpha/fake-model-tuned-001/low/0/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/low/0/careful"
+  | "fake-harness-alpha/fake-model-tuned-001/low/1/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/low/1/careful"
+  | "fake-harness-alpha/fake-model-tuned-001/high/0/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/high/0/careful"
+  | "fake-harness-alpha/fake-model-tuned-001/high/1/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/high/1/careful";
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;

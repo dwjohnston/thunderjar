@@ -213,6 +213,8 @@ export function declarePromptSet<C = undefined, R extends ResolvedOf = undefined
 export type HarnessApplyCtx = ApplyParameterCtx & {
   version: string;
   modelId: string;
+  /** The model's settings, from `models`, with each variant's value the pair names, e.g. `{ reasoningEffort: "high" }`. */
+  model: Record<string, SettingValue>;
 };
 
 /**
@@ -234,6 +236,18 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * `claude-code-2.1.311/`, and copy the folder to try another.
    */
   version: string;
+  /**
+   * @docs
+   * @name models
+   * @type {Record<string, ModelSetting[]>}
+   * @description
+   * The models the agent runs, by their real IDs, each with its settings, one setting per entry. A
+   * fixed setting, e.g. `{ reasoningEffort: "low" }`, adds nothing to the pair's name. A variant
+   * setting, `{ reasoningEffort: { values: ["low", "high"] } }`, adds one required part, e.g.
+   * `codex-0.166.0/openai/gpt-6.1-sol/high`. Several make their cross product, parts in array
+   * order. A test case may only name these. `ctx.model` is the settings, each variant's value chosen.
+   */
+  models: HarnessModels;
   /**
    * @docs
    * @name applyParameter
@@ -282,6 +296,18 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    */
   requiredEnv?: RequiredEnv[];
 };
+
+/** A model setting's value. */
+export type SettingValue = string | number | boolean;
+
+/**
+ * One setting of a model: fixed, e.g. `{ reasoningEffort: "low" }`, or a variant,
+ * `{ reasoningEffort: { values: ["low", "high"] } }`, which adds one part to the pair's name.
+ */
+export type ModelSetting = Record<string, SettingValue | { values: readonly SettingValue[] }>;
+
+/** A harness's models: each model ID, and its settings, one per entry. */
+export type HarnessModels = Record<string, readonly ModelSetting[]>;
 
 /** A variable a harness needs, by name, or any one of several, the first that's set. */
 export type RequiredEnv = string | { oneOf: string[] };

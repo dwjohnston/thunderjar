@@ -3,6 +3,7 @@ import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 // A fake agent that tries to sandbox itself, as Claude Code's bubblewrap sandbox does: in a user
 // namespace of its own, with its own mounts and processes. It replies whether it could.
 export default declareHarness({
+  models: { "fake-model-small-001": [], "fake-model-large-001": [] },
   version: "1.0.0",
   applyParameter: (_config, ctx) =>
     [

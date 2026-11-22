@@ -1,10 +1,14 @@
 import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 
 // OpenAI's Codex CLI, without its sandbox or approvals: the container is the sandbox.
-// A test case names a model by the ID the agent takes, e.g. "codex-0.166.0/gpt-6.1-sol", "codex-0.166.0/gpt-5.5".
-// Models come and go: check https://developers.openai.com/codex/models for the current IDs.
 export default declareHarness({
   version: "0.166.0",
+  // The models a test case may name, after the folder. Models come and go: check
+  // https://developers.openai.com/codex/models for the current IDs.
+  models: {
+    "gpt-6.1-sol": [],
+    "gpt-5.5": [],
+  },
   applyParameter: (_config, ctx) =>
     [
       `RUN npm install -g @openai/codex@${ctx.version}`,

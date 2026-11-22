@@ -2,11 +2,15 @@ import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 
 // GitHub Copilot CLI. COPILOT_GITHUB_TOKEN is a GitHub token with Copilot access: a fine-grained
 // personal access token with the "Copilot Requests" permission.
-// A test case names a model by the ID the agent takes, e.g. "copilot-1.0.105/claude-haiku-5.5", "copilot-1.0.105/gpt-5.5".
-// Models come and go: check `copilot --help`, or GitHub's supported models page, for the current IDs.
-// Which you can use depends on your Copilot plan and your organization's policy.
+// Which models you can use depends on your Copilot plan and your organization's policy.
 export default declareHarness({
   version: "1.0.105",
+  // The models a test case may name, after the folder. Models come and go: check
+  // `copilot --help`, or GitHub's supported models page, for the current IDs.
+  models: {
+    "claude-haiku-5.5": [],
+    "gpt-5.5": [],
+  },
   applyParameter: (_config, ctx) =>
     [
       `RUN npm install -g @github/copilot@${ctx.version}`,

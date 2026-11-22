@@ -5,7 +5,7 @@
 //
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
-import { declareHarness, type HarnessDeclaration, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
 import { MODEL_PATH, PROMPT_PATH, RESULT_PATH, writeModel, writeRunScript } from "./files.ts";
 
 type ModelUsage = {
@@ -75,10 +75,21 @@ export function claudeCodeTokenCosts(raw: string): TokenCosts {
   return { outcome: "collected", models, ...(apiDurationMs !== undefined && { apiDurationMs }) };
 }
 
+/** The models `claudeCode` declares unless given others: Anthropic's current IDs, as Claude Code takes them. */
+export const CLAUDE_CODE_MODELS: HarnessModels = {
+  "claude-fable-5-2": [],
+  "claude-opus-5-5": [],
+  "claude-sonnet-5-5": [],
+  "claude-haiku-5-5": [],
+  "claude-haiku-4-5-20251001": [],
+};
+
 /** What `claudeCode` gets. */
 export type ClaudeCodeOptions = {
   /** The version of `@anthropic-ai/claude-code` to install, e.g. `"2.1.311"`. */
   version: string;
+  /** The models it runs, as `declareHarness`'s `models`, e.g. `{ "claude-haiku-5-5": [] }`. By default, `CLAUDE_CODE_MODELS`. */
+  models?: HarnessModels;
   /** Replaces the command its run script runs: `CLAUDE_CODE_COMMAND` is the default. */
   command?: string;
 };
@@ -104,9 +115,10 @@ export const CLAUDE_CODE_COMMAND =
  * export default claudeCode({ version: "2.1.311" });
  * ```
  */
-export function claudeCode({ version, command = CLAUDE_CODE_COMMAND }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
+export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
+    models,
     applyParameter: (_config, ctx) =>
       [
         `RUN npm install -g @anthropic-ai/claude-code@${ctx.version}`,

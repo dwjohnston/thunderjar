@@ -85,8 +85,13 @@ describe("claudeCode", () => {
     expect(harness.requiredEnv).toEqual([{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }]);
   });
 
+  test("without models, declares Anthropic's current ones, and takes a list in their place", () => {
+    expect(Object.keys(harness.models)).toEqual(["claude-fable-5-2", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-haiku-4-5-20251001"]);
+    expect(claudeCode({ version: "2.1.311", models: { "claude-haiku-5-5": [] } }).models).toEqual({ "claude-haiku-5-5": [] });
+  });
+
   test("installs Claude Code as root, writes the model and run script, then runs as node", () => {
-    expect(harness.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "claude-haiku-5-5", resolved: undefined })).toBe(
+    expect(harness.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "claude-haiku-5-5", model: {}, resolved: undefined })).toBe(
       `RUN npm install -g @anthropic-ai/claude-code@2.1.311
 RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
 COPY <<'THUNDERJAR_EOF' /thunderjar/model.txt
@@ -108,7 +113,7 @@ USER node`,
   test("its command can be replaced", () => {
     const custom = claudeCode({ version: "2.1.311", command: "claude -p hi > /thunderjar/result.json" });
 
-    expect(custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", resolved: undefined })).toContain(
+    expect(custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", model: {}, resolved: undefined })).toContain(
       "#!/bin/sh\nclaude -p hi > /thunderjar/result.json\n",
     );
   });

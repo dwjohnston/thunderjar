@@ -2,7 +2,7 @@ import { declareHarness, type TokenCosts, writeModel, writeRunScript } from "thu
 
 // OpenAI's Codex CLI, on OpenRouter, without its sandbox or approvals: the container is the sandbox.
 // A custom model provider points Codex at OpenRouter's Responses API. It needs OPENROUTER_API_KEY.
-// A test case names a model by its OpenRouter ID, e.g. "codex-0.166.0/openai/gpt-5.5".
+// A test case names a model it declares, by its OpenRouter ID, e.g. "codex-0.166.0/openai/gpt-6-luna/medium".
 // Models come and go: check https://openrouter.ai/models for the current IDs.
 const OPENROUTER_PROVIDER =
   `-c model_provider=openrouter` +
@@ -55,13 +55,17 @@ function codexTokenCosts(raw: string, modelId: string): TokenCosts {
 
 export default declareHarness({
   version: "0.166.0",
+  // A pair names the reasoning effort too, e.g. "codex-0.166.0/openai/gpt-6-luna/medium": Codex's default is medium.
+  models: {
+    "openai/gpt-6-luna": [{ reasoningEffort: { values: ["low", "medium", "high"] } }],
+  },
   applyParameter: (_config, ctx) =>
     [
       `RUN npm install -g @openai/codex@${ctx.version}`,
       "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
       writeModel(ctx.modelId),
       // The prompt and model are read from their files, so quotes and newlines reach the agent intact.
-      writeRunScript(`codex exec ${OPENROUTER_PROVIDER} --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`),
+      writeRunScript(`codex exec ${OPENROUTER_PROVIDER} -c model_reasoning_effort=${ctx.model.reasoningEffort} --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`),
       "USER node",
     ].join("\n"),
   collectReply: codexReply,

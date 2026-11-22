@@ -259,6 +259,34 @@ describe("0402 broken declarations", () => {
       ],
     ],
     [
+      "a model its harness doesn't declare",
+      "undeclared-model",
+      [
+        `${testCase("undeclared-model")}: harnessModel: "fake-harness-efforts/fake/model-medium" is not a model of fake-harness-efforts. Its models: fake/model-small, fake/model-large`,
+      ],
+    ],
+    [
+      "a model with its variant part missing",
+      "missing-variant",
+      [
+        `${testCase("missing-variant")}: harnessModel: "fake-harness-efforts/fake/model-large" names no effort. Its names: fake/model-large/low, fake/model-large/high`,
+      ],
+    ],
+    [
+      "a variant part that isn't one of the setting's values",
+      "unknown-variant",
+      [
+        `${testCase("unknown-variant")}: harnessModel: "fake-harness-efforts/fake/model-large/medium": "medium" is not a value of effort for fake/model-large. Its names: fake/model-large/low, fake/model-large/high`,
+      ],
+    ],
+    [
+      "a harness that declares no models",
+      "modelless",
+      [
+        `${parameter("harnessModels/fake-harness-modelless/index.ts")}: models: must be the models the agent runs, by ID, each with its settings, e.g. { "claude-haiku-5-5": [] }, got undefined`,
+      ],
+    ],
+    [
       "an empty array, and iterations that isn't an integer",
       "empty-code-states",
       [

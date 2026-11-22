@@ -38,6 +38,7 @@ describe("envNamesProblem", () => {
 describe("requiredEnvOf", () => {
   const harness = declareHarness({
     version: "1.0.0",
+    models: {},
     applyParameter: () => "",
     requiredEnv: ["OTHER", { oneOf: ["TOKEN", "KEY"] }],
   });

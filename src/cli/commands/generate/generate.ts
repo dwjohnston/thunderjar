@@ -1,9 +1,9 @@
 import { Command } from "commander";
-import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
+import { FOLDER, findThunderjarRoot, type Problem } from "../../../config/loader.ts";
 import { painter } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { GENERATED_PATH, writeParameterNames } from "./parameterNames.ts";
-import { print } from "../../output.ts";
+import { print, printWarning } from "../../output.ts";
 
 /** `path`, an absolute path under `dir` or a folder above it, relative to `dir`. */
 function relativeTo(dir: string, path: string): string {
@@ -20,10 +20,10 @@ function relativeTo(dir: string, path: string): string {
  * Writes the typed parameter names of the nearest `.thunderjar/` folder, in `cwd` or above it.
  * Returns the path it wrote.
  */
-export async function generate(cwd: string): Promise<string> {
+export async function generate(cwd: string): Promise<{ path: string; problems: Problem[] }> {
   const root = await findThunderjarRoot(cwd);
-  await writeParameterNames(root);
-  return `${root}/${GENERATED_PATH}`;
+  const problems = await writeParameterNames(root);
+  return { path: `${root}/${GENERATED_PATH}`, problems };
 }
 
 export function createGenerateCommand(): Command {
@@ -33,7 +33,10 @@ export function createGenerateCommand(): Command {
     )
     .action(
       reportingConfigErrors(async () => {
-        const path = await generate(process.cwd());
+        const { path, problems } = await generate(process.cwd());
+        for (const { file, field, message } of problems) {
+          printWarning(`${FOLDER}/${file}: ${field ? `${field}: ` : ""}${message} Its pairs take any model.`);
+        }
         const paint = painter();
         print(`${paint.green("Wrote")} ${paint.cyan(relativeTo(process.cwd(), path))}`);
       }),

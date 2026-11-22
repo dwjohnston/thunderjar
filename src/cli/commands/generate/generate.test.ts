@@ -26,8 +26,24 @@ type TaskName = "is-prime";
 type InitialPromptNames = {
   "is-prime": "plain";
 };
-type HarnessName = "fake-harness-alpha";
-type HarnessModelName = \`\${HarnessName}/\${string}\`;
+type HarnessName = "claude-code-2.1.311" | "fake-harness-alpha";
+type HarnessModelName =
+  | "claude-code-2.1.311/claude-fable-5-2"
+  | "claude-code-2.1.311/claude-opus-5-5"
+  | "claude-code-2.1.311/claude-sonnet-5-5"
+  | "claude-code-2.1.311/claude-haiku-5-5"
+  | "claude-code-2.1.311/claude-haiku-4-5-20251001"
+  | "fake-harness-alpha/fake-model-small-001"
+  | "fake-harness-alpha/fake-model-effort-001/low"
+  | "fake-harness-alpha/fake-model-effort-001/high"
+  | "fake-harness-alpha/fake-model-tuned-001/low/0/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/low/0/careful"
+  | "fake-harness-alpha/fake-model-tuned-001/low/1/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/low/1/careful"
+  | "fake-harness-alpha/fake-model-tuned-001/high/0/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/high/0/careful"
+  | "fake-harness-alpha/fake-model-tuned-001/high/1/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/high/1/careful";
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;
@@ -79,7 +95,7 @@ describe("0101 empty project", () => {
   });
 });
 
-// Harnesses are listed by folder, never loaded, so a broken one doesn't stop it.
+// A harness that fails to load is warned about, and takes any model, so it doesn't stop it.
 describe("0403 broken harness family", () => {
   test("lists every harness folder, the broken one too", async () => {
     await using copy = await copyScenarioProject("0403");
@@ -89,5 +105,32 @@ describe("0403 broken harness family", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(await Bun.file(`${copy.dir}/${GENERATED}`).text()).toContain('type HarnessName = "fake-harness-alpha" | "fake-harness-beta";\n');
+  });
+});
+
+describe("0402 broken declarations", () => {
+  test("a harness that declares its models gives each name they make", async () => {
+    await using copy = await copyScenarioProject("0402");
+
+    const { exitCode } = await thunderjar(copy.dir, ["generate"]);
+
+    expect(exitCode).toBe(0);
+    expect(await Bun.file(`${copy.dir}/${GENERATED}`).text()).toContain(
+      '\n  | "fake-harness-efforts/fake/model-small"\n  | "fake-harness-efforts/fake/model-large/low"\n  | "fake-harness-efforts/fake/model-large/high"\n',
+    );
+  });
+});
+
+describe("0402 broken declarations, a harness that fails to load", () => {
+  test("is warned about, and takes any model", async () => {
+    await using copy = await copyScenarioProject("0402");
+
+    const { stderr, exitCode } = await thunderjar(copy.dir, ["generate"]);
+
+    expect(stderr).toBe(
+      "Warning: .thunderjar/parameters/harnessModels/fake-harness-unwrapped/index.ts: default export is not wrapped in declareHarness(...). Its pairs take any model.\n",
+    );
+    expect(exitCode).toBe(0);
+    expect(await Bun.file(`${copy.dir}/${GENERATED}`).text()).toContain("`fake-harness-unwrapped/${string}`");
   });
 });

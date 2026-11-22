@@ -15,7 +15,7 @@ const parameters = (overrides: Partial<PrerunParameters> = {}): PrerunParameters
   promptSet: { file: "promptSets/snerk/index.ts", declaration: declarePromptSet({ applyParameter: () => "COPY CLAUDE.md /workspace/" }) },
   harness: {
     file: "harnessModels/claude-code/index.ts",
-    declaration: declareHarness({ version: "2.1.283", applyParameter: () => "RUN npm install -g claude" }),
+    declaration: declareHarness({ version: "2.1.283", models: {}, applyParameter: () => "RUN npm install -g claude" }),
   },
   initialPrompt: { file: "tasks/is-prime/initial-prompts/plain.ts", declaration: declareInitialPrompt({ timeoutSeconds: 60 }) },
   modelId: "claude-haiku-5-5",
@@ -85,6 +85,7 @@ describe("renderPrerun", () => {
           file: "harnessModels/claude-code/index.ts",
           declaration: declareHarness({
             version: "2.1.283",
+            models: {},
             config: { packageName: "@anthropic-ai/claude-code" },
             applyParameter: (config, ctx) => ((seen.harness = ctx), `RUN npm install -g ${config.packageName}@${ctx.version}`),
           }),
@@ -110,7 +111,7 @@ describe("renderPrerun", () => {
       baseImage: { dir: PARAMETER_DIRS.baseImage },
       codeState: { dir: "parameters/codeState" },
       promptSet: [undefined, { dir: "parameters/promptSet" }],
-      harness: { dir: "parameters/harness", version: "2.1.283", modelId: "claude-haiku-5-5" },
+      harness: { dir: "parameters/harness", version: "2.1.283", modelId: "claude-haiku-5-5", model: {} },
       initialPrompt: {},
     });
   });
@@ -158,6 +159,7 @@ describe("renderPrerun, the build context", () => {
       file: "parameters/harnessModels/claude-code/index.ts",
       declaration: declareHarness({
         version: "2.1.283",
+        models: {},
         applyParameter: (_config, ctx) => `COPY ${ctx.dir}/scripts/ /opt/parameters/promptSet/\nRUN ls parameters/harnessy`,
       }),
     };

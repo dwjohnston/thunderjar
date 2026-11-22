@@ -177,6 +177,27 @@ describe("hashPermutations", () => {
     expect(changes([small as HashedPermutation], [large as HashedPermutation])).toEqual([{ parameters: [], hash: true, image: true }]);
   });
 
+  test("a pair with a variant part gives its model ID alone", async () => {
+    const [high] = await hashPermutations(`${scenario("0402")}/${FOLDER}`, { ...ONE, harnessModel: ["fake-harness-efforts/fake/model-large/high"] });
+
+    expect(high?.modelId).toBe("fake/model-large");
+  });
+
+  test("a harness's fragment gets the model's settings, with the variant the pair names, as ctx.model", async () => {
+    const [high] = await hashPermutations(`${scenario("0402")}/${FOLDER}`, { ...ONE, harnessModel: ["fake-harness-efforts/fake/model-large/high"] });
+
+    expect(high?.dockerfile).toContain('RUN echo "effort=high"');
+  });
+
+  test("two variants of one model share every parameter hash, but each has its own permutation hash", async () => {
+    const [low, high] = await hashPermutations(`${scenario("0402")}/${FOLDER}`, {
+      ...ONE,
+      harnessModel: ["fake-harness-efforts/fake/model-large/low", "fake-harness-efforts/fake/model-large/high"],
+    });
+
+    expect(changes([low as HashedPermutation], [high as HashedPermutation])).toEqual([{ parameters: [], hash: true, image: true }]);
+  });
+
   test("changing a harness's version changes its parameter hash and its image", async () => {
     const { copy, root: copied, parameters } = await copy0202();
     await using _ = copy;

@@ -5,7 +5,7 @@ const declarations = (text: string) => text.slice(text.indexOf("type BaseImageNa
 
 describe("renderParameterNames", () => {
   test("a kind with no names is never, and an empty task list is {}", () => {
-    const text = renderParameterNames({ baseImages: [], codeStates: [], promptSets: [], tasks: {}, harnesses: [] });
+    const text = renderParameterNames({ baseImages: [], codeStates: [], promptSets: [], tasks: {}, harnesses: {} });
 
     expect(declarations(text)).toBe(`type BaseImageName = never;
 type CodeStateName = never;
@@ -23,7 +23,7 @@ type HarnessModelName = \`\${HarnessName}/\${string}\`;
       codeStates: ["baseline"],
       promptSets: ["glurk", "snerk"],
       tasks: { "fizz-buzz": ["fizzy"], "is-prime": ["plain", "terse"], "no-prompts": [] },
-      harnesses: ["claude-code-2.1.311", "fake-harness-alpha"],
+      harnesses: { "claude-code-2.1.311": undefined, "fake-harness-alpha": undefined },
     });
 
     expect(declarations(text)).toBe(`type BaseImageName = "node20" | "node22";
@@ -38,5 +38,23 @@ type InitialPromptNames = {
 type HarnessName = "claude-code-2.1.311" | "fake-harness-alpha";
 type HarnessModelName = \`\${HarnessName}/\${string}\`;
 `);
+  });
+
+  test("a harness with declared models gives each of its names; one without, any model", () => {
+    const text = renderParameterNames({
+      baseImages: [],
+      codeStates: [],
+      promptSets: [],
+      tasks: {},
+      harnesses: { "codex-0.166.0": ["openai/gpt-5.5", "openai/gpt-6.1-sol/low"], "fake-harness-beta": undefined },
+    });
+
+    expect(declarations(text)).toContain(
+      `type HarnessModelName =
+  | "codex-0.166.0/openai/gpt-5.5"
+  | "codex-0.166.0/openai/gpt-6.1-sol/low"
+  | \`fake-harness-beta/\${string}\`;
+`,
+    );
   });
 });

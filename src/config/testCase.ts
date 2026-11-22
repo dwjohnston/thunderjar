@@ -2,9 +2,10 @@
 // a stale generated file or an ignored type error is still caught. Only the declarations the test
 // case names are loaded, so a broken one stops only the test cases naming it.
 import { RUN_SCRIPT_PATH } from "../api/files.ts";
-import type { TestCaseDeclaration } from "../api/declarations.ts";
+import type { HarnessModels, TestCaseDeclaration } from "../api/declarations.ts";
 import { foldersIn, PARAMETERS } from "./folders.ts";
 import { ConfigError, existsIn, FOLDER, loadDeclaration, type Problem, problemsError } from "./loader.ts";
+import { modelsProblem, splitPair } from "./harnessModels.ts";
 import { checkMeasurements } from "./measurements.ts";
 import { requiredEnvProblem } from "./requiredEnv.ts";
 import { runOptionsProblem } from "./runOptions.ts";
@@ -46,7 +47,7 @@ const HARNESS_MODEL = /^([^/]+)\/(.+)$/;
 
 class TestCaseChecker {
   readonly problems: Problem[] = [];
-  private readonly harnesses = new Set<string>();
+  private readonly harnesses = new Map<string, Record<string, unknown> | undefined>();
 
   constructor(
     private readonly root: string,
@@ -145,12 +146,12 @@ class TestCaseChecker {
   }
 
   /** Checks harness `name`'s declaration, once however many of the test case's pairs name it. */
-  private async checkHarness(name: string) {
-    if (this.harnesses.has(name)) return;
-    this.harnesses.add(name);
+  private async checkHarness(name: string): Promise<Record<string, unknown> | undefined> {
+    if (this.harnesses.has(name)) return this.harnesses.get(name);
     const file = `${PARAMETERS}/harnessModels/${name}/index.ts`;
     const declaration = (await loadDeclaration(this.root, file, "declareHarness", this.problems)) as Record<string, unknown> | undefined;
-    if (!declaration) return;
+    this.harnesses.set(name, declaration);
+    if (!declaration) return undefined;
     const problem = (field: string, message: string) => this.problems.push({ file, field, message });
     if (typeof declaration.version !== "string" || declaration.version.trim() === "") {
       problem("version", `must be the version of the agent the harness installs, e.g. "2.1.311", got ${show(declaration.version)}`);
@@ -161,6 +162,8 @@ class TestCaseChecker {
     if (typeof declaration.applyParameter !== "function") {
       problem("applyParameter", `must install the agent and write ${RUN_SCRIPT_PATH}, e.g. with writeRunScript(command), got ${show(declaration.applyParameter)}`);
     }
+    const models = modelsProblem(declaration.models);
+    if (models) problem("models", models);
     const envProblem = requiredEnvProblem(declaration.requiredEnv);
     if (envProblem) problem("requiredEnv", envProblem);
     for (const field of ["collectReply", "collectTokenCosts"]) {
@@ -168,6 +171,7 @@ class TestCaseChecker {
         problem(field, `must be a function of the result file's text, got ${show(declaration[field])}`);
       }
     }
+    return declaration;
   }
 
   private async checkHarnessModels(pairs: string[]) {
@@ -186,7 +190,11 @@ class TestCaseChecker {
         );
         continue;
       }
-      if (await this.requires("harnessModel", pair, `${PARAMETERS}/harnessModels/${name}/`)) await this.checkHarness(name);
+      if (!(await this.requires("harnessModel", pair, `${PARAMETERS}/harnessModels/${name}/`))) continue;
+      const declaration = await this.checkHarness(name);
+      if (declaration === undefined || modelsProblem(declaration.models)) continue;
+      const split = splitPair(pair, declaration.models as HarnessModels);
+      if ("problem" in split) this.problem("harnessModel", split.problem);
     }
   }
 

@@ -23,6 +23,7 @@ import type {
   FragmentCtx,
   HarnessApplyCtx,
   HarnessDeclaration,
+  SettingValue,
   InitialPromptDeclaration,
   PromptSetDeclaration,
 } from "../api/declarations.ts";
@@ -64,6 +65,8 @@ export type PrerunParameters = {
   initialPrompt: Loaded<InitialPromptDeclaration>;
   /** The pair's model ID, for the harness's fragment. */
   modelId: string;
+  /** The model's settings, for the harness's fragment. None if absent. */
+  model?: Record<string, SettingValue>;
 };
 
 /** The ctx `applyParameter` gets, by parameter. */
@@ -136,7 +139,7 @@ export function renderPrerun(parameters: PrerunParameters): string {
     baseImage: renderFragment("baseImage", parameters.baseImage, { dir: PARAMETER_DIRS.baseImage }, problems),
     codeState: renderFragment("codeState", parameters.codeState, { dir: PARAMETER_DIRS.codeState }, problems),
     promptSet: renderFragment("promptSet", parameters.promptSet, { dir: PARAMETER_DIRS.promptSet }, problems),
-    harness: renderFragment("harness", parameters.harness, { dir: PARAMETER_DIRS.harness, version: parameters.harness.declaration.version, modelId: parameters.modelId }, problems),
+    harness: renderFragment("harness", parameters.harness, { dir: PARAMETER_DIRS.harness, version: parameters.harness.declaration.version, modelId: parameters.modelId, model: parameters.model ?? {} }, problems),
     initialPrompt: renderFragment("initialPrompt", parameters.initialPrompt, {}, problems),
   };
   if (problems.length > 0) throw problemsError(problems);

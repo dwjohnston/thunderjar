@@ -17,6 +17,7 @@ import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 // with, `set` or nothing, never their values: its key, and FAKE_RUN_OPTION_KEY and FAKE_OVERRIDDEN,
 // which base image node20-env's run options pass.
 export default declareHarness({
+  models: { "fake-model-small-001": [], "fake-model-large-001": [] },
   version: "1.0.0",
   applyParameter: (_config, ctx) =>
     [

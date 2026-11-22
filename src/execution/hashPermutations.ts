@@ -10,9 +10,10 @@
 // A parameter's `resolve` runs first, once per execution, and its result reaches the hash only
 // through the text it ends up in.
 //
-// The permutation hash, which identifies runs, is of every parameter hash and the model ID. The
-// prerun image hash is of what the image is built from alone: its Dockerfile, with the harness's
-// fragment rendered with the pair's model ID, and each folder parameter's `files/`.
+// The permutation hash, which identifies runs, is of every parameter hash, the model ID and its
+// settings, when it has any. The prerun image hash is of what the image is built from alone: its
+// Dockerfile, with the harness's fragment rendered with the pair's model, and each folder
+// parameter's `files/`.
 import { $, CryptoHasher, Glob } from "bun";
 import type {
   BaseImageDeclaration,
@@ -22,11 +23,13 @@ import type {
   PromptSetDeclaration,
   Resolved,
   ResolveCtx,
+  SettingValue,
   TestCaseDeclaration,
 } from "../api/declarations.ts";
 import { FILES, PARAMETERS } from "../config/folders.ts";
 import { ConfigError, existsIn, loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
 import { AXES, type Axis, expandPermutations, type HashedPermutation, parsePair } from "../config/permutations.ts";
+import { type SplitPair, splitPair } from "../config/harnessModels.ts";
 import { RUN_SCRIPT_PATH } from "./runScript.ts";
 import { type Ctxs, type FolderRole, joinFragments, PARAMETER_DIRS, renderFragment, type Role } from "./prerunDockerfile.ts";
 
@@ -91,6 +94,9 @@ type FolderAxis = keyof typeof FOLDERS;
  * the model, not by the model, which is in the permutation hash on its own.
  */
 const SAMPLE_MODEL_ID = "<modelId>";
+
+/** The settings a harness's fragment is rendered with to hash it, as SAMPLE_MODEL_ID: each `<name>`. */
+const sampleModel = (model: Record<string, SettingValue>) => Object.fromEntries(Object.keys(model).map((key) => [key, `<${key}>`]));
 
 /** Runs a command on the host, as `ctx.exec` does: see ResolveCtx. */
 export type Exec = ResolveCtx["exec"];
@@ -170,11 +176,13 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
     return declaration && { key: `${axis}\0${name}`, label: `${ROLE_NAMES[axis]} ${JSON.stringify(name)}`, file, dir, declaration };
   };
   const harnessParameter = async (pair: string) => {
-    const { harness: name, modelId } = parsePair(pair);
+    const { harness: name } = parsePair(pair);
     const dir = `${PARAMETERS}/harnessModels/${name}`;
     const file = `${dir}/index.ts`;
     const declaration = await load<HarnessDeclaration>(file, "declareHarness");
     if (!declaration) return undefined;
+    // loadTestCase already checked the pair names one of its models.
+    const { modelId, model } = declaration.models === undefined ? { ...parsePair(pair), model: {} } : (splitPair(pair, declaration.models) as SplitPair);
     return {
       key: `harnessModel\0${name}`,
       label: `${ROLE_NAMES.harnessModel} ${JSON.stringify(name)}`,
@@ -183,6 +191,7 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
       declaration,
       version: declaration.version,
       modelId,
+      model,
     };
   };
   const initialPromptParameter = async (name: string) => {
@@ -227,7 +236,7 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
 
   // Rendering: each parameter's fragment, once, with what it resolved to, and its hash.
   const rendered = new Map<string, Promise<Rendered | undefined>>();
-  const render = (parameter: Parameter<object> & { version?: string; modelId?: string }, role: Role, hashed: (fragment: string) => Promise<Rendered | undefined>) => {
+  const render = (parameter: Parameter<object> & { version?: string; modelId?: string; model?: Record<string, SettingValue> }, role: Role, hashed: (fragment: string) => Promise<Rendered | undefined>) => {
     const done = rendered.get(parameter.key);
     if (done) return done;
     const resolvedValue = resolved.get(parameter.key);
@@ -235,6 +244,7 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
       ...(parameter.dir !== undefined && { dir: PARAMETER_DIRS[role as FolderRole] }),
       ...(parameter.version !== undefined && { version: parameter.version }),
       ...(parameter.modelId !== undefined && { modelId: parameter.modelId }),
+      ...(parameter.model !== undefined && { model: parameter.model }),
       resolved: resolvedValue,
     } as Ctxs[Role] & { resolved: unknown };
     const fragment = renderFragment(role, parameter, ctx, problems);
@@ -251,14 +261,14 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
     });
 
   // A harness is hashed once, with SAMPLE_MODEL_ID, and its fragment rendered once per model.
-  const harness = (parameter: Parameter<HarnessDeclaration> & { version: string; modelId: string }) =>
-    render({ ...parameter, modelId: SAMPLE_MODEL_ID }, "harness", async (fragment) => {
+  const harness = (parameter: Parameter<HarnessDeclaration> & { version: string; modelId: string; model: Record<string, SettingValue> }) =>
+    render({ ...parameter, modelId: SAMPLE_MODEL_ID, model: sampleModel(parameter.model) }, "harness", async (fragment) => {
       const files = await filesOf(root, parameter.dir as string);
       return { fragment, files, hash: sha256(JSON.stringify({ fragment, requiredEnv: parameter.declaration.requiredEnv ?? [], files })) };
     });
   // Rendered for the model only once it rendered for the sample, so a broken fragment is one problem.
-  const harnessForModel = (parameter: Parameter<HarnessDeclaration> & { version: string; modelId: string }): string | undefined => {
-    const ctx = { dir: PARAMETER_DIRS.harness, version: parameter.version, modelId: parameter.modelId, resolved: resolved.get(parameter.key) };
+  const harnessForModel = (parameter: Parameter<HarnessDeclaration> & { version: string; modelId: string; model: Record<string, SettingValue> }): string | undefined => {
+    const ctx = { dir: PARAMETER_DIRS.harness, version: parameter.version, modelId: parameter.modelId, model: parameter.model, resolved: resolved.get(parameter.key) };
     return renderFragment("harness", parameter, ctx, problems);
   };
 
@@ -312,7 +322,8 @@ export async function hashPermutations(root: string, testCase: TestCaseDeclarati
     }
     permutations.push({
       ...permutation,
-      hash: sha256(JSON.stringify({ parameterHashes, modelId: harnessModel.modelId })),
+      // The model's settings only when it has some, so a model without keeps the hash it had before them.
+      hash: sha256(JSON.stringify({ parameterHashes, modelId: harnessModel.modelId, ...(Object.keys(harnessModel.model).length > 0 && { model: harnessModel.model }) })),
       parameterHashes,
       modelId: harnessModel.modelId,
       imageHash: sha256(JSON.stringify({ dockerfile, files })),
