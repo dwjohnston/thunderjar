@@ -446,7 +446,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell" | "commits"}
  * @description
  * What to measure. Each instrument takes its own `config`, and returns its own value, the measure:
  *
@@ -457,6 +457,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * | `bunTestFile` | `{ subject, test }` | `{ passed, total }`: tests passed, of all the tests | the pass rate, `passed / total` |
  * | `replyMatches` | `{ pattern, turn? }` | `boolean`: whether the agent's reply matches `pattern` | the value |
  * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
+ * | `commits` | `{}` | `Commit[]`, oldest first: `{ sha, message, files: { added, modified, deleted } }` | none: give each metric a `score` |
  *
  * `shell` stores `command`'s stdout as it is, up to 64 KiB, in the run data store. A command that
  * prints secrets or other sensitive data will persist them: nothing transforms its output before
@@ -508,6 +509,29 @@ export type InstrumentTypes = {
    * image has installed. By default, a metric's score is whether it exited 0.
    */
   shell: { config: { command: string }; value: { exitCode: number; stdout: string; stdoutTruncated: boolean }; defaultScore: boolean };
+  /**
+   * The commits the agent made since the start, `refs/thunderjar/start` to `HEAD`, oldest first.
+   * Only committed work: uncommitted changes aren't in it. The count is `v.length`. The author is
+   * left out: in a run it's always the agent. A metric needs a `score` of its own. `skipped` when
+   * the workspace isn't a git repository, or has no `refs/thunderjar/start`.
+   */
+  commits: { config: Record<string, never>; value: Commit[] };
+};
+
+/** Files changed, as paths relative to the workspace, like `glob` elsewhere. */
+export type FileChanges = {
+  added: string[];
+  modified: string[];
+  deleted: string[];
+};
+
+/** A commit the agent made. */
+export type Commit = {
+  sha: string;
+  /** The whole commit message. */
+  message: string;
+  /** What this commit changed, against its first parent. */
+  files: FileChanges;
 };
 
 export type InstrumentName = keyof InstrumentTypes;
