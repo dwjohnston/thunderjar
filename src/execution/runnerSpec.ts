@@ -16,6 +16,7 @@
 import type { HarnessDeclaration, ImageStore, TestCaseDeclaration } from "../api/declarations.ts";
 import { PARAMETERS } from "../config/folders.ts";
 import { loadDeclaration, type Problem, problemsError } from "../config/loader.ts";
+import type { Overrides } from "../config/overrides.ts";
 import { parsePair } from "../config/permutations.ts";
 import type { ProjectConfig } from "../config/projectConfig.ts";
 import { NOT_REPORTED, type PlannedExecution, type PlannedPermutation } from "./planExecution.ts";
@@ -57,7 +58,10 @@ export async function hydratePlan(root: string, data: PlanData): Promise<Planned
 export type SubmissionSummary = {
   /** The test case's name. */
   name: string;
+  /** Already given its `overrides`, if any. */
   testCase: TestCaseDeclaration;
+  /** What was given on the command line in place of the test case's own. */
+  overrides?: Overrides;
   plan: PlanData;
   /** How many containers run at once. */
   concurrency: number;
@@ -75,4 +79,4 @@ export type Submission = SubmissionSummary & {
 };
 
 /** The summary of `submission`: without its variables, and what only the runner needs. */
-export const summaryOf = ({ name, testCase, plan, concurrency }: Submission): SubmissionSummary => ({ name, testCase, plan, concurrency });
+export const summaryOf = ({ name, testCase, overrides, plan, concurrency }: Submission): SubmissionSummary => ({ name, testCase, overrides, plan, concurrency });
