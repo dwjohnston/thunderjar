@@ -3,6 +3,7 @@ import DefaultTheme from "vitepress/theme";
 import Layout from "./Layout.vue";
 import Todo from "./Todo.vue";
 import AiPlaceholder from "./AiPlaceholder.vue";
+import "./sidebar.css";
 
 export default {
   extends: DefaultTheme,

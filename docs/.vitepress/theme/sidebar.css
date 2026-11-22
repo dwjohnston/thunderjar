@@ -1,0 +1,16 @@
+/* The sidebar scrolls with the page, not on its own. VitePress fixes it to the viewport with its
+   own scrollbar; here it sits in the layout instead, at least as tall as the page so its
+   background reaches the bottom. Below 60rem it's the slide-out menu, and is left alone.
+   VitePress's rule is scoped, `.VPSidebar[data-v-…]`, so this one needs more classes to win. */
+@media (min-width: 60rem) {
+  .Layout {
+    position: relative;
+  }
+
+  .Layout .VPSidebar.VPSidebar {
+    position: absolute;
+    bottom: auto;
+    min-height: 100%;
+    overflow-y: visible;
+  }
+}
