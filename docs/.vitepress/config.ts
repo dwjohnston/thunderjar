@@ -34,6 +34,13 @@ export default defineConfig({
         ],
       },
       {
+        text: "Core concepts",
+        items: [
+          { text: "Parameters", link: "/core-concepts/parameters" },
+          { text: "Terminology", link: "/core-concepts/terminology" },
+        ],
+      },
+      {
         text: "Configuration",
         items: [
           { text: ".thunderjar/", link: "/configuration/" },
