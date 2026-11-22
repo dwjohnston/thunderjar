@@ -21,6 +21,13 @@ describe("codeStateGitCheckout with a commit", () => {
   });
 });
 
+test("install runs its command in /workspace after the checkout", async () => {
+  const state = codeStateGitCheckout({ repo, commit: SHA, install: "bun install --frozen-lockfile" });
+  const resolved = await state.resolve!(state.config!, { exec: async () => "" });
+  expect(state.applyParameter!(state.config!, { dir: "d", resolved })).toEndWith(`&& git -C /workspace remote remove origin
+RUN bun install --frozen-lockfile`);
+});
+
 describe("resolve", () => {
   const ASK = async (state: ReturnType<typeof codeStateGitCheckout>, reply: string) => {
     const commands: string[] = [];
