@@ -60,13 +60,6 @@ export default defineConfig({
         ],
       },
       {
-        text: "Guides",
-        items: [
-          { text: "Tweak skill descriptions", link: "/guides/tweak-skill-descriptions" },
-          { text: "Compare models", link: "/guides/compare-models" },
-        ],
-      },
-      {
         text: "Writing measurements",
         items: [{ text: "Overview", link: "/writing-measurements/" }],
       },
@@ -84,6 +77,13 @@ export default defineConfig({
       {
         text: "Remote runtimes",
         items: [{ text: "Overview", link: "/remote-runtimes/" }],
+      },
+      {
+        text: "Guides",
+        items: [
+          { text: "Tweak skill descriptions", link: "/guides/tweak-skill-descriptions" },
+          { text: "Compare models", link: "/guides/compare-models" },
+        ],
       },
       {
         text: "CLI reference",
