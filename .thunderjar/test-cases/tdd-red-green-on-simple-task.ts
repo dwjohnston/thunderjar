@@ -21,7 +21,7 @@ export default declareTestCase({
     "claude-code-2.1.326/claude-sonnet-5-5",
     "claude-code-2.1.326/claude-opus-5-5",
   ],
-  task: "humans-test-version",
+  task: "rename-nonexistent-harness-version-to-999",
   initialPrompt: ["plain"],
   iterations: 5,
 });
