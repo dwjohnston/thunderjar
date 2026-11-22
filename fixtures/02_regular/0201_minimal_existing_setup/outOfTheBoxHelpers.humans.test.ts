@@ -22,6 +22,6 @@ describe("claudeCode(), with its built-in models", () => {
     // @ts-expect-error - no model ID
     assertType<HarnessModelName>("claude-code-2.1.311");
     // @ts-expect-error - a version with no harness folder
-    assertType<HarnessModelName>("claude-code-2.1.326/claude-haiku-5-5");
+    assertType<HarnessModelName>("claude-code-9.9.9/claude-haiku-5-5");
   });
 });
