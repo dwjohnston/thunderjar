@@ -82,12 +82,13 @@ The following environment variables should be available to you:
 
 Maintained by humans only, in [project-md/human-safe-space/](project-md/human-safe-space/).
 
+- [Terminology](project-md/human-safe-space/terminology.md)
+- [Canonical tests](project-md/human-safe-space/canonical-tests/canonical-tests.md)
 - [Tag and ref conventions](project-md/human-safe-space/conventions/tags-and-refs.md)
 - [Parameter apply order](project-md/human-safe-space/parameters/apply_order.md)
 - [Measurements philosophy](project-md/human-safe-space/measurements-philosophy/index.md)
 - [Not supported: parameter behaviour](project-md/human-safe-space/not-supported/parameter-behaviour.md)
 - [Things that are a bit messy: skills](project-md/human-safe-space/things-that-are-a-bit-messy/skills.md)
-- [Canonical tests](project-md/human-safe-space/canonical-tests/canonical-tests.md)
 - [Package scripts: docs](project-md/human-safe-space/package-scripts/docs.md)
 - [Idealised Architecture](project-md/human-safe-space/refactor-work/architecture-plan.md)
 
