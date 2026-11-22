@@ -19,7 +19,7 @@ export default declareTestCase({
   codeState: ["thunderjar-nested-skills-root"],
   promptSet: ["none", "nested-skills-reading-files", "nested-skills-analysing-a-ts", "nested-skills-required-format", "nested-skills-read-tool", "nested-skills-read-tool-not-shell"],
   harnessModel: [
-    "claude-code-2.1.326/claude-haiku-5-5",
+    "claude-code-2.1.326/claude-haiksu-5-5",
     "claude-code-2.1.326/claude-sonnet-5-5",
     "claude-code-2.1.326/claude-opus-5-5",
 
