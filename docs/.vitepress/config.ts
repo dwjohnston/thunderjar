@@ -67,7 +67,7 @@ export default defineConfig({
         text: "Thunderjar capture",
         items: [
           { text: "Overview", link: "/thunderjar-capture/" },
-          { text: "/tj-oneshot", link: "/thunderjar-capture/tj-oneshot" },
+          { text: "Create capture with /tj-oneshot", link: "/thunderjar-capture/tj-oneshot" },
           {
             text: "Creating test cases from captures",
             link: "/thunderjar-capture/creating-test-cases-from-captures",

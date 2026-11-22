@@ -1,3 +1,3 @@
-# `/tj-oneshot`
+# Create capture with `/tj-oneshot`
 
 TODO
