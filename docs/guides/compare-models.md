@@ -1,3 +1,3 @@
-# Compare models
+# Compare model performance
 
 TODO

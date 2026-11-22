@@ -82,7 +82,7 @@ export default defineConfig({
         text: "Guides",
         items: [
           { text: "Tweak skill descriptions", link: "/guides/tweak-skill-descriptions" },
-          { text: "Compare models", link: "/guides/compare-models" },
+          { text: "Compare model performance", link: "/guides/compare-models" },
         ],
       },
       {
