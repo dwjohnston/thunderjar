@@ -16,7 +16,7 @@ export default declareMeasurement({
   instrument: "shell",
   config: { command: "git diff --name-only --diff-filter=A thunderjar-start HEAD -- .changeset/ | grep -v README | xargs -r cat" },
   metrics: {
-    added: { score: (v) => /\"thunderjar\":/.test(v.stdout), stat: "rate", better: "higher" },
-    notPatch: { score: (v) => /\"thunderjar\":\s*(minor|major)/.test(v.stdout), stat: "rate", better: "lower" },
+    added: { score: (v) => /"thunderjar":/.test(v.stdout), stat: "rate", better: "higher" },
+    notPatch: { score: (v) => /"thunderjar":\s*(minor|major)/.test(v.stdout), stat: "rate", better: "lower" },
   },
 });
