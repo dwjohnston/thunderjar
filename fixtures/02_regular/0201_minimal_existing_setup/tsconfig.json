@@ -6,6 +6,7 @@
     ]
   },
   "files": [
-    "parameterNames.humans.test.ts"
+    "parameterNames.humans.test.ts",
+    "outOfTheBoxHelpers.humans.test.ts"
   ]
 }
