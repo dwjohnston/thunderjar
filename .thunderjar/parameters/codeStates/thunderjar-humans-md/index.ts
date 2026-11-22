@@ -10,12 +10,12 @@
 
 import { declareCodeState } from "thunderjar";
 
-// This repository at tag tj-thunderjar-humans-md, where AGENTS.md includes @HUMANS.md, which asks for ☝️ in
+// This repository at tag thunderjar/codestate/thunderjar-humans-md, where AGENTS.md includes @HUMANS.md, which asks for ☝️ in
 // every response.
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "tj-thunderjar-humans-md",
+    tag: "thunderjar/codestate/thunderjar-humans-md",
   },
   resolve: async (config, ctx) => {
     const tag = `refs/tags/${config.tag}`;

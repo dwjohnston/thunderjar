@@ -15,7 +15,7 @@
 
 import { codeStateGitCheckout } from "thunderjar";
 
-// This repository at tag tj-thunderjar-security-assessment: main as it was when the
+// This repository at tag thunderjar/codestate/thunderjar-security-assessment: main as it was when the
 // security-assessment task was written, with dependencies installed, so the agent has no need of the
 // network. At that commit, API keys passed with `docker run -e` are kept by `docker commit` in the
 // postrun image: the issue the task's measurement looks for.
@@ -24,6 +24,6 @@ import { codeStateGitCheckout } from "thunderjar";
 // Keep it there, or the agent can read what's being measured.
 export default codeStateGitCheckout({
   repo: "https://github.com/dwjohnston/thunderjar.git",
-  tag: "tj-thunderjar-security-assessment",
+  tag: "thunderjar/codestate/thunderjar-security-assessment",
   install: "bun install --frozen-lockfile",
 });

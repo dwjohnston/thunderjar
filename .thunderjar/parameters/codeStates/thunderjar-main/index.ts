@@ -1,11 +1,11 @@
 import { declareCodeState } from "thunderjar";
 
-// The project's repository at tag tj-thunderjar-main, a commit on main, with its dependencies
+// The project's repository at tag thunderjar/codestate/thunderjar-main, a commit on main, with its dependencies
 // installed, so measurements can run its typecheck and tests. resolve looks up the tag's commit.
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "tj-thunderjar-main",
+    tag: "thunderjar/codestate/thunderjar-main",
   },
   resolve: async (config, ctx) => {
     const tag = `refs/tags/${config.tag}`;

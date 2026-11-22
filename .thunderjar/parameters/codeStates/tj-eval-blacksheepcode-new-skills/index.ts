@@ -6,7 +6,7 @@ import { declareCodeState } from "thunderjar";
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "tj-tj-eval-blacksheepcode-new-skills",
+    tag: "thunderjar/codestate/tj-eval-blacksheepcode-new-skills",
   },
   resolve: async (config, ctx) => {
     const tag = `refs/tags/${config.tag}`;
