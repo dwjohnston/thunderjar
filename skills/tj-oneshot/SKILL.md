@@ -45,17 +45,19 @@ You are the orchestrator. You don't do the task yourself.
 1. Choose the harness: `claude-code`, `codex`, `copilot` or `opencode`.
    - The default is the harness you are running under.
    - `--harness <id>` at the start of the argument overrides it. Strip it from the prompt.
-2. Check that capture hooks for that harness are installed. Look for `thunderjar capture` in its config:
+2. Check that capture hooks for that harness are installed. Look for a `capture` command in every file of its row:
 
    | Harness | Project config | User config |
    |---|---|---|
-   | `claude-code` | `.claude/settings.local.json` | `~/.claude/settings.json` |
+   | `claude-code` | `.claude/settings.json`, `.claude/settings.local.json` | `~/.claude/settings.json` |
    | `codex` | `.codex/hooks.json` | `$CODEX_HOME/hooks.json`, default `~/.codex` |
    | `copilot` | `.github/hooks/thunderjar-capture.json` | `$COPILOT_HOME/hooks/thunderjar-capture.json`, default `~/.copilot` |
    | `opencode` | `.opencode/plugins/thunderjar-capture.ts` | `$XDG_CONFIG_HOME/opencode/plugins/thunderjar-capture.ts`, default `~/.config` |
 
-   - Not installed: stop, and suggest `thunderjar capture install --harness <id>`.
-3. For Codex, remind the user that Codex runs the hooks only once they're trusted in `/hooks`.
+   - e.g. `grep -l capture .claude/settings.json .claude/settings.local.json ~/.claude/settings.json`
+   - The hook may run Thunderjar from source, e.g. `bun "$CLAUDE_PROJECT_DIR"/src/cli/index.ts capture prompt`, not `thunderjar capture`. It still counts.
+   - Not installed in any of them: stop, and suggest `thunderjar capture install --harness <id>`.
+
 
 ## 2. Anticipate what external interactions the subagent may need to do
 
