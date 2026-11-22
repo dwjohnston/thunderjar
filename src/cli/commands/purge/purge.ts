@@ -14,8 +14,8 @@
 
 // `thunderjar purge image`: deletes the images executions left, from the local Docker daemon and
 // the image store, and marks each postrun image purged on its container run's record. It says
-// what it would purge and asks first. `purge` is a group: `image` is its only command for now.
-import { Command, InvalidArgumentError, Option } from "commander";
+// what it would purge and asks first. `purge` is a group: `capture` (capture.ts) is its other command.
+import { Command, Option } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadProjectConfig, registryHost } from "../../../config/projectConfig.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
@@ -31,7 +31,6 @@ import {
   type ImageKind,
   isGone,
   type Outcome,
-  parseAge,
   type Places,
   type PostrunResult,
   type PostrunTarget,
@@ -53,12 +52,14 @@ import {
 import { type ExecutionRecord, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, padEnd, painter, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
+import { confirm } from "../../confirm.ts";
 import { dataDirOption, displayPath, openStore, resolvePath } from "../../dataDir.ts";
 import { minute, plural } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError, printJson, printWarning } from "../../output.ts";
-import { textOutput } from "../../textOutput.ts";
+import { olderThanOption } from "./age.ts";
+import { createPurgeCaptureCommand } from "./capture.ts";
 
 type ImageOptions = {
   testCase?: string;
@@ -97,23 +98,6 @@ function planLines(executions: ExecutionTargets[], preruns: PrerunTarget[], pain
   );
   for (const { local, stored } of preruns) lines.push(`  ${paint.dim("prerun")}  ${[local, stored].filter(Boolean).map((image) => paint.cyan(image!)).join("  ")}`);
   return lines;
-}
-
-/** Asks `question` on the terminal, and whether the answer was yes. */
-async function confirm(question: string): Promise<boolean> {
-  textOutput().write(`${question} [y/N] `);
-  const reader = Bun.stdin.stream().getReader();
-  let answer = "";
-  try {
-    while (!answer.includes("\n")) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      answer += new TextDecoder().decode(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return /^y(es)?$/i.test(answer.trim());
 }
 
 /** Runs `command` with `reference` added, in `cwd`: undefined if it exited 0, or else why it failed. */
@@ -262,16 +246,6 @@ async function purgeImage(cwd: string, executionIds: string[], options: ImageOpt
   }
 }
 
-/** `--older-than <age>`, in ms. */
-const olderThanOption = () =>
-  new Option("--older-than <age>", "only executions that started longer ago than <age>, e.g. 30d, 12h, 90m or 2w").argParser((value: string) => {
-    try {
-      return parseAge(value);
-    } catch (error) {
-      throw new InvalidArgumentError((error as Error).message);
-    }
-  });
-
 export function createPurgeImageCommand(): Command {
   return new Command("image")
     .description(
@@ -279,7 +253,7 @@ export function createPurgeImageCommand(): Command {
     )
     .argument("[executions...]", "the IDs of the executions whose images to purge, as listed by `thunderjar executions`")
     .option("--test-case <name>", "the executions of test case <name>, or with --kind prerun, the prerun images it builds now")
-    .addOption(olderThanOption())
+    .addOption(olderThanOption("executions"))
     .option("--all", "every execution, or with --kind prerun, every prerun image")
     .addOption(new Option("--kind <kind>", "which images: the runs' postrun images, the prerun images they start from, or both").choices(IMAGE_KINDS).default("postrun"))
     .addOption(
@@ -300,5 +274,5 @@ export function createPurgeImageCommand(): Command {
 }
 
 export function createPurgeCommand(): Command {
-  return new Command("purge").description("Delete what executions left behind, and record that it's gone.").addCommand(createPurgeImageCommand());
+  return new Command("purge").description("Delete what executions left behind, and record that it's gone.").addCommand(createPurgeImageCommand()).addCommand(createPurgeCaptureCommand());
 }
