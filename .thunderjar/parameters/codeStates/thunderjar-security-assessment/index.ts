@@ -13,7 +13,7 @@
  *
  */
 
-import { declareCodeState } from "thunderjar";
+import { codeStateGitCheckout, declareCodeState, resolveGitCheckout } from "thunderjar";
 
 // This repository at tag tj-thunderjar-security-assessment: main as it was when the
 // security-assessment task was written, with dependencies installed, so the agent has no need of the
@@ -21,25 +21,16 @@ import { declareCodeState } from "thunderjar";
 // postrun image: the issue the task's measurement looks for.
 //
 // Sealed: no origin, and the tag is on a commit from before the task and its measurement were added.
-// Keep it there, or the agent can read what's being measured. resolve looks up the tag's commit, so
-// the Dockerfile pins a SHA.
+// Keep it there, or the agent can read what's being measured. codeStateGitCheckout looks up the tag's
+// commit, so the Dockerfile pins a SHA; this adds the install on top.
+const checkout = codeStateGitCheckout({
+  repo: "https://github.com/dwjohnston/thunderjar.git",
+  tag: "tj-thunderjar-security-assessment",
+});
+
 export default declareCodeState({
-  config: {
-    repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "tj-thunderjar-security-assessment",
-  },
-  resolve: async (config, ctx) => {
-    const tag = `refs/tags/${config.tag}`;
-    const lines = (await ctx.exec(`git ls-remote --exit-code ${config.repo} ${tag} '${tag}^{}'`)).split("\n");
-    // An annotated tag lists its own object, then the commit it points to, with ^{}.
-    const line = lines.find((l) => l.endsWith("^{}")) ?? lines[0]!;
-    return line.split("\t")[0]!;
-  },
-  applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
-  && git -C /workspace fetch --quiet origin ${ctx.resolved} \\
-  && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
-  && git -C /workspace tag thunderjar-start \\
-  && git -C /workspace remote remove origin \\
-  && cd /workspace && bun install --frozen-lockfile
-WORKDIR /workspace`,
+  config: checkout.config!,
+  resolve: resolveGitCheckout,
+  applyParameter: (config, ctx) => `${checkout.applyParameter!(config, ctx)}
+RUN bun install --frozen-lockfile`,
 });
