@@ -13,7 +13,7 @@
  *
  */
 
-import { codeStateGitCheckout, declareCodeState, resolveGitCheckout } from "thunderjar";
+import { codeStateGitCheckout } from "thunderjar";
 
 // This repository at tag tj-thunderjar-security-assessment: main as it was when the
 // security-assessment task was written, with dependencies installed, so the agent has no need of the
@@ -21,16 +21,9 @@ import { codeStateGitCheckout, declareCodeState, resolveGitCheckout } from "thun
 // postrun image: the issue the task's measurement looks for.
 //
 // Sealed: no origin, and the tag is on a commit from before the task and its measurement were added.
-// Keep it there, or the agent can read what's being measured. codeStateGitCheckout looks up the tag's
-// commit, so the Dockerfile pins a SHA; this adds the install on top.
-const checkout = codeStateGitCheckout({
+// Keep it there, or the agent can read what's being measured.
+export default codeStateGitCheckout({
   repo: "https://github.com/dwjohnston/thunderjar.git",
   tag: "tj-thunderjar-security-assessment",
-});
-
-export default declareCodeState({
-  config: checkout.config!,
-  resolve: resolveGitCheckout,
-  applyParameter: (config, ctx) => `${checkout.applyParameter!(config, ctx)}
-RUN bun install --frozen-lockfile`,
+  install: "bun install --frozen-lockfile",
 });
