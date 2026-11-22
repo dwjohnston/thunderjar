@@ -27,6 +27,5 @@ export default declareCodeState({
   applyParameter: (config, ctx) => `RUN git clone --quiet ${config.repo} /workspace \\
   && git -C /workspace fetch --quiet origin ${ctx.resolved} \\
   && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
-  && git -C /workspace remote remove origin
-WORKDIR /workspace`,
+  && git -C /workspace remote remove origin`,
 });

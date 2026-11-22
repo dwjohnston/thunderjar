@@ -35,5 +35,5 @@ export default declareCodeState({
   && git -C /workspace fetch --quiet origin ${ctx.resolved} \\
   && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
   && git -C /workspace remote remove origin \\
-  && cd /workspace && bun install --frozen-lockfile`,
+  && bun install --frozen-lockfile`,
 });

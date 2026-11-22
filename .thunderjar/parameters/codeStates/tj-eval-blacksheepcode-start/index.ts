@@ -20,6 +20,5 @@ export default declareCodeState({
   && git -C /workspace checkout --quiet --detach ${ctx.resolved} \\
   && git -C /workspace tag thunderjar-start \\
   && git -C /workspace remote remove origin \\
-  && cd /workspace && bun install --frozen-lockfile
-WORKDIR /workspace`,
+  && bun install --frozen-lockfile`,
 });
