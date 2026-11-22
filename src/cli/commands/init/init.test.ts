@@ -126,16 +126,7 @@ export default declareTestCase({
 
     const harness = await read(copy.dir, `${P}/harnessModels/claude-code-2.1.311/index.ts`);
     expect(harness).toStartWith('import { claudeCode } from "thunderjar";\n');
-    expect(harness).toEndWith(`
-export default claudeCode({
-  version: "2.1.311",
-  models: {
-    "claude-haiku-4-5-20251001": [],
-    "claude-haiku-5-5": [],
-    "claude-sonnet-5-5": [],
-  },
-});
-`);
+    expect(harness).toEndWith('\nexport default claudeCode({ version: "2.1.311" });\n');
   });
 
   test("its base image gives every user a git identity", async () => {
