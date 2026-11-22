@@ -79,8 +79,8 @@ export function claudeCodeTokenCosts(raw: string): TokenCosts {
 export type ClaudeCodeOptions = {
   /** The version of `@anthropic-ai/claude-code` to install, e.g. `"2.1.311"`. */
   version: string;
-  /** The models it runs, as `declareHarness`'s `models`, e.g. `{ "claude-haiku-5-5": [] }`. */
-  models: HarnessModels;
+  /** The models it runs, as `declareHarness`'s `models`, e.g. `{ "claude-haiku-5-5": [] }`. By default, `CLAUDE_CODE_MODELS`. */
+  models?: HarnessModels;
   /** Replaces the command its run script runs: `CLAUDE_CODE_COMMAND` is the default. */
   command?: string;
 };
@@ -109,7 +109,7 @@ export const CLAUDE_CODE_COMMAND =
 export function claudeCode({ version, models, command = CLAUDE_CODE_COMMAND }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
-    models,
+    models: models ?? {},
     applyParameter: (_config, ctx) =>
       [
         `RUN npm install -g @anthropic-ai/claude-code@${ctx.version}`,
