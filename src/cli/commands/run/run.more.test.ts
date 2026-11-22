@@ -197,9 +197,9 @@ describe("0206 run options", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "0d345b7c", 1)}
+${permutation(1, "8d593fe0", 1)}
 
-Permutation 2: prerun image thunderjar-prerun:0d345b7c
+Permutation 2: prerun image thunderjar-prerun:8d593fe0
   Iteration 1: postrun image thunderjar-postrun:<ULID>-2-1
     docker:   ${OPTIONS}
     command:  sh /thunderjar/thunderjar-run.sh
@@ -214,7 +214,7 @@ Permutation 2: prerun image thunderjar-prerun:0d345b7c
     expect(exitCode).toBe(0);
     const runs = (await docker.commands()).filter((command) => command.startsWith("docker run --name"));
     expect(runs.map((command) => command.includes(OPTIONS))).toEqual([false, true]);
-    expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:0d345b7c -c `);
+    expect(runs[1]).toContain(` --pull never ${OPTIONS} --entrypoint sh thunderjar-prerun:8d593fe0 -c `);
   });
 
   test("scrubbed-env: the postrun image holds no value the agent was run with, and its base image's own", async () => {
@@ -251,7 +251,7 @@ describe("0206 test-case-env: a test case's own env and secretEnv", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-Permutation 1: prerun image thunderjar-prerun:2bdc0dba
+Permutation 1: prerun image thunderjar-prerun:70748710
   Iteration 1: postrun image thunderjar-postrun:<ULID>-1-1
     env:      FAKE_TEST_CASE_SECRET, ${SETTING}, FAKE_TEST_CASE_AWKWARD=${JSON.stringify(AWKWARD_VALUE)}
     command:  sh /thunderjar/thunderjar-run.sh
@@ -512,7 +512,7 @@ describe("0201 minimal existing setup", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "77e9dd16", 1)}
+${permutation(1, "4799f255", 1)}
 `);
   });
 });
@@ -585,7 +585,7 @@ describe("0210 build secrets", () => {
 
 describe("0207 image store", () => {
   const REPOSITORY = "ghcr.io/acme/thunderjar-images";
-  const PRERUN = `${REPOSITORY}:prerun-h77e9dd16`;
+  const PRERUN = `${REPOSITORY}:prerun-h4799f255`;
 
   test("without a docker login for the registry, stops before anything is built, run or written", async () => {
     await using docker = await fakeDocker();
@@ -613,7 +613,7 @@ describe("0207 image store", () => {
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
     const postrun = `${REPOSITORY}:postrun-e${executionId}-h0af800ad-i00`;
     expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
-Building thunderjar-prerun:77e9dd16 ... done
+Building thunderjar-prerun:4799f255 ... done
 Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
@@ -629,7 +629,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
   });
 
   test("a prerun push the registry refuses is an error, and nothing is run or written", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:77e9dd16"], failing: [PRERUN] });
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"], images: ["thunderjar-prerun:4799f255"], failing: [PRERUN] });
     const data = dataDir();
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["run", "example", "--data-dir", data], { env: docker.env });
@@ -659,7 +659,7 @@ describe("0201 minimal existing setup, with imageStore: null", () => {
 
 describe("0211 remote runtime", () => {
   const REPOSITORY = "ghcr.io/acme/thunderjar-images";
-  const PRERUN = `${REPOSITORY}:prerun-h77e9dd16`;
+  const PRERUN = `${REPOSITORY}:prerun-h4799f255`;
   const REMOTE = "docker --context cloud";
 
   test("builds on the runtime and pushes from there, so pulls nothing, then runs, commits, pushes and measures there", async () => {
@@ -674,7 +674,7 @@ describe("0211 remote runtime", () => {
     const postrun = `${REPOSITORY}:postrun-e${executionId}-h0af800ad-i00`;
     expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
 Running containers with \`<REPO>/src/testing/fakeDocker.ts --context cloud\`
-Building thunderjar-prerun:77e9dd16 ... done
+Building thunderjar-prerun:4799f255 ... done
 Pushing ${PRERUN} ... done
  1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
       Pushing ${postrun.replace(executionId, "<ID>")} ... done
@@ -691,8 +691,8 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     ]);
     // Looked for, built, tagged and pushed on the runtime, so it's already there: never pulled.
     expect(commands).toContain(`${REMOTE} image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun`);
-    expect(commands.find((command) => command.startsWith(`${REMOTE} build `))).toMatch(/ -t thunderjar-prerun:77e9dd16 /);
-    expect(commands).toContain(`${REMOTE} tag thunderjar-prerun:77e9dd16 ${PRERUN}`);
+    expect(commands.find((command) => command.startsWith(`${REMOTE} build `))).toMatch(/ -t thunderjar-prerun:4799f255 /);
+    expect(commands).toContain(`${REMOTE} tag thunderjar-prerun:4799f255 ${PRERUN}`);
     expect(commands).toContain(`${REMOTE} push --quiet ${PRERUN}`);
     expect(commands.some((command) => command.includes(" pull "))).toBe(false);
     // The runtime runs the stored prerun image, pulling it if it must.
@@ -704,7 +704,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     expect(commands.some((command) => command.includes(" image rm "))).toBe(false);
     // Its disk usage is logged before and after.
     expect(commands.filter((command) => command.startsWith(`${REMOTE} system df`))).toHaveLength(2);
-    expect(await docker.images()).toEqual(["thunderjar-prerun:77e9dd16", PRERUN, `thunderjar-postrun:${executionId}-1-1`, postrun]);
+    expect(await docker.images()).toEqual(["thunderjar-prerun:4799f255", PRERUN, `thunderjar-postrun:${executionId}-1-1`, postrun]);
   });
 
   test("--timings prints how long each phase took, once the execution and the runtime's afterExecution are done", async () => {
@@ -731,7 +731,7 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });
     // As on a fresh machine: the image store has it, the local daemon and the runtime don't.
-    await $`${FAKE_DOCKER} image rm thunderjar-prerun:77e9dd16 ${PRERUN}`.env({ ...Bun.env, ...docker.env }).quiet();
+    await $`${FAKE_DOCKER} image rm thunderjar-prerun:4799f255 ${PRERUN}`.env({ ...Bun.env, ...docker.env }).quiet();
     const before = (await docker.commands()).length;
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: docker.env });

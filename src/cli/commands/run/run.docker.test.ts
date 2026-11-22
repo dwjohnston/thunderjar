@@ -50,8 +50,8 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("run, against real Docker", ()
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
-Building <PREFIX>-prerun:32a1d048 ... done
-Building <PREFIX>-prerun:577ed2bd ... done
+Building <PREFIX>-prerun:ded54607 ... done
+Building <PREFIX>-prerun:e4f0784f ... done
  1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
       isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
  2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
@@ -116,7 +116,7 @@ Recorded in <DATA>/runs.sqlite
     // A postrun image starts as its prerun image does, rather than running the agent again.
     const config = "{{json .Config.Entrypoint}} {{json .Config.Cmd}}";
     expect(await $`docker image inspect --format ${config} ${alpha.postrunImage}`.text()).toBe(
-      await $`docker image inspect --format ${config} ${prefix}-prerun:32a1d048`.text(),
+      await $`docker image inspect --format ${config} ${prefix}-prerun:ded54607`.text(),
     );
 
     // Every container was removed.

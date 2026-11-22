@@ -90,6 +90,7 @@ describe("hashPermutations", () => {
         "RUN npm install --global bun@1.3.14",
         "WORKDIR /workspace",
         'RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md',
+        'RUN if git -C /workspace rev-parse --git-dir >/dev/null 2>&1; then git -C /workspace update-ref refs/thunderjar/start HEAD; fi',
         'RUN echo "install fake-harness-alpha@1.0.0"',
         writeModel("fake-model-small-001"),
         writeRunScript(
