@@ -91,7 +91,7 @@ bun run fixture 0202 plan is-prime-baseline
   - `0101_empty_project`: an empty project, not JavaScript. `init` gives it a nested `.thunderjar/package.json`.
   - `0102_javascript_project`: a JavaScript project with its own `package.json`. `init` gives it no nested one.
 - **02_regular**: initialised projects that work.
-  - `0201_minimal_existing_setup`: exactly the shared setup. Has type tests of the generated names.
+  - `0201_minimal_existing_setup`: the shared setup, with `fake-harness-alpha` also declaring `fake-model-effort-001`, with an `effort` variant, and `fake-model-tuned-001`, with `effort`, `temperature` and `mode` variants. Has type tests of the generated names.
   - `0202_typical_project`: a matrix of two prompt sets, two fake agents and two wordings of the task.
     - Prompt sets `snerk` and `glurk`, each writing its own `FAKE_INSTRUCTIONS.md`.
     - A second fake agent, `fake-harness-beta`, version `1.0.0`, on model IDs `fake-model-small-001` and `fake-model-large-001`. It writes a correct `isPrime.ts`, where alpha's is buggy.
