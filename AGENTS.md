@@ -235,6 +235,22 @@ These are the planned CLI commands. See the [CLI reference](./project-md/prd/100
    - `bun run test:package` packs Thunderjar, installs the tarball into an empty project in a temporary folder, and runs `init`, `generate`, `plan example` and `run example --dry-run` there with the installed `thunderjar`.
    - Every other test runs Thunderjar from source. This one catches what only the package gets wrong, such as a file left out of `files`.
 
+## Running the tests
+
+The whole suite takes over a minute, so run as little of it as the change needs.
+
+✅ **Do** run the tests of the code you're changing, by path, while you work.
+
+```sh
+bun test src/cli/commands/plan
+```
+
+✅ **Do** run the whole suite with `bun run test`, once, before you commit.
+
+❌ **Don't** run bare `bun test` for the whole suite.
+
+**Why:** `bun run test` adds `--parallel`, and finishes in about half the time of bare `bun test` (~70s vs ~130s). `bunfig.toml` can't set `parallel`, so the flag lives in the script. The slowest files, `src/cli/commands/run/*.test.ts` and `src/docker/docker.test.ts`, wait out real timeouts, so leave them out unless you've touched that code.
+
 ## Fixtures 
 
 Fixtures are example projects with sample thunderjar configurations. 
