@@ -2,9 +2,12 @@
 // unchanged. Any of these can be run by hand, e.g. `bun run fixture 0402 plan unknown-prompt-set`.
 import { describe, expect, test } from "bun:test";
 import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
+import { instruments } from "../../../instruments/instruments.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
+
+const KNOWN_INSTRUMENTS = Object.keys(instruments).join(", ");
 
 /** What 0202's fake-harness-alpha needs: `plan` and `run` stop without it. */
 const KEY = { FAKE_HARNESS_KEY: "fake-key" };
@@ -303,7 +306,7 @@ describe("0402 broken declarations", () => {
       "a measurement naming an unknown instrument",
       "unknown-instrument",
       [
-        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: fileCreated, grep, bunTestFile, replyMatches, shell, commits, filesChanged`,
+        `${measurement("unknown-instrument/measurements/isPrimeTsExists.ts")}: instrument: "fileCraeted" is not a known instrument. Known instruments: ${KNOWN_INSTRUMENTS}`,
       ],
     ],
     [

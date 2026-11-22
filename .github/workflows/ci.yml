@@ -29,6 +29,8 @@ jobs:
           THUNDERJAR_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
       # The Fly client's tests. `bun test` skips them: they're in .thunderjar/, a hidden folder.
       - run: bun run test:fly
+      # bun test doesn't look in .thunderjar/, a hidden folder.
+      - run: bun run test:measurements
       - name: Installed package smoke test
         run: bun run test:package
 

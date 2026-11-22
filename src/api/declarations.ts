@@ -446,7 +446,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell" | "commits" | "filesChanged"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell" | "commits" | "filesChanged" | "jsAst"}
  * @description
  * What to measure. Each instrument takes its own `config`, and returns its own value, the measure:
  *
@@ -459,6 +459,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
  * | `filesChanged` | `{ glob? }` | `FileChanges`: `{ added, modified, deleted }` paths changed since the start | none: give each metric a `score` |
  * | `commits` | `{}` | `Commit[]`, oldest first: `{ sha, message, files: { added, modified, deleted } }` | none: give each metric a `score` |
+ * | `jsAst` | `{ glob, selectors }` | `{ file, matches, parseError? }[]`: for each matching JS or TS file, how many nodes each esquery selector matches | none: give each metric a `score` |
  *
  * `shell` stores `command`'s stdout as it is, up to 64 KiB, in the run data store. A command that
  * prints secrets or other sensitive data will persist them: nothing transforms its output before
@@ -491,6 +492,15 @@ export type InstrumentTypes = {
   fileCreated: { config: { glob: string }; value: boolean };
   /** How many lines, across the files matching `glob`, match `pattern`, a JavaScript regular expression? */
   grep: { config: { glob: string; pattern: string }; value: number };
+  /**
+   * For each JavaScript or TypeScript file matching `glob`, how many syntax tree nodes each of
+   * `selectors`, esquery selectors by name, matches? Sorted by path. A file that doesn't parse
+   * counts 0 for each, and has `parseError`. A metric needs a `score` of its own.
+   */
+  jsAst: {
+    config: { glob: string; selectors: Record<string, string> };
+    value: { file: string; matches: Record<string, number>; parseError?: string }[];
+  };
   /**
    * How many tests pass, of all of them, when `test`, a Bun test file at a path relative to the
    * measurement's file, is run with `bun test` against each file matching `subject`? The test
@@ -597,6 +607,14 @@ export type MetricOf<I extends InstrumentName, T extends Stat = Stat> = { stat: 
 /** A metric as loaded at runtime, whatever its instrument. */
 export type Metric = { score?: (value: never) => unknown; stat: Stat; better?: Better };
 
+declare const metricNames: unique symbol;
+
+/**
+ * What `declareMeasurement` returns: the declaration, remembering its metric names for the type
+ * checker only (`measure()` types its metrics by them). There's no such property at runtime.
+ */
+export type DeclaredMeasurement<Name extends string = string> = MeasurementDeclaration & { readonly [metricNames]?: Name };
+
 /** A measurement as loaded at runtime: an instrument, its config, and its metrics, by name. */
 export type MeasurementDeclaration = {
   [I in InstrumentName]: {
@@ -615,8 +633,8 @@ export function declareMeasurement<I extends InstrumentName, T extends Record<st
   instrument: I;
   config: InstrumentTypes[I]["config"];
   metrics: { [K in keyof T]: MetricOf<I, T[K]> };
-}): MeasurementDeclaration {
-  return declared("declareMeasurement", declaration) as unknown as MeasurementDeclaration;
+}): DeclaredMeasurement<keyof T & string> {
+  return declared("declareMeasurement", declaration) as unknown as DeclaredMeasurement<keyof T & string>;
 }
 
 /**
