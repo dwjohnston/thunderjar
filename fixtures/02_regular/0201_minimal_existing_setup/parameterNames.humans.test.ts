@@ -46,6 +46,25 @@ describe("generated parameter names", () => {
     // @ts-expect-error - not a declared harness
     assertType<HarnessModelName>("nonexistent-harness/fake-model-small-001");
   });
+
+  it("HarnessModelName, with an effort level", () => {
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-effort-001/low");
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-effort-001/high");
+    // @ts-expect-error - the effort level is required
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-effort-001");
+    // @ts-expect-error - not one of its effort levels
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-effort-001/medium");
+  });
+
+  it("HarnessModelName, with an effort level and two other variants", () => {
+    // One part per variant, in the order they're declared: effort, then temperature, then mode.
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-tuned-001/low/0/fast");
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-tuned-001/high/1/careful");
+    // @ts-expect-error - every variant's part is required
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-tuned-001/low/0");
+    // @ts-expect-error - the parts are in the order they're declared
+    assertType<HarnessModelName>("fake-harness-alpha/fake-model-tuned-001/fast/0/low");
+  });
 });
 
 describe("declareTestCase", () => {

@@ -28,7 +28,17 @@ type InitialPromptNames = {
 };
 type HarnessName = "fake-harness-alpha";
 type HarnessModelName =
-  | "fake-harness-alpha/fake-model-small-001";
+  | "fake-harness-alpha/fake-model-small-001"
+  | "fake-harness-alpha/fake-model-effort-001/low"
+  | "fake-harness-alpha/fake-model-effort-001/high"
+  | "fake-harness-alpha/fake-model-tuned-001/low/0/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/low/0/careful"
+  | "fake-harness-alpha/fake-model-tuned-001/low/1/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/low/1/careful"
+  | "fake-harness-alpha/fake-model-tuned-001/high/0/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/high/0/careful"
+  | "fake-harness-alpha/fake-model-tuned-001/high/1/fast"
+  | "fake-harness-alpha/fake-model-tuned-001/high/1/careful";
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;
