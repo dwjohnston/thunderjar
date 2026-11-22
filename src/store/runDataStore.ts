@@ -152,6 +152,11 @@ export type ContainerRunRecord = {
   /** The run's measures, by measurement name. Empty until it has been measured. */
   result: Record<string, RecordedMeasure>;
   /**
+   * Its measures before each `remeasure`, oldest first: `result` is always the latest. Absent if it
+   * was never remeasured.
+   */
+  earlierResults?: Record<string, RecordedMeasure>[];
+  /**
    * That its postrun image was deleted, so `postrunImage` names an image that may no longer exist.
    * Its measures stay valid; they just can't be retaken. Absent if it never was.
    */
