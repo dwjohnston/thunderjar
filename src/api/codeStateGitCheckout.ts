@@ -11,7 +11,11 @@
 import { declareCodeState, type CodeStateDeclaration } from "./declarations.ts";
 
 /** A bare `ref` string would be ambiguous (`abc123` could be a branch), so there are three keys, one at a time. */
-export type CodeStateGitCheckoutConfig = { repo: string } & (
+export type CodeStateGitCheckoutConfig = {
+  repo: string;
+  /** A command run in /workspace after the checkout, e.g. `bun install --frozen-lockfile`. */
+  install?: string;
+} & (
   | { commit: string; branch?: never; tag?: never }
   | { branch: string; commit?: never; tag?: never }
   | { tag: string; commit?: never; branch?: never }
