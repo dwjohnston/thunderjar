@@ -85,6 +85,9 @@ bun .thunderjar/fly-client/index.ts <up | docker <args…> | stop [--force] | de
   - Adds `--network host` to `build`, so build steps can resolve names.
   - Resets the timer when it exits, however it exits.
   - `fly-client/docker` is the same, as one executable, for `THUNDERJAR_DOCKER`.
+- Progress
+  - While it waits, e.g. on starting the machine, its daemon or the SSH connection, it shows what on, with a timer, on the terminal (`/dev/tty`): Thunderjar captures its output. `FLY_CLIENT_PROGRESS=0` turns that off.
+  - Each step, how long it took, and waits on another process's lock go to `.thunderjar/logs/fly-client.log` (`FLY_CLIENT_LOG_FILE`).
 - The timer
   - `.thunderjar/.fly`, git-ignored: when the last `docker` command finished, and the deadlines from it.
   - A detached `watch` process acts on it: it stops the machine after `FLY_SLEEP_MINUTES`, and destroys it and its volume after `FLY_DESTROY_MINUTES`.

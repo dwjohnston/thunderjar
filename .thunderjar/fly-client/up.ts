@@ -9,10 +9,9 @@ import { describeSize, findMachine, fly, type Guest, type Machine, type MachineC
 import { busy } from "./idle.ts";
 import { imageRef, machineDir } from "./image.ts";
 import { withLock } from "./lock.ts";
+import { say, step } from "./progress.ts";
 import recipe from "./machine/recipe.json";
 import type { Settings } from "./settings.ts";
-
-const say = (message: string) => console.error(`fly-client: ${message}`);
 
 /** performance-<cpus>x, with 2 GB a CPU, or the recipe's size. */
 export function desiredGuest(settings: Settings): Guest {
@@ -22,12 +21,11 @@ export function desiredGuest(settings: Settings): Guest {
 }
 
 async function buildImage(settings: Settings, image: string): Promise<void> {
-  say(`building the machine's image, ${image}`);
   const label = image.split(":").at(-1) ?? "";
-  await fly(
+  await step(`building the machine's image, ${image}`, () => fly(
     ["deploy", "--build-only", "--push", "--image-label", label, "-a", settings.app, "--config", "fly.toml", "--dockerfile", "Dockerfile"],
     { cwd: machineDir },
-  );
+  ));
 }
 
 /** An unattached volume from the recipe, in the region, or a new one. */
@@ -59,15 +57,14 @@ async function create(settings: Settings): Promise<void> {
     env: { ...recipe.config.env, FLY_SLEEP_MINUTES: String(settings.sleepMinutes) },
     mounts: [{ volume, path: recipe.volume.path }],
   };
-  say(`creating the machine, ${describeSize(config.guest)}, in ${settings.region}`);
-  await fly([
+  await step(`creating the machine, ${describeSize(config.guest)}, in ${settings.region}`, () => fly([
     "machine", "run", image,
     "-a", settings.app,
     "--name", recipe.name,
     "--region", settings.region,
     "--machine-config", JSON.stringify(config),
     "--detach",
-  ]);
+  ]));
 }
 
 const sameGuest = (a: Guest | undefined, b: Guest) =>
@@ -100,22 +97,28 @@ async function updateIfChanged(settings: Settings, machine: Machine): Promise<bo
   if (what.length === 0) return false;
   const reason = await busy(settings, machine);
   if (reason) {
-    say(`not ${what.join(" or ")} ${machine.id}: ${reason}. Run up again once it's idle`);
+    await say(`not ${what.join(" or ")} ${machine.id}: ${reason}. Run up again once it's idle`);
     return false;
   }
-  if (changed.guest) say(`resizing ${machine.id} from ${describeSize(machine.config.guest)} to ${describeSize(changed.guest)}`);
-  if (changed.image) say(`moving ${machine.id} to ${image}`);
-  if (changed.env) say(`setting the watchdog of ${machine.id} to ${settings.sleepMinutes} minutes`);
+  if (changed.guest) await say(`resizing ${machine.id} from ${describeSize(machine.config.guest)} to ${describeSize(changed.guest)}`);
+  if (changed.image) await say(`moving ${machine.id} to ${image}`);
+  if (changed.env) await say(`setting the watchdog of ${machine.id} to ${settings.sleepMinutes} minutes`);
   if (changed.image) await buildImage(settings, image);
   await closeConnection(settings);
   const config: MachineConfig = { ...machine.config, ...changed };
-  await fly(["machine", "update", machine.id, "-a", settings.app, "--machine-config", JSON.stringify(config), "--yes"]);
+  await step(`updating ${machine.id}`, () =>
+    fly(["machine", "update", machine.id, "-a", settings.app, "--machine-config", JSON.stringify(config), "--yes"]),
+  );
   return true;
 }
 
 /** Waits until the machine's Docker daemon answers, twice in a row: after a start it can answer
  * once and then go away as the machine restarts. */
 async function waitForDaemon(settings: Settings, machine: Machine): Promise<void> {
+  await step(`waiting for the Docker daemon on ${machine.id}`, () => daemonAnswers(settings, machine));
+}
+
+async function daemonAnswers(settings: Settings, machine: Machine): Promise<void> {
   let answered = 0;
   for (let attempt = 0; attempt < 40; attempt++) {
     await ensureConnection(settings, machine.id).catch(() => {});
@@ -131,27 +134,32 @@ export async function up(settings: Settings): Promise<Machine> {
   // Several commands can find it stopped at once: one brings it up, the rest wait.
   return await withLock(settings, "up", async () => {
     const began = Date.now();
-    let machine = await findMachine(settings);
+    let machine = await step("finding the machine", () => findMachine(settings));
     const missing = !machine;
     if (!machine) {
-      say(`no machine in ${settings.app}. Creating ${recipe.name}…`);
+      await say(`no machine in ${settings.app}. Creating ${recipe.name}…`);
       await create(settings);
       machine = await findMachine(settings);
       if (!machine) throw new Error(`the machine in app ${settings.app} wasn't created`);
     } else if (machine.state === "stopping" || machine.state === "suspending") {
-      await fly(["machine", "wait", machine.id, "-a", settings.app, "--state", "stopped", "-w", "90s"]).catch(() => "");
+      const { id } = machine;
+      await step(`waiting for ${id} to finish ${machine.state}`, () =>
+        fly(["machine", "wait", id, "-a", settings.app, "--state", "stopped", "-w", "90s"]).catch(() => ""),
+      );
     }
     const updated = !missing && (await updateIfChanged(settings, machine));
     // A new machine starts by itself, as does an updated one.
     if (!missing && !updated && machine.state !== "started") {
-      say(`machine ${machine.name} (${machine.id}) is ${machine.state}. Starting it…`);
-      await fly(["machine", "start", machine.id, "-a", settings.app]);
+      await say(`machine ${machine.name} (${machine.id}) is ${machine.state}. Starting it…`);
+      await step(`starting ${machine.id}`, () => fly(["machine", "start", machine.id, "-a", settings.app]));
     }
-    await fly(["machine", "wait", machine.id, "-a", settings.app, "--state", "started", "-w", "120s"]);
+    await step(`waiting for ${machine.id} to be started`, () =>
+      fly(["machine", "wait", machine.id, "-a", settings.app, "--state", "started", "-w", "120s"]),
+    );
     await waitForDaemon(settings, machine);
     const took = `${Math.round((Date.now() - began) / 1000)}s`;
-    if (missing) say(`machine ${machine.name} (${machine.id}) created and started (${took})`);
-    else if (machine.state !== "started") say(`machine ${machine.name} (${machine.id}) started (${took})`);
+    if (missing) await say(`machine ${machine.name} (${machine.id}) created and started (${took})`);
+    else if (machine.state !== "started") await say(`machine ${machine.name} (${machine.id}) started (${took})`);
     return machine;
   });
 }

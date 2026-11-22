@@ -6,6 +6,7 @@
 // whose holder has gone is taken over.
 
 import { $ } from "bun";
+import { log } from "./progress.ts";
 import type { Settings } from "./settings.ts";
 
 export const alive = (pid: number | undefined): boolean => {
@@ -21,6 +22,8 @@ export const alive = (pid: number | undefined): boolean => {
 export async function withLock<T>(settings: Settings, name: string, action: () => Promise<T>): Promise<T> {
   const dir = `${settings.runtimeDir}/${name}.lock`;
   await $`mkdir -p ${settings.runtimeDir}`.quiet();
+  const began = Date.now();
+  let waited = false;
   for (;;) {
     if ((await $`mkdir ${dir}`.nothrow().quiet()).exitCode === 0) break;
     const holder = Bun.file(`${dir}/pid`);
@@ -28,8 +31,13 @@ export async function withLock<T>(settings: Settings, name: string, action: () =
       await $`rm -rf ${dir}`.quiet();
       continue;
     }
+    if (!waited) {
+      waited = true;
+      await log(`waiting for the ${name} lock, held by ${(await holder.exists()) ? await holder.text() : "another process"}`);
+    }
     await Bun.sleep(100);
   }
+  if (waited) await log(`got the ${name} lock after ${Math.round((Date.now() - began) / 1000)}s`);
   await Bun.write(`${dir}/pid`, String(process.pid));
   try {
     return await action();
