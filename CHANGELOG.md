@@ -1,5 +1,11 @@
 # thunderjar
 
+## 0.4.1
+
+### Patch Changes
+
+- c0e564d: Docs: add an alpha warning and a roadmap page, split the declaration reference into a page per parameter, and add stub sections for writing measurements, Thunderjar capture and remote runtimes.
+
 ## 0.4.0
 
 ### Minor Changes
