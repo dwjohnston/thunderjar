@@ -1,5 +1,5 @@
 <!-- Mockup: AI-generated draft of the configuration section. -->
-# Project structure
+# `.thunderjar/`
 
 <AiPlaceholder />
 
@@ -62,4 +62,4 @@ export default declareTestCase({
 });
 ```
 
-See the [declaration reference](./reference) for every option.
+See the [declaration reference](./reference/existing) for every option.
