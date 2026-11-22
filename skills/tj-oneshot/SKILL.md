@@ -58,10 +58,6 @@ You are the orchestrator. You don't do the task yourself.
    - The hook may run Thunderjar from source, e.g. `bun "$CLAUDE_PROJECT_DIR"/src/cli/index.ts capture prompt`, not `thunderjar capture`. It still counts.
    - Not installed in any of them: stop, and suggest `thunderjar capture install --harness <id>`.
 
-   ❌ **Don't** check only `.claude/settings.local.json`, or only for the text `thunderjar capture`.
-
-   **Why:** a project can commit its hooks to `.claude/settings.json`, and one that dogfoods Thunderjar runs it from source. Missing either stops the one-shot for no reason.
-3. For Codex, remind the user that Codex runs the hooks only once they're trusted in `/hooks`.
 
 ## 2. Anticipate what external interactions the subagent may need to do
 
