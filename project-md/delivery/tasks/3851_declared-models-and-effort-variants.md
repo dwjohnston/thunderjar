@@ -91,7 +91,7 @@ Error: .thunderjar/test-cases/compare-codex.ts: harnessModel: "codex-0.166.0-ope
 
 - File creating tests of `generate`: the literal union, and the warning for a harness that fails to load.
 - Fixture + stdout tests of `plan`: undeclared model, missing variant part, unknown variant value.
-- Type tests in scenario 0201's `parameterNames.test.ts`, restored. Name what doesn't exist explicitly, e.g.
+- Type tests in scenario 0201's `parameterNames.comprehensive.test.ts`, a new file beside `parameterNames.humans.test.ts`, in the same format. Add it to the scenario's `tsconfig.json`. Don't modify the `.humans.` file: see Human interventions. Name what doesn't exist explicitly, e.g.
   ```ts
   assertType<HarnessModelName>("fake-harness-alpha/fake-model-small-001");
   // @ts-expect-error - not a declared model
@@ -107,4 +107,6 @@ Error: .thunderjar/test-cases/compare-codex.ts: harnessModel: "codex-0.166.0-ope
 
 ## Human interventions
 
-None.
+- `fixtures/02_regular/0201_minimal_existing_setup/parameterNames.humans.test.ts` is canonical, and this task makes it wrong.
+  - Its `HarnessModelName` test accepts any model ID, `fake-harness-alpha/fake-model-large-001`, which is now a type error.
+  - A human updates it. Until then, flag it with 🔔📄 at the end of the PR description.
