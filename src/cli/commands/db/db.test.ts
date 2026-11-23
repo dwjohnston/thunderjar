@@ -22,6 +22,16 @@ afterEach(async () => {
   await admin.close();
 });
 
+test("db setup with a sqliteStore has nothing to set up: it creates its own tables", async () => {
+  await using copy = await copyScenarioProject("0202");
+
+  expect(await thunderjar(copy.dir, ["db", "setup"])).toEqual({
+    stdout: "The run data store is a SQLite file, which creates its own tables: there's nothing to set up.\n",
+    stderr: "",
+    exitCode: 0,
+  });
+});
+
 test("db setup with a postgresStore whose admin URL is unset says what to set, and changes nothing", async () => {
   await using copy = await copyScenarioProject("0202");
   await usePostgres(copy.dir);
