@@ -381,7 +381,11 @@ export async function setupPostgres(url: string, schema: string): Promise<void> 
   const sql = new SQL(url, { max: 1 });
   try {
     await sql.begin(async (tx) => {
-      await tx.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoted(schema)}`);
+      // CREATE SCHEMA needs the right to create schemas even when it exists, which its owner may lack.
+      const [existing] = await tx`SELECT pg_get_userbyid(nspowner) AS owner, current_user AS me FROM pg_namespace WHERE nspname = ${schema}`;
+      if (existing === undefined) await tx.unsafe(`CREATE SCHEMA ${quoted(schema)}`);
+      // As the schema's owner, so the tables are its, and its default privileges grant access to them.
+      else if (existing.owner !== existing.me) await tx.unsafe(`SET LOCAL ROLE ${quoted(existing.owner)}`);
       for (const statement of postgresTables(schema)) await tx.unsafe(statement);
     });
   } finally {
