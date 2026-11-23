@@ -9,7 +9,19 @@
  */
 
 import { expect, test } from "bun:test";
+import { measure } from "thunderjar/testing";
+import customProvider from "../customProvider.ts";
 import { customProviderTest, deepSeekProvider } from "../customProvider.helpers.ts";
+
+// Each metric's score, with each fixture at its workspace path.
+const fixture = (name: string) => `${import.meta.dir}/fixtures/${name}`;
+const measured = async (files: Record<string, string>) =>
+  (await measure(customProvider, { files: Object.fromEntries(Object.entries(files).map(([path, name]) => [path, fixture(name)])) })).metrics;
+
+// claudeCode.test.ts at PR #282's 0339eae, after the owner asked for a made-up provider.
+test("PR #282's test with a made-up provider is a custom-provider test", async () => {
+  expect((await measured({ "src/api/claudeCode.test.ts": "claudeCode_0339eae.ts" })).customProviderTest).toBe(true);
+});
 
 // Each metric's score, for the added test lines `stdout`.
 const scores = (stdout: string, exitCode = 0) => ({
