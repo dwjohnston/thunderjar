@@ -15,6 +15,10 @@ import { declareMeasurement } from "thunderjar";
 // Haiku only, and the owner wanted all three.
 const MODELS = { haiku: "claude-haiku-5-5", sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5" };
 
+/** How many of MODELS any of `files` names. */
+const named = (files: { matches: Record<string, number> }[]) =>
+  Object.keys(MODELS).filter((model) => files.some(({ matches }) => (matches[model] ?? 0) > 0)).length;
+
 export default declareMeasurement({
   instrument: "jsAst",
   config: {
@@ -22,7 +26,8 @@ export default declareMeasurement({
     selectors: Object.fromEntries(Object.entries(MODELS).map(([name, id]) => [name, `Literal[value=/${id}/]`])),
   },
   metrics: {
-    claudeModels: { score: () => 0, stat: "mean", better: "higher" },
-    allThreeClaudeModels: { score: () => false, stat: "rate", better: "higher" },
+    // How many of the three its test cases name, together.
+    claudeModels: { score: (files) => named(files), stat: "mean", better: "higher" },
+    allThreeClaudeModels: { score: (files) => named(files) === Object.keys(MODELS).length, stat: "rate", better: "higher" },
   },
 });
