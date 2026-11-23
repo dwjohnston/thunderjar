@@ -121,4 +121,24 @@ USER node`,
       custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", model: { maxTurns: 60 }, resolved: undefined }),
     ).toContain("#!/bin/sh\nclaude-2.1.311 --model m --max-turns 60 own < /thunderjar/prompt.txt > /thunderjar/result.json\n");
   });
+
+  describe("with a provider", () => {
+    const fragment = (harness: ReturnType<typeof claudeCode>, modelId: string, model: Record<string, string | number | boolean> = {}) =>
+      harness.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId, model, resolved: undefined });
+
+    test("passes a custom provider's address and key as Claude Code's, and needs only its key", () => {
+      const deepseek = claudeCode({
+        version: "2.1.311",
+        provider: { baseUrl: "https://api.deepseek.com/anthropic", apiKeyEnv: "DEEPSEEK_API_KEY" },
+        models: { "deepseek-v4-pro": [] },
+      });
+
+      expect(deepseek.requiredEnv).toEqual(["DEEPSEEK_API_KEY"]);
+      expect(fragment(deepseek, "deepseek-v4-pro")).toContain(
+        `#!/bin/sh
+ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY" ANTHROPIC_API_KEY='' claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json --dangerously-skip-permissions > /thunderjar/result.json
+`,
+      );
+    });
+  });
 });
