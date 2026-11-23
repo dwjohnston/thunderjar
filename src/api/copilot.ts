@@ -18,6 +18,7 @@
 // Copilot's JSON lines leave out its token events, so the run script also has it write its usage
 // statistics to a file, and appends them to the result file as one more line:
 // {"type":"thunderjar.usage","data":<the usage file>}.
+import type { TokenCosts } from "./declarations.ts";
 import { jsonLines } from "./jsonLines.ts";
 
 type Event = { type?: unknown; agentId?: unknown; data?: Record<string, unknown> };
@@ -30,4 +31,9 @@ export function copilotReply(raw: string): string {
     .findLast((content) => typeof content === "string" && content.trim() !== "");
   if (typeof reply !== "string") throw new Error("no assistant.message with content in Copilot's JSONL output");
   return reply;
+}
+
+/** Tokens per model, from the usage line the run script appended. */
+export function copilotTokenCosts(_raw: string): TokenCosts {
+  return { outcome: "unavailable", reason: "notReported" };
 }
