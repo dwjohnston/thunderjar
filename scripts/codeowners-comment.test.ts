@@ -8,7 +8,7 @@
  * Humans: add your notes here
  */
 import { describe, expect, test } from "bun:test";
-import { commentBody, MARKER, protectedFiles } from "./codeowners-comment";
+import { commentAction, commentBody, MARKER, protectedFiles } from "./codeowners-comment";
 
 const CODEOWNERS = `
 # Files that need a manual review from a human.
@@ -74,5 +74,13 @@ describe("commentBody", () => {
         "",
       ].join("\n"),
     );
+  });
+});
+
+const FILES = [{ path: "HUMANS.md", owners: ["@dwjohnston"] }];
+
+describe("commentAction", () => {
+  test("creates the comment when protected files change and there is none yet", () => {
+    expect(commentAction(undefined, FILES, PR)).toEqual({ kind: "create", body: commentBody(FILES, PR) });
   });
 });

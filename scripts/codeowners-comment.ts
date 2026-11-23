@@ -45,6 +45,14 @@ export function commentBody(files: ProtectedFile[], pr: PullRequest): string {
   ].join("\n");
 }
 
+export type Comment = { id: number; body: string };
+export type CommentAction = { kind: "create"; body: string } | { kind: "update"; id: number; body: string } | { kind: "none" };
+
+/** What to do to the PR's comments, given the comment this script left before, if any. */
+export function commentAction(_existing: Comment | undefined, _files: ProtectedFile[], _pr: PullRequest): CommentAction {
+  return { kind: "none" };
+}
+
 /** GitHub anchors a file's diff on the PR's files tab with the SHA-256 of its path. */
 function diffUrl(path: string, pr: PullRequest): string {
   const hash = new Bun.CryptoHasher("sha256").update(path).digest("hex");
