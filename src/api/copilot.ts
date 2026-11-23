@@ -98,9 +98,10 @@ export const COPILOT_COMMAND = ({ modelId, paths, provider }: CommandContext): s
  * The API Copilot speaks to a provider for `modelId`: the Responses API for OpenAI's models, as on
  * Chat Completions Copilot sends a tool without a `name`, and OpenAI rejects every request (400
  * "Missing required parameter: 'tools[4].name'", gauntlet smoke run 6, openai/gpt-6.1-sol).
- * Chat Completions for the rest.
+ * Chat Completions for the rest. A model's `wireApi` setting, `"responses"` or `"chat"`, overrides it.
  */
-const wireApiFor = (modelId: string): WireApi => (modelId.startsWith("openai/") ? "responses" : "chat");
+const wireApiFor = (modelId: string, setting: unknown): WireApi =>
+  setting === "responses" || setting === "chat" ? setting : modelId.startsWith("openai/") ? "responses" : "chat";
 
 /**
  * `command`, wrapped: the usage file is cleared first, then, if the command wrote one, it's
@@ -137,7 +138,7 @@ export function copilot({ version, models = COPILOT_MODELS, provider }: CopilotO
         "RUN copilot --version",
         "USER root",
         writeModel(ctx.modelId),
-        writeRunScript(withUsage(COPILOT_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: provider && { ...provider, wireApi: wireApiFor(ctx.modelId) } }), COMMAND_PATHS)),
+        writeRunScript(withUsage(COPILOT_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: provider && { ...provider, wireApi: wireApiFor(ctx.modelId, ctx.model.wireApi) } }), COMMAND_PATHS)),
         "USER node",
       ].join("\n"),
     collectReply: copilotReply,
