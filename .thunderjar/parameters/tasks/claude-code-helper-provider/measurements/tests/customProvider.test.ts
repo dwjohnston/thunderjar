@@ -23,6 +23,10 @@ test("PR #282's test with a made-up provider is a custom-provider test", async (
   expect((await measured({ "src/api/claudeCode.test.ts": "claudeCode_0339eae.ts" })).customProviderTest).toBe(true);
 });
 
+test("a test file with OpenRouter, as OPENROUTER or written out, has no custom provider", async () => {
+  expect((await measured({ "src/api/openRouter.test.ts": "openrouter_only.ts" })).customProviderTest).toBe(false);
+});
+
 // Each metric's score, for the added test lines `stdout`.
 const scores = (stdout: string, exitCode = 0) => ({
   customProviderTest: customProviderTest({ exitCode, stdout }),
