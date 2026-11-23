@@ -23,5 +23,11 @@ export default declareMeasurement({
       stat: "rate",
       better: "higher",
     },
+    // That provider is DeepSeek, as on PR #282, where the owner asked for a made-up one instead.
+    deepSeekProvider: {
+      score: (v) => (v.exitCode === 0 ? customProviderUrls(v.stdout).some((url) => /deepseek/i.test(url)) : undefined),
+      stat: "rate",
+      better: "lower",
+    },
   },
 });
