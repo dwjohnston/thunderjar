@@ -243,6 +243,20 @@ describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
     expect(tables).toEqual({ executions: true, container_runs: true });
   });
 
+  test("a store with a schema records into, and reads from, that schema's tables", async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+    await setupPostgres(POSTGRES_URL!, schema);
+    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+
+    await postgresStore(POSTGRES_URL!, "test db", { schema }).recordExecution(execution(id));
+
+    const admin = new SQL(POSTGRES_URL!);
+    const rows = await admin.unsafe(`SELECT execution_id FROM "${schema}".thunderjar_executions`);
+    await admin.close();
+    expect(rows.map((row: { execution_id: string }) => row.execution_id)).toEqual([id]);
+  });
+
   test("an empty database is an empty store", async () => {
     const store = postgresStore(await freshDatabase(), "test db");
 

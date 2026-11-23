@@ -399,6 +399,8 @@ export async function setupPostgres(url: string, schema: string): Promise<void> 
 }
 
 export type PostgresStoreOptions = {
+  /** The schema holding the store's tables. */
+  schema?: string;
   /** How long to wait before each retry of a query that failed. */
   retryDelaysMs?: readonly number[];
 };
