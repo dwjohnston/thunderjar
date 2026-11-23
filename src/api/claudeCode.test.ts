@@ -110,11 +110,15 @@ USER node`,
     expect(harness.collectTokenCosts?.(REAL, { version: "2.1.311", modelId: "deepseek-v4-pro" })).toEqual(claudeCodeTokenCosts(REAL));
   });
 
-  test("its command can be replaced", () => {
-    const custom = claudeCode({ version: "2.1.311", command: "claude -p hi > /thunderjar/result.json" });
+  test("its command is a function of the model, version and paths", () => {
+    const custom = claudeCode({
+      version: "2.1.311",
+      command: ({ modelId, model, version, paths, provider }) =>
+        `claude-${version} --model ${modelId} --max-turns ${model.maxTurns} ${provider === undefined ? "own" : "other"} < ${paths.prompt} > ${paths.result}`,
+    });
 
-    expect(custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", model: {}, resolved: undefined })).toContain(
-      "#!/bin/sh\nclaude -p hi > /thunderjar/result.json\n",
-    );
+    expect(
+      custom.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId: "m", model: { maxTurns: 60 }, resolved: undefined }),
+    ).toContain("#!/bin/sh\nclaude-2.1.311 --model m --max-turns 60 own < /thunderjar/prompt.txt > /thunderjar/result.json\n");
   });
 });
