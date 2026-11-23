@@ -24,3 +24,9 @@ const MADE_UP = `const custom = claudeCode({
 test("a test with a made-up provider is a custom-provider test", () => {
   expect(scores(MADE_UP).customProviderTest).toBe(true);
 });
+
+test("OpenRouter, written out or as OPENROUTER, isn't a custom provider", () => {
+  const openRouter = `const harness = claudeCode({ version: "2.1.311", provider: OPENROUTER, models: { "anthropic/claude-opus-5.5": [] } });
+expect(OPENROUTER).toEqual({ baseUrl: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY" });`;
+  expect(scores(openRouter).customProviderTest).toBe(false);
+});
