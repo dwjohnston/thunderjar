@@ -16,6 +16,7 @@
 // model call. Only the main session's events are written, so sub-agents' tokens aren't counted.
 // For a harness's `collectReply` and `collectTokenCosts`, so an OpenCode harness needn't parse it
 // itself, and `opencode`, a whole OpenCode harness.
+import type { TokenCosts } from "./declarations.ts";
 import { jsonLines } from "./jsonLines.ts";
 
 type Part = {
@@ -32,4 +33,9 @@ export function opencodeReply(raw: string): string {
   const texts = all.slice(lastStep + 1).flatMap((e) => (e.type === "text" && typeof e.part?.text === "string" ? [e.part.text] : []));
   if (texts.length === 0) throw new Error("no text event in OpenCode's JSON output");
   return texts.join("\n");
+}
+
+/** Every step's tokens, summed. */
+export function opencodeTokenCosts(_raw: string, _modelId: string): TokenCosts {
+  return { outcome: "unavailable", reason: "notReported" };
 }
