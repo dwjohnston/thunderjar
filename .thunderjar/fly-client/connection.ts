@@ -14,6 +14,7 @@
 import { $ } from "bun";
 import { fly } from "./fly.ts";
 import { withLock } from "./lock.ts";
+import { step } from "./progress.ts";
 import { flyEnv, type Settings } from "./settings.ts";
 
 export const HOST = "tjfly";
@@ -90,15 +91,19 @@ export async function ensureConnection(settings: Settings, machineId: string): P
   await withLock(settings, "connection", async () => {
     const p = paths(settings);
     if (!(await certificateFresh(settings))) {
-      await fly(["ssh", "issue", settings.org, p.key, "--hours", "24", "--overwrite"]);
+      await step("getting an SSH certificate", () => fly(["ssh", "issue", settings.org, p.key, "--hours", "24", "--overwrite"]));
     }
     await writeConfig(settings, machineId);
     if (await connected(settings)) return;
     // Its SSH server can take a few seconds to come up after the machine starts.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (await open(settings)) return;
-      await Bun.sleep(settings.pollMs);
-    }
+    const opened = await step(`connecting to ${machineId}`, async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (await open(settings)) return true;
+        await Bun.sleep(settings.pollMs);
+      }
+      return false;
+    });
+    if (opened) return;
     throw new Error(`can't connect to the Fly machine ${machineId} in app ${settings.app}`);
   });
 }

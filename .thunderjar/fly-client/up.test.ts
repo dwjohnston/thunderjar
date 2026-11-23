@@ -27,6 +27,17 @@ describe("up", () => {
     expect(result.stderr).toMatch(new RegExp(`machine ${machine.name} \\(m-1\\) started \\(\\d+s\\)`));
   });
 
+  test("logs each step it waits on, and how long it took", async () => {
+    await f.setMachines([await machineFixture({ state: "stopped" })]);
+
+    await f.run(["up"]);
+
+    const log = await Bun.file(`${f.dir}/fly-client.log`).text();
+    for (const step of ["finding the machine", "starting m-1", "waiting for m-1 to be started", "waiting for the Docker daemon on m-1"]) {
+      expect(log).toMatch(new RegExp(`\\] ${step}: done in \\d+s`));
+    }
+  });
+
   test("says there's no machine, then that it created and started one and how long that took", async () => {
     const result = await f.run(["up"]);
 

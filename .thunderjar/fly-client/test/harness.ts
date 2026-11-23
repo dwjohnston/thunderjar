@@ -86,6 +86,8 @@ export async function fixture(): Promise<Fixture> {
     FLYIO_TOKEN: "fake-token",
     FLY_TIMER_FILE: timerFile,
     FLY_CLIENT_DIR: `${dir}/runtime`,
+    FLY_CLIENT_LOG_FILE: `${dir}/fly-client.log`,
+    FLY_CLIENT_PROGRESS: "0",
     FLY_CLIENT_POLL_MS: "10",
   };
 
