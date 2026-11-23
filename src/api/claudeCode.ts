@@ -118,10 +118,12 @@ export type ClaudeCodeOptions = ClaudeCodeCommon &
 
 /**
  * The command that runs Claude Code: the prompt and model read from their files, so quotes and
- * newlines reach the agent intact, its result as JSON, without permission prompts.
+ * newlines reach the agent intact, at the model's `effort` if it has one, its result as JSON,
+ * without permission prompts. Given a provider, it points Claude Code at it.
  */
-export const CLAUDE_CODE_COMMAND = ({ paths, provider }: CommandContext): string =>
-  `${provider ? `${envAssignments(providerEnv(provider))} ` : ""}claude -p "$(cat ${paths.prompt})" --model "$(cat ${paths.model})" --output-format json --dangerously-skip-permissions > ${paths.result}`;
+export const CLAUDE_CODE_COMMAND = ({ model, paths, provider }: CommandContext): string =>
+  `${provider ? `${envAssignments(providerEnv(provider))} ` : ""}claude -p "$(cat ${paths.prompt})" --model "$(cat ${paths.model})"` +
+  `${model.effort === undefined ? "" : ` --effort ${model.effort}`} --output-format json --dangerously-skip-permissions > ${paths.result}`;
 
 /**
  * `baseUrl` as `ANTHROPIC_BASE_URL` takes it: without a final `/v1`, which Claude Code adds
