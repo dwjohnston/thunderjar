@@ -75,6 +75,31 @@ describe.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("recordRun", () => {
     ]);
   });
 
+  test("records a run as a role that may only insert, like CI's ci_metrics_writer", async () => {
+    await using db = await freshSchema();
+    await createTables(db.sql, db.schema);
+    const writer = `${db.schema}_writer`;
+    await db.sql.unsafe(`create role ${writer} nologin`);
+    await db.sql.unsafe(`grant usage on schema ${db.schema} to ${writer}`);
+    await db.sql.unsafe(`grant insert on all tables in schema ${db.schema} to ${writer}`);
+    await db.sql.unsafe(`grant usage on all sequences in schema ${db.schema} to ${writer}`);
+    const asWriter = new SQL(Bun.env.THUNDERJAR_POSTGRES_URL!, { max: 1 });
+    await asWriter.unsafe(`set role ${writer}`);
+
+    try {
+      await expect(
+        recordRun(asWriter, run, { totalSeconds: 1, tests: [{ file: "a.test.ts", name: "fast", durationMs: 2, status: "passed" }] }, db.schema),
+      ).resolves.toBeUndefined();
+    } finally {
+      await asWriter.close();
+      await db.sql.unsafe(`drop owned by ${writer}`);
+      await db.sql.unsafe(`drop role ${writer}`);
+    }
+
+    const tests = await db.sql`select name from ${db.sql(db.schema)}.ci_test_metrics`;
+    expect([...tests]).toEqual([{ name: "fast" }]);
+  });
+
   test("createTables replaces an empty ci_test_metrics of another shape, e.g. one made by hand", async () => {
     await using db = await freshSchema();
     await db.sql`create table ${db.sql(db.schema)}.ci_test_metrics (id serial primary key, test_name text not null, duration numeric not null)`;
