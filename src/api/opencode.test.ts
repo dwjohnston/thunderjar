@@ -126,4 +126,8 @@ USER node`,
       `echo 1.19.5 openrouter/openai/gpt-5.5 {"options":{"reasoningEffort":"high"}} chat > /thunderjar/result.json`,
     );
   });
+
+  test("its required variables can be replaced, e.g. for OpenCode's built-in openrouter provider, which reads OPENROUTER_API_KEY itself", () => {
+    expect(opencode({ version: "1.19.5", models: { "openrouter/openai/gpt-5.5": [] }, requiredEnv: ["OPENROUTER_API_KEY"] }).requiredEnv).toEqual(["OPENROUTER_API_KEY"]);
+  });
 });
