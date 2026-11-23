@@ -25,4 +25,10 @@ describe("opencodeTokenCosts", () => {
       ],
     });
   });
+
+  test("no events is unparseable; events but no finished step, e.g. a first model call that failed, notReported; a step missing its tokens unparseable", () => {
+    expect(opencodeTokenCosts("Error: something went wrong", "m")).toEqual({ outcome: "unavailable", reason: "unparseable" });
+    expect(opencodeTokenCosts('{"type":"error","error":{"name":"APIError","data":{"statusCode":402}}}', "m")).toEqual({ outcome: "unavailable", reason: "notReported" });
+    expect(opencodeTokenCosts('{"type":"step_finish","part":{}}', "m")).toEqual({ outcome: "unavailable", reason: "unparseable" });
+  });
 });
