@@ -1,0 +1,592 @@
+{
+  "uid": "ci-timings",
+  "title": "CI timings",
+  "tags": [
+    "ci"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "job",
+        "label": "Job",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "ci-metrics"
+        },
+        "query": "select distinct job from ci_runs order by 1",
+        "definition": "select distinct job from ci_runs order by 1",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "check"
+          ],
+          "value": [
+            "check"
+          ]
+        },
+        "refresh": 1
+      },
+      {
+        "name": "outcome",
+        "label": "Outcome",
+        "type": "custom",
+        "query": "success,failure,cancelled",
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "success"
+          ],
+          "value": [
+            "success"
+          ]
+        },
+        "options": []
+      },
+      {
+        "name": "test_filter",
+        "label": "Test filter (regex)",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Job time, latest run",
+      "description": "Wall-clock time of each job's latest run, from its first step to the upload.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "select started_at as time, job as metric, job_seconds as value from ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome) order by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Job time, last 7 days vs the 7 before",
+      "description": "Change in each job's median wall-clock time. Positive means slower.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "select job,\n  (percentile_cont(0.5) within group (order by job_seconds) filter (where started_at > now() - interval '7 days'))\n  / nullif(percentile_cont(0.5) within group (order by job_seconds) filter (where started_at <= now() - interval '7 days'), 0) - 1 as change\nfrom ci_runs where started_at > now() - interval '14 days' and job in ($job) and outcome in ($outcome)\ngroup by job order by job"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^change$/",
+          "values": true
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Tests, latest run",
+      "description": "Number of tests in each job's latest run.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "select started_at as time, job as metric, tests as value from ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome) order by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Job wall-clock time per run",
+      "description": "Each point is one CI job run. The average line smooths out runner noise, so slow creep shows.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "select started_at as time, job as metric, job_seconds as value\nfrom ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\nunion all\nselect started_at, job || ' (10-run average)', avg(job_seconds) over (partition by job order by started_at rows 9 preceding)\nfrom ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "pointSize": 6,
+            "showPoints": "always",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Test runner time per run",
+      "description": "The test runner's own wall-clock time, as Bun reports it.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "select started_at as time, job as metric, test_seconds as value\nfrom ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\nunion all\nselect started_at, job || ' (10-run average)', avg(test_seconds) over (partition by job order by started_at rows 9 preceding)\nfrom ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\norder by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "pointSize": 6,
+            "showPoints": "always",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Tests getting slower",
+      "description": "Median duration in the last 7 days against the 30 days before. Tests with at least 3 runs in each window, by the biggest increase.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "with t as (\n  select m.file, m.name, m.duration_ms, m.recorded_at > now() - interval '7 days' as recent\n  from ci_test_metrics m join ci_runs r on r.id = m.ci_run_id\n  where m.recorded_at > now() - interval '37 days' and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\n), s as (\n  select file, name,\n    percentile_cont(0.5) within group (order by duration_ms) filter (where not recent) as \"Before (ms)\",\n    percentile_cont(0.5) within group (order by duration_ms) filter (where recent) as \"Last 7 days (ms)\",\n    count(*) filter (where not recent) as before_runs, count(*) filter (where recent) as recent_runs\n  from t group by file, name\n)\nselect file as \"File\", name as \"Test\", \"Before (ms)\", \"Last 7 days (ms)\",\n  \"Last 7 days (ms)\" - \"Before (ms)\" as \"Change (ms)\",\n  \"Last 7 days (ms)\" / nullif(\"Before (ms)\", 0) - 1 as \"Change\"\nfrom s where before_runs >= 3 and recent_runs >= 3\norder by \"Change (ms)\" desc limit 25"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(ms\\)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Change"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Runs"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "File"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 320
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Slowest tests",
+      "description": "Over the dashboard's time range. Passed runs only.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "select m.file as \"File\", m.name as \"Test\",\n  percentile_cont(0.5) within group (order by m.duration_ms) as \"Median (ms)\",\n  percentile_cont(0.9) within group (order by m.duration_ms) as \"p90 (ms)\",\n  count(*) as \"Runs\"\nfrom ci_test_metrics m join ci_runs r on r.id = m.ci_run_id\nwhere $__timeFilter(m.recorded_at) and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\ngroup by m.file, m.name order by 3 desc limit 25"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*\\(ms\\)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Change"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Runs"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "File"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 320
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Duration of the 10 slowest tests, per run",
+      "description": "The tests with the highest median in the time range, narrowed by the Test filter above.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 11
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "with m as (\n  select m.* from ci_test_metrics m join ci_runs r on r.id = m.ci_run_id\n  where $__timeFilter(m.recorded_at) and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\n    and (m.file || ' ' || m.name) ~* '$test_filter'\n), top as (\n  select file, name from m group by file, name\n  order by percentile_cont(0.5) within group (order by duration_ms) desc limit 10\n)\nselect m.recorded_at as time, m.name as metric, m.duration_ms as value\nfrom m join top using (file, name) order by 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "pointSize": 6,
+            "showPoints": "always",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}

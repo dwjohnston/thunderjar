@@ -1,0 +1,7 @@
+# 🤖 This file was created with AI (Claude Code, session_01LCLeLhdFSg6pjhA6B8LSGh).
+apiVersion: 1
+providers:
+  - name: ci-metrics
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards

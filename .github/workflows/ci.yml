@@ -19,12 +19,15 @@ jobs:
         ports: ["5432:5432"]
         options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 15
     steps:
+      # For the CI timing metrics: scripts/ci-metrics.
+      - name: Note the job's start
+        run: echo "CI_JOB_STARTED_AT=$(date +%s.%N)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
-      - run: bun run test
+      - run: bun run test --reporter=junit --reporter-outfile=junit.xml
         env:
           THUNDERJAR_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
       # The Fly client's tests. `bun test` skips them: they're in .thunderjar/, a hidden folder.
@@ -33,6 +36,13 @@ jobs:
       - run: bun run test:measurements
       - name: Installed package smoke test
         run: bun run test:package
+      # Records the job's time and each test's in the CI metrics database. Never fails the job.
+      - name: Upload test timings
+        if: always()
+        continue-on-error: true
+        run: bun scripts/ci-metrics/upload.ts junit.xml --outcome ${{ job.status }}
+        env:
+          CI_METRICS_DB_URL: ${{ secrets.CI_METRICS_DB_URL }}
 
   # Its own job, so it runs alongside check rather than after it.
   docker:
@@ -43,6 +53,9 @@ jobs:
       contents: read
       packages: write
     steps:
+      # For the CI timing metrics: scripts/ci-metrics.
+      - name: Note the job's start
+        run: echo "CI_JOB_STARTED_AT=$(date +%s.%N)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
@@ -61,7 +74,14 @@ jobs:
       - name: Pull or build the sample repo image
         run: bun run di:build:sample-repo --registry ghcr.io/${{ github.repository_owner }}/thunderjar-sample-repo --push
       - name: Docker image tests (GitHub's Ubuntu runners have Docker)
-        run: bun run test:docker:parallel
+        run: bun run test:docker:parallel --reporter=junit --reporter-outfile=junit-docker.xml
+      # Records the job's time and each test's in the CI metrics database. Never fails the job.
+      - name: Upload test timings
+        if: always()
+        continue-on-error: true
+        run: bun scripts/ci-metrics/upload.ts junit-docker.xml --outcome ${{ job.status }}
+        env:
+          CI_METRICS_DB_URL: ${{ secrets.CI_METRICS_DB_URL }}
 
   # Builds the versioned docs site, as the deploy after a release does, so a release
   # PR whose docs won't build can't be merged.
