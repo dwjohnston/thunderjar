@@ -34,7 +34,8 @@ export function codexReply(raw: string): string {
 
 /**
  * Tokens summed over every `turn.completed`, as one entry for `modelId`: Codex doesn't name the
- * model. Its `input_tokens` include the cached ones, so they're subtracted.
+ * model. Its `input_tokens` include the cached ones, so they're subtracted. `notReported` if no
+ * turn completed or none counted a token.
  */
 export function codexTokenCosts(raw: string, modelId: string): TokenCosts {
   let input = 0, cached = 0, output = 0;
@@ -44,6 +45,7 @@ export function codexTokenCosts(raw: string, modelId: string): TokenCosts {
     cached += tokenCount(usage.cached_input_tokens) ?? 0;
     output += tokenCount(usage.output_tokens) ?? 0;
   }
+  if (input + output === 0) return { outcome: "unavailable", reason: "notReported" };
   return {
     outcome: "collected",
     models: [{ model: modelId, inputTokens: Math.max(0, input - cached), outputTokens: output, cacheReadTokens: cached, cacheCreationTokens: 0 }],
