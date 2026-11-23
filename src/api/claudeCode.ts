@@ -154,7 +154,7 @@ const providerEnv = (provider: CommandProvider) => ({
  * ```
  */
 export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND, provider, requiredEnv }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
-  const commandProvider: CommandProvider | undefined = provider && { ...provider, baseUrl: anthropicBaseUrl(provider.baseUrl), wireApi: "anthropic" };
+  const commandProvider: CommandProvider | undefined = provider && { baseUrl: anthropicBaseUrl(provider.baseUrl), apiKeyEnv: provider.apiKeyEnv, wireApi: "anthropic" };
   return declareHarness({
     version,
     models,
