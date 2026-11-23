@@ -1,7 +1,8 @@
 // The Copilot readers, against a `copilot --output-format json` result: JSON lines, one event each,
 // with the usage line the run script appended.
 import { describe, expect, test } from "bun:test";
-import { copilotReply, copilotTokenCosts } from "./copilot.ts";
+import { copilot, copilotReply, copilotTokenCosts } from "./copilot.ts";
+import { declaredBy } from "./declarations.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/copilot.result.jsonl`).text();
 
@@ -30,5 +31,38 @@ describe("copilotTokenCosts", () => {
     expect(copilotTokenCosts('{"type":"thunderjar.usage","data":{"modelMetrics":{"m":{"usage":{"inputTokens":"many"}}}}}')).toEqual({ outcome: "unavailable", reason: "unparseable" });
     const none = '{"type":"thunderjar.usage","data":{"modelMetrics":{"m":{"usage":{"inputTokens":0,"outputTokens":0,"cacheReadTokens":0,"cacheWriteTokens":0}}}}}';
     expect(copilotTokenCosts(none)).toEqual({ outcome: "unavailable", reason: "notReported" });
+  });
+});
+
+const fragment = (harness: ReturnType<typeof copilot>, modelId: string, model: Record<string, string> = {}) =>
+  harness.applyParameter(undefined, { dir: "parameters/harness", version: "1.0.105", modelId, model, resolved: undefined });
+
+describe("copilot", () => {
+  const harness = copilot({ version: "1.0.105" });
+
+  test("is a harness declaration, pinning its version, needing COPILOT_GITHUB_TOKEN, and reading with the library's readers", () => {
+    expect(declaredBy(harness)).toBe("declareHarness");
+    expect(harness.version).toBe("1.0.105");
+    expect(harness.requiredEnv).toEqual(["COPILOT_GITHUB_TOKEN"]);
+    expect(harness.collectReply?.(RESULT)).toBe("pong");
+    expect(harness.collectTokenCosts?.(RESULT, { version: "1.0.105", modelId: "claude-haiku-5.5" })).toEqual(copilotTokenCosts(RESULT));
+  });
+
+  test("installs and unpacks Copilot as node, writes the model, and a run script that appends the usage line to the result", () => {
+    expect(fragment(harness, "claude-haiku-5.5")).toBe(
+      `RUN npm install -g @github/copilot@1.0.105
+RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
+USER node
+RUN copilot --version
+USER root
+COPY <<'THUNDERJAR_EOF' /thunderjar/model.txt
+claude-haiku-5.5
+THUNDERJAR_EOF
+COPY --chmod=755 <<'THUNDERJAR_EOF' /thunderjar/thunderjar-run.sh
+#!/bin/sh
+rm -f /tmp/copilot-usage.json; copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color --output-format json --usage-output-file /tmp/copilot-usage.json > /thunderjar/result.json; code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code
+THUNDERJAR_EOF
+USER node`,
+    );
   });
 });

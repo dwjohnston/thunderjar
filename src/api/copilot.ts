@@ -18,7 +18,8 @@
 // Copilot's JSON lines leave out its token events, so the run script also has it write its usage
 // statistics to a file, and appends them to the result file as one more line:
 // {"type":"thunderjar.usage","data":<the usage file>}.
-import type { ModelTokenCosts, TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
+import type { HelperOptions } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Event = { type?: unknown; agentId?: unknown; data?: Record<string, unknown> };
@@ -58,4 +59,25 @@ export function copilotTokenCosts(raw: string): TokenCosts {
   if (total === 0) return { outcome: "unavailable", reason: "notReported" };
   const apiDurationMs = tokenCount(usage?.totalApiDurationMs);
   return { outcome: "collected", models, ...(apiDurationMs !== undefined && { apiDurationMs }) };
+}
+
+/** The models `copilot` declares unless given others, as Copilot takes them. Which you can use depends on your Copilot plan. */
+export const COPILOT_MODELS: HarnessModels = {
+  "claude-haiku-5.5": [],
+  "gpt-5.5": [],
+};
+
+/** What `copilot` gets. */
+export type CopilotOptions = HelperOptions;
+
+/** A complete harness declaration for Copilot `version`. */
+export function copilot({ version, models = COPILOT_MODELS }: CopilotOptions): HarnessDeclaration<undefined, undefined> {
+  return declareHarness({
+    version,
+    models,
+    applyParameter: () => "",
+    collectReply: copilotReply,
+    collectTokenCosts: copilotTokenCosts,
+    requiredEnv: ["COPILOT_GITHUB_TOKEN"],
+  });
 }
