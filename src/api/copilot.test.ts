@@ -82,5 +82,24 @@ USER node`,
       expect(fragment(openRouter, "anthropic/claude-haiku-5.5", { wireApi: "responses" })).toContain("COPILOT_PROVIDER_WIRE_API=responses copilot -p");
       expect(fragment(openRouter, "openai/gpt-6.1-sol", { wireApi: "chat" })).toContain("COPILOT_PROVIDER_MODEL_ID=gpt-6.1-sol copilot -p");
     });
+
+    test("passes a custom provider the same way", () => {
+      const custom = copilot({ version: "1.0.105", provider: { baseUrl: "https://llm.example.com/v1", apiKeyEnv: "EXAMPLE_API_KEY" }, models: { "big-model": [] } });
+
+      expect(custom.requiredEnv).toEqual(["EXAMPLE_API_KEY"]);
+      expect(fragment(custom, "big-model")).toContain(
+        `COPILOT_PROVIDER_BASE_URL=https://llm.example.com/v1 COPILOT_PROVIDER_API_KEY="$EXAMPLE_API_KEY" COPILOT_PROVIDER_MODEL_ID=big-model copilot -p`,
+      );
+    });
+  });
+
+  test("wraps a command override too: with --usage-output-file its usage line is appended, and without it the run still works, with no token costs", () => {
+    const usage = copilot({ version: "1.0.105", command: ({ paths }) => `copilot -p hi --usage-output-file ${paths.usage} > ${paths.result}` });
+    const noUsage = copilot({ version: "1.0.105", command: ({ paths }) => `copilot -p hi > ${paths.result}` });
+    const append = `code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code`;
+
+    expect(fragment(usage, "gpt-5.5")).toContain(`\nrm -f /tmp/copilot-usage.json; copilot -p hi --usage-output-file /tmp/copilot-usage.json > /thunderjar/result.json; ${append}\n`);
+    expect(fragment(noUsage, "gpt-5.5")).toContain(`\nrm -f /tmp/copilot-usage.json; copilot -p hi > /thunderjar/result.json; ${append}\n`);
+    expect(copilotTokenCosts('{"type":"assistant.message","data":{"content":"pong"}}')).toEqual({ outcome: "unavailable", reason: "unparseable" });
   });
 });
