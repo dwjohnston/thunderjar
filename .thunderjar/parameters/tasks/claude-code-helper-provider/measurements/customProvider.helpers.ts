@@ -18,5 +18,5 @@ export const ADDED_TEST_LINES = "true";
 
 /** The `baseUrl` of each provider declared in `text`, other than OpenRouter's. */
 export function customProviderUrls(text: string): string[] {
-  return [...text.matchAll(/\bbaseUrl\s*:\s*["'`]([^"'`]+)["'`]/g)].map((match) => match[1]!);
+  return [...text.matchAll(/\bbaseUrl\s*:\s*["'`]([^"'`]+)["'`]/g)].map((match) => match[1]!).filter((url) => !/openrouter\.ai/i.test(url));
 }
