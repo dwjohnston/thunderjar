@@ -63,3 +63,28 @@ Matrix shape: 1/1/2/2/2 (8 permutations)
     expect(await docker.commands()).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun"]);
   });
 });
+
+describe("--json", () => {
+  test("0202: the parameters, matrix shape and each permutation, with its hash, prerun image and whether it's built", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["plan", "two-harnesses", "--json"], { env: { ...docker.env, ...KEY } });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    const plan = JSON.parse(stdout);
+    expect(plan.testCase).toBe("two-harnesses");
+    expect(plan.parameters.task).toBe("is-prime");
+    expect(plan.matrixShape).toEqual([1, 1, 1, 2, 1]);
+    expect(plan.permutations).toHaveLength(2);
+    expect(plan.permutations[0]).toEqual({
+      number: 1,
+      parameters: expect.objectContaining({ harnessModel: plan.parameters.harnessModel[0] }),
+      modelId: expect.any(String),
+      hash: expect.stringMatching(/^[0-9a-f]{64}$/),
+      prerunImage: expect.stringMatching(/^thunderjar-prerun:[0-9a-f]{8}$/),
+      prerunImageStatus: "missing",
+      resolved: {},
+    });
+  });
+});
