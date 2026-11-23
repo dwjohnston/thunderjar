@@ -99,5 +99,18 @@ USER node`,
         `OPENCODE_PERMISSION='{"external_directory":"allow"}' OPENCODE_CONFIG_CONTENT='{"provider":{"openrouter":{"npm":"@ai-sdk/openai-compatible","name":"OpenRouter","options":{"baseURL":"https://openrouter.ai/api/v1","apiKey":"{env:OPENROUTER_API_KEY}"},"models":{"openai/gpt-5.5":{"options":{"reasoningEffort":"low"}}}}}}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
       );
     });
+
+    test("names a custom provider by its models' first part, and lists the model even with no config of its own", () => {
+      const custom = opencode({
+        version: "1.19.5",
+        provider: { baseUrl: "https://mycustomprovider.com/v1", apiKeyEnv: "MY_CUSTOM_PROVIDER_API_KEY" },
+        models: { "mycustomprovider/my-custom-model": [] },
+      });
+
+      expect(custom.requiredEnv).toEqual(["MY_CUSTOM_PROVIDER_API_KEY"]);
+      expect(runScript(custom, "mycustomprovider/my-custom-model")).toBe(
+        `OPENCODE_PERMISSION='{"external_directory":"allow"}' OPENCODE_CONFIG_CONTENT='{"provider":{"mycustomprovider":{"npm":"@ai-sdk/openai-compatible","name":"mycustomprovider","options":{"baseURL":"https://mycustomprovider.com/v1","apiKey":"{env:MY_CUSTOM_PROVIDER_API_KEY}"},"models":{"my-custom-model":{}}}}}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
+      );
+    });
   });
 });
