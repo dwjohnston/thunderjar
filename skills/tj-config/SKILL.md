@@ -69,11 +69,22 @@ runDataStore: sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }),
 import { declareConfig, postgresStore } from "thunderjar";
 
 runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL" }),
+// or, with its own schema and admin URL variable:
+runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL", schema: "evals", adminUrlEnv: "EVALS_ADMIN_URL" }),
 ```
 
-- `urlEnv` names the variable holding the connection URL, e.g. `postgres://user:pass@host:5432/thunderjar`.
-- Thunderjar creates its two tables, `thunderjar_executions` and `thunderjar_container_runs`, on first use. The database can hold other tables.
+- `urlEnv` names the variable holding the connection URL, e.g. `postgres://user:pass@host:5432/postgres`.
+  - That URL needs only SELECT, INSERT and UPDATE on the two tables.
+- The two tables, `thunderjar_executions` and `thunderjar_container_runs`, are in `schema`, by default `thunderjar`. The database can hold other schemas and tables.
+- `thunderjar db setup` creates the schema and the tables, with the URL in `adminUrlEnv`, by default `THUNDERJAR_DB_URL_ADMIN`. Running it again is harmless.
+  - Other commands never create them. Without them, they and `doctor` stop, saying to run `db setup`.
 - Errors name the store as `Postgres at $THUNDERJAR_DB_URL`, never by its URL.
+
+✅ **Do** have the user run `thunderjar db setup` once, with an admin URL, e.g. the database owner's, before the first `run`.
+
+❌ **Don't** set the admin URL on machines that only run experiments, e.g. CI.
+
+**Why:** the admin URL may drop tables. Only setting up needs it.
 
 ✅ **Do** have the user export the variable in the shell, or CI secret store, that runs `thunderjar`. Commands that use the store stop if it's unset.
 

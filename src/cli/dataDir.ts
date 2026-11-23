@@ -48,7 +48,7 @@ export async function openStore(
       );
     }
     const where = `Postgres at $${runDataStore.urlEnv}`;
-    return { store: postgresStore(url, where), where };
+    return { store: postgresStore(url, where, { schema: runDataStore.schema, adminUrlEnv: runDataStore.adminUrlEnv }), where };
   }
   const where = resolvePath(resolvePath(thunderjarRoot, ".."), runDataStore.path);
   return { store: sqliteStore(where), where };

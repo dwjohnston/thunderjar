@@ -141,12 +141,22 @@ export function runtimeProblem(runtime: unknown, imageStore: unknown): string | 
   return runnerProblem(fields.runner);
 }
 
+/** A Postgres schema name that needs no quoting, e.g. `thunderjar`. */
+const SCHEMA_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
+
 /** Why `runDataStore` isn't a run data store, or undefined if it is. */
 export function runDataStoreProblem(runDataStore: unknown): string | undefined {
-  const { kind, path, urlEnv } = (runDataStore ?? {}) as { kind?: unknown; path?: unknown; urlEnv?: unknown };
+  const { kind, path, urlEnv, schema, adminUrlEnv } = (runDataStore ?? {}) as { kind?: unknown; path?: unknown; urlEnv?: unknown; schema?: unknown; adminUrlEnv?: unknown };
   if (kind === "sqlite") return typeof path === "string" && path !== "" ? undefined : "sqliteStore's path must be a file path";
   if (kind === "postgres") {
-    return typeof urlEnv === "string" && ENV_NAME.test(urlEnv) ? undefined : `postgresStore's urlEnv, ${show(urlEnv)}, is not an environment variable name`;
+    if (typeof urlEnv !== "string" || !ENV_NAME.test(urlEnv)) return `postgresStore's urlEnv, ${show(urlEnv)}, is not an environment variable name`;
+    if (adminUrlEnv !== undefined && (typeof adminUrlEnv !== "string" || !ENV_NAME.test(adminUrlEnv))) {
+      return `postgresStore's adminUrlEnv, ${show(adminUrlEnv)}, is not an environment variable name`;
+    }
+    if (schema !== undefined && (typeof schema !== "string" || !SCHEMA_NAME.test(schema))) {
+      return `postgresStore's schema, ${show(schema)}, is not a schema name: lower-case letters, digits and _, starting with a letter or _`;
+    }
+    return undefined;
   }
   return 'must be a store, e.g. sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }) or postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })';
 }
@@ -165,7 +175,7 @@ export type ProjectConfig = {
    * The run data store, as the config gives it: a SQLite file, relative to the project folder
    * (the one holding `.thunderjar/`) unless absolute, or the variable holding a Postgres URL.
    */
-  runDataStore: { kind: "sqlite"; path: string } | { kind: "postgres"; urlEnv: string };
+  runDataStore: { kind: "sqlite"; path: string } | { kind: "postgres"; urlEnv: string; schema: string; adminUrlEnv: string };
   /** What prerun builds are given, and how many build at once: no secrets, no SSH agent and 1, unless the config gives them. */
   build: Required<BuildOptions>;
   /** A warning for each deprecated field the config gives, e.g. a runtime hook by its old name. */
@@ -204,7 +214,15 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
       imageStore === null
         ? null
         : { repository: imageStore.repository, ...(imageStore.deleteCommand !== undefined && { deleteCommand: [...imageStore.deleteCommand] }) },
-    runDataStore: runDataStore.kind === "postgres" ? { kind: "postgres", urlEnv: runDataStore.urlEnv } : { kind: "sqlite", path: runDataStore.path },
+    runDataStore:
+      runDataStore.kind === "postgres"
+        ? {
+            kind: "postgres",
+            urlEnv: runDataStore.urlEnv,
+            schema: runDataStore.schema ?? "thunderjar",
+            adminUrlEnv: runDataStore.adminUrlEnv ?? "THUNDERJAR_DB_URL_ADMIN",
+          }
+        : { kind: "sqlite", path: runDataStore.path },
     runtime:
       runtime === undefined
         ? null

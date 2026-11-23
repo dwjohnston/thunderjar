@@ -9,6 +9,7 @@ import {
   mergePurge,
   type PostrunPurge,
   postgresStore,
+  setupPostgres,
   RunDataStoreError,
   sqliteStore,
   storeFileIn,
@@ -210,13 +211,11 @@ const POSTGRES_URL = Bun.env.THUNDERJAR_POSTGRES_URL;
 
 describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
   const schemas: string[] = [];
-  /** A URL for a fresh, empty schema of the test database, dropped after the test. */
+  /** A URL for a fresh schema of the test database, set up with empty tables, dropped after the test. */
   const freshDatabase = async () => {
     const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
     schemas.push(schema);
-    const admin = new SQL(POSTGRES_URL!);
-    await admin.unsafe(`CREATE SCHEMA ${schema}`);
-    await admin.close();
+    await setupPostgres(POSTGRES_URL!, schema);
     const url = new URL(POSTGRES_URL!);
     url.searchParams.set("options", `-c search_path=${schema}`);
     return url.toString();
@@ -224,8 +223,73 @@ describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
 
   afterEach(async () => {
     const admin = new SQL(POSTGRES_URL!);
-    for (const schema of schemas.splice(0)) await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`);
+    for (const schema of schemas.splice(0)) await admin.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await admin.close();
+  });
+
+  test("setupPostgres creates the schema, if it's missing, and the store's tables in it; running it again is harmless", async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+
+    await setupPostgres(POSTGRES_URL!, schema);
+    await setupPostgres(POSTGRES_URL!, schema);
+
+    const admin = new SQL(POSTGRES_URL!);
+    const [tables] = await admin`SELECT to_regclass(${`${schema}.thunderjar_executions`}) IS NOT NULL AS executions,
+      to_regclass(${`${schema}.thunderjar_container_runs`}) IS NOT NULL AS container_runs`;
+    await admin.close();
+    expect(tables).toEqual({ executions: true, container_runs: true });
+  });
+
+  test("setupPostgres creates the tables in a schema that exists, as a role that owns it but may not create schemas", async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+    const admin = new SQL(POSTGRES_URL!);
+    await admin.unsafe(`CREATE ROLE ${schema} LOGIN PASSWORD 'owner'`);
+    await admin.unsafe(`CREATE SCHEMA ${schema} AUTHORIZATION ${schema}`);
+    const owner = new URL(POSTGRES_URL!);
+    owner.username = schema;
+    owner.password = "owner";
+
+    try {
+      expect(await setupPostgres(owner.toString(), schema).then(() => "set up", (error: Error) => error.message)).toBe("set up");
+      const [{ tables }] = await admin`SELECT count(*)::int AS tables FROM information_schema.tables WHERE table_schema = ${schema}`;
+      expect(tables).toBe(2);
+    } finally {
+      await admin.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      await admin.unsafe(`DROP ROLE ${schema}`);
+      await admin.close();
+    }
+  });
+
+  test("a store with a schema records into, and reads from, that schema's tables", async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+    await setupPostgres(POSTGRES_URL!, schema);
+    const id = "01kfa1bgz0aaaaaaaaaaaaaaaa";
+
+    await postgresStore(POSTGRES_URL!, "test db", { schema }).recordExecution(execution(id));
+
+    const admin = new SQL(POSTGRES_URL!);
+    const rows = await admin.unsafe(`SELECT execution_id FROM "${schema}".thunderjar_executions`);
+    await admin.close();
+    expect(rows.map((row: { execution_id: string }) => row.execution_id)).toEqual([id]);
+  });
+
+  test("a store whose tables aren't set up says to run db setup, and creates nothing", async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+    const admin = new SQL(POSTGRES_URL!);
+    await admin.unsafe(`CREATE SCHEMA ${schema}`);
+    const store = postgresStore(POSTGRES_URL!, "test db", { schema, adminUrlEnv: "TJ_ADMIN_URL", retryDelaysMs: [] });
+
+    expect(await store.check().catch(errorOf)).toEqual({
+      path: "test db",
+      message: `Thunderjar's tables aren't in the ${schema} schema.\nRun \`thunderjar db setup\` with TJ_ADMIN_URL set, to create them.`,
+    });
+    const [{ tables }] = await admin`SELECT count(*)::int AS tables FROM information_schema.tables WHERE table_schema = ${schema}`;
+    await admin.close();
+    expect(tables).toBe(0);
   });
 
   test("an empty database is an empty store", async () => {
@@ -288,7 +352,7 @@ test("check passes for a SQLite store with no file yet, without creating it, and
 });
 
 test("check fails for a Postgres that can't be reached, after trying again once per retry delay", async () => {
-  const store = postgresStore("postgres://user:secret@127.0.0.1:1/none", "Postgres at $THUNDERJAR_DB_URL", [30, 30]);
+  const store = postgresStore("postgres://user:secret@127.0.0.1:1/none", "Postgres at $THUNDERJAR_DB_URL", { retryDelaysMs: [30, 30] });
   const startedAt = Date.now();
 
   expect(await store.check().catch(errorOf)).toEqual({ path: "Postgres at $THUNDERJAR_DB_URL", message: expect.any(String) });

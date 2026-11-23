@@ -102,6 +102,48 @@ describe("loadProjectConfig", () => {
     });
   });
 
+  test("a postgresStore gives its schema and the variable of its admin URL", async () => {
+    await using copy = await copyScenarioProject("0201");
+    await Bun.write(
+      `${copy.dir}/.thunderjar/thunderjar.config.ts`,
+      `import { declareConfig, postgresStore } from "thunderjar";
+
+export default declareConfig({
+  imageStore: null,
+  runDataStore: postgresStore({ urlEnv: "RUNS_URL", schema: "evals", adminUrlEnv: "RUNS_ADMIN_URL" }),
+});
+`,
+    );
+
+    expect((await loadProjectConfig(`${copy.dir}/.thunderjar`)).runDataStore).toEqual({
+      kind: "postgres",
+      urlEnv: "RUNS_URL",
+      schema: "evals",
+      adminUrlEnv: "RUNS_ADMIN_URL",
+    });
+  });
+
+  test("a postgresStore's tables are in the thunderjar schema, set up with THUNDERJAR_DB_URL_ADMIN, unless it says otherwise", async () => {
+    await using copy = await copyScenarioProject("0201");
+    await Bun.write(
+      `${copy.dir}/.thunderjar/thunderjar.config.ts`,
+      `import { declareConfig, postgresStore } from "thunderjar";
+
+export default declareConfig({
+  imageStore: null,
+  runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL" }),
+});
+`,
+    );
+
+    expect((await loadProjectConfig(`${copy.dir}/.thunderjar`)).runDataStore).toEqual({
+      kind: "postgres",
+      urlEnv: "THUNDERJAR_DB_URL",
+      schema: "thunderjar",
+      adminUrlEnv: "THUNDERJAR_DB_URL_ADMIN",
+    });
+  });
+
   test("0210's build gives a secret and the SSH agent", async () => {
     expect((await loadProjectConfig(await findThunderjarRoot(scenario("0210")))).build).toEqual({
       secrets: [{ id: "github", env: "GITHUB_TOKEN" }],
@@ -276,7 +318,7 @@ describe("runDataStoreProblem", () => {
     expect(runDataStoreProblem({ kind: "postgres", urlEnv: "THUNDERJAR_DB_URL" })).toBeUndefined();
   });
 
-  test.each([[undefined], ["./runs.sqlite"], [{ kind: "sqlite" }], [{ kind: "sqlite", path: "" }], [{ kind: "postgres" }], [{ kind: "postgres", urlEnv: "postgres://u:p@host/db" }], [{ kind: "mysql" }]])(
+  test.each([[undefined], ["./runs.sqlite"], [{ kind: "sqlite" }], [{ kind: "sqlite", path: "" }], [{ kind: "postgres" }], [{ kind: "postgres", urlEnv: "postgres://u:p@host/db" }], [{ kind: "postgres", urlEnv: "THUNDERJAR_DB_URL", schema: "runs; drop" }], [{ kind: "mysql" }]])(
     "%p is not a store",
     (store) => {
       expect(runDataStoreProblem(store)).toBeString();

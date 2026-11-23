@@ -2,7 +2,7 @@
 // `bun test --parallel` runs them in two workers.
 import { expect } from "bun:test";
 import { $, Glob, SQL } from "bun";
-import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
+import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, setupPostgres, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { TMP_DIR } from "../../../testing/cli.ts";
 import type { FakeDocker } from "../../../testing/fakeDocker.ts";
 
@@ -79,26 +79,27 @@ export async function removeDataDirs() {
   for (const dir of dataDirs.splice(0)) await $`rm -rf ${dir}`.quiet();
 }
 
-/** Points the config of the project in `dir` at a postgresStore, its URL in THUNDERJAR_DB_URL. */
-export async function usePostgres(dir: string) {
+/** Points the config of the project in `dir` at a postgresStore, its URL in THUNDERJAR_DB_URL, its tables in `schema` if given. */
+export async function usePostgres(dir: string, schema?: string) {
   const config = `${dir}/.thunderjar/thunderjar.config.ts`;
   const text = await Bun.file(config).text();
   await Bun.write(
     config,
     text
       .replace("import { declareConfig, sqliteStore }", "import { declareConfig, postgresStore }")
-      .replace(/runDataStore: sqliteStore\(\{[^}]*\}\)/, 'runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })'),
+      .replace(/runDataStore: sqliteStore\(\{[^}]*\}\)/, `runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL"${schema === undefined ? "" : `, schema: "${schema}"`} })`),
   );
 }
 
-/** A fresh schema of the Postgres at THUNDERJAR_POSTGRES_URL, and a URL that uses it; dropped when disposed. */
+/** A fresh schema of the Postgres at THUNDERJAR_POSTGRES_URL, set up with empty tables, and a URL that uses it; dropped when disposed. */
 export async function postgresSchema() {
   const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
   const admin = new SQL(Bun.env.THUNDERJAR_POSTGRES_URL!);
-  await admin.unsafe(`CREATE SCHEMA ${schema}`);
+  await setupPostgres(Bun.env.THUNDERJAR_POSTGRES_URL!, schema);
   const url = new URL(Bun.env.THUNDERJAR_POSTGRES_URL!);
   url.searchParams.set("options", `-c search_path=${schema}`);
   return {
+    schema,
     url: url.toString(),
     async [Symbol.asyncDispose]() {
       await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`);

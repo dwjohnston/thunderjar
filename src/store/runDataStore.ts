@@ -3,7 +3,8 @@
 //
 //   sqliteStore    a local SQLite file, by `bun:sqlite`; by default `.thunderjar/.data/runs.sqlite`,
 //                  which `init` gitignores, or `runs.sqlite` in `--data-dir`
-//   postgresStore  a shared Postgres database, by `Bun.sql`, so CI and developers see the same runs
+//   postgresStore  a shared Postgres database, by `Bun.sql`, so CI and developers see the same runs;
+//                  its tables are created by `db setup` (`setupPostgres`), never on first use
 //
 // Both have the same two tables (Postgres's prefixed `thunderjar_`):
 //
@@ -350,9 +351,13 @@ export function sqliteStore(path: string): RunDataStore {
   };
 }
 
-const POSTGRES_SCHEMA = [
-  "CREATE TABLE IF NOT EXISTS thunderjar_executions (execution_id TEXT PRIMARY KEY, record JSONB NOT NULL)",
-  `CREATE TABLE IF NOT EXISTS thunderjar_container_runs (
+/** `name` as a quoted SQL identifier. */
+const quoted = (name: string) => `"${name.replaceAll('"', '""')}"`;
+
+/** The statements that create the store's tables in `schema`, if they're missing. */
+const postgresTables = (schema: string) => [
+  `CREATE TABLE IF NOT EXISTS ${quoted(schema)}.thunderjar_executions (execution_id TEXT PRIMARY KEY, record JSONB NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS ${quoted(schema)}.thunderjar_container_runs (
     execution_id TEXT NOT NULL,
     permutation INTEGER NOT NULL,
     iteration INTEGER NOT NULL,
@@ -364,12 +369,50 @@ const POSTGRES_SCHEMA = [
 /**
  * The Postgres store at `url`, named `label` in errors, e.g. `Postgres at $THUNDERJAR_DB_URL`, so
  * the URL and its password are never printed. Its tables, prefixed `thunderjar_` to share a
- * database, are created on first use. Throws a RunDataStoreError if the database can't be reached,
+ * database, are in `schema`: it never creates them, `setupPostgres` does, so its URL needs no
+ * right to create tables. Throws a RunDataStoreError if the database can't be reached,
  * after trying again once for each of `retryDelaysMs`.
  */
-export function postgresStore(url: string, label: string, retryDelaysMs: readonly number[] = [500, 2000]): RunDataStore {
+/**
+ * Creates `schema`, if it's missing, and the store's two tables in it: what `db setup` does, with
+ * a URL that may create them. Safe to run again.
+ */
+export async function setupPostgres(url: string, schema: string): Promise<void> {
+  const sql = new SQL(url, { max: 1 });
+  try {
+    await sql.begin(async (tx) => {
+      // CREATE SCHEMA needs the right to create schemas even when it exists, which its owner may lack.
+      const [existing] = await tx`SELECT pg_get_userbyid(nspowner) AS owner, current_user AS me FROM pg_namespace WHERE nspname = ${schema}`;
+      if (existing === undefined) await tx.unsafe(`CREATE SCHEMA ${quoted(schema)}`);
+      // As the schema's owner, so the tables are its, and its default privileges grant access to them.
+      else if (existing.owner !== existing.me) await tx.unsafe(`SET LOCAL ROLE ${quoted(existing.owner)}`);
+      for (const statement of postgresTables(schema)) await tx.unsafe(statement);
+    });
+  } finally {
+    await sql.close();
+  }
+}
+
+export type PostgresStoreOptions = {
+  /** The schema holding the store's tables. */
+  schema?: string;
+  /** The variable holding the URL `db setup` creates the tables with, named when they're missing. */
+  adminUrlEnv?: string;
+  /** How long to wait before each retry of a query that failed. */
+  retryDelaysMs?: readonly number[];
+};
+
+export function postgresStore(url: string, label: string, { schema, adminUrlEnv = "THUNDERJAR_DB_URL_ADMIN", retryDelaysMs = [500, 2000] }: PostgresStoreOptions = {}): RunDataStore {
   // A short idle timeout, so a command's process can exit once its queries are done.
   const sql = new SQL(url, { max: 4, idleTimeout: 1 });
+  // Without a schema, the tables of the connection's search_path.
+  const executions = schema === undefined ? "thunderjar_executions" : `${schema}.thunderjar_executions`;
+  const containerRuns = schema === undefined ? "thunderjar_container_runs" : `${schema}.thunderjar_container_runs`;
+  // Only `db setup` creates them, with a URL that may.
+  const missingTables = new RunDataStoreError(
+    label,
+    `Thunderjar's tables aren't in the ${schema ?? "search_path"} schema.\nRun \`thunderjar db setup\` with ${adminUrlEnv} set, to create them.`,
+  );
   let ready: Promise<void> | undefined;
 
   /**
@@ -382,12 +425,14 @@ export function postgresStore(url: string, label: string, retryDelaysMs: readonl
     for (let attempt = 0; ; attempt++) {
       try {
         ready ??= (async () => {
-          for (const statement of POSTGRES_SCHEMA) await sql.unsafe(statement);
+          const [{ found }] = await sql`SELECT to_regclass(${executions}) IS NOT NULL AND to_regclass(${containerRuns}) IS NOT NULL AS found`;
+          if (!found) throw missingTables;
         })();
         await ready;
         return await query();
       } catch (error) {
         ready = undefined;
+        if (error === missingTables) throw error;
         const message = error instanceof Error ? error.message : String(error);
         const delay = retryDelaysMs[attempt];
         if (delay === undefined) throw new RunDataStoreError(label, message);
@@ -403,25 +448,25 @@ export function postgresStore(url: string, label: string, retryDelaysMs: readonl
     },
     async recordExecution(record) {
       await run(
-        () => sql`INSERT INTO thunderjar_executions (execution_id, record) VALUES (${record.executionId}, ${record})
+        () => sql`INSERT INTO ${sql(executions)} (execution_id, record) VALUES (${record.executionId}, ${record})
           ON CONFLICT (execution_id) DO UPDATE SET record = EXCLUDED.record`,
       );
     },
     async recordContainerRun(record) {
       await run(
-        () => sql`INSERT INTO thunderjar_container_runs (execution_id, permutation, iteration, record)
+        () => sql`INSERT INTO ${sql(containerRuns)} (execution_id, permutation, iteration, record)
           VALUES (${record.executionId}, ${record.permutation}, ${record.iteration}, ${record})
           ON CONFLICT (execution_id, permutation, iteration) DO UPDATE SET record = EXCLUDED.record`,
       );
     },
     async listExecutions() {
       // ULIDs sort by time.
-      const rows = await run(() => sql`SELECT record FROM thunderjar_executions ORDER BY execution_id DESC`);
+      const rows = await run(() => sql`SELECT record FROM ${sql(executions)} ORDER BY execution_id DESC`);
       return (rows as { record: ExecutionRecord }[]).map((row) => row.record);
     },
     async containerRunsOf(executionId) {
       const rows = await run(
-        () => sql`SELECT record FROM thunderjar_container_runs WHERE execution_id = ${executionId} ORDER BY permutation, iteration`,
+        () => sql`SELECT record FROM ${sql(containerRuns)} WHERE execution_id = ${executionId} ORDER BY permutation, iteration`,
       );
       return (rows as { record: ContainerRunRecord }[]).map((row) => row.record);
     },
@@ -429,7 +474,7 @@ export function postgresStore(url: string, label: string, retryDelaysMs: readonl
       // Read, locked, and rewritten in one transaction, so a run recorded meanwhile isn't overwritten.
       return run(() =>
         sql.begin(async (tx) => {
-          const rows = (await tx`SELECT record FROM thunderjar_container_runs WHERE execution_id = ${executionId}
+          const rows = (await tx`SELECT record FROM ${tx(containerRuns)} WHERE execution_id = ${executionId}
             ORDER BY permutation, iteration FOR UPDATE`) as { record: ContainerRunRecord }[];
           const marked = markedRuns(
             rows.map((row) => row.record),
@@ -437,7 +482,7 @@ export function postgresStore(url: string, label: string, retryDelaysMs: readonl
             runs,
           );
           for (const record of marked) {
-            await tx`UPDATE thunderjar_container_runs SET record = ${record}
+            await tx`UPDATE ${tx(containerRuns)} SET record = ${record}
               WHERE execution_id = ${executionId} AND permutation = ${record.permutation} AND iteration = ${record.iteration}`;
           }
           return marked;

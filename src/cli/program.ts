@@ -4,6 +4,7 @@ import { createAttachCommand } from "./commands/attach/attach.ts";
 import { createBuildCommand } from "./commands/build/build.ts";
 import { createCaptureCommand } from "./commands/capture/capture.ts";
 import { createCheckoutCommand } from "./commands/checkout/checkout.ts";
+import { createDbCommand } from "./commands/db/db.ts";
 import { createDoctorCommand } from "./commands/doctor/doctor.ts";
 import { createExecutionsCommand } from "./commands/executions/executions.ts";
 import { createGenerateCommand } from "./commands/generate/generate.ts";
@@ -96,6 +97,7 @@ export function createProgram(): Command {
     // What a runtime's runner runs, not a command for a user: left out of --help.
     .addCommand(createRunnerCommand(), { hidden: true })
     .addCommand(createDoctorCommand())
+    .addCommand(createDbCommand())
     .addCommand(createExecutionsCommand())
     .addCommand(createShowCommand())
     .addCommand(createViewCommand())
