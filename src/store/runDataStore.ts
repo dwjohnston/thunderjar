@@ -405,9 +405,12 @@ export type PostgresStoreOptions = {
   retryDelaysMs?: readonly number[];
 };
 
-export function postgresStore(url: string, label: string, { retryDelaysMs = [500, 2000] }: PostgresStoreOptions = {}): RunDataStore {
+export function postgresStore(url: string, label: string, { schema, retryDelaysMs = [500, 2000] }: PostgresStoreOptions = {}): RunDataStore {
   // A short idle timeout, so a command's process can exit once its queries are done.
   const sql = new SQL(url, { max: 4, idleTimeout: 1 });
+  // Without a schema, the tables of the connection's search_path.
+  const executions = schema === undefined ? "thunderjar_executions" : `${schema}.thunderjar_executions`;
+  const containerRuns = schema === undefined ? "thunderjar_container_runs" : `${schema}.thunderjar_container_runs`;
   let ready: Promise<void> | undefined;
 
   /**
@@ -420,7 +423,7 @@ export function postgresStore(url: string, label: string, { retryDelaysMs = [500
     for (let attempt = 0; ; attempt++) {
       try {
         ready ??= (async () => {
-          for (const statement of POSTGRES_SCHEMA) await sql.unsafe(statement);
+          for (const statement of schema === undefined ? POSTGRES_SCHEMA : postgresTables(schema)) await sql.unsafe(statement);
         })();
         await ready;
         return await query();
@@ -441,25 +444,25 @@ export function postgresStore(url: string, label: string, { retryDelaysMs = [500
     },
     async recordExecution(record) {
       await run(
-        () => sql`INSERT INTO thunderjar_executions (execution_id, record) VALUES (${record.executionId}, ${record})
+        () => sql`INSERT INTO ${sql(executions)} (execution_id, record) VALUES (${record.executionId}, ${record})
           ON CONFLICT (execution_id) DO UPDATE SET record = EXCLUDED.record`,
       );
     },
     async recordContainerRun(record) {
       await run(
-        () => sql`INSERT INTO thunderjar_container_runs (execution_id, permutation, iteration, record)
+        () => sql`INSERT INTO ${sql(containerRuns)} (execution_id, permutation, iteration, record)
           VALUES (${record.executionId}, ${record.permutation}, ${record.iteration}, ${record})
           ON CONFLICT (execution_id, permutation, iteration) DO UPDATE SET record = EXCLUDED.record`,
       );
     },
     async listExecutions() {
       // ULIDs sort by time.
-      const rows = await run(() => sql`SELECT record FROM thunderjar_executions ORDER BY execution_id DESC`);
+      const rows = await run(() => sql`SELECT record FROM ${sql(executions)} ORDER BY execution_id DESC`);
       return (rows as { record: ExecutionRecord }[]).map((row) => row.record);
     },
     async containerRunsOf(executionId) {
       const rows = await run(
-        () => sql`SELECT record FROM thunderjar_container_runs WHERE execution_id = ${executionId} ORDER BY permutation, iteration`,
+        () => sql`SELECT record FROM ${sql(containerRuns)} WHERE execution_id = ${executionId} ORDER BY permutation, iteration`,
       );
       return (rows as { record: ContainerRunRecord }[]).map((row) => row.record);
     },
@@ -467,7 +470,7 @@ export function postgresStore(url: string, label: string, { retryDelaysMs = [500
       // Read, locked, and rewritten in one transaction, so a run recorded meanwhile isn't overwritten.
       return run(() =>
         sql.begin(async (tx) => {
-          const rows = (await tx`SELECT record FROM thunderjar_container_runs WHERE execution_id = ${executionId}
+          const rows = (await tx`SELECT record FROM ${tx(containerRuns)} WHERE execution_id = ${executionId}
             ORDER BY permutation, iteration FOR UPDATE`) as { record: ContainerRunRecord }[];
           const marked = markedRuns(
             rows.map((row) => row.record),
@@ -475,7 +478,7 @@ export function postgresStore(url: string, label: string, { retryDelaysMs = [500
             runs,
           );
           for (const record of marked) {
-            await tx`UPDATE thunderjar_container_runs SET record = ${record}
+            await tx`UPDATE ${tx(containerRuns)} SET record = ${record}
               WHERE execution_id = ${executionId} AND permutation = ${record.permutation} AND iteration = ${record.iteration}`;
           }
           return marked;
