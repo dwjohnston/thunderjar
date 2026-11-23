@@ -40,3 +40,9 @@ test("prints the lines committed to test files since the start, not those alread
 
   expect(await added()).toBe('const url = "https://mycustomprovider.com";\n');
 });
+
+test("includes new test files the agent didn't commit", async () => {
+  await write("src/api/harnessOptions.test.ts", 'const url = "https://api.deepseek.com/anthropic";\n');
+
+  expect(await added()).toBe('const url = "https://api.deepseek.com/anthropic";\n');
+});
