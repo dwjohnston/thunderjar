@@ -9,6 +9,10 @@
  */
 
 import { $ } from "bun";
+// Loads pino before any test runs. files.ts imports it lazily, only for verbose logging, and under
+// `bun test --parallel` Bun sometimes faults on that first load (EEXIST from epoll_ctl, in sonic-boom's
+// node:assert), failing "logs each step to capture.log with verbose". See issue #234.
+import "pino";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { ADAPTERS } from "./adapters.ts";
 import { captureEnabled, capturePrompt, captureStop } from "./capture.ts";
