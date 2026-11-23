@@ -14,8 +14,7 @@
 // Reading what `codex exec --json` writes: JSON lines, one event each. For a harness's
 // `collectReply` and `collectTokenCosts`, so a Codex harness needn't parse it itself, and `codex`,
 // a whole Codex harness.
-
-import type { TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type TokenCosts } from "./declarations.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Event = { type?: unknown; item?: { type?: unknown; item_type?: unknown; text?: unknown }; usage?: Record<string, unknown> };
@@ -50,4 +49,30 @@ export function codexTokenCosts(raw: string, modelId: string): TokenCosts {
     outcome: "collected",
     models: [{ model: modelId, inputTokens: Math.max(0, input - cached), outputTokens: output, cacheReadTokens: cached, cacheCreationTokens: 0 }],
   };
+}
+
+/** The models `codex` declares unless given others: OpenAI's, as Codex takes them. */
+export const CODEX_MODELS: HarnessModels = {
+  "gpt-6.1-sol": [],
+  "gpt-5.5": [],
+};
+
+/** What `codex` gets. */
+export type CodexOptions = {
+  /** The version of `@openai/codex` to install, e.g. `"0.166.0"`. */
+  version: string;
+  /** The models it runs, as `declareHarness`'s `models`. By default, `CODEX_MODELS`. */
+  models?: HarnessModels;
+};
+
+/** A complete harness declaration for Codex `version`. */
+export function codex({ version, models = CODEX_MODELS }: CodexOptions): HarnessDeclaration<undefined, undefined> {
+  return declareHarness({
+    version,
+    models,
+    applyParameter: () => "",
+    collectReply: codexReply,
+    collectTokenCosts: (raw, ctx) => codexTokenCosts(raw, ctx.modelId),
+    requiredEnv: ["OPENAI_API_KEY"],
+  });
 }

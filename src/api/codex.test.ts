@@ -1,6 +1,7 @@
 // The Codex readers, against a `codex exec --json` result: JSON lines, one event each.
 import { describe, expect, test } from "bun:test";
-import { codexReply, codexTokenCosts } from "./codex.ts";
+import { codex, codexReply, codexTokenCosts } from "./codex.ts";
+import { declaredBy } from "./declarations.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/codex.result.jsonl`).text();
 
@@ -30,5 +31,35 @@ describe("codexTokenCosts", () => {
       outcome: "unavailable",
       reason: "notReported",
     });
+  });
+});
+
+const fragment = (harness: ReturnType<typeof codex>, modelId: string, model: Record<string, string> = {}) =>
+  harness.applyParameter(undefined, { dir: "parameters/harness", version: "0.166.0", modelId, model, resolved: undefined });
+
+describe("codex", () => {
+  const harness = codex({ version: "0.166.0" });
+
+  test("is a harness declaration, pinning its version, needing OPENAI_API_KEY, and reading with the library's readers", () => {
+    expect(declaredBy(harness)).toBe("declareHarness");
+    expect(harness.version).toBe("0.166.0");
+    expect(harness.requiredEnv).toEqual(["OPENAI_API_KEY"]);
+    expect(harness.collectReply?.(RESULT)).toBe("pong");
+    expect(harness.collectTokenCosts?.(RESULT, { version: "0.166.0", modelId: "gpt-5.5" })).toEqual(codexTokenCosts(RESULT, "gpt-5.5"));
+  });
+
+  test("installs Codex as root, writes the model and run script, then runs as node", () => {
+    expect(fragment(harness, "gpt-5.5")).toBe(
+      `RUN npm install -g @openai/codex@0.166.0
+RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
+COPY <<'THUNDERJAR_EOF' /thunderjar/model.txt
+gpt-5.5
+THUNDERJAR_EOF
+COPY --chmod=755 <<'THUNDERJAR_EOF' /thunderjar/thunderjar-run.sh
+#!/bin/sh
+codex exec --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json
+THUNDERJAR_EOF
+USER node`,
+    );
   });
 });
