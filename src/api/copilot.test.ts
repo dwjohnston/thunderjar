@@ -76,5 +76,11 @@ USER node`,
         `\nrm -f /tmp/copilot-usage.json; COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY" COPILOT_PROVIDER_MODEL_ID=claude-haiku-5.5 copilot -p`,
       );
     });
+
+    test("puts OpenAI's models on the Responses API, as OpenAI rejects Copilot's tool list on Chat Completions; a model's wireApi overrides it", () => {
+      expect(fragment(openRouter, "openai/gpt-6.1-sol")).toContain("COPILOT_PROVIDER_MODEL_ID=gpt-6.1-sol COPILOT_PROVIDER_WIRE_API=responses copilot -p");
+      expect(fragment(openRouter, "anthropic/claude-haiku-5.5", { wireApi: "responses" })).toContain("COPILOT_PROVIDER_WIRE_API=responses copilot -p");
+      expect(fragment(openRouter, "openai/gpt-6.1-sol", { wireApi: "chat" })).toContain("COPILOT_PROVIDER_MODEL_ID=gpt-6.1-sol copilot -p");
+    });
   });
 });
