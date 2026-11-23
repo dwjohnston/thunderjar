@@ -16,7 +16,7 @@
 // a whole Codex harness.
 import { declareHarness, type HarnessDeclaration, type HarnessModels, type TokenCosts } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
-import { COMMAND_PATHS, type CommandContext, type CommandProvider, type ProviderAndModels, providerId, shellQuote } from "./harnessOptions.ts";
+import { COMMAND_PATHS, type CommandContext, type CommandProvider, type HelperOptions, providerId, shellQuote } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Event = { type?: unknown; item?: { type?: unknown; item_type?: unknown; text?: unknown }; usage?: Record<string, unknown> };
@@ -62,13 +62,8 @@ export const CODEX_MODELS: HarnessModels = {
   "gpt-5.5": [{ reasoningEffort: { values: CODEX_REASONING_EFFORTS } }],
 };
 
-/** What `codex` gets. */
-export type CodexOptions = {
-  /** The version of `@openai/codex` to install, e.g. `"0.166.0"`. */
-  version: string;
-  /** The command its run script runs, from the model, version, paths and provider: `CODEX_COMMAND` by default. */
-  command?: (ctx: CommandContext) => string;
-} & ProviderAndModels;
+/** What `codex` gets: `version` is `@openai/codex`'s, `command` is `CODEX_COMMAND` by default, and `models` `CODEX_MODELS`. */
+export type CodexOptions = HelperOptions;
 
 /**
  * The flags that point Codex at `provider`: a `model_providers` entry, named after its host, e.g.
@@ -109,7 +104,7 @@ export const CODEX_COMMAND = ({ model, paths, provider }: CommandContext): strin
  * });
  * ```
  */
-export function codex({ version, models = CODEX_MODELS, provider, command = CODEX_COMMAND }: CodexOptions): HarnessDeclaration<undefined, undefined> {
+export function codex({ version, models = CODEX_MODELS, provider, command = CODEX_COMMAND, requiredEnv }: CodexOptions): HarnessDeclaration<undefined, undefined> {
   const commandProvider: CommandProvider | undefined = provider && { baseUrl: provider.baseUrl, apiKeyEnv: provider.apiKeyEnv, wireApi: "responses" };
   return declareHarness({
     version,
@@ -124,6 +119,6 @@ export function codex({ version, models = CODEX_MODELS, provider, command = CODE
       ].join("\n"),
     collectReply: codexReply,
     collectTokenCosts: (raw, ctx) => codexTokenCosts(raw, ctx.modelId),
-    requiredEnv: provider ? [provider.apiKeyEnv] : ["OPENAI_API_KEY"],
+    requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : ["OPENAI_API_KEY"]),
   });
 }

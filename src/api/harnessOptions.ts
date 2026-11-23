@@ -13,7 +13,7 @@
  */
 // The options every out-of-the-box harness helper shares: `provider`, where the agent sends its
 // requests, and `command`, a function of `CommandContext` that gives the run script's command.
-import type { HarnessModels, SettingValue } from "./declarations.ts";
+import type { HarnessModels, RequiredEnv, SettingValue } from "./declarations.ts";
 import { MODEL_PATH, PROMPT_PATH, RESULT_PATH, USAGE_PATH } from "./files.ts";
 
 /** A model provider other than the agent's own: its API's address, and the variable that holds its key. */
@@ -100,3 +100,13 @@ export type ProviderAndModels =
       /** The models it runs, by the provider's IDs: required, as the defaults are the agent's own provider's. */
       models: HarnessModels;
     };
+
+/** The options every helper takes, with its `provider` and `models`. */
+export type HelperOptions = {
+  /** The version of the agent to install, e.g. `"0.166.0"`. */
+  version: string;
+  /** The command its run script runs, from the model, version, paths and provider. By default, the helper's own. */
+  command?: (ctx: CommandContext) => string;
+  /** The variables it needs, as `declareHarness`'s `requiredEnv`. By default, the provider's key, or the agent's own. */
+  requiredEnv?: RequiredEnv[];
+} & ProviderAndModels;
