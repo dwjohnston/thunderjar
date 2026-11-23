@@ -14,6 +14,13 @@ import { isStartTestCase } from "./start.helpers.ts";
 
 // Does the test case the agent added run Claude Code on all three Claude models? On PR #288 it ran
 // Haiku only, and the owner wanted all three.
+//
+// The three are the current Haiku, Sonnet and Opus, as the repo's other Claude Code test cases
+// run them. CLAUDE_CODE_MODELS in src/api/claudeCode.ts also lists claude-fable-5-2 and
+// claude-haiku-4-5-20251001, which no test case here runs on all three.
+//
+// Known gap: it reads test-cases/ only, so models listed in a shared file, as
+// shared/gauntletHarnessModels.ts does for the gauntlet, don't count.
 const MODELS = { haiku: "claude-haiku-5-5", sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5" };
 
 /**
