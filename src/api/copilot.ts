@@ -19,7 +19,8 @@
 // statistics to a file, and appends them to the result file as one more line:
 // {"type":"thunderjar.usage","data":<the usage file>}.
 import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
-import type { HelperOptions } from "./harnessOptions.ts";
+import { writeModel, writeRunScript } from "./files.ts";
+import { COMMAND_PATHS, type CommandContext, type CommandPaths, type HelperOptions } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Event = { type?: unknown; agentId?: unknown; data?: Record<string, unknown> };
@@ -70,12 +71,53 @@ export const COPILOT_MODELS: HarnessModels = {
 /** What `copilot` gets. */
 export type CopilotOptions = HelperOptions;
 
-/** A complete harness declaration for Copilot `version`. */
+/**
+ * The command that runs Copilot: the prompt and model read from their files, so quotes and
+ * newlines reach the agent intact, with every tool allowed, its events as JSON lines, and its
+ * usage statistics written to `paths.usage`.
+ */
+export const COPILOT_COMMAND = ({ paths }: CommandContext): string =>
+  `copilot -p "$(cat ${paths.prompt})" --model "$(cat ${paths.model})" --allow-all-tools --no-color` +
+  ` --output-format json --usage-output-file ${paths.usage} > ${paths.result}`;
+
+/**
+ * `command`, wrapped: the usage file is cleared first, then, if the command wrote one, it's
+ * appended to the result as one line, `{"type":"thunderjar.usage","data":…}`. The command's exit
+ * code is kept as the script's.
+ */
+const withUsage = (command: string, { usage, result }: CommandPaths) =>
+  `rm -f ${usage}; ${command}; code=$?; ` +
+  `[ -f ${usage} ] && printf '{"type":"${COPILOT_USAGE_TYPE}","data":%s}\\n' "$(tr -d '\\n' < ${usage})" >> ${result}; ` +
+  `exit $code`;
+
+/**
+ * A complete harness declaration for GitHub Copilot CLI `version`. Its fragment installs Copilot
+ * as root, and runs it once as `node`, so it unpacks itself into `~/.cache/copilot` in the image:
+ * otherwise every run does, 500 MB in each postrun image. That's before the model is written, so
+ * every model's image shares the layer. Then it writes the model ID and the run script, and
+ * switches to `node`. Its reply and token costs are read from its JSON lines and the usage line.
+ * It needs `COPILOT_GITHUB_TOKEN`, a GitHub token with Copilot access.
+ *
+ * ```ts
+ * // harnessModels/copilot-1.0.105/index.ts
+ * export default copilot({ version: "1.0.105" });
+ * ```
+ */
 export function copilot({ version, models = COPILOT_MODELS }: CopilotOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     models,
-    applyParameter: () => "",
+    applyParameter: (_config, ctx) =>
+      [
+        `RUN npm install -g @github/copilot@${ctx.version}`,
+        "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+        "USER node",
+        "RUN copilot --version",
+        "USER root",
+        writeModel(ctx.modelId),
+        writeRunScript(withUsage(COPILOT_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: undefined }), COMMAND_PATHS)),
+        "USER node",
+      ].join("\n"),
     collectReply: copilotReply,
     collectTokenCosts: copilotTokenCosts,
     requiredEnv: ["COPILOT_GITHUB_TOKEN"],
