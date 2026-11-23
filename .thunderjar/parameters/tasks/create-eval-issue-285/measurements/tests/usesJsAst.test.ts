@@ -33,3 +33,8 @@ test("PR #288's first version, whose custom-provider measurement is shell, doesn
   };
   expect((await measure(usesJsAst, { files })).metrics.usesJsAst).toBe(false);
 });
+
+test("without a measurement the agent added, whether it used jsAst doesn't apply", async () => {
+  const files = { ".thunderjar/parameters/tasks/tj-eval-blacksheepcode/measurements/codeStateUsesTag.ts": fixture("start/codeStateUsesTag.ts") };
+  expect((await measure(usesJsAst, { files })).metrics.usesJsAst).toBeUndefined();
+});
