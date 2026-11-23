@@ -255,6 +255,22 @@ describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
     expect(rows.map((row: { execution_id: string }) => row.execution_id)).toEqual([id]);
   });
 
+  test("a store whose tables aren't set up says to run db setup, and creates nothing", async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+    const admin = new SQL(POSTGRES_URL!);
+    await admin.unsafe(`CREATE SCHEMA ${schema}`);
+    const store = postgresStore(POSTGRES_URL!, "test db", { schema, adminUrlEnv: "TJ_ADMIN_URL", retryDelaysMs: [] });
+
+    expect(await store.check().catch(errorOf)).toEqual({
+      path: "test db",
+      message: `Thunderjar's tables aren't in the ${schema} schema.\nRun \`thunderjar db setup\` with TJ_ADMIN_URL set, to create them.`,
+    });
+    const [{ tables }] = await admin`SELECT count(*)::int AS tables FROM information_schema.tables WHERE table_schema = ${schema}`;
+    await admin.close();
+    expect(tables).toBe(0);
+  });
+
   test("an empty database is an empty store", async () => {
     const store = postgresStore(await freshDatabase(), "test db");
 
