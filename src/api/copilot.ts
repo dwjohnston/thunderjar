@@ -18,8 +18,8 @@
 // Copilot's JSON lines leave out its token events, so the run script also has it write its usage
 // statistics to a file, and appends them to the result file as one more line:
 // {"type":"thunderjar.usage","data":<the usage file>}.
-import type { TokenCosts } from "./declarations.ts";
-import { jsonLines } from "./jsonLines.ts";
+import type { ModelTokenCosts, TokenCosts } from "./declarations.ts";
+import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Event = { type?: unknown; agentId?: unknown; data?: Record<string, unknown> };
 
@@ -33,7 +33,21 @@ export function copilotReply(raw: string): string {
   return reply;
 }
 
-/** Tokens per model, from the usage line the run script appended. */
-export function copilotTokenCosts(_raw: string): TokenCosts {
-  return { outcome: "unavailable", reason: "notReported" };
+/** The type of the line the run script appends to the result, holding Copilot's usage statistics. */
+export const COPILOT_USAGE_TYPE = "thunderjar.usage";
+
+/**
+ * Tokens per model, from the usage line the run script appended. Copilot's `inputTokens` include
+ * cached reads and writes, so they're subtracted to fit Thunderjar's separate buckets. Its `cost`
+ * is a premium-request multiplier, not dollars, so no cost is reported.
+ */
+export function copilotTokenCosts(raw: string): TokenCosts {
+  const usage = jsonLines<Event>(raw).findLast((e) => e.type === COPILOT_USAGE_TYPE)?.data;
+  const metrics = (usage?.modelMetrics ?? {}) as Record<string, { usage?: Record<string, unknown> }>;
+  const models: ModelTokenCosts[] = Object.entries(metrics).map(([model, metric]) => {
+    const [input, output, cacheRead, cacheWrite] = ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"].map((k) => tokenCount(metric.usage?.[k]) ?? 0) as [number, number, number, number];
+    return { model, inputTokens: Math.max(0, input - cacheRead - cacheWrite), outputTokens: output, cacheReadTokens: cacheRead, cacheCreationTokens: cacheWrite };
+  });
+  const apiDurationMs = tokenCount(usage?.totalApiDurationMs);
+  return { outcome: "collected", models, ...(apiDurationMs !== undefined && { apiDurationMs }) };
 }
