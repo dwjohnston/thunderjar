@@ -20,6 +20,6 @@ export default declareMeasurement({
     selectors: { jsAst: 'Property[key.name="instrument"][value.value="jsAst"]' },
   },
   metrics: {
-    usesJsAst: { score: () => false, stat: "rate", better: "higher" },
+    usesJsAst: { score: (files) => files.some(({ matches }) => (matches.jsAst ?? 0) > 0), stat: "rate", better: "higher" },
   },
 });
