@@ -1,0 +1,70 @@
+# 🤖 This file was created with AI
+#
+# Harness: Claude Code
+# Session Id: session_01LCLeLiFAvaM4X8UPgmvECj
+# Supervising engineer: dwjohnston
+#
+# Humans: add your notes here
+
+name: Sync agent skills
+
+# Opens (or updates) one PR when skills installed from dwjohnston/agent-skills have changed there.
+# Runs daily, on demand, or when agent-skills sends a `agent-skills-updated` repository_dispatch.
+# Third-party skills in skills-lock.json are left alone.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+  repository_dispatch:
+    types: [agent-skills-updated]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-agent-skills
+  cancel-in-progress: false
+
+env:
+  SKILLS_SOURCE: dwjohnston/agent-skills
+  # Pinned so a new skills CLI can't rewrite the lockfile format behind our back.
+  SKILLS_CLI: skills@1.9.0
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Update skills from ${{ env.SKILLS_SOURCE }}
+        run: |
+          names=$(jq -r --arg src "$SKILLS_SOURCE" '.skills | to_entries[] | select(.value.source == $src) | .key' skills-lock.json)
+          if [ -z "$names" ]; then echo "No skills from $SKILLS_SOURCE in skills-lock.json"; exit 0; fi
+          echo "Updating: $(echo $names)"
+          npx -y "$SKILLS_CLI" update --project --yes $names
+
+      - name: Open or update the PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/sync-agent-skills
+          delete-branch: true
+          commit-message: "Sync skills from dwjohnston/agent-skills"
+          title: "Sync skills from dwjohnston/agent-skills"
+          body: |
+            🤖 Sync agent skills workflow
+
+            Skills installed from [dwjohnston/agent-skills](https://github.com/dwjohnston/agent-skills) have changed upstream.
+
+            <details>
+            <summary>How this PR was made</summary>
+
+            The [Sync agent skills](https://github.com/${{ github.repository }}/blob/main/.github/workflows/sync-agent-skills.yml) workflow ran `npx ${{ env.SKILLS_CLI }} update --project` for each skill whose `source` in `skills-lock.json` is `${{ env.SKILLS_SOURCE }}`. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Later runs update this PR rather than open a new one.
+
+            </details>
