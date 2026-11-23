@@ -12,9 +12,10 @@
 
 /**
  * A shell command that prints every line the agent added to a test file since the start,
- * committed or not.
+ * committed or not. A test file is any named `*.test.*`, at any depth. Each `+++ ` line is a diff's
+ * file header, not an added line.
  */
-export const ADDED_TEST_LINES = "true";
+export const ADDED_TEST_LINES = "git diff --no-renames --no-color -U0 refs/thunderjar/start -- '*.test.*' | sed -n '/^+++ /d; s/^+//p'";
 
 /** The `baseUrl` of each provider declared in `text`, other than OpenRouter's. */
 export function customProviderUrls(text: string): string[] {
