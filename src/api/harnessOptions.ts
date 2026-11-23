@@ -22,10 +22,12 @@ export type Provider = {
   baseUrl: string;
   /** The environment variable that holds its key, e.g. `"OPENROUTER_API_KEY"`. Passed into the agent's container by name. */
   apiKeyEnv: string;
+  /** Its display name, for an agent that shows one, e.g. `"OpenRouter"`. By default, from its host. */
+  name?: string;
 };
 
 /** OpenRouter, by its OpenAI-compatible address. Each helper adapts it to the API its agent speaks. */
-export const OPENROUTER = { baseUrl: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY" } as const satisfies Provider;
+export const OPENROUTER = { name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY" } as const satisfies Provider;
 
 /** The API an agent speaks to its provider: Anthropic's Messages, OpenAI's Responses, or Chat Completions. */
 export type WireApi = "anthropic" | "responses" | "chat";

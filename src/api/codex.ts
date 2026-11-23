@@ -66,12 +66,12 @@ export const CODEX_MODELS: HarnessModels = {
 export type CodexOptions = HelperOptions;
 
 /**
- * The flags that point Codex at `provider`: a `model_providers` entry, named after its host, e.g.
+ * The flags that point Codex at `provider`: a `model_providers` entry, its ID from its host, e.g.
  * `openrouter`, on the Responses API, which is all Codex speaks.
  */
 const providerFlags = (provider: CommandProvider) => {
   const id = providerId(provider.baseUrl);
-  const entry = { name: id, base_url: provider.baseUrl, env_key: provider.apiKeyEnv, wire_api: provider.wireApi };
+  const entry = { name: provider.name ?? id, base_url: provider.baseUrl, env_key: provider.apiKeyEnv, wire_api: provider.wireApi };
   const table = `{${Object.entries(entry).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(",")}}`;
   return `-c model_provider=${id} -c ${shellQuote(`model_providers.${id}=${table}`)}`;
 };
@@ -105,7 +105,7 @@ export const CODEX_COMMAND = ({ model, paths, provider }: CommandContext): strin
  * ```
  */
 export function codex({ version, models = CODEX_MODELS, provider, command = CODEX_COMMAND, requiredEnv }: CodexOptions): HarnessDeclaration<undefined, undefined> {
-  const commandProvider: CommandProvider | undefined = provider && { baseUrl: provider.baseUrl, apiKeyEnv: provider.apiKeyEnv, wireApi: "responses" };
+  const commandProvider: CommandProvider | undefined = provider && { ...provider, wireApi: "responses" };
   return declareHarness({
     version,
     models,
