@@ -24,4 +24,11 @@ describe("copilotTokenCosts", () => {
       apiDurationMs: 4200,
     });
   });
+
+  test("a result without a readable usage line is unparseable, and one with no tokens notReported", () => {
+    expect(copilotTokenCosts('{"type":"assistant.message","data":{"content":"hi"}}')).toEqual({ outcome: "unavailable", reason: "unparseable" });
+    expect(copilotTokenCosts('{"type":"thunderjar.usage","data":{"modelMetrics":{"m":{"usage":{"inputTokens":"many"}}}}}')).toEqual({ outcome: "unavailable", reason: "unparseable" });
+    const none = '{"type":"thunderjar.usage","data":{"modelMetrics":{"m":{"usage":{"inputTokens":0,"outputTokens":0,"cacheReadTokens":0,"cacheWriteTokens":0}}}}}';
+    expect(copilotTokenCosts(none)).toEqual({ outcome: "unavailable", reason: "notReported" });
+  });
 });
