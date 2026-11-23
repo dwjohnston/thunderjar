@@ -3,7 +3,8 @@
 //
 //   sqliteStore    a local SQLite file, by `bun:sqlite`; by default `.thunderjar/.data/runs.sqlite`,
 //                  which `init` gitignores, or `runs.sqlite` in `--data-dir`
-//   postgresStore  a shared Postgres database, by `Bun.sql`, so CI and developers see the same runs
+//   postgresStore  a shared Postgres database, by `Bun.sql`, so CI and developers see the same runs;
+//                  its tables are created by `db setup` (`setupPostgres`), never on first use
 //
 // Both have the same two tables (Postgres's prefixed `thunderjar_`):
 //
@@ -365,21 +366,11 @@ const postgresTables = (schema: string) => [
   )`,
 ];
 
-const POSTGRES_SCHEMA = [
-  "CREATE TABLE IF NOT EXISTS thunderjar_executions (execution_id TEXT PRIMARY KEY, record JSONB NOT NULL)",
-  `CREATE TABLE IF NOT EXISTS thunderjar_container_runs (
-    execution_id TEXT NOT NULL,
-    permutation INTEGER NOT NULL,
-    iteration INTEGER NOT NULL,
-    record JSONB NOT NULL,
-    PRIMARY KEY (execution_id, permutation, iteration)
-  )`,
-];
-
 /**
  * The Postgres store at `url`, named `label` in errors, e.g. `Postgres at $THUNDERJAR_DB_URL`, so
  * the URL and its password are never printed. Its tables, prefixed `thunderjar_` to share a
- * database, are created on first use. Throws a RunDataStoreError if the database can't be reached,
+ * database, are in `schema`: it never creates them, `setupPostgres` does, so its URL needs no
+ * right to create tables. Throws a RunDataStoreError if the database can't be reached,
  * after trying again once for each of `retryDelaysMs`.
  */
 /**
@@ -407,12 +398,17 @@ export type PostgresStoreOptions = {
   retryDelaysMs?: readonly number[];
 };
 
-export function postgresStore(url: string, label: string, { schema, retryDelaysMs = [500, 2000] }: PostgresStoreOptions = {}): RunDataStore {
+export function postgresStore(url: string, label: string, { schema, adminUrlEnv = "THUNDERJAR_DB_URL_ADMIN", retryDelaysMs = [500, 2000] }: PostgresStoreOptions = {}): RunDataStore {
   // A short idle timeout, so a command's process can exit once its queries are done.
   const sql = new SQL(url, { max: 4, idleTimeout: 1 });
   // Without a schema, the tables of the connection's search_path.
   const executions = schema === undefined ? "thunderjar_executions" : `${schema}.thunderjar_executions`;
   const containerRuns = schema === undefined ? "thunderjar_container_runs" : `${schema}.thunderjar_container_runs`;
+  // Only `db setup` creates them, with a URL that may.
+  const missingTables = new RunDataStoreError(
+    label,
+    `Thunderjar's tables aren't in the ${schema ?? "search_path"} schema.\nRun \`thunderjar db setup\` with ${adminUrlEnv} set, to create them.`,
+  );
   let ready: Promise<void> | undefined;
 
   /**
@@ -425,12 +421,14 @@ export function postgresStore(url: string, label: string, { schema, retryDelaysM
     for (let attempt = 0; ; attempt++) {
       try {
         ready ??= (async () => {
-          for (const statement of schema === undefined ? POSTGRES_SCHEMA : postgresTables(schema)) await sql.unsafe(statement);
+          const [{ found }] = await sql`SELECT to_regclass(${executions}) IS NOT NULL AND to_regclass(${containerRuns}) IS NOT NULL AS found`;
+          if (!found) throw missingTables;
         })();
         await ready;
         return await query();
       } catch (error) {
         ready = undefined;
+        if (error === missingTables) throw error;
         const message = error instanceof Error ? error.message : String(error);
         const delay = retryDelaysMs[attempt];
         if (delay === undefined) throw new RunDataStoreError(label, message);
