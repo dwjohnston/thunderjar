@@ -38,6 +38,10 @@ test("without a custom provider, which one it is doesn't apply", async () => {
   expect((await measured({ "src/api/openRouter.test.ts": "openrouter_only.ts" })).deepSeekProvider).toBeUndefined();
 });
 
+test("a DeepSeek baseUrl held in a variable is DeepSeek", async () => {
+  expect(await measured({ "src/api/harness.test.ts": "deepseek_url_in_variable.ts" })).toEqual({ customProviderTest: true, deepSeekProvider: true });
+});
+
 // Each metric's score, for the added test lines `stdout`.
 const scores = (stdout: string, exitCode = 0) => ({
   customProviderTest: customProviderTest({ exitCode, stdout }),
