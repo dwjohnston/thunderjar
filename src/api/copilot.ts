@@ -39,15 +39,23 @@ export const COPILOT_USAGE_TYPE = "thunderjar.usage";
 /**
  * Tokens per model, from the usage line the run script appended. Copilot's `inputTokens` include
  * cached reads and writes, so they're subtracted to fit Thunderjar's separate buckets. Its `cost`
- * is a premium-request multiplier, not dollars, so no cost is reported.
+ * is a premium-request multiplier, not dollars, so no cost is reported. `unparseable` without a
+ * readable usage line, e.g. when the command wasn't given `--usage-output-file`, and
+ * `notReported` if it counts no tokens.
  */
 export function copilotTokenCosts(raw: string): TokenCosts {
   const usage = jsonLines<Event>(raw).findLast((e) => e.type === COPILOT_USAGE_TYPE)?.data;
-  const metrics = (usage?.modelMetrics ?? {}) as Record<string, { usage?: Record<string, unknown> }>;
-  const models: ModelTokenCosts[] = Object.entries(metrics).map(([model, metric]) => {
-    const [input, output, cacheRead, cacheWrite] = ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"].map((k) => tokenCount(metric.usage?.[k]) ?? 0) as [number, number, number, number];
-    return { model, inputTokens: Math.max(0, input - cacheRead - cacheWrite), outputTokens: output, cacheReadTokens: cacheRead, cacheCreationTokens: cacheWrite };
-  });
+  const metrics = usage?.modelMetrics;
+  if (typeof metrics !== "object" || metrics === null) return { outcome: "unavailable", reason: "unparseable" };
+  const models: ModelTokenCosts[] = [];
+  for (const [model, metric] of Object.entries(metrics as Record<string, { usage?: Record<string, unknown> }>)) {
+    const counts = ["inputTokens", "outputTokens", "cacheReadTokens", "cacheWriteTokens"].map((k) => tokenCount(metric.usage?.[k]));
+    if (counts.some((n) => n === undefined)) return { outcome: "unavailable", reason: "unparseable" };
+    const [input, output, cacheRead, cacheWrite] = counts as [number, number, number, number];
+    models.push({ model, inputTokens: Math.max(0, input - cacheRead - cacheWrite), outputTokens: output, cacheReadTokens: cacheRead, cacheCreationTokens: cacheWrite });
+  }
+  const total = models.reduce((sum, m) => sum + m.inputTokens + m.outputTokens + m.cacheCreationTokens + m.cacheReadTokens, 0);
+  if (total === 0) return { outcome: "unavailable", reason: "notReported" };
   const apiDurationMs = tokenCount(usage?.totalApiDurationMs);
   return { outcome: "collected", models, ...(apiDurationMs !== undefined && { apiDurationMs }) };
 }
