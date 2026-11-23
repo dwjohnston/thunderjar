@@ -16,7 +16,7 @@
 // a whole Codex harness.
 
 import type { TokenCosts } from "./declarations.ts";
-import { jsonLines } from "./jsonLines.ts";
+import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Event = { type?: unknown; item?: { type?: unknown; item_type?: unknown; text?: unknown }; usage?: Record<string, unknown> };
 
@@ -32,7 +32,20 @@ export function codexReply(raw: string): string {
   return reply;
 }
 
-/** Tokens summed over every `turn.completed`. */
-export function codexTokenCosts(_raw: string, _modelId: string): TokenCosts {
-  return { outcome: "unavailable", reason: "notReported" };
+/**
+ * Tokens summed over every `turn.completed`, as one entry for `modelId`: Codex doesn't name the
+ * model. Its `input_tokens` include the cached ones, so they're subtracted.
+ */
+export function codexTokenCosts(raw: string, modelId: string): TokenCosts {
+  let input = 0, cached = 0, output = 0;
+  for (const { type, usage } of jsonLines<Event>(raw)) {
+    if (type !== "turn.completed" || !usage) continue;
+    input += tokenCount(usage.input_tokens) ?? 0;
+    cached += tokenCount(usage.cached_input_tokens) ?? 0;
+    output += tokenCount(usage.output_tokens) ?? 0;
+  }
+  return {
+    outcome: "collected",
+    models: [{ model: modelId, inputTokens: Math.max(0, input - cached), outputTokens: output, cacheReadTokens: cached, cacheCreationTokens: 0 }],
+  };
 }
