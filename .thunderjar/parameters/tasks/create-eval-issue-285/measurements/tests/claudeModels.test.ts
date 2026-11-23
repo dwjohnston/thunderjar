@@ -31,3 +31,8 @@ test("PR #288's test case uses one Claude model, beside the start's own test cas
   };
   expect((await measure(claudeModels, { files })).metrics).toEqual({ claudeModels: 1, allThreeClaudeModels: false });
 });
+
+test("without a test case the agent added, which models it uses doesn't apply", async () => {
+  const files = { [`${TEST_CASES}/tdd-red-green-on-simple-task.ts`]: fixture("start/tdd-red-green-on-simple-task.ts") };
+  expect((await measure(claudeModels, { files })).metrics).toEqual({ claudeModels: undefined, allThreeClaudeModels: undefined });
+});
