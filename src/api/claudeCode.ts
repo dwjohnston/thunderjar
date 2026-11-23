@@ -157,6 +157,21 @@ const providerEnv = (provider: CommandProvider) => ({
  * // harnessModels/claude-code-2.1.311/index.ts
  * export default claudeCode({ version: "2.1.311" });
  * ```
+ *
+ * Given a `provider`, which must speak Anthropic's Messages API, it needs only the provider's
+ * key, and `models` by the provider's IDs. A model's `effort` setting is passed as `--effort`.
+ * Anything else, e.g. `MAX_THINKING_TOKENS` or `--max-turns`, is bespoke: write it in `command`.
+ *
+ * ```ts
+ * export default claudeCode({
+ *   version: "2.1.311",
+ *   provider: OPENROUTER,
+ *   models: {
+ *     "anthropic/claude-opus-5.5": [{ effort: { values: ["low", "high"] } }, { thinkingTokens: { values: [8000, 32000] } }],
+ *   },
+ *   command: (ctx) => `MAX_THINKING_TOKENS=${ctx.model.thinkingTokens} ${CLAUDE_CODE_COMMAND(ctx)}`,
+ * });
+ * ```
  */
 export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND, provider, requiredEnv }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
   const commandProvider: CommandProvider | undefined = provider && { ...provider, baseUrl: anthropicBaseUrl(provider.baseUrl), wireApi: "anthropic" };
