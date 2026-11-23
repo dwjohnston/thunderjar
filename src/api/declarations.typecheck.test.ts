@@ -10,6 +10,7 @@ import {
   declarePromptSet,
 } from "./declarations.ts";
 import { claudeCode } from "./claudeCode.ts";
+import { codex } from "./codex.ts";
 import { writeModel, writeRunScript } from "./files.ts";
 import { OPENROUTER } from "./harnessOptions.ts";
 
@@ -233,5 +234,13 @@ describe("claudeCode", () => {
     claudeCode({ version: "2.1.311", command: ({ paths }) => `claude -p hi > ${paths.result}` });
     // @ts-expect-error - a string command
     claudeCode({ version: "2.1.311", command: "claude -p hi > /thunderjar/result.json" });
+  });
+});
+
+describe("codex", () => {
+  it("needs models with a provider: its default models are OpenAI's IDs", () => {
+    codex({ version: "0.166.0", provider: OPENROUTER, models: { "openai/gpt-6-luna": [] } });
+    // @ts-expect-error - a provider without models
+    codex({ version: "0.166.0", provider: OPENROUTER });
   });
 });

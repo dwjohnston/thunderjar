@@ -2,6 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { CODEX_REASONING_EFFORTS, codex, codexReply, codexTokenCosts } from "./codex.ts";
 import { declaredBy } from "./declarations.ts";
+import { OPENROUTER } from "./harnessOptions.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/codex.result.jsonl`).text();
 
@@ -67,5 +68,19 @@ USER node`,
     expect(CODEX_REASONING_EFFORTS).toEqual(["low", "medium", "high"]);
     expect(Object.values(harness.models)).toEqual(Object.keys(harness.models).map(() => [{ reasoningEffort: { values: CODEX_REASONING_EFFORTS } }]));
     expect(fragment(harness, "gpt-5.5", { reasoningEffort: "high" })).toContain(`\ncodex exec -c model_reasoning_effort=high --model "$(cat /thunderjar/model.txt)" --json`);
+  });
+
+  test("sets up a provider as a model_providers entry, on the Responses API, needing only its key", () => {
+    const openRouter = codex({ version: "0.166.0", provider: OPENROUTER, models: { "openai/gpt-6-luna": [{ reasoningEffort: { values: CODEX_REASONING_EFFORTS } }] } });
+    const custom = codex({ version: "0.166.0", provider: { baseUrl: "https://llm.example.com/v1", apiKeyEnv: "EXAMPLE_API_KEY" }, models: { "big-model": [] } });
+
+    expect(openRouter.requiredEnv).toEqual(["OPENROUTER_API_KEY"]);
+    expect(fragment(openRouter, "openai/gpt-6-luna", { reasoningEffort: "medium" })).toContain(
+      `\ncodex exec -c model_provider=openrouter -c 'model_providers.openrouter={name="openrouter",base_url="https://openrouter.ai/api/v1",env_key="OPENROUTER_API_KEY",wire_api="responses"}' -c model_reasoning_effort=medium --model "$(cat /thunderjar/model.txt)" --json`,
+    );
+    expect(custom.requiredEnv).toEqual(["EXAMPLE_API_KEY"]);
+    expect(fragment(custom, "big-model")).toContain(
+      `\ncodex exec -c model_provider=example -c 'model_providers.example={name="example",base_url="https://llm.example.com/v1",env_key="EXAMPLE_API_KEY",wire_api="responses"}' --model`,
+    );
   });
 });
