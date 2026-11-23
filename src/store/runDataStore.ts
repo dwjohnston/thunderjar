@@ -350,6 +350,21 @@ export function sqliteStore(path: string): RunDataStore {
   };
 }
 
+/** `name` as a quoted SQL identifier. */
+const quoted = (name: string) => `"${name.replaceAll('"', '""')}"`;
+
+/** The statements that create the store's tables in `schema`, if they're missing. */
+const postgresTables = (schema: string) => [
+  `CREATE TABLE IF NOT EXISTS ${quoted(schema)}.thunderjar_executions (execution_id TEXT PRIMARY KEY, record JSONB NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS ${quoted(schema)}.thunderjar_container_runs (
+    execution_id TEXT NOT NULL,
+    permutation INTEGER NOT NULL,
+    iteration INTEGER NOT NULL,
+    record JSONB NOT NULL,
+    PRIMARY KEY (execution_id, permutation, iteration)
+  )`,
+];
+
 const POSTGRES_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS thunderjar_executions (execution_id TEXT PRIMARY KEY, record JSONB NOT NULL)",
   `CREATE TABLE IF NOT EXISTS thunderjar_container_runs (
@@ -371,7 +386,17 @@ const POSTGRES_SCHEMA = [
  * Creates `schema`, if it's missing, and the store's two tables in it: what `db setup` does, with
  * a URL that may create them. Safe to run again.
  */
-export async function setupPostgres(url: string, schema: string): Promise<void> {}
+export async function setupPostgres(url: string, schema: string): Promise<void> {
+  const sql = new SQL(url, { max: 1 });
+  try {
+    await sql.begin(async (tx) => {
+      await tx.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoted(schema)}`);
+      for (const statement of postgresTables(schema)) await tx.unsafe(statement);
+    });
+  } finally {
+    await sql.close();
+  }
+}
 
 export type PostgresStoreOptions = {
   /** How long to wait before each retry of a query that failed. */
