@@ -58,8 +58,8 @@ export const CODEX_REASONING_EFFORTS = ["low", "medium", "high"] as const;
 
 /** The models `codex` declares unless given others: OpenAI's, as Codex takes them. */
 export const CODEX_MODELS: HarnessModels = {
-  "gpt-6.1-sol": [],
-  "gpt-5.5": [],
+  "gpt-6.1-sol": [{ reasoningEffort: { values: CODEX_REASONING_EFFORTS } }],
+  "gpt-5.5": [{ reasoningEffort: { values: CODEX_REASONING_EFFORTS } }],
 };
 
 /** What `codex` gets. */
@@ -73,10 +73,10 @@ export type CodexOptions = {
 /**
  * The command that runs Codex: the prompt and model read from their files, so quotes and newlines
  * reach the agent intact, its events as JSON lines, without its sandbox or approvals: the
- * container is the sandbox.
+ * container is the sandbox. At the model's `reasoningEffort`, if it has one.
  */
-export const CODEX_COMMAND = ({ paths }: CommandContext): string =>
-  `codex exec --model "$(cat ${paths.model})" --json --dangerously-bypass-approvals-and-sandbox "$(cat ${paths.prompt})" > ${paths.result}`;
+export const CODEX_COMMAND = ({ model, paths }: CommandContext): string =>
+  `codex exec${model.reasoningEffort === undefined ? "" : ` -c model_reasoning_effort=${model.reasoningEffort}`} --model "$(cat ${paths.model})" --json --dangerously-bypass-approvals-and-sandbox "$(cat ${paths.prompt})" > ${paths.result}`;
 
 /**
  * A complete harness declaration for Codex `version`. Its fragment installs Codex as root, writes
