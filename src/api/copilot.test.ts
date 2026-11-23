@@ -102,4 +102,8 @@ USER node`,
     expect(fragment(noUsage, "gpt-5.5")).toContain(`\nrm -f /tmp/copilot-usage.json; copilot -p hi > /thunderjar/result.json; ${append}\n`);
     expect(copilotTokenCosts('{"type":"assistant.message","data":{"content":"pong"}}')).toEqual({ outcome: "unavailable", reason: "unparseable" });
   });
+
+  test("its required variables can be replaced", () => {
+    expect(copilot({ version: "1.0.105", requiredEnv: [{ oneOf: ["COPILOT_GITHUB_TOKEN", "GH_TOKEN"] }] }).requiredEnv).toEqual([{ oneOf: ["COPILOT_GITHUB_TOKEN", "GH_TOKEN"] }]);
+  });
 });
