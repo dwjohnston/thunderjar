@@ -17,7 +17,8 @@
 // For a harness's `collectReply` and `collectTokenCosts`, so an OpenCode harness needn't parse it
 // itself, and `opencode`, a whole OpenCode harness.
 import { declareHarness, type HarnessDeclaration, type HarnessModels, type TokenCosts } from "./declarations.ts";
-import type { HelperOptions } from "./harnessOptions.ts";
+import { writeModel, writeRunScript } from "./files.ts";
+import { COMMAND_PATHS, type CommandContext, envAssignments, type HelperOptions } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Part = {
@@ -74,12 +75,44 @@ export const OPENCODE_MODELS: HarnessModels = {
 /** What `opencode` gets. */
 export type OpenCodeOptions = HelperOptions;
 
-/** A complete harness declaration for OpenCode `version`. */
+/**
+ * The command that runs OpenCode: the prompt and model read from their files, so quotes and
+ * newlines reach the agent intact, its events as JSON lines. `OPENCODE_PERMISSION` allows paths
+ * outside /workspace: with nobody to ask, `opencode run` otherwise rejects a command that touches
+ * one (the external_directory permission), then stops, exiting 0 with no reply.
+ */
+export const OPENCODE_COMMAND = ({ paths }: CommandContext): string =>
+  `${envAssignments({ OPENCODE_PERMISSION: JSON.stringify({ external_directory: "allow" }) })}` +
+  ` opencode run --model "$(cat ${paths.model})" --format json "$(cat ${paths.prompt})" > ${paths.result}`;
+
+/**
+ * A complete harness declaration for OpenCode `version`. Its fragment installs OpenCode as root,
+ * and its plugin package as `node`, where OpenCode looks for it: otherwise every run installs it
+ * as it starts, 175 MB of ~/.config and ~/.npm in each postrun image. That's before the model is
+ * written, so every model's image shares the layer. Then it writes the model ID and the run
+ * script, and switches to `node`. Its reply and token costs are read from its JSON lines. It
+ * needs `OPENCODE_API_KEY`, an OpenCode Zen key.
+ *
+ * ```ts
+ * // harnessModels/opencode-1.19.5/index.ts
+ * export default opencode({ version: "1.19.5" });
+ * ```
+ */
 export function opencode({ version, models = OPENCODE_MODELS }: OpenCodeOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     models,
-    applyParameter: () => "",
+    applyParameter: (_config, ctx) =>
+      [
+        `RUN npm install -g opencode-ai@${ctx.version}`,
+        "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+        "USER node",
+        `RUN mkdir -p ~/.config/opencode && cd ~/.config/opencode && echo '{"dependencies":{"@opencode-ai/plugin":"${ctx.version}"}}' > package.json && npm install --no-audit --no-fund && npm cache clean --force`,
+        "USER root",
+        writeModel(ctx.modelId),
+        writeRunScript(OPENCODE_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: undefined })),
+        "USER node",
+      ].join("\n"),
     collectReply: opencodeReply,
     collectTokenCosts: (raw, ctx) => opencodeTokenCosts(raw, ctx.modelId),
     requiredEnv: ["OPENCODE_API_KEY"],
