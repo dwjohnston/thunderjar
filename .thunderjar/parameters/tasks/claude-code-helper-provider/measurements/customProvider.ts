@@ -36,6 +36,6 @@ export default declareMeasurement({
     customProviderTest: { score: (files) => total(files, "customProvider") > 0, stat: "rate", better: "higher" },
     // That provider is DeepSeek, as on PR #282, where the owner asked for a made-up one instead.
     // Doesn't apply when there's no custom-provider test.
-    deepSeekProvider: { score: (files) => total(files, "deepSeek") > 0, stat: "rate", better: "lower" },
+    deepSeekProvider: { score: (files) => (total(files, "customProvider") === 0 ? undefined : total(files, "deepSeek") > 0), stat: "rate", better: "lower" },
   },
 });
