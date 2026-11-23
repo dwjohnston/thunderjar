@@ -4,7 +4,9 @@ import { loadProjectConfig } from "../../../config/projectConfig.ts";
 import { DockerBuildError, DockerPullError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { probeRuntime } from "../../../execution/runtimeProbe.ts";
+import { RunDataStoreError } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
+import { openStore } from "../../dataDir.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError, printJson } from "../../output.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
@@ -13,9 +15,9 @@ const STEP_LABEL = { build: "Building", push: "Pushing", pull: "Pulling through 
 
 /** One of doctor's checks, as `--json` prints it: `none` if there's nothing to check. */
 export type DoctorCheck = {
-  check: "config" | "imageStore" | "runtime";
+  check: "config" | "runDataStore" | "imageStore" | "runtime";
   status: "ok" | "none" | "failed";
-  /** The image store's repository, or the runtime's command. */
+  /** The run data store's database, the image store's repository, or the runtime's command. */
   target?: string;
   /** Why it failed. */
   error?: string;
@@ -23,6 +25,7 @@ export type DoctorCheck = {
 
 /** Why `error`, thrown by a check, failed it, or undefined if it isn't a failed check. */
 function failure(error: unknown): string | undefined {
+  if (error instanceof RunDataStoreError) return error.message;
   if (error instanceof DockerUnavailableError) return `Docker can't be reached: ${error.message}`;
   if (error instanceof ImageStoreLoginError) return error.message;
   if (error instanceof DockerBuildError) return `Building the probe image failed: ${error.message}`;
@@ -35,14 +38,14 @@ function failure(error: unknown): string | undefined {
 
 /**
  * Checks the setup of the nearest `.thunderjar/` folder in `cwd` or above it: that its config
- * loads, that Docker can be reached and has a login for the image store's registry, and, with a
+ * loads, that a Postgres run data store can be reached and has its tables, that Docker can be reached and has a login for the image store's registry, and, with a
  * runtime, that a probe image pushed to the image store can be pulled through the runtime.
  * Exits 1, saying why, at the first check that fails. With `json`, prints each check as JSON
  * once it's done, `{ ok, checks }`, the failed one with its error, which is also written to stderr.
  */
 async function doctor(cwd: string, json = false): Promise<void> {
   const root = await findThunderjarRoot(cwd);
-  const { imageStore, runtime } = await loadProjectConfig(root);
+  const { imageStore, runtime, runDataStore } = await loadProjectConfig(root);
   const checks: DoctorCheck[] = [{ check: "config", status: "ok" }];
   print("Config ... ok");
   // The line that's waiting for how its check ends.
@@ -50,6 +53,17 @@ async function doctor(cwd: string, json = false): Promise<void> {
   // The check that's going, so a failure is put down to it.
   let current: DoctorCheck | undefined;
   try {
+    // A SQLite file creates its own tables: only a Postgres database can be missing them.
+    if (runDataStore.kind === "postgres") {
+      const { store, where } = await openStore(cwd, undefined, root);
+      current = { check: "runDataStore", status: "ok", target: where };
+      line = waitingLine(`Run data store, ${where} ... `);
+      await store.check();
+      line.finish("ok");
+      line = undefined;
+      checks.push(current);
+      current = undefined;
+    }
     if (imageStore === null) {
       checks.push({ check: "imageStore", status: "none" });
       print("Image store ... none: images stay in the local Docker daemon");
