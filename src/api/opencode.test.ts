@@ -1,6 +1,7 @@
 // The OpenCode readers, against an `opencode run --format json` result: JSON lines, one event each.
 import { describe, expect, test } from "bun:test";
 import { declaredBy } from "./declarations.ts";
+import { OPENROUTER } from "./harnessOptions.ts";
 import { opencode, opencodeReply, opencodeTokenCosts } from "./opencode.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/opencode.result.jsonl`).text();
@@ -83,5 +84,20 @@ USER node`,
     expect(runScript(configured, "opencode/gpt-5.5", { "options.reasoningEffort": "high", "limit.context": 200000 })).toBe(
       `OPENCODE_PERMISSION='{"external_directory":"allow"}' OPENCODE_CONFIG_CONTENT='{"provider":{"opencode":{"models":{"gpt-5.5":{"options":{"reasoningEffort":"high"},"limit":{"context":200000}}}}}}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
     );
+  });
+
+  describe("with a provider", () => {
+    test("sets up OpenRouter as an OpenAI-compatible provider on Chat Completions, in OPENCODE_CONFIG_CONTENT, its key as {env:…}", () => {
+      const openRouter = opencode({
+        version: "1.19.5",
+        provider: OPENROUTER,
+        models: { "openrouter/openai/gpt-5.5": [{ options: { reasoningEffort: { values: ["low", "high"] } } }] },
+      });
+
+      expect(openRouter.requiredEnv).toEqual(["OPENROUTER_API_KEY"]);
+      expect(runScript(openRouter, "openrouter/openai/gpt-5.5", { "options.reasoningEffort": "low" })).toBe(
+        `OPENCODE_PERMISSION='{"external_directory":"allow"}' OPENCODE_CONFIG_CONTENT='{"provider":{"openrouter":{"npm":"@ai-sdk/openai-compatible","name":"OpenRouter","options":{"baseURL":"https://openrouter.ai/api/v1","apiKey":"{env:OPENROUTER_API_KEY}"},"models":{"openai/gpt-5.5":{"options":{"reasoningEffort":"low"}}}}}}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
+      );
+    });
   });
 });
