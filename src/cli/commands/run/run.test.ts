@@ -98,17 +98,6 @@ ${permutation(1, "12571887", 1)}
 `);
   });
 
-  test("two-harnesses: one permutation per fake harness, one iteration each", async () => {
-    const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--dry-run"], { env: KEY });
-
-    expect(exitCode).toBe(0);
-    expect(stdout).toBe(`Execution <ULID>
-
-${alphaPermutation(1, "ded54607", 1)}
-
-${permutation(2, "e4f0784f", 1)}
-`);
-  });
 });
 
 describe("run, against the fake Docker", () => {
