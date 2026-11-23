@@ -82,16 +82,16 @@ create index if not exists ci_test_metrics_run on ${schema}.ci_test_metrics (ci_
 }
 
 /**
- * Creates the tables in `schema` if they're missing. A ci_test_metrics without a ci_run_id column,
- * e.g. one made by hand before this schema, is dropped first when it's empty.
+ * Creates the tables in `schema` if they're missing. Throws, changing nothing, if a ci_test_metrics
+ * without a ci_run_id column is there, e.g. one made by hand before this schema: a person decides
+ * whether to drop it.
  */
 export async function createTables(sql: SQL, schema = SCHEMA): Promise<void> {
   const columns = await sql`select column_name from information_schema.columns
     where table_name = 'ci_test_metrics' and table_schema = ${schema}`;
   const names: string[] = columns.map((c: { column_name: string }) => c.column_name);
   if (names.length > 0 && !names.includes("ci_run_id")) {
-    const [{ count }] = await sql.unsafe(`select count(*)::int as count from ${schema}.ci_test_metrics`);
-    if (count === 0) await sql.unsafe(`drop table ${schema}.ci_test_metrics`);
+    throw new Error(`${schema}.ci_test_metrics has another shape: drop or rename it, then run this again`);
   }
   await sql.unsafe(tablesSql(schema));
 }
