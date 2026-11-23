@@ -9,11 +9,13 @@
  */
 
 import { expect, test } from "bun:test";
-import customProvider from "../customProvider.ts";
+import { customProviderTest, deepSeekProvider } from "../customProvider.helpers.ts";
 
 // Each metric's score, for the added test lines `stdout`.
-const scores = (stdout: string, exitCode = 0) =>
-  Object.fromEntries(Object.entries(customProvider.metrics).map(([name, metric]) => [name, metric.score!({ exitCode, stdout })]));
+const scores = (stdout: string, exitCode = 0) => ({
+  customProviderTest: customProviderTest({ exitCode, stdout }),
+  deepSeekProvider: deepSeekProvider({ exitCode, stdout }),
+});
 
 const MADE_UP = `const custom = claudeCode({
   version: "2.1.311",

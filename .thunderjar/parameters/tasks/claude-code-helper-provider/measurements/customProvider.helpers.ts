@@ -23,3 +23,15 @@ export const ADDED_TEST_LINES =
 export function customProviderUrls(text: string): string[] {
   return [...text.matchAll(/\bbaseUrl\s*:\s*["'`]([^"'`]+)["'`]/g)].map((match) => match[1]!).filter((url) => !/openrouter\.ai/i.test(url));
 }
+
+/** What the `shell` instrument gives for `ADDED_TEST_LINES`. */
+export type Shell = { exitCode: number; stdout: string };
+
+/** Whether the added test lines declare a custom provider: one with a baseUrl of its own, not OPENROUTER's. */
+export const customProviderTest = (v: Shell) => (v.exitCode === 0 ? customProviderUrls(v.stdout).length > 0 : undefined);
+
+/** Whether a custom provider they declare is DeepSeek. Doesn't apply when they declare none. */
+export function deepSeekProvider(v: Shell): boolean | undefined {
+  const urls = v.exitCode === 0 ? customProviderUrls(v.stdout) : [];
+  return urls.length === 0 ? undefined : urls.some((url) => /deepseek/i.test(url));
+}
