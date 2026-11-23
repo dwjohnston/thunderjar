@@ -38,6 +38,10 @@ describe("codexTokenCosts", () => {
 const fragment = (harness: ReturnType<typeof codex>, modelId: string, model: Record<string, string> = {}) =>
   harness.applyParameter(undefined, { dir: "parameters/harness", version: "0.166.0", modelId, model, resolved: undefined });
 
+/** The run script `harness` writes for `modelId`, without its `#!/bin/sh` line. */
+const runScript = (harness: ReturnType<typeof codex>, modelId: string, model: Record<string, string> = {}) =>
+  /\n#!\/bin\/sh\n([\s\S]*?)\nTHUNDERJAR_EOF\n/.exec(fragment(harness, modelId, model))?.[1];
+
 describe("codex", () => {
   const harness = codex({ version: "0.166.0" });
 
@@ -67,20 +71,26 @@ USER node`,
   test("its default models declare the reasoning effort as a variant, passed as model_reasoning_effort", () => {
     expect(CODEX_REASONING_EFFORTS).toEqual(["low", "medium", "high"]);
     expect(Object.values(harness.models)).toEqual(Object.keys(harness.models).map(() => [{ reasoningEffort: { values: CODEX_REASONING_EFFORTS } }]));
-    expect(fragment(harness, "gpt-5.5", { reasoningEffort: "high" })).toContain(`\ncodex exec -c model_reasoning_effort=high --model "$(cat /thunderjar/model.txt)" --json`);
+    expect(runScript(harness, "gpt-5.5", { reasoningEffort: "high" })).toBe(
+      `codex exec -c model_reasoning_effort=high --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
+    );
   });
 
-  test("sets up a provider as a model_providers entry, named by its name or host, on the Responses API, needing only its key", () => {
+  test("sets up OpenRouter as a model_providers entry, on the Responses API, needing only its key", () => {
     const openRouter = codex({ version: "0.166.0", provider: OPENROUTER, models: { "openai/gpt-6-luna": [{ reasoningEffort: { values: CODEX_REASONING_EFFORTS } }] } });
-    const custom = codex({ version: "0.166.0", provider: { baseUrl: "https://llm.example.com/v1", apiKeyEnv: "EXAMPLE_API_KEY" }, models: { "big-model": [] } });
 
     expect(openRouter.requiredEnv).toEqual(["OPENROUTER_API_KEY"]);
-    expect(fragment(openRouter, "openai/gpt-6-luna", { reasoningEffort: "medium" })).toContain(
-      `\ncodex exec -c model_provider=openrouter -c 'model_providers.openrouter={name="OpenRouter",base_url="https://openrouter.ai/api/v1",env_key="OPENROUTER_API_KEY",wire_api="responses"}' -c model_reasoning_effort=medium --model "$(cat /thunderjar/model.txt)" --json`,
+    expect(runScript(openRouter, "openai/gpt-6-luna", { reasoningEffort: "medium" })).toBe(
+      `codex exec -c model_provider=openrouter -c 'model_providers.openrouter={name="OpenRouter",base_url="https://openrouter.ai/api/v1",env_key="OPENROUTER_API_KEY",wire_api="responses"}' -c model_reasoning_effort=medium --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
     );
+  });
+
+  test("names a custom provider's entry after its host, without a name", () => {
+    const custom = codex({ version: "0.166.0", provider: { baseUrl: "https://llm.example.com/v1", apiKeyEnv: "EXAMPLE_API_KEY" }, models: { "big-model": [] } });
+
     expect(custom.requiredEnv).toEqual(["EXAMPLE_API_KEY"]);
-    expect(fragment(custom, "big-model")).toContain(
-      `\ncodex exec -c model_provider=example -c 'model_providers.example={name="example",base_url="https://llm.example.com/v1",env_key="EXAMPLE_API_KEY",wire_api="responses"}' --model`,
+    expect(runScript(custom, "big-model")).toBe(
+      `codex exec -c model_provider=example -c 'model_providers.example={name="example",base_url="https://llm.example.com/v1",env_key="EXAMPLE_API_KEY",wire_api="responses"}' --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-approvals-and-sandbox "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
     );
   });
 
@@ -92,9 +102,7 @@ USER node`,
       command: (ctx) => `echo ${ctx.version} ${ctx.modelId} ${ctx.provider?.wireApi} ${ctx.provider?.baseUrl} > ${ctx.paths.result}`,
     });
 
-    expect(fragment(custom, "openai/gpt-6-luna")).toContain(
-      "#!/bin/sh\necho 0.166.0 openai/gpt-6-luna responses https://openrouter.ai/api/v1 > /thunderjar/result.json\n",
-    );
+    expect(runScript(custom, "openai/gpt-6-luna")).toBe("echo 0.166.0 openai/gpt-6-luna responses https://openrouter.ai/api/v1 > /thunderjar/result.json");
   });
 
   test("its required variables can be replaced", () => {
