@@ -91,3 +91,6 @@ Maintained by humans only, in [project-md/human-safe-space/](project-md/human-sa
 
 
 ## Working style 
+
+### Writing tests 
+- Do not use snapshots, inline snapshots. Test snapshots are allowed online in `*.humans.*`
