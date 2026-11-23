@@ -129,6 +129,15 @@ export default declareTestCase({
     expect(harness).toEndWith('\nexport default claudeCode({ version: "2.1.311" });\n');
   });
 
+  test("its Codex harness is the library's, pinned by its folder", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const harness = await read(copy.dir, `${P}/harnessModels/codex-0.166.0/index.ts`);
+    expect(harness).toStartWith('import { codex } from "thunderjar";\n');
+    expect(harness).toEndWith('\nexport default codex({ version: "0.166.0" });\n');
+  });
+
   test("its base image gives every user a git identity", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
