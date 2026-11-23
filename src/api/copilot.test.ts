@@ -38,6 +38,10 @@ describe("copilotTokenCosts", () => {
 const fragment = (harness: ReturnType<typeof copilot>, modelId: string, model: Record<string, string> = {}) =>
   harness.applyParameter(undefined, { dir: "parameters/harness", version: "1.0.105", modelId, model, resolved: undefined });
 
+/** The run script `harness` writes for `modelId`, without its `#!/bin/sh` line. */
+const runScript = (harness: ReturnType<typeof copilot>, modelId: string, model: Record<string, string> = {}) =>
+  /\n#!\/bin\/sh\n([\s\S]*?)\nTHUNDERJAR_EOF\n/.exec(fragment(harness, modelId, model))?.[1];
+
 describe("copilot", () => {
   const harness = copilot({ version: "1.0.105" });
 
@@ -72,34 +76,50 @@ USER node`,
 
     test("passes it as COPILOT_PROVIDER_ variables, with the well-known model ID, needing only its key", () => {
       expect(openRouter.requiredEnv).toEqual(["OPENROUTER_API_KEY"]);
-      expect(fragment(openRouter, "anthropic/claude-haiku-5.5")).toContain(
-        `\nrm -f /tmp/copilot-usage.json; COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY" COPILOT_PROVIDER_MODEL_ID=claude-haiku-5.5 copilot -p`,
+      expect(runScript(openRouter, "anthropic/claude-haiku-5.5")).toBe(
+        `rm -f /tmp/copilot-usage.json; COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY" COPILOT_PROVIDER_MODEL_ID=claude-haiku-5.5 copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color --output-format json --usage-output-file /tmp/copilot-usage.json > /thunderjar/result.json; code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code`,
       );
     });
 
-    test("puts OpenAI's models on the Responses API, as OpenAI rejects Copilot's tool list on Chat Completions; a model's wireApi overrides it", () => {
-      expect(fragment(openRouter, "openai/gpt-6.1-sol")).toContain("COPILOT_PROVIDER_MODEL_ID=gpt-6.1-sol COPILOT_PROVIDER_WIRE_API=responses copilot -p");
-      expect(fragment(openRouter, "anthropic/claude-haiku-5.5", { wireApi: "responses" })).toContain("COPILOT_PROVIDER_WIRE_API=responses copilot -p");
-      expect(fragment(openRouter, "openai/gpt-6.1-sol", { wireApi: "chat" })).toContain("COPILOT_PROVIDER_MODEL_ID=gpt-6.1-sol copilot -p");
+    test("puts OpenAI's models on the Responses API, as OpenAI rejects Copilot's tool list on Chat Completions", () => {
+      expect(runScript(openRouter, "openai/gpt-6.1-sol")).toBe(
+        `rm -f /tmp/copilot-usage.json; COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY" COPILOT_PROVIDER_MODEL_ID=gpt-6.1-sol COPILOT_PROVIDER_WIRE_API=responses copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color --output-format json --usage-output-file /tmp/copilot-usage.json > /thunderjar/result.json; code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code`,
+      );
+    });
+
+    test("a model's wireApi setting overrides that choice", () => {
+      expect(runScript(openRouter, "anthropic/claude-haiku-5.5", { wireApi: "responses" })).toBe(
+        `rm -f /tmp/copilot-usage.json; COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY" COPILOT_PROVIDER_MODEL_ID=claude-haiku-5.5 COPILOT_PROVIDER_WIRE_API=responses copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color --output-format json --usage-output-file /tmp/copilot-usage.json > /thunderjar/result.json; code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code`,
+      );
+      expect(runScript(openRouter, "openai/gpt-6.1-sol", { wireApi: "chat" })).toBe(
+        `rm -f /tmp/copilot-usage.json; COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY" COPILOT_PROVIDER_MODEL_ID=gpt-6.1-sol copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color --output-format json --usage-output-file /tmp/copilot-usage.json > /thunderjar/result.json; code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code`,
+      );
     });
 
     test("passes a custom provider the same way", () => {
       const custom = copilot({ version: "1.0.105", provider: { baseUrl: "https://llm.example.com/v1", apiKeyEnv: "EXAMPLE_API_KEY" }, models: { "big-model": [] } });
 
       expect(custom.requiredEnv).toEqual(["EXAMPLE_API_KEY"]);
-      expect(fragment(custom, "big-model")).toContain(
-        `COPILOT_PROVIDER_BASE_URL=https://llm.example.com/v1 COPILOT_PROVIDER_API_KEY="$EXAMPLE_API_KEY" COPILOT_PROVIDER_MODEL_ID=big-model copilot -p`,
+      expect(runScript(custom, "big-model")).toBe(
+        `rm -f /tmp/copilot-usage.json; COPILOT_PROVIDER_BASE_URL=https://llm.example.com/v1 COPILOT_PROVIDER_API_KEY="$EXAMPLE_API_KEY" COPILOT_PROVIDER_MODEL_ID=big-model copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color --output-format json --usage-output-file /tmp/copilot-usage.json > /thunderjar/result.json; code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code`,
       );
     });
   });
 
-  test("wraps a command override too: with --usage-output-file its usage line is appended, and without it the run still works, with no token costs", () => {
-    const usage = copilot({ version: "1.0.105", command: ({ paths }) => `copilot -p hi --usage-output-file ${paths.usage} > ${paths.result}` });
-    const noUsage = copilot({ version: "1.0.105", command: ({ paths }) => `copilot -p hi > ${paths.result}` });
-    const append = `code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code`;
+  test("wraps a command override with --usage-output-file, so its usage line is appended", () => {
+    const custom = copilot({ version: "1.0.105", command: ({ paths }) => `copilot -p hi --usage-output-file ${paths.usage} > ${paths.result}` });
 
-    expect(fragment(usage, "gpt-5.5")).toContain(`\nrm -f /tmp/copilot-usage.json; copilot -p hi --usage-output-file /tmp/copilot-usage.json > /thunderjar/result.json; ${append}\n`);
-    expect(fragment(noUsage, "gpt-5.5")).toContain(`\nrm -f /tmp/copilot-usage.json; copilot -p hi > /thunderjar/result.json; ${append}\n`);
+    expect(runScript(custom, "gpt-5.5")).toBe(
+      `rm -f /tmp/copilot-usage.json; copilot -p hi --usage-output-file /tmp/copilot-usage.json > /thunderjar/result.json; code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code`,
+    );
+  });
+
+  test("wraps a command override without --usage-output-file the same way: the run works, with no usage line, so no token costs", () => {
+    const custom = copilot({ version: "1.0.105", command: ({ paths }) => `copilot -p hi > ${paths.result}` });
+
+    expect(runScript(custom, "gpt-5.5")).toBe(
+      `rm -f /tmp/copilot-usage.json; copilot -p hi > /thunderjar/result.json; code=$?; [ -f /tmp/copilot-usage.json ] && printf '{"type":"thunderjar.usage","data":%s}\\n' "$(tr -d '\\n' < /tmp/copilot-usage.json)" >> /thunderjar/result.json; exit $code`,
+    );
     expect(copilotTokenCosts('{"type":"assistant.message","data":{"content":"pong"}}')).toEqual({ outcome: "unavailable", reason: "unparseable" });
   });
 
