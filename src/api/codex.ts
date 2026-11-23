@@ -15,6 +15,8 @@
 // `collectReply` and `collectTokenCosts`, so a Codex harness needn't parse it itself, and `codex`,
 // a whole Codex harness.
 import { declareHarness, type HarnessDeclaration, type HarnessModels, type TokenCosts } from "./declarations.ts";
+import { writeModel, writeRunScript } from "./files.ts";
+import { COMMAND_PATHS, type CommandContext } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Event = { type?: unknown; item?: { type?: unknown; item_type?: unknown; text?: unknown }; usage?: Record<string, unknown> };
@@ -65,12 +67,36 @@ export type CodexOptions = {
   models?: HarnessModels;
 };
 
-/** A complete harness declaration for Codex `version`. */
+/**
+ * The command that runs Codex: the prompt and model read from their files, so quotes and newlines
+ * reach the agent intact, its events as JSON lines, without its sandbox or approvals: the
+ * container is the sandbox.
+ */
+export const CODEX_COMMAND = ({ paths }: CommandContext): string =>
+  `codex exec --model "$(cat ${paths.model})" --json --dangerously-bypass-approvals-and-sandbox "$(cat ${paths.prompt})" > ${paths.result}`;
+
+/**
+ * A complete harness declaration for Codex `version`. Its fragment installs Codex as root, writes
+ * the model ID and the run script, then switches to the image's non-root `node` user. Its reply
+ * and token costs are read from its JSON lines. It needs `OPENAI_API_KEY`.
+ *
+ * ```ts
+ * // harnessModels/codex-0.166.0/index.ts
+ * export default codex({ version: "0.166.0" });
+ * ```
+ */
 export function codex({ version, models = CODEX_MODELS }: CodexOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     models,
-    applyParameter: () => "",
+    applyParameter: (_config, ctx) =>
+      [
+        `RUN npm install -g @openai/codex@${ctx.version}`,
+        "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
+        writeModel(ctx.modelId),
+        writeRunScript(CODEX_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: undefined })),
+        "USER node",
+      ].join("\n"),
     collectReply: codexReply,
     collectTokenCosts: (raw, ctx) => codexTokenCosts(raw, ctx.modelId),
     requiredEnv: ["OPENAI_API_KEY"],
