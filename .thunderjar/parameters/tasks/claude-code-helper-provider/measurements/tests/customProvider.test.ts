@@ -41,3 +41,7 @@ const DEEPSEEK = `const deepseek = claudeCode({
 test("a test with DeepSeek as the custom provider uses DeepSeek", () => {
   expect(scores(DEEPSEEK).deepSeekProvider).toBe(true);
 });
+
+test("without a custom-provider test, which provider it used doesn't apply", () => {
+  expect(scores("expect(OPENROUTER.apiKeyEnv).toBe(\"OPENROUTER_API_KEY\");").deepSeekProvider).toBeUndefined();
+});
