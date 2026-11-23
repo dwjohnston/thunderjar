@@ -138,6 +138,15 @@ export default declareTestCase({
     expect(harness).toEndWith('\nexport default codex({ version: "0.166.0" });\n');
   });
 
+  test("its Copilot harness is the library's, pinned by its folder", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const harness = await read(copy.dir, `${P}/harnessModels/copilot-1.0.105/index.ts`);
+    expect(harness).toStartWith('import { copilot } from "thunderjar";\n');
+    expect(harness).toEndWith('\nexport default copilot({ version: "1.0.105" });\n');
+  });
+
   test("its base image gives every user a git identity", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
