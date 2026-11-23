@@ -86,5 +86,72 @@ describe("--json", () => {
       prerunImageStatus: "missing",
       resolved: {},
     });
+
+
+    expect(plan).toMatchInlineSnapshot(`
+      {
+        "env": {},
+        "matrixShape": [
+          1,
+          1,
+          1,
+          2,
+          1,
+        ],
+        "parameters": {
+          "baseImage": [
+            "node20",
+          ],
+          "codeState": [
+            "baseline",
+          ],
+          "harnessModel": [
+            "fake-harness-alpha/fake-model-small-001",
+            "fake-harness-beta/fake-model-large-001",
+          ],
+          "initialPrompt": [
+            "plain",
+          ],
+          "promptSet": [
+            "snerk",
+          ],
+          "task": "is-prime",
+        },
+        "permutations": [
+          {
+            "hash": "bef6be59e0075f3bc210d929098246bb6b2e437acfcc81fe71dd66e5581b7953",
+            "modelId": "fake-model-small-001",
+            "number": 1,
+            "parameters": {
+              "baseImage": "node20",
+              "codeState": "baseline",
+              "harnessModel": "fake-harness-alpha/fake-model-small-001",
+              "initialPrompt": "plain",
+              "promptSet": "snerk",
+            },
+            "prerunImage": "thunderjar-prerun:ded54607",
+            "prerunImageStatus": "missing",
+            "resolved": {},
+          },
+          {
+            "hash": "6200c2337c98d56cf6d7cf3c1ae2958b79e5b0b8bf828ec25621f4692991db54",
+            "modelId": "fake-model-large-001",
+            "number": 2,
+            "parameters": {
+              "baseImage": "node20",
+              "codeState": "baseline",
+              "harnessModel": "fake-harness-beta/fake-model-large-001",
+              "initialPrompt": "plain",
+              "promptSet": "snerk",
+            },
+            "prerunImage": "thunderjar-prerun:e4f0784f",
+            "prerunImageStatus": "missing",
+            "resolved": {},
+          },
+        ],
+        "secretEnv": [],
+        "testCase": "two-harnesses",
+      }
+    `)
   });
 });
