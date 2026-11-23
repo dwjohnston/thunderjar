@@ -38,8 +38,15 @@ function createDbSetupCommand(): Command {
             `db setup creates the run data store's tables with the URL in ${runDataStore.adminUrlEnv}, which is not set.\nExport it with a URL that may create a schema and tables, e.g. the database owner's.`,
           );
         }
-        await setupPostgres(url, runDataStore.schema);
-        print(`The run data store's tables are in the ${runDataStore.schema} schema of Postgres at $${runDataStore.adminUrlEnv}.`);
+        const where = `Postgres at $${runDataStore.adminUrlEnv}`;
+        try {
+          await setupPostgres(url, runDataStore.schema);
+        } catch (error) {
+          // The driver's message, never the URL, which holds a password.
+          const message = (error instanceof Error ? error.message : String(error)).replaceAll(url, `$${runDataStore.adminUrlEnv}`);
+          throw new ConfigError(`Couldn't set up the run data store's tables in ${where}: ${message.split("\n")[0]}`);
+        }
+        print(`The run data store's tables are in the ${runDataStore.schema} schema of ${where}.`);
       }),
     );
 }
