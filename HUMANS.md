@@ -91,3 +91,4 @@ Maintained by humans only, in [project-md/human-safe-space/](project-md/human-sa
 
 
 ## Working style 
+<!-- Demo for #275: a harmless change to a code-owned file. Do not merge. -->
