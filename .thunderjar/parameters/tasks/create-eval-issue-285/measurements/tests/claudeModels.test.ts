@@ -21,3 +21,13 @@ test("a test case on Haiku, Sonnet and Opus uses all three Claude models", async
   const files = { [`${TEST_CASES}/create-eval-issue-285.ts`]: `${import.meta.dir}/../../../../../test-cases/create-eval-issue-285.ts` };
   expect((await measure(claudeModels, { files })).metrics).toEqual({ claudeModels: 3, allThreeClaudeModels: true });
 });
+
+// PR #288's test case, Haiku only: the same at its first version and its head. tdd-red-green-on-simple-task.ts
+// was already there at the start, on all three, so it doesn't count.
+test("PR #288's test case uses one Claude model, beside the start's own test case on all three", async () => {
+  const files = {
+    [`${TEST_CASES}/claude-code-helper-provider.ts`]: fixture("pr288-head/claude-code-helper-provider.ts"),
+    [`${TEST_CASES}/tdd-red-green-on-simple-task.ts`]: fixture("start/tdd-red-green-on-simple-task.ts"),
+  };
+  expect((await measure(claudeModels, { files })).metrics).toEqual({ claudeModels: 1, allThreeClaudeModels: false });
+});
