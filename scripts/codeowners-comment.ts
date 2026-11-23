@@ -15,6 +15,31 @@
 export type ProtectedFile = { path: string; owners: string[] };
 
 /** The changed files that CODEOWNERS gives an owner other than `author`, with their owners. */
-export function protectedFiles(_codeowners: string, _changed: string[], _author: string): ProtectedFile[] {
-  return [];
+export function protectedFiles(codeowners: string, changed: string[], _author: string): ProtectedFile[] {
+  const rules = parseCodeowners(codeowners);
+  return changed.flatMap((path) => {
+    // As in GitHub, the last rule that matches wins.
+    const rule = rules.findLast((r) => r.globs.some((g) => g.match(path)));
+    return rule && rule.owners.length > 0 ? [{ path, owners: rule.owners }] : [];
+  });
+}
+
+type Rule = { globs: Bun.Glob[]; owners: string[] };
+
+function parseCodeowners(text: string): Rule[] {
+  return text.split("\n").flatMap((line) => {
+    const [pattern, ...owners] = line.replace(/#.*/, "").trim().split(/\s+/);
+    return pattern ? [{ globs: globsOf(pattern), owners }] : [];
+  });
+}
+
+/** Globs matching what a CODEOWNERS pattern matches, which follows .gitignore's rules. */
+function globsOf(pattern: string): Bun.Glob[] {
+  // A slash at the start or in the middle anchors the pattern to the root. Otherwise it matches at any depth.
+  const anchored = pattern.replace(/\/$/, "").includes("/");
+  let glob = pattern.replace(/^\//, "");
+  if (glob.endsWith("/")) glob += "**";
+  if (!anchored) glob = `**/${glob}`;
+  // A pattern that names a folder matches everything in it.
+  return [new Bun.Glob(glob), new Bun.Glob(`${glob}/**`)];
 }
