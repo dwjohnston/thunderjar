@@ -79,15 +79,15 @@ export async function removeDataDirs() {
   for (const dir of dataDirs.splice(0)) await $`rm -rf ${dir}`.quiet();
 }
 
-/** Points the config of the project in `dir` at a postgresStore, its URL in THUNDERJAR_DB_URL. */
-export async function usePostgres(dir: string) {
+/** Points the config of the project in `dir` at a postgresStore, its URL in THUNDERJAR_DB_URL, its tables in `schema` if given. */
+export async function usePostgres(dir: string, schema?: string) {
   const config = `${dir}/.thunderjar/thunderjar.config.ts`;
   const text = await Bun.file(config).text();
   await Bun.write(
     config,
     text
       .replace("import { declareConfig, sqliteStore }", "import { declareConfig, postgresStore }")
-      .replace(/runDataStore: sqliteStore\(\{[^}]*\}\)/, 'runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })'),
+      .replace(/runDataStore: sqliteStore\(\{[^}]*\}\)/, `runDataStore: postgresStore({ urlEnv: "THUNDERJAR_DB_URL"${schema === undefined ? "" : `, schema: "${schema}"`} })`),
   );
 }
 
@@ -99,6 +99,7 @@ export async function postgresSchema() {
   const url = new URL(Bun.env.THUNDERJAR_POSTGRES_URL!);
   url.searchParams.set("options", `-c search_path=${schema}`);
   return {
+    schema,
     url: url.toString(),
     async [Symbol.asyncDispose]() {
       await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`);

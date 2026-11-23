@@ -395,9 +395,9 @@ export default declareTestCase({
   // Only with THUNDERJAR_POSTGRES_URL set to a Postgres it may create a schema in.
   test.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("with a postgresStore, the run is recorded in Postgres, and executions and show read it there", async () => {
     await using copy = await copyScenarioProject("0202");
-    await usePostgres(copy.dir);
-    await using docker = await fakeDocker();
     await using database = await postgresSchema();
+    await usePostgres(copy.dir, database.schema);
+    await using docker = await fakeDocker();
     const env = { ...docker.env, ...KEY, THUNDERJAR_DB_URL: database.url };
 
     const ran = await thunderjar(copy.dir, ["run", "two-harnesses"], { env });
