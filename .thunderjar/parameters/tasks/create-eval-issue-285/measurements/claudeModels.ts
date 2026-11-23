@@ -30,7 +30,11 @@ export default declareMeasurement({
   instrument: "jsAst",
   config: {
     glob: ".thunderjar/test-cases/*.ts",
-    selectors: Object.fromEntries(Object.entries(MODELS).map(([name, id]) => [name, `Literal[value=/${id}/]`])),
+    // A string naming the model, or a template string's text, which is at value.cooked. Comments
+    // aren't in the syntax tree, so a model named only in one doesn't count.
+    selectors: Object.fromEntries(
+      Object.entries(MODELS).map(([name, id]) => [name, `:matches(Literal[value=/${id}/], TemplateElement[value.cooked=/${id}/])`]),
+    ),
   },
   metrics: {
     // How many of the three its test cases name, together.
