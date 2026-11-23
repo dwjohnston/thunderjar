@@ -50,6 +50,7 @@ export type CommentAction = { kind: "create"; body: string } | { kind: "update";
 
 /** What to do to the PR's comments, given the comment this script left before, if any. */
 export function commentAction(_existing: Comment | undefined, files: ProtectedFile[], pr: PullRequest): CommentAction {
+  if (files.length === 0) return { kind: "none" };
   return { kind: "create", body: commentBody(files, pr) };
 }
 
