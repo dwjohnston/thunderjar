@@ -114,7 +114,7 @@ describe("verbose logging", () => {
     const log = await logFile().text();
     expect(log).toContain(`prompt: wrote ${refName(SESSION, "start")}`);
     expect(log).toContain(`stop: wrote ${refName(SESSION, "turn-1")}`);
-  });
+  }, 20_000); // two hook runs, each spawning git: over the 5 s default when the parallel suite loads CI
 });
 
 describe("refName", () => {
