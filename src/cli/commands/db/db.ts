@@ -46,7 +46,7 @@ function createDbSetupCommand(): Command {
           const message = (error instanceof Error ? error.message : String(error)).replaceAll(url, `$${runDataStore.adminUrlEnv}`);
           throw new ConfigError(`Couldn't set up the run data store's tables in ${where}: ${message.split("\n")[0]}`);
         }
-        print(`The run data store's tables are in the ${runDataStore.schema} schema of ${where}.`);
+        print(`✅ The run data store's tables are in the ${runDataStore.schema} schema of ${where}.`);
       }),
     );
 }
