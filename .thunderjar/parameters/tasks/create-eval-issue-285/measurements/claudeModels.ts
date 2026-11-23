@@ -10,14 +10,17 @@
  */
 
 import { declareMeasurement } from "thunderjar";
+import { isStartTestCase } from "./start.helpers.ts";
 
 // Does the test case the agent added run Claude Code on all three Claude models? On PR #288 it ran
 // Haiku only, and the owner wanted all three.
 const MODELS = { haiku: "claude-haiku-5-5", sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5" };
 
-/** How many of MODELS any of `files` names. */
-const named = (files: { matches: Record<string, number> }[]) =>
-  Object.keys(MODELS).filter((model) => files.some(({ matches }) => (matches[model] ?? 0) > 0)).length;
+/** How many of MODELS any of `files` names, other than the test cases there at the start. */
+const named = (files: { file: string; matches: Record<string, number> }[]) => {
+  const added = files.filter(({ file }) => !isStartTestCase(file));
+  return Object.keys(MODELS).filter((model) => added.some(({ matches }) => (matches[model] ?? 0) > 0)).length;
+};
 
 export default declareMeasurement({
   instrument: "jsAst",
