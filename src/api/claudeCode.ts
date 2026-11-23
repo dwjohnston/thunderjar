@@ -5,7 +5,7 @@
 //
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type RequiredEnv, type TokenCosts } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
 import { COMMAND_PATHS, type CommandContext, type CommandProvider, envAssignments, envRef, type Provider } from "./harnessOptions.ts";
 
@@ -97,6 +97,8 @@ type ClaudeCodeCommon = {
   version: string;
   /** The command its run script runs, from the model, version, paths and provider: `CLAUDE_CODE_COMMAND` by default. */
   command?: (ctx: CommandContext) => string;
+  /** The variables it needs, as `declareHarness`'s `requiredEnv`. By default, the provider's key, or Claude Code's own. */
+  requiredEnv?: RequiredEnv[];
 };
 
 /** What `claudeCode` gets. */
@@ -156,7 +158,7 @@ const providerEnv = (provider: CommandProvider) => ({
  * export default claudeCode({ version: "2.1.311" });
  * ```
  */
-export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND, provider }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
+export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND, provider, requiredEnv }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
   const commandProvider: CommandProvider | undefined = provider && { ...provider, baseUrl: anthropicBaseUrl(provider.baseUrl), wireApi: "anthropic" };
   return declareHarness({
     version,
@@ -171,6 +173,6 @@ export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLA
       ].join("\n"),
     collectReply: claudeCodeReply,
     collectTokenCosts: claudeCodeTokenCosts,
-    requiredEnv: provider ? [provider.apiKeyEnv] : [{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }],
+    requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : [{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }]),
   });
 }
