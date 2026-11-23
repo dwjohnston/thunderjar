@@ -32,8 +32,23 @@ export const MARKER = "<!-- codeowners-comment -->";
 export type PullRequest = { repo: string; number: number };
 
 /** The comment listing `files`, each linked to its diff in `pr`. */
-export function commentBody(_files: ProtectedFile[], _pr: PullRequest): string {
-  return "";
+export function commentBody(files: ProtectedFile[], pr: PullRequest): string {
+  const lines = files.map(({ path, owners }) => `- [\`${path}\`](${diffUrl(path, pr)}) (${owners.join(", ")})`);
+  return [
+    MARKER,
+    "### Changes to files with code owners",
+    "",
+    "This PR changes files that need a code owner's approval:",
+    "",
+    ...lines,
+    "",
+  ].join("\n");
+}
+
+/** GitHub anchors a file's diff on the PR's files tab with the SHA-256 of its path. */
+function diffUrl(path: string, pr: PullRequest): string {
+  const hash = new Bun.CryptoHasher("sha256").update(path).digest("hex");
+  return `https://github.com/${pr.repo}/pull/${pr.number}/files#diff-${hash}`;
 }
 
 type Rule = { globs: Bun.Glob[]; owners: string[] };
