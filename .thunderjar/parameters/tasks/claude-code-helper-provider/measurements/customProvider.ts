@@ -24,8 +24,9 @@ export default declareMeasurement({
   config: {
     glob: "{src,scripts}/**/*.test.{ts,tsx}",
     selectors: {
-      // An object's baseUrl, as in a provider.
-      customProvider: 'ObjectExpression > Property[key.name="baseUrl"]',
+      // An object's baseUrl, as in a provider, unless it's OpenRouter's. One held in a variable
+      // counts: the selector can't see the variable's value.
+      customProvider: 'ObjectExpression > Property[key.name="baseUrl"]:not([value.value=/openrouter\\.ai/i])',
     },
   },
   metrics: {
