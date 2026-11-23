@@ -30,3 +30,14 @@ test("OpenRouter, written out or as OPENROUTER, isn't a custom provider", () => 
 expect(OPENROUTER).toEqual({ baseUrl: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY" });`;
   expect(scores(openRouter).customProviderTest).toBe(false);
 });
+
+// The test PR #282's agent first wrote.
+const DEEPSEEK = `const deepseek = claudeCode({
+  version: "2.1.311",
+  provider: { baseUrl: "https://api.deepseek.com/anthropic", apiKeyEnv: "DEEPSEEK_API_KEY" },
+  models: { "deepseek-v4-pro": [] },
+});`;
+
+test("a test with DeepSeek as the custom provider uses DeepSeek", () => {
+  expect(scores(DEEPSEEK).deepSeekProvider).toBe(true);
+});
