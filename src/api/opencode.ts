@@ -123,7 +123,7 @@ function runConfig(modelId: string, model: OpenCodeModelConfig, provider: Comman
   const [providerId, modelName] = modelId.split(/\/(.*)/s) as [string, string | undefined];
   const setup = provider && {
     npm: "@ai-sdk/openai-compatible",
-    name: provider.name,
+    name: provider.name ?? providerId,
     options: { baseURL: provider.baseUrl, apiKey: `{env:${provider.apiKeyEnv}}` },
   };
   return { provider: { [providerId]: { ...setup, models: { [modelName ?? providerId]: model } } } };
