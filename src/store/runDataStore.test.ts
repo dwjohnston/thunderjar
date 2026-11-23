@@ -288,7 +288,7 @@ test("check passes for a SQLite store with no file yet, without creating it, and
 });
 
 test("check fails for a Postgres that can't be reached, after trying again once per retry delay", async () => {
-  const store = postgresStore("postgres://user:secret@127.0.0.1:1/none", "Postgres at $THUNDERJAR_DB_URL", [30, 30]);
+  const store = postgresStore("postgres://user:secret@127.0.0.1:1/none", "Postgres at $THUNDERJAR_DB_URL", { retryDelaysMs: [30, 30] });
   const startedAt = Date.now();
 
   expect(await store.check().catch(errorOf)).toEqual({ path: "Postgres at $THUNDERJAR_DB_URL", message: expect.any(String) });

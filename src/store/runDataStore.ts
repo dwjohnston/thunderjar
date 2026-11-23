@@ -367,7 +367,12 @@ const POSTGRES_SCHEMA = [
  * database, are created on first use. Throws a RunDataStoreError if the database can't be reached,
  * after trying again once for each of `retryDelaysMs`.
  */
-export function postgresStore(url: string, label: string, retryDelaysMs: readonly number[] = [500, 2000]): RunDataStore {
+export type PostgresStoreOptions = {
+  /** How long to wait before each retry of a query that failed. */
+  retryDelaysMs?: readonly number[];
+};
+
+export function postgresStore(url: string, label: string, { retryDelaysMs = [500, 2000] }: PostgresStoreOptions = {}): RunDataStore {
   // A short idle timeout, so a command's process can exit once its queries are done.
   const sql = new SQL(url, { max: 4, idleTimeout: 1 });
   let ready: Promise<void> | undefined;
