@@ -26,6 +26,16 @@ export function protectedFiles(codeowners: string, changed: string[], author: st
   });
 }
 
+/** Marks the comment this script keeps, so it can find it again. */
+export const MARKER = "<!-- codeowners-comment -->";
+
+export type PullRequest = { repo: string; number: number };
+
+/** The comment listing `files`, each linked to its diff in `pr`. */
+export function commentBody(_files: ProtectedFile[], _pr: PullRequest): string {
+  return "";
+}
+
 type Rule = { globs: Bun.Glob[]; owners: string[] };
 
 function parseCodeowners(text: string): Rule[] {

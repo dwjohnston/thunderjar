@@ -8,7 +8,7 @@
  * Humans: add your notes here
  */
 import { describe, expect, test } from "bun:test";
-import { protectedFiles } from "./codeowners-comment";
+import { commentBody, MARKER, protectedFiles } from "./codeowners-comment";
 
 const CODEOWNERS = `
 # Files that need a manual review from a human.
@@ -48,5 +48,31 @@ describe("protectedFiles", () => {
 
   test("leaves out files the author owns, as they need no one else's approval", () => {
     expect(protectedFiles(CODEOWNERS, ["HUMANS.md"], "dwjohnston")).toEqual([]);
+  });
+});
+
+const PR = { repo: "dwjohnston/thunderjar", number: 42 };
+
+describe("commentBody", () => {
+  test("lists each protected file, linked to its diff, with its owners", () => {
+    const body = commentBody(
+      [
+        { path: "HUMANS.md", owners: ["@dwjohnston"] },
+        { path: "docs/cli/plan.md", owners: ["@dwjohnston", "@someone"] },
+      ],
+      PR,
+    );
+    expect(body).toBe(
+      [
+        MARKER,
+        "### Changes to files with code owners",
+        "",
+        "This PR changes files that need a code owner's approval:",
+        "",
+        "- [`HUMANS.md`](https://github.com/dwjohnston/thunderjar/pull/42/files#diff-9fb6e1edd7cee50cec9852b98780479a272e7243eb23a02a0555a5295f7550a0) (@dwjohnston)",
+        "- [`docs/cli/plan.md`](https://github.com/dwjohnston/thunderjar/pull/42/files#diff-9e1d9644beb7a5672b88919772dd0dd9db7615aff95aabebef1d6ff6009e292e) (@dwjohnston, @someone)",
+        "",
+      ].join("\n"),
+    );
   });
 });
