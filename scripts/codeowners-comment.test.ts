@@ -45,4 +45,8 @@ describe("protectedFiles", () => {
       { path: ".github/CODEOWNERS", owners: ["@dwjohnston"] },
     ]);
   });
+
+  test("leaves out files the author owns, as they need no one else's approval", () => {
+    expect(protectedFiles(CODEOWNERS, ["HUMANS.md"], "dwjohnston")).toEqual([]);
+  });
 });
