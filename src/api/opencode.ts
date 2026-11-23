@@ -16,7 +16,8 @@
 // model call. Only the main session's events are written, so sub-agents' tokens aren't counted.
 // For a harness's `collectReply` and `collectTokenCosts`, so an OpenCode harness needn't parse it
 // itself, and `opencode`, a whole OpenCode harness.
-import type { TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type TokenCosts } from "./declarations.ts";
+import type { HelperOptions } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Part = {
@@ -62,4 +63,25 @@ export function opencodeTokenCosts(raw: string, modelId: string): TokenCosts {
   // A model missing from OpenCode's price table costs 0 there, so 0 means "unknown", not free.
   const cost = costUsd > 0 ? { costUsd, costBasis: "list" as const } : {};
   return { outcome: "collected", models: [{ model: modelId, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, ...cost }] };
+}
+
+/** The models `opencode` declares unless given others: OpenCode Zen's, provider first, as OpenCode takes them. */
+export const OPENCODE_MODELS: HarnessModels = {
+  "opencode/claude-haiku-5-5": [],
+  "opencode/gpt-5.5": [],
+};
+
+/** What `opencode` gets. */
+export type OpenCodeOptions = HelperOptions;
+
+/** A complete harness declaration for OpenCode `version`. */
+export function opencode({ version, models = OPENCODE_MODELS }: OpenCodeOptions): HarnessDeclaration<undefined, undefined> {
+  return declareHarness({
+    version,
+    models,
+    applyParameter: () => "",
+    collectReply: opencodeReply,
+    collectTokenCosts: (raw, ctx) => opencodeTokenCosts(raw, ctx.modelId),
+    requiredEnv: ["OPENCODE_API_KEY"],
+  });
 }

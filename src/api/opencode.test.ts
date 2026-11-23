@@ -1,6 +1,7 @@
 // The OpenCode readers, against an `opencode run --format json` result: JSON lines, one event each.
 import { describe, expect, test } from "bun:test";
-import { opencodeReply, opencodeTokenCosts } from "./opencode.ts";
+import { declaredBy } from "./declarations.ts";
+import { opencode, opencodeReply, opencodeTokenCosts } from "./opencode.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/opencode.result.jsonl`).text();
 
@@ -30,5 +31,40 @@ describe("opencodeTokenCosts", () => {
     expect(opencodeTokenCosts("Error: something went wrong", "m")).toEqual({ outcome: "unavailable", reason: "unparseable" });
     expect(opencodeTokenCosts('{"type":"error","error":{"name":"APIError","data":{"statusCode":402}}}', "m")).toEqual({ outcome: "unavailable", reason: "notReported" });
     expect(opencodeTokenCosts('{"type":"step_finish","part":{}}', "m")).toEqual({ outcome: "unavailable", reason: "unparseable" });
+  });
+});
+
+const fragment = (harness: ReturnType<typeof opencode>, modelId: string, model: Record<string, string | number> = {}) =>
+  harness.applyParameter(undefined, { dir: "parameters/harness", version: "1.19.5", modelId, model, resolved: undefined });
+
+
+describe("opencode", () => {
+  const harness = opencode({ version: "1.19.5" });
+
+  test("is a harness declaration on OpenCode Zen, pinning its version, needing OPENCODE_API_KEY, and reading with the library's readers", () => {
+    expect(declaredBy(harness)).toBe("declareHarness");
+    expect(harness.version).toBe("1.19.5");
+    expect(harness.requiredEnv).toEqual(["OPENCODE_API_KEY"]);
+    expect(Object.keys(harness.models)).toEqual(["opencode/claude-haiku-5-5", "opencode/gpt-5.5"]);
+    expect(harness.collectReply?.(RESULT)).toBe("pong");
+    expect(harness.collectTokenCosts?.(RESULT, { version: "1.19.5", modelId: "opencode/gpt-5.5" })).toEqual(opencodeTokenCosts(RESULT, "opencode/gpt-5.5"));
+  });
+
+  test("installs OpenCode as root and its plugin package as node, writes the model and run script, then runs as node", () => {
+    expect(fragment(harness, "opencode/gpt-5.5")).toBe(
+      `RUN npm install -g opencode-ai@1.19.5
+RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar
+USER node
+RUN mkdir -p ~/.config/opencode && cd ~/.config/opencode && echo '{"dependencies":{"@opencode-ai/plugin":"1.19.5"}}' > package.json && npm install --no-audit --no-fund && npm cache clean --force
+USER root
+COPY <<'THUNDERJAR_EOF' /thunderjar/model.txt
+opencode/gpt-5.5
+THUNDERJAR_EOF
+COPY --chmod=755 <<'THUNDERJAR_EOF' /thunderjar/thunderjar-run.sh
+#!/bin/sh
+OPENCODE_PERMISSION='{"external_directory":"allow"}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json
+THUNDERJAR_EOF
+USER node`,
+    );
   });
 });
