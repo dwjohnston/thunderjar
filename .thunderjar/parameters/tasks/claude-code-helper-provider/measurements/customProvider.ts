@@ -11,11 +11,16 @@
 import { declareMeasurement } from "thunderjar";
 
 // Did the agent add a test of claudeCode() with a custom provider? It parses the test files in
-// src/ and scripts/, as the agent left them, committed or not.
+// src/ and scripts/ as the agent left them, committed or not. Not node_modules/: a glob can't
+// exclude it, so it names the folders.
 //
-// It counts only what the agent added because nothing in them matches at the start: claudeCode.test.ts
-// already mentions DeepSeek there, in its recorded-result tests, but in no provider and no URL.
-// Keep it that way if you move the code state.
+// jsAst reads the end state only, not a diff. It counts only what the agent added because no
+// selector matches any test file at the start, 242388c8: claudeCode.test.ts mentions DeepSeek
+// there, in its recorded-result tests, but in no baseUrl and no deepseek.com URL. Check that
+// again if you move the code state.
+//
+// Known gap: a baseUrl held in a variable always counts as custom, even if the variable holds
+// OpenRouter's URL: a selector matches one node, so it can't follow the variable to its value.
 const total = (files: { matches: Record<string, number> }[], selector: string) =>
   files.reduce((sum, { matches }) => sum + (matches[selector] ?? 0), 0);
 
