@@ -22,7 +22,7 @@
 
 import { file, SQL } from "bun";
 import { parseJunit } from "./junit";
-import { migrate, recordRun } from "./store";
+import { createTables, recordRun } from "./store";
 
 const env = Bun.env;
 const [junitPath] = Bun.argv.slice(2);
@@ -44,7 +44,7 @@ const report = parseJunit(await file(junitPath).text());
 
 const sql = new SQL(env.CI_METRICS_DB_URL);
 try {
-  await migrate(sql);
+  await createTables(sql);
   await recordRun(sql, {
     runId: Number(env.GITHUB_RUN_ID),
     runAttempt: Number(env.GITHUB_RUN_ATTEMPT ?? 1),

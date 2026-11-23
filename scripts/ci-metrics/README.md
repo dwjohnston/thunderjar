@@ -51,7 +51,7 @@ The dashboard is provisioned from `grafana/provisioning/dashboards/ci-timings.js
 
 - `junit.ts`
   - Reads Bun's JUnit report.
-- `store.ts`, `schema.sql`
+- `store.ts`
   - Creates the tables and records a run.
 - `upload.ts`
   - The CI step.

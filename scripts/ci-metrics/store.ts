@@ -15,7 +15,7 @@
 
 // Writes a CI job's timings to Postgres.
 
-import { file, type SQL } from "bun";
+import type { SQL } from "bun";
 import type { JunitReport } from "./junit";
 
 export interface CiRun {
@@ -33,23 +33,70 @@ export interface CiRun {
   finishedAt: Date;
 }
 
+/** The schema the tables live in. Tests pass a throwaway one. */
+export const SCHEMA = "metrics";
+
+/** The tables, in `schema`. Safe to run again. */
+function tablesSql(schema: string): string {
+  return `
+-- One row per CI job run, e.g. the "check" job of a workflow run.
+create table if not exists ${schema}.ci_runs (
+  id bigserial primary key,
+  run_id bigint not null,
+  run_attempt int not null,
+  job text not null,
+  workflow text not null,
+  event text not null,
+  branch text not null,
+  sha text not null,
+  pr_number int,
+  outcome text not null,
+  started_at timestamptz not null,
+  finished_at timestamptz not null,
+  -- From the job's first step to the upload.
+  job_seconds double precision not null,
+  -- The test runner's own wall-clock time.
+  test_seconds double precision not null,
+  tests int not null,
+  failures int not null,
+  skipped int not null,
+  unique (run_id, run_attempt, job)
+);
+create index if not exists ci_runs_started_at on ${schema}.ci_runs (started_at);
+
+-- One row per test per CI job run.
+create table if not exists ${schema}.ci_test_metrics (
+  id bigserial primary key,
+  ci_run_id bigint not null references ${schema}.ci_runs (id) on delete cascade,
+  -- The job's start, copied here so time series need no join.
+  recorded_at timestamptz not null,
+  file text not null,
+  name text not null,
+  status text not null,
+  duration_ms double precision not null
+);
+create index if not exists ci_test_metrics_test on ${schema}.ci_test_metrics (file, name, recorded_at);
+create index if not exists ci_test_metrics_run on ${schema}.ci_test_metrics (ci_run_id);
+`;
+}
+
 /**
- * Creates the tables if they're missing. A ci_test_metrics without a ci_run_id column, e.g. one
- * made by hand before this schema, is dropped first when it's empty.
+ * Creates the tables in `schema` if they're missing. A ci_test_metrics without a ci_run_id column,
+ * e.g. one made by hand before this schema, is dropped first when it's empty.
  */
-export async function migrate(sql: SQL): Promise<void> {
+export async function createTables(sql: SQL, schema = SCHEMA): Promise<void> {
   const columns = await sql`select column_name from information_schema.columns
-    where table_name = 'ci_test_metrics' and table_schema = current_schema()`;
+    where table_name = 'ci_test_metrics' and table_schema = ${schema}`;
   const names: string[] = columns.map((c: { column_name: string }) => c.column_name);
   if (names.length > 0 && !names.includes("ci_run_id")) {
-    const [{ count }] = await sql`select count(*)::int as count from ci_test_metrics`;
-    if (count === 0) await sql`drop table ci_test_metrics`;
+    const [{ count }] = await sql.unsafe(`select count(*)::int as count from ${schema}.ci_test_metrics`);
+    if (count === 0) await sql.unsafe(`drop table ${schema}.ci_test_metrics`);
   }
-  await sql.unsafe(await file(new URL("./schema.sql", import.meta.url)).text());
+  await sql.unsafe(tablesSql(schema));
 }
 
 /** Records a job run and its tests, replacing an earlier record of the same run attempt and job. */
-export async function recordRun(sql: SQL, run: CiRun, report: JunitReport): Promise<void> {
+export async function recordRun(sql: SQL, run: CiRun, report: JunitReport, schema = SCHEMA): Promise<void> {
   const row = {
     run_id: run.runId,
     run_attempt: run.runAttempt,
@@ -70,8 +117,8 @@ export async function recordRun(sql: SQL, run: CiRun, report: JunitReport): Prom
   };
   await sql.begin(async (tx) => {
     // Deleting cascades to the earlier record's tests.
-    await tx`delete from ci_runs where run_id = ${row.run_id} and run_attempt = ${row.run_attempt} and job = ${row.job}`;
-    const [{ id }] = await tx`insert into ci_runs ${tx(row)} returning id`;
+    await tx`delete from ${tx(schema)}.ci_runs where run_id = ${row.run_id} and run_attempt = ${row.run_attempt} and job = ${row.job}`;
+    const [{ id }] = await tx`insert into ${tx(schema)}.ci_runs ${tx(row)} returning id`;
     const tests = report.tests.map((t) => ({
       ci_run_id: id,
       recorded_at: run.startedAt,
@@ -82,7 +129,7 @@ export async function recordRun(sql: SQL, run: CiRun, report: JunitReport): Prom
     }));
     // Postgres takes at most 65535 parameters a statement.
     for (let i = 0; i < tests.length; i += 1000) {
-      await tx`insert into ci_test_metrics ${tx(tests.slice(i, i + 1000))}`;
+      await tx`insert into ${tx(schema)}.ci_test_metrics ${tx(tests.slice(i, i + 1000))}`;
     }
   });
 }
