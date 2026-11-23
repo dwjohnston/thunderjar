@@ -45,13 +45,21 @@ export function commentBody(files: ProtectedFile[], pr: PullRequest): string {
   ].join("\n");
 }
 
-export type Comment = { id: number; body: string };
+const NO_LONGER = [
+  MARKER,
+  "### Changes to files with code owners",
+  "",
+  "This PR no longer changes files that need a code owner's approval.",
+  "",
+].join("\n");
+
+export type Comment ={ id: number; body: string };
 export type CommentAction = { kind: "create"; body: string } | { kind: "update"; id: number; body: string } | { kind: "none" };
 
 /** What to do to the PR's comments, given the comment this script left before, if any. */
 export function commentAction(existing: Comment | undefined, files: ProtectedFile[], pr: PullRequest): CommentAction {
-  if (files.length === 0) return { kind: "none" };
-  const body = commentBody(files, pr);
+  if (files.length === 0 && !existing) return { kind: "none" };
+  const body = files.length === 0 ? NO_LONGER : commentBody(files, pr);
   return existing ? { kind: "update", id: existing.id, body } : { kind: "create", body };
 }
 
