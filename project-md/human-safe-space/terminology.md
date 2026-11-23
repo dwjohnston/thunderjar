@@ -71,8 +71,27 @@ The measurements occur **inside** the post run image, they're esessentially scri
 A **measuring instrument** is a helpful, precanned  tool shipped with Thunderjar. A measuring instrument returns data of any shape. This data can be turning into **metrics** - a metric is always a number or a boolean. 
 
 
+!! IMPORTANT: execution vs run is not working for me. 
+A 'run' needs to be the full thing, and I need a new term for the individual executions. 
+
+## Run statuses
+
+**Failed execution** - if an individual execution exits non-zero for any reason
+    - Common non-zero reaons are:
+         - Rate limited
+         - Trust/permissions issues ('workspace not trusted)
+         - Network issues
+         - Bad API key
+    
+
+- **Failed run** -  if _all_ of the individual executions of the run are failed. 
+- **Partially failed run** - at least one, but not all individual executions are failed. 
+
+
+
 
 ## Also 
 
 - captures
 - runtimes
+- purge 
