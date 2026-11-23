@@ -27,8 +27,14 @@ export default declareMeasurement({
       // An object's baseUrl, as in a provider, unless it's OpenRouter's. One held in a variable
       // counts: the selector can't see the variable's value.
       customProvider: 'ObjectExpression > Property[key.name="baseUrl"]:not([value.value=/openrouter\\.ai/i])',
-      // A baseUrl that's DeepSeek's.
-      deepSeek: 'ObjectExpression > Property[key.name="baseUrl"][value.value=/deepseek/i]',
+      // A baseUrl that's DeepSeek's, or a DeepSeek URL anywhere, e.g. in the variable a baseUrl
+      // holds. At the start, no string in them names deepseek.com.
+      deepSeek: `:matches(${[
+        'ObjectExpression > Property[key.name="baseUrl"][value.value=/deepseek/i]',
+        "Literal[value=/deepseek\\.com/i]",
+        // A template string's text is at value.cooked.
+        "TemplateElement[value.cooked=/deepseek\\.com/i]",
+      ].join(", ")})`,
     },
   },
   metrics: {
