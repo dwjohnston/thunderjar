@@ -34,6 +34,10 @@ test("PR #282's DeepSeek provider is DeepSeek, its made-up one isn't", async () 
   expect(await measured({ "src/api/claudeCode.test.ts": "claudeCode_0339eae.ts" })).toEqual({ customProviderTest: true, deepSeekProvider: false });
 });
 
+test("without a custom provider, which one it is doesn't apply", async () => {
+  expect((await measured({ "src/api/openRouter.test.ts": "openrouter_only.ts" })).deepSeekProvider).toBeUndefined();
+});
+
 // Each metric's score, for the added test lines `stdout`.
 const scores = (stdout: string, exitCode = 0) => ({
   customProviderTest: customProviderTest({ exitCode, stdout }),
