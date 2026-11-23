@@ -28,7 +28,10 @@ function createDbSetupCommand(): Command {
     .action(
       reportingConfigErrors(async () => {
         const { runDataStore } = await loadProjectConfig(await findThunderjarRoot(process.cwd()));
-        if (runDataStore.kind !== "postgres") return;
+        if (runDataStore.kind !== "postgres") {
+          print("The run data store is a SQLite file, which creates its own tables: there's nothing to set up.");
+          return;
+        }
         const url = Bun.env[runDataStore.adminUrlEnv];
         if (!url) {
           throw new ConfigError(
