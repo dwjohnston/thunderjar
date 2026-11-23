@@ -83,4 +83,17 @@ USER node`,
       `\ncodex exec -c model_provider=example -c 'model_providers.example={name="example",base_url="https://llm.example.com/v1",env_key="EXAMPLE_API_KEY",wire_api="responses"}' --model`,
     );
   });
+
+  test("its command is a function of the model, version, paths and provider", () => {
+    const custom = codex({
+      version: "0.166.0",
+      provider: OPENROUTER,
+      models: { "openai/gpt-6-luna": [] },
+      command: (ctx) => `echo ${ctx.version} ${ctx.modelId} ${ctx.provider?.wireApi} ${ctx.provider?.baseUrl} > ${ctx.paths.result}`,
+    });
+
+    expect(fragment(custom, "openai/gpt-6-luna")).toContain(
+      "#!/bin/sh\necho 0.166.0 openai/gpt-6-luna responses https://openrouter.ai/api/v1 > /thunderjar/result.json\n",
+    );
+  });
 });
