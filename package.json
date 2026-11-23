@@ -24,7 +24,8 @@
     "src/execution/scoreOf.ts",
     "src/api",
     "!src/**/*.test.ts",
-    "!src/**/*.result.json"
+    "!src/**/*.result.json",
+    "!src/**/*.result.jsonl"
   ],
   "publishConfig": {
     "access": "public"
