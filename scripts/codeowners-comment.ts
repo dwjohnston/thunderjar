@@ -18,28 +18,6 @@
 
 import { $, file } from "bun";
 
-if (import.meta.main) {
-  const pr = { repo: requireEnv("REPO"), number: Number(requireEnv("PR_NUMBER")) };
-  const author = requireEnv("PR_AUTHOR");
-  const codeowners = await file(".github/CODEOWNERS").text();
-
-  const changed = (await $`gh api --paginate repos/${pr.repo}/pulls/${pr.number}/files --jq ${".[].filename"}`.text())
-    .split("\n")
-    .filter(Boolean);
-  const comments: Comment[] = (await $`gh api --paginate repos/${pr.repo}/issues/${pr.number}/comments --jq ${".[] | {id, body}"}`.text())
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as Comment);
-  const existing = comments.find((c) => c.body.startsWith(MARKER));
-
-  const action = commentAction(existing, protectedFiles(codeowners, changed, author), pr);
-  if (action.kind === "create") {
-    await $`gh api repos/${pr.repo}/issues/${pr.number}/comments -f body=${action.body}`.quiet();
-  } else if (action.kind === "update" && action.body !== existing?.body) {
-    await $`gh api -X PATCH repos/${pr.repo}/issues/comments/${action.id} -f body=${action.body}`.quiet();
-  }
-}
-
 function requireEnv(name: string): string {
   const value = Bun.env[name];
   if (!value) throw new Error(`${name} is not set`);
@@ -121,4 +99,27 @@ function globsOf(pattern: string): Bun.Glob[] {
   if (!anchored) glob = `**/${glob}`;
   // A pattern that names a folder matches everything in it.
   return [new Bun.Glob(glob), new Bun.Glob(`${glob}/**`)];
+}
+
+// Last, so the consts above (MARKER, NO_LONGER) are initialised before it runs.
+if (import.meta.main) {
+  const pr = { repo: requireEnv("REPO"), number: Number(requireEnv("PR_NUMBER")) };
+  const author = requireEnv("PR_AUTHOR");
+  const codeowners = await file(".github/CODEOWNERS").text();
+
+  const changed = (await $`gh api --paginate repos/${pr.repo}/pulls/${pr.number}/files --jq ${".[].filename"}`.text())
+    .split("\n")
+    .filter(Boolean);
+  const comments: Comment[] = (await $`gh api --paginate repos/${pr.repo}/issues/${pr.number}/comments --jq ${".[] | {id, body}"}`.text())
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Comment);
+  const existing = comments.find((c) => c.body.startsWith(MARKER));
+
+  const action = commentAction(existing, protectedFiles(codeowners, changed, author), pr);
+  if (action.kind === "create") {
+    await $`gh api repos/${pr.repo}/issues/${pr.number}/comments -f body=${action.body}`.quiet();
+  } else if (action.kind === "update" && action.body !== existing?.body) {
+    await $`gh api -X PATCH repos/${pr.repo}/issues/comments/${action.id} -f body=${action.body}`.quiet();
+  }
 }
