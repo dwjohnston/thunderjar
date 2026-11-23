@@ -35,7 +35,7 @@ const sql = new SQL(url, { max: 1 });
 try {
   await sql`set role metrics_owner`;
   await createTables(sql);
-  process.stdout.write("The metrics tables are ready.\n");
+  process.stdout.write("✅ The metrics tables are ready.\n");
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
   process.exitCode = 1;
