@@ -9,6 +9,7 @@ import {
   mergePurge,
   type PostrunPurge,
   postgresStore,
+  setupPostgres,
   RunDataStoreError,
   sqliteStore,
   storeFileIn,
@@ -224,8 +225,22 @@ describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
 
   afterEach(async () => {
     const admin = new SQL(POSTGRES_URL!);
-    for (const schema of schemas.splice(0)) await admin.unsafe(`DROP SCHEMA ${schema} CASCADE`);
+    for (const schema of schemas.splice(0)) await admin.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await admin.close();
+  });
+
+  test("setupPostgres creates the schema, if it's missing, and the store's tables in it; running it again is harmless", async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+
+    await setupPostgres(POSTGRES_URL!, schema);
+    await setupPostgres(POSTGRES_URL!, schema);
+
+    const admin = new SQL(POSTGRES_URL!);
+    const [tables] = await admin`SELECT to_regclass(${`${schema}.thunderjar_executions`}) IS NOT NULL AS executions,
+      to_regclass(${`${schema}.thunderjar_container_runs`}) IS NOT NULL AS container_runs`;
+    await admin.close();
+    expect(tables).toEqual({ executions: true, container_runs: true });
   });
 
   test("an empty database is an empty store", async () => {

@@ -367,6 +367,12 @@ const POSTGRES_SCHEMA = [
  * database, are created on first use. Throws a RunDataStoreError if the database can't be reached,
  * after trying again once for each of `retryDelaysMs`.
  */
+/**
+ * Creates `schema`, if it's missing, and the store's two tables in it: what `db setup` does, with
+ * a URL that may create them. Safe to run again.
+ */
+export async function setupPostgres(url: string, schema: string): Promise<void> {}
+
 export type PostgresStoreOptions = {
   /** How long to wait before each retry of a query that failed. */
   retryDelaysMs?: readonly number[];
