@@ -9,10 +9,12 @@ Tracks CI job time and each test's duration over time, to catch slow creep befor
 
 ```mermaid
 flowchart LR
-  A["bun test --reporter=junit"] --> B["upload.ts"] --> C[("Supabase: ci_runs, ci_test_metrics")] --> D["Grafana, run locally"]
+  A["bun test --reporter=junit"] --> B["upload.ts"] --> C[("Supabase: metrics.ci_runs, metrics.ci_test_metrics")] --> D["Grafana, run locally"]
 ```
 
 ## What's recorded
+
+Both tables are in the `metrics` schema.
 
 - `ci_runs`
   - One row per CI job run: the `check` job (`bun run test`) and the `docker` job (`test:docker:parallel`).
@@ -24,13 +26,25 @@ The upload step runs last in each job, even when tests fail, and never fails the
 
 ## Set up
 
-1. Add the repository secret `CI_METRICS_DB_URL`
-   - Supabase's session pooler URL. The direct host is IPv6 only, which GitHub's runners can't reach.
+Three logins, each with only what it needs:
+
+| Login | Can | Used by |
+|---|---|---|
+| A member of `metrics_owner`, e.g. `david_admin` | Create and change the tables | `create-tables.ts`, by hand |
+| `ci_metrics_writer` | Insert rows, nothing else | CI's upload |
+| `metrics_dashboard` | Read the tables | Grafana |
+
+1. Create the tables, once:
+   ```sh
+   CI_METRICS_DB_URL_ADMIN=<david_admin's URL> bun scripts/ci-metrics/create-tables.ts
+   ```
+   - Safe to run again. If `metrics.ci_test_metrics` already exists with another shape, it stops and changes nothing: drop or rename that table yourself, then run it again.
+2. Add the repository secret `CI_METRICS_DB_URL`: `ci_metrics_writer`'s pooler URL.
    - e.g.
      ```
-     postgresql://postgres.oojmoxinrsflssiecitj:<password>@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
+     postgresql://ci_metrics_writer.oojmoxinrsflssiecitj:<password>@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres
      ```
-2. That's it: the upload creates the tables on its first run.
+   - The upload only inserts. A second upload of the same run attempt and job is refused, by `ci_runs`' unique key.
 
 ## View the dashboard
 
@@ -39,7 +53,7 @@ bun run ci-metrics:grafana
 ```
 
 - Runs Grafana in Docker, at http://localhost:3000.
-- Reads the database password from `CI_METRICS_DB_PASSWORD`, else `CI_OWNER_PASSWORD`.
+- Logs in as `metrics_dashboard`, with its password from `CI_METRICS_DB_PASSWORD`.
 
 - **Job wall-clock time per run**, with a 10-run average to show the trend.
 - **Tests getting slower**: median of the last 7 days against the 30 days before.
@@ -52,6 +66,8 @@ The dashboard is provisioned from `grafana/provisioning/dashboards/ci-timings.js
 - `junit.ts`
   - Reads Bun's JUnit report.
 - `store.ts`
-  - Creates the tables and records a run.
+  - The tables, and recording a run.
+- `create-tables.ts`
+  - Creates the tables. Run by hand.
 - `upload.ts`
   - The CI step.

@@ -22,8 +22,8 @@
           "type": "grafana-postgresql-datasource",
           "uid": "ci-metrics"
         },
-        "query": "select distinct job from ci_runs order by 1",
-        "definition": "select distinct job from ci_runs order by 1",
+        "query": "select distinct job from metrics.ci_runs order by 1",
+        "definition": "select distinct job from metrics.ci_runs order by 1",
         "multi": true,
         "includeAll": true,
         "current": {
@@ -91,7 +91,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "select started_at as time, job as metric, job_seconds as value from ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome) order by 1"
+          "rawSql": "select started_at as time, job as metric, job_seconds as value from metrics.ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome) order by 1"
         }
       ],
       "fieldConfig": {
@@ -141,7 +141,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "select job,\n  (percentile_cont(0.5) within group (order by job_seconds) filter (where started_at > now() - interval '7 days'))\n  / nullif(percentile_cont(0.5) within group (order by job_seconds) filter (where started_at <= now() - interval '7 days'), 0) - 1 as change\nfrom ci_runs where started_at > now() - interval '14 days' and job in ($job) and outcome in ($outcome)\ngroup by job order by job"
+          "rawSql": "select job,\n  (percentile_cont(0.5) within group (order by job_seconds) filter (where started_at > now() - interval '7 days'))\n  / nullif(percentile_cont(0.5) within group (order by job_seconds) filter (where started_at <= now() - interval '7 days'), 0) - 1 as change\nfrom metrics.ci_runs where started_at > now() - interval '14 days' and job in ($job) and outcome in ($outcome)\ngroup by job order by job"
         }
       ],
       "fieldConfig": {
@@ -204,7 +204,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "select started_at as time, job as metric, tests as value from ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome) order by 1"
+          "rawSql": "select started_at as time, job as metric, tests as value from metrics.ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome) order by 1"
         }
       ],
       "fieldConfig": {
@@ -254,7 +254,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "select started_at as time, job as metric, job_seconds as value\nfrom ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\nunion all\nselect started_at, job || ' (10-run average)', avg(job_seconds) over (partition by job order by started_at rows 9 preceding)\nfrom ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\norder by 1"
+          "rawSql": "select started_at as time, job as metric, job_seconds as value\nfrom metrics.ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\nunion all\nselect started_at, job || ' (10-run average)', avg(job_seconds) over (partition by job order by started_at rows 9 preceding)\nfrom metrics.ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\norder by 1"
         }
       ],
       "fieldConfig": {
@@ -307,7 +307,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "select started_at as time, job as metric, test_seconds as value\nfrom ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\nunion all\nselect started_at, job || ' (10-run average)', avg(test_seconds) over (partition by job order by started_at rows 9 preceding)\nfrom ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\norder by 1"
+          "rawSql": "select started_at as time, job as metric, test_seconds as value\nfrom metrics.ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\nunion all\nselect started_at, job || ' (10-run average)', avg(test_seconds) over (partition by job order by started_at rows 9 preceding)\nfrom metrics.ci_runs where $__timeFilter(started_at) and job in ($job) and outcome in ($outcome)\norder by 1"
         }
       ],
       "fieldConfig": {
@@ -360,7 +360,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "with t as (\n  select m.file, m.name, m.duration_ms, m.recorded_at > now() - interval '7 days' as recent\n  from ci_test_metrics m join ci_runs r on r.id = m.ci_run_id\n  where m.recorded_at > now() - interval '37 days' and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\n), s as (\n  select file, name,\n    percentile_cont(0.5) within group (order by duration_ms) filter (where not recent) as \"Before (ms)\",\n    percentile_cont(0.5) within group (order by duration_ms) filter (where recent) as \"Last 7 days (ms)\",\n    count(*) filter (where not recent) as before_runs, count(*) filter (where recent) as recent_runs\n  from t group by file, name\n)\nselect file as \"File\", name as \"Test\", \"Before (ms)\", \"Last 7 days (ms)\",\n  \"Last 7 days (ms)\" - \"Before (ms)\" as \"Change (ms)\",\n  \"Last 7 days (ms)\" / nullif(\"Before (ms)\", 0) - 1 as \"Change\"\nfrom s where before_runs >= 3 and recent_runs >= 3\norder by \"Change (ms)\" desc limit 25"
+          "rawSql": "with t as (\n  select m.file, m.name, m.duration_ms, m.recorded_at > now() - interval '7 days' as recent\n  from metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\n  where m.recorded_at > now() - interval '37 days' and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\n), s as (\n  select file, name,\n    percentile_cont(0.5) within group (order by duration_ms) filter (where not recent) as \"Before (ms)\",\n    percentile_cont(0.5) within group (order by duration_ms) filter (where recent) as \"Last 7 days (ms)\",\n    count(*) filter (where not recent) as before_runs, count(*) filter (where recent) as recent_runs\n  from t group by file, name\n)\nselect file as \"File\", name as \"Test\", \"Before (ms)\", \"Last 7 days (ms)\",\n  \"Last 7 days (ms)\" - \"Before (ms)\" as \"Change (ms)\",\n  \"Last 7 days (ms)\" / nullif(\"Before (ms)\", 0) - 1 as \"Change\"\nfrom s where before_runs >= 3 and recent_runs >= 3\norder by \"Change (ms)\" desc limit 25"
         }
       ],
       "fieldConfig": {
@@ -458,7 +458,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "select m.file as \"File\", m.name as \"Test\",\n  percentile_cont(0.5) within group (order by m.duration_ms) as \"Median (ms)\",\n  percentile_cont(0.9) within group (order by m.duration_ms) as \"p90 (ms)\",\n  count(*) as \"Runs\"\nfrom ci_test_metrics m join ci_runs r on r.id = m.ci_run_id\nwhere $__timeFilter(m.recorded_at) and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\ngroup by m.file, m.name order by 3 desc limit 25"
+          "rawSql": "select m.file as \"File\", m.name as \"Test\",\n  percentile_cont(0.5) within group (order by m.duration_ms) as \"Median (ms)\",\n  percentile_cont(0.9) within group (order by m.duration_ms) as \"p90 (ms)\",\n  count(*) as \"Runs\"\nfrom metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\nwhere $__timeFilter(m.recorded_at) and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\ngroup by m.file, m.name order by 3 desc limit 25"
         }
       ],
       "fieldConfig": {
@@ -556,7 +556,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "with m as (\n  select m.* from ci_test_metrics m join ci_runs r on r.id = m.ci_run_id\n  where $__timeFilter(m.recorded_at) and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\n    and (m.file || ' ' || m.name) ~* '$test_filter'\n), top as (\n  select file, name from m group by file, name\n  order by percentile_cont(0.5) within group (order by duration_ms) desc limit 10\n)\nselect m.recorded_at as time, m.name as metric, m.duration_ms as value\nfrom m join top using (file, name) order by 1"
+          "rawSql": "with m as (\n  select m.* from metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\n  where $__timeFilter(m.recorded_at) and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\n    and (m.file || ' ' || m.name) ~* '$test_filter'\n), top as (\n  select file, name from m group by file, name\n  order by percentile_cont(0.5) within group (order by duration_ms) desc limit 10\n)\nselect m.recorded_at as time, m.name as metric, m.duration_ms as value\nfrom m join top using (file, name) order by 1"
         }
       ],
       "fieldConfig": {
