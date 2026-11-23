@@ -15,12 +15,14 @@
 export type ProtectedFile = { path: string; owners: string[] };
 
 /** The changed files that CODEOWNERS gives an owner other than `author`, with their owners. */
-export function protectedFiles(codeowners: string, changed: string[], _author: string): ProtectedFile[] {
+export function protectedFiles(codeowners: string, changed: string[], author: string): ProtectedFile[] {
   const rules = parseCodeowners(codeowners);
   return changed.flatMap((path) => {
     // As in GitHub, the last rule that matches wins.
     const rule = rules.findLast((r) => r.globs.some((g) => g.match(path)));
-    return rule && rule.owners.length > 0 ? [{ path, owners: rule.owners }] : [];
+    if (!rule || rule.owners.length === 0) return [];
+    if (rule.owners.some((o) => o.toLowerCase() === `@${author.toLowerCase()}`)) return [];
+    return [{ path, owners: rule.owners }];
   });
 }
 
