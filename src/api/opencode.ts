@@ -36,6 +36,7 @@ export function opencodeReply(raw: string): string {
   if (texts.length === 0) throw new Error("no text event in OpenCode's JSON output");
   return texts.join("\n");
 }
+
 /**
  * Every step's tokens, summed, as one entry for `modelId`. OpenCode already takes cached tokens out
  * of `input`, but it takes reasoning out of `output`, so reasoning is added back: it's billed as
@@ -155,9 +156,20 @@ export const OPENCODE_COMMAND = ({ modelId, model, paths, provider }: CommandCon
  * script, and switches to `node`. Its reply and token costs are read from its JSON lines. It
  * needs `OPENCODE_API_KEY`, an OpenCode Zen key.
  *
+ * Model IDs take OpenCode's own form, provider first. A model's settings are OpenCode's own
+ * per-model config, `options` and `limit`, written into its config for that model. Given a
+ * `provider`, it's set up as an OpenAI-compatible one, on Chat Completions, under the models'
+ * first part, and needs only its key.
+ *
  * ```ts
  * // harnessModels/opencode-1.19.5/index.ts
  * export default opencode({ version: "1.19.5" });
+ *
+ * export default opencode({
+ *   version: "1.19.5",
+ *   provider: OPENROUTER,
+ *   models: { "openrouter/openai/gpt-5.5": [{ options: { reasoningEffort: { values: ["low", "high"] } } }] },
+ * });
  * ```
  */
 export function opencode({ version, models = OPENCODE_MODELS, provider, command = OPENCODE_COMMAND, requiredEnv }: OpenCodeOptions): HarnessDeclaration<undefined, undefined> {

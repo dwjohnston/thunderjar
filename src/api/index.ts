@@ -3,6 +3,17 @@ export { CLAUDE_CODE_COMMAND, CLAUDE_CODE_EFFORTS, CLAUDE_CODE_MODELS, claudeCod
 export { CODEX_COMMAND, CODEX_MODELS, CODEX_REASONING_EFFORTS, codex, codexReply, codexTokenCosts, type CodexOptions } from "./codex.ts";
 export { codeStateGitCheckout, resolveGitCheckout, type CodeStateGitCheckoutConfig } from "./codeStateGitCheckout.ts";
 export { COPILOT_COMMAND, COPILOT_MODELS, COPILOT_USAGE_TYPE, copilot, copilotReply, copilotTokenCosts, type CopilotOptions } from "./copilot.ts";
+export {
+  OPENCODE_COMMAND,
+  OPENCODE_MODELS,
+  opencode,
+  opencodeReply,
+  opencodeTokenCosts,
+  type OpenCodeModelConfig,
+  type OpenCodeModels,
+  type OpenCodeModelSetting,
+  type OpenCodeOptions,
+} from "./opencode.ts";
 export { MODEL_PATH, PROMPT_PATH, RESULT_PATH, RUN_SCRIPT_PATH, USAGE_PATH, writeFile, writeModel, writePrompt, writeRunScript } from "./files.ts";
 export {
   COMMAND_PATHS,
