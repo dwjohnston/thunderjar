@@ -160,7 +160,7 @@ export const OPENCODE_COMMAND = ({ modelId, model, paths, provider }: CommandCon
  * export default opencode({ version: "1.19.5" });
  * ```
  */
-export function opencode({ version, models = OPENCODE_MODELS, provider, command = OPENCODE_COMMAND }: OpenCodeOptions): HarnessDeclaration<undefined, undefined> {
+export function opencode({ version, models = OPENCODE_MODELS, provider, command = OPENCODE_COMMAND, requiredEnv }: OpenCodeOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     models: flatModels(models),
@@ -177,6 +177,6 @@ export function opencode({ version, models = OPENCODE_MODELS, provider, command 
       ].join("\n"),
     collectReply: opencodeReply,
     collectTokenCosts: (raw, ctx) => opencodeTokenCosts(raw, ctx.modelId),
-    requiredEnv: provider ? [provider.apiKeyEnv] : ["OPENCODE_API_KEY"],
+    requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : ["OPENCODE_API_KEY"]),
   });
 }
