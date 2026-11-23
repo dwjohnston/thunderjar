@@ -96,4 +96,8 @@ USER node`,
       "#!/bin/sh\necho 0.166.0 openai/gpt-6-luna responses https://openrouter.ai/api/v1 > /thunderjar/result.json\n",
     );
   });
+
+  test("its required variables can be replaced", () => {
+    expect(codex({ version: "0.166.0", requiredEnv: [{ oneOf: ["CODEX_API_KEY", "OPENAI_API_KEY"] }] }).requiredEnv).toEqual([{ oneOf: ["CODEX_API_KEY", "OPENAI_API_KEY"] }]);
+  });
 });
