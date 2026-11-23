@@ -85,6 +85,12 @@ export const CLAUDE_CODE_MODELS: HarnessModels = {
   "claude-haiku-4-5-20251001": [],
 };
 
+/**
+ * The effort levels Claude Code takes, as `--effort`, for a model's `effort` setting, e.g.
+ * `{ "claude-opus-5-5": [{ effort: { values: CLAUDE_CODE_EFFORTS } }] }`.
+ */
+export const CLAUDE_CODE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
 /** What `claudeCode` gets, with or without a provider. */
 type ClaudeCodeCommon = {
   /** The version of `@anthropic-ai/claude-code` to install, e.g. `"2.1.311"`. */

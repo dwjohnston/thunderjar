@@ -1,7 +1,7 @@
 // The Claude Code readers, against a real `claude -p --output-format json` result, from Claude Code
 // 2.1.316 run on DeepSeek's Anthropic-compatible API, whose model its price table doesn't know.
 import { describe, expect, test } from "bun:test";
-import { claudeCode, claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
+import { CLAUDE_CODE_EFFORTS, claudeCode, claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
 import { declaredBy } from "./declarations.ts";
 import { OPENROUTER } from "./harnessOptions.ts";
 
@@ -153,5 +153,15 @@ ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic ANTHROPIC_AUTH_TOKEN="$DEE
         `echo {"baseUrl":"https://openrouter.ai/api","apiKeyEnv":"OPENROUTER_API_KEY","wireApi":"anthropic"}`,
       );
     });
+  });
+
+  test("passes a model's effort setting as --effort, and none without one", () => {
+    const efforts = claudeCode({ version: "2.1.311", models: { "claude-opus-5-5": [{ effort: { values: CLAUDE_CODE_EFFORTS } }], "claude-haiku-4-5-20251001": [] } });
+    const run = (modelId: string, model: Record<string, string>) =>
+      efforts.applyParameter(undefined, { dir: "parameters/harness", version: "2.1.311", modelId, model, resolved: undefined });
+
+    expect(CLAUDE_CODE_EFFORTS).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(run("claude-opus-5-5", { effort: "xhigh" })).toContain(`--model "$(cat /thunderjar/model.txt)" --effort xhigh --output-format json`);
+    expect(run("claude-haiku-4-5-20251001", {})).toContain(`--model "$(cat /thunderjar/model.txt)" --output-format json`);
   });
 });
