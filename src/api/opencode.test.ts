@@ -38,6 +38,11 @@ const fragment = (harness: ReturnType<typeof opencode>, modelId: string, model: 
   harness.applyParameter(undefined, { dir: "parameters/harness", version: "1.19.5", modelId, model, resolved: undefined });
 
 
+
+/** The run script `harness` writes for `modelId`, without its `#!/bin/sh` line. */
+const runScript = (harness: ReturnType<typeof opencode>, modelId: string, model: Record<string, string | number> = {}) =>
+  /\n#!\/bin\/sh\n([\s\S]*?)\nTHUNDERJAR_EOF\n/.exec(fragment(harness, modelId, model))?.[1];
+
 describe("opencode", () => {
   const harness = opencode({ version: "1.19.5" });
 
@@ -65,6 +70,18 @@ COPY --chmod=755 <<'THUNDERJAR_EOF' /thunderjar/thunderjar-run.sh
 OPENCODE_PERMISSION='{"external_directory":"allow"}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json
 THUNDERJAR_EOF
 USER node`,
+    );
+  });
+
+  test("writes a model's own config, its options and limit, into OpenCode's config for that model, a variant in them adding a name part", () => {
+    const configured = opencode({
+      version: "1.19.5",
+      models: { "opencode/gpt-5.5": [{ options: { reasoningEffort: { values: ["low", "high"] } } }, { limit: { context: 200000 } }] },
+    });
+
+    expect(configured.models).toEqual({ "opencode/gpt-5.5": [{ "options.reasoningEffort": { values: ["low", "high"] } }, { "limit.context": 200000 }] });
+    expect(runScript(configured, "opencode/gpt-5.5", { "options.reasoningEffort": "high", "limit.context": 200000 })).toBe(
+      `OPENCODE_PERMISSION='{"external_directory":"allow"}' OPENCODE_CONFIG_CONTENT='{"provider":{"opencode":{"models":{"gpt-5.5":{"options":{"reasoningEffort":"high"},"limit":{"context":200000}}}}}}' opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json`,
     );
   });
 });
