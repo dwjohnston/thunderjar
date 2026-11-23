@@ -276,7 +276,7 @@ describe("runDataStoreProblem", () => {
     expect(runDataStoreProblem({ kind: "postgres", urlEnv: "THUNDERJAR_DB_URL" })).toBeUndefined();
   });
 
-  test.each([[undefined], ["./runs.sqlite"], [{ kind: "sqlite" }], [{ kind: "sqlite", path: "" }], [{ kind: "postgres" }], [{ kind: "postgres", urlEnv: "postgres://u:p@host/db" }], [{ kind: "mysql" }]])(
+  test.each([[undefined], ["./runs.sqlite"], [{ kind: "sqlite" }], [{ kind: "sqlite", path: "" }], [{ kind: "postgres" }], [{ kind: "postgres", urlEnv: "postgres://u:p@host/db" }], [{ kind: "postgres", urlEnv: "THUNDERJAR_DB_URL", schema: "runs; drop" }], [{ kind: "mysql" }]])(
     "%p is not a store",
     (store) => {
       expect(runDataStoreProblem(store)).toBeString();
