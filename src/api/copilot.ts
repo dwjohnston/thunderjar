@@ -126,7 +126,7 @@ const withUsage = (command: string, { usage, result }: CommandPaths) =>
  * export default copilot({ version: "1.0.105" });
  * ```
  */
-export function copilot({ version, models = COPILOT_MODELS, provider }: CopilotOptions): HarnessDeclaration<undefined, undefined> {
+export function copilot({ version, models = COPILOT_MODELS, provider, command = COPILOT_COMMAND }: CopilotOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     models,
@@ -138,7 +138,7 @@ export function copilot({ version, models = COPILOT_MODELS, provider }: CopilotO
         "RUN copilot --version",
         "USER root",
         writeModel(ctx.modelId),
-        writeRunScript(withUsage(COPILOT_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: provider && { ...provider, wireApi: wireApiFor(ctx.modelId, ctx.model.wireApi) } }), COMMAND_PATHS)),
+        writeRunScript(withUsage(command({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: provider && { ...provider, wireApi: wireApiFor(ctx.modelId, ctx.model.wireApi) } }), COMMAND_PATHS)),
         "USER node",
       ].join("\n"),
     collectReply: copilotReply,
