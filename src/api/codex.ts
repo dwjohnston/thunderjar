@@ -15,6 +15,7 @@
 // `collectReply` and `collectTokenCosts`, so a Codex harness needn't parse it itself, and `codex`,
 // a whole Codex harness.
 
+import type { TokenCosts } from "./declarations.ts";
 import { jsonLines } from "./jsonLines.ts";
 
 type Event = { type?: unknown; item?: { type?: unknown; item_type?: unknown; text?: unknown }; usage?: Record<string, unknown> };
@@ -29,4 +30,9 @@ export function codexReply(raw: string): string {
     .findLast((text) => typeof text === "string" && text.trim() !== "");
   if (typeof reply !== "string") throw new Error("no completed agent_message with text in Codex's JSONL output");
   return reply;
+}
+
+/** Tokens summed over every `turn.completed`. */
+export function codexTokenCosts(_raw: string, _modelId: string): TokenCosts {
+  return { outcome: "unavailable", reason: "notReported" };
 }
