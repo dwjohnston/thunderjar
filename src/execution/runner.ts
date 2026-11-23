@@ -50,7 +50,7 @@ export function openRunnerStore(declared: ProjectConfig["runDataStore"], root: s
     const url = env[declared.urlEnv];
     if (!url) throw new ConfigError(`The run data store is Postgres, at the URL in ${declared.urlEnv}, which the runner wasn't given.`);
     const where = `Postgres at $${declared.urlEnv}`;
-    return { store: postgresStore(url, where), where };
+    return { store: postgresStore(url, where, { schema: declared.schema, adminUrlEnv: declared.adminUrlEnv }), where };
   }
   const where = declared.path.startsWith("/") ? declared.path : `${root.slice(0, root.lastIndexOf("/"))}/${declared.path.replace(/^\.\//, "")}`;
   return { store: sqliteStore(where), where };

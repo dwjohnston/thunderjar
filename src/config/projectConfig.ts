@@ -175,7 +175,7 @@ export type ProjectConfig = {
    * The run data store, as the config gives it: a SQLite file, relative to the project folder
    * (the one holding `.thunderjar/`) unless absolute, or the variable holding a Postgres URL.
    */
-  runDataStore: { kind: "sqlite"; path: string } | { kind: "postgres"; urlEnv: string };
+  runDataStore: { kind: "sqlite"; path: string } | { kind: "postgres"; urlEnv: string; schema?: string; adminUrlEnv?: string };
   /** What prerun builds are given, and how many build at once: no secrets, no SSH agent and 1, unless the config gives them. */
   build: Required<BuildOptions>;
   /** A warning for each deprecated field the config gives, e.g. a runtime hook by its old name. */
@@ -214,7 +214,15 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
       imageStore === null
         ? null
         : { repository: imageStore.repository, ...(imageStore.deleteCommand !== undefined && { deleteCommand: [...imageStore.deleteCommand] }) },
-    runDataStore: runDataStore.kind === "postgres" ? { kind: "postgres", urlEnv: runDataStore.urlEnv } : { kind: "sqlite", path: runDataStore.path },
+    runDataStore:
+      runDataStore.kind === "postgres"
+        ? {
+            kind: "postgres",
+            urlEnv: runDataStore.urlEnv,
+            ...(runDataStore.schema !== undefined && { schema: runDataStore.schema }),
+            ...(runDataStore.adminUrlEnv !== undefined && { adminUrlEnv: runDataStore.adminUrlEnv }),
+          }
+        : { kind: "sqlite", path: runDataStore.path },
     runtime:
       runtime === undefined
         ? null
