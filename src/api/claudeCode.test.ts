@@ -3,6 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { claudeCode, claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
 import { declaredBy } from "./declarations.ts";
+import { OPENROUTER } from "./harnessOptions.ts";
 
 const REAL = await Bun.file(`${import.meta.dir}/claudeCode.deepseek.result.json`).text();
 
@@ -138,6 +139,18 @@ USER node`,
         `#!/bin/sh
 ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY" ANTHROPIC_API_KEY='' claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json --dangerously-skip-permissions > /thunderjar/result.json
 `,
+      );
+    });
+
+    test("passes OpenRouter's Anthropic-compatible address, not its OpenAI one, to the default command and an override", () => {
+      const options = { version: "2.1.311", provider: OPENROUTER, models: { "anthropic/claude-opus-5.5": [] } };
+
+      expect(fragment(claudeCode(options), "anthropic/claude-opus-5.5")).toContain(
+        `ANTHROPIC_BASE_URL=https://openrouter.ai/api ANTHROPIC_AUTH_TOKEN="$OPENROUTER_API_KEY" ANTHROPIC_API_KEY='' claude -p`,
+      );
+      const custom = claudeCode({ ...options, command: ({ provider }) => `echo ${JSON.stringify(provider)}` });
+      expect(fragment(custom, "anthropic/claude-opus-5.5")).toContain(
+        `echo {"baseUrl":"https://openrouter.ai/api","apiKeyEnv":"OPENROUTER_API_KEY","wireApi":"anthropic"}`,
       );
     });
   });
