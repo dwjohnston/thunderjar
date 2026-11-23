@@ -20,7 +20,7 @@ import { declareCodeState } from "thunderjar";
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "tj-thunderjar-nested-skills-root",
+    tag: "thunderjar/codestate/thunderjar-nested-skills-root",
   },
   resolve: async (config, ctx) => {
     const tag = `refs/tags/${config.tag}`;

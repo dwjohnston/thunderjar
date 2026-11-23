@@ -12,7 +12,7 @@
 import { declarePromptSet } from "thunderjar";
 
 // The nested-skills fixture as it is at a git tag, checked out over the code state's
-// and committed. At gauntlet-nested-skills-read-tool the skills are unchanged ("Always apply
+// and committed. At thunderjar/promptset/nested-skills-read-tool the skills are unchanged ("Always apply
 // this skill."), and the fixture's root gains an AGENTS.md, "Whenever you are asked to inspect a
 // file, make sure you use your read tool.", and a CLAUDE.md that imports it.
 //
@@ -22,7 +22,7 @@ import { declarePromptSet } from "thunderjar";
 export default declarePromptSet({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "gauntlet-nested-skills-read-tool",
+    tag: "thunderjar/promptset/nested-skills-read-tool",
   },
   applyParameter: (config) => `RUN git -C /workspace fetch --quiet ${config.repo} tag ${config.tag} --no-tags \\
   && git -C /workspace checkout ${config.tag} -- src/gauntlet/nested-skills \\

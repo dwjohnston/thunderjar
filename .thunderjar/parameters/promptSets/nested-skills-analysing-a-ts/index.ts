@@ -12,7 +12,7 @@
 import { declarePromptSet } from "thunderjar";
 
 // The nested-skills fixture's skills as they are at a git tag, checked out over the code state's
-// and committed. At gauntlet-nested-skills-analysing-a-ts their descriptions say "Invoke this skill
+// and committed. At thunderjar/promptset/nested-skills-analysing-a-ts their descriptions say "Invoke this skill
 // when analysing the file a.ts." instead of "Always apply this skill.".
 //
 // Only src/gauntlet/nested-skills is checked out, so the agent still can't read the task's
@@ -21,7 +21,7 @@ import { declarePromptSet } from "thunderjar";
 export default declarePromptSet({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "gauntlet-nested-skills-analysing-a-ts",
+    tag: "thunderjar/promptset/nested-skills-analysing-a-ts",
   },
   applyParameter: (config) => `RUN git -C /workspace fetch --quiet ${config.repo} tag ${config.tag} --no-tags \\
   && git -C /workspace checkout ${config.tag} -- src/gauntlet/nested-skills \\

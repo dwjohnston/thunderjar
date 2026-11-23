@@ -22,7 +22,7 @@ import { declareCodeState } from "thunderjar";
 export default declareCodeState({
   config: {
     repo: "https://github.com/dwjohnston/thunderjar.git",
-    tag: "tj-thunderjar-gauntlet",
+    tag: "thunderjar/codestate/thunderjar-gauntlet",
   },
   resolve: async (config, ctx) => {
     const tag = `refs/tags/${config.tag}`;
