@@ -87,4 +87,9 @@ describe("commentAction", () => {
   test("does nothing when no protected files change and there is no comment", () => {
     expect(commentAction(undefined, [], PR)).toEqual({ kind: "none" });
   });
+
+  test("updates the existing comment when the PR changes", () => {
+    const existing = { id: 7, body: commentBody([{ path: "docs/cli/plan.md", owners: ["@dwjohnston"] }], PR) };
+    expect(commentAction(existing, FILES, PR)).toEqual({ kind: "update", id: 7, body: commentBody(FILES, PR) });
+  });
 });
