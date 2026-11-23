@@ -18,8 +18,16 @@
 // Copilot's JSON lines leave out its token events, so the run script also has it write its usage
 // statistics to a file, and appends them to the result file as one more line:
 // {"type":"thunderjar.usage","data":<the usage file>}.
+import { jsonLines } from "./jsonLines.ts";
+
+type Event = { type?: unknown; agentId?: unknown; data?: Record<string, unknown> };
 
 /** The main agent's last message with text: its final reply. Sub-agents' messages have an agentId. Throws if there is none. */
-export function copilotReply(_raw: string): string {
-  return "";
+export function copilotReply(raw: string): string {
+  const reply = jsonLines<Event>(raw)
+    .filter((e) => e.type === "assistant.message" && e.agentId === undefined)
+    .map((e) => e.data?.content)
+    .findLast((content) => typeof content === "string" && content.trim() !== "");
+  if (typeof reply !== "string") throw new Error("no assistant.message with content in Copilot's JSONL output");
+  return reply;
 }
