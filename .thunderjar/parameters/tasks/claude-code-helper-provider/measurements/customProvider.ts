@@ -27,6 +27,8 @@ export default declareMeasurement({
       // An object's baseUrl, as in a provider, unless it's OpenRouter's. One held in a variable
       // counts: the selector can't see the variable's value.
       customProvider: 'ObjectExpression > Property[key.name="baseUrl"]:not([value.value=/openrouter\\.ai/i])',
+      // A baseUrl that's DeepSeek's.
+      deepSeek: 'ObjectExpression > Property[key.name="baseUrl"][value.value=/deepseek/i]',
     },
   },
   metrics: {
@@ -34,6 +36,6 @@ export default declareMeasurement({
     customProviderTest: { score: (files) => total(files, "customProvider") > 0, stat: "rate", better: "higher" },
     // That provider is DeepSeek, as on PR #282, where the owner asked for a made-up one instead.
     // Doesn't apply when there's no custom-provider test.
-    deepSeekProvider: { score: () => undefined, stat: "rate", better: "lower" },
+    deepSeekProvider: { score: (files) => total(files, "deepSeek") > 0, stat: "rate", better: "lower" },
   },
 });
