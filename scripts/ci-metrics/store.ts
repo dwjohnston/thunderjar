@@ -39,4 +39,40 @@ export async function migrate(sql: SQL): Promise<void> {
 }
 
 /** Records a job run and its tests, replacing an earlier record of the same run attempt and job. */
-export async function recordRun(_sql: SQL, _run: CiRun, _report: JunitReport): Promise<void> {}
+export async function recordRun(sql: SQL, run: CiRun, report: JunitReport): Promise<void> {
+  const row = {
+    run_id: run.runId,
+    run_attempt: run.runAttempt,
+    job: run.job,
+    workflow: run.workflow,
+    event: run.event,
+    branch: run.branch,
+    sha: run.sha,
+    pr_number: run.prNumber,
+    outcome: run.outcome,
+    started_at: run.startedAt,
+    finished_at: run.finishedAt,
+    job_seconds: (run.finishedAt.getTime() - run.startedAt.getTime()) / 1000,
+    test_seconds: report.totalSeconds,
+    tests: report.tests.length,
+    failures: report.tests.filter((t) => t.status === "failed").length,
+    skipped: report.tests.filter((t) => t.status === "skipped").length,
+  };
+  await sql.begin(async (tx) => {
+    // Deleting cascades to the earlier record's tests.
+    await tx`delete from ci_runs where run_id = ${row.run_id} and run_attempt = ${row.run_attempt} and job = ${row.job}`;
+    const [{ id }] = await tx`insert into ci_runs ${tx(row)} returning id`;
+    const tests = report.tests.map((t) => ({
+      ci_run_id: id,
+      recorded_at: run.startedAt,
+      file: t.file,
+      name: t.name,
+      status: t.status,
+      duration_ms: t.durationMs,
+    }));
+    // Postgres takes at most 65535 parameters a statement.
+    for (let i = 0; i < tests.length; i += 1000) {
+      await tx`insert into ci_test_metrics ${tx(tests.slice(i, i + 1000))}`;
+    }
+  });
+}
