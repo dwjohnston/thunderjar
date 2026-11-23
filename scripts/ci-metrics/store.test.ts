@@ -75,4 +75,17 @@ describe.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("recordRun", () => {
       { recorded_at: run.startedAt, file: "b.test.ts", name: "later", status: "skipped", duration_ms: 0 },
     ]);
   });
+
+  test("migrate replaces an empty ci_test_metrics of another shape, e.g. one made by hand", async () => {
+    await using db = await freshSchema();
+    await db.sql`create table ci_test_metrics (id serial primary key, test_name text not null, duration numeric not null)`;
+
+    await expect(migrate(db.sql)).resolves.toBeUndefined();
+
+    const columns = await db.sql`select column_name from information_schema.columns
+      where table_name = 'ci_test_metrics' and table_schema = current_schema() order by ordinal_position`;
+    expect(columns.map((c: { column_name: string }) => c.column_name)).toEqual([
+      "id", "ci_run_id", "recorded_at", "file", "name", "status", "duration_ms",
+    ]);
+  });
 });
