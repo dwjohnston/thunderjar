@@ -16,7 +16,7 @@
 // a whole Codex harness.
 import { declareHarness, type HarnessDeclaration, type HarnessModels, type TokenCosts } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
-import { COMMAND_PATHS, type CommandContext } from "./harnessOptions.ts";
+import { COMMAND_PATHS, type CommandContext, type CommandProvider, type ProviderAndModels, providerId, shellQuote } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Event = { type?: unknown; item?: { type?: unknown; item_type?: unknown; text?: unknown }; usage?: Record<string, unknown> };
@@ -66,29 +66,49 @@ export const CODEX_MODELS: HarnessModels = {
 export type CodexOptions = {
   /** The version of `@openai/codex` to install, e.g. `"0.166.0"`. */
   version: string;
-  /** The models it runs, as `declareHarness`'s `models`. By default, `CODEX_MODELS`. */
-  models?: HarnessModels;
+} & ProviderAndModels;
+
+/**
+ * The flags that point Codex at `provider`: a `model_providers` entry, named after its host, e.g.
+ * `openrouter`, on the Responses API, which is all Codex speaks.
+ */
+const providerFlags = (provider: CommandProvider) => {
+  const id = providerId(provider.baseUrl);
+  const entry = { name: id, base_url: provider.baseUrl, env_key: provider.apiKeyEnv, wire_api: provider.wireApi };
+  const table = `{${Object.entries(entry).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(",")}}`;
+  return `-c model_provider=${id} -c ${shellQuote(`model_providers.${id}=${table}`)}`;
 };
 
 /**
  * The command that runs Codex: the prompt and model read from their files, so quotes and newlines
  * reach the agent intact, its events as JSON lines, without its sandbox or approvals: the
- * container is the sandbox. At the model's `reasoningEffort`, if it has one.
+ * container is the sandbox. At the model's `reasoningEffort`, if it has one. Given a provider, it
+ * points Codex at it.
  */
-export const CODEX_COMMAND = ({ model, paths }: CommandContext): string =>
-  `codex exec${model.reasoningEffort === undefined ? "" : ` -c model_reasoning_effort=${model.reasoningEffort}`} --model "$(cat ${paths.model})" --json --dangerously-bypass-approvals-and-sandbox "$(cat ${paths.prompt})" > ${paths.result}`;
+export const CODEX_COMMAND = ({ model, paths, provider }: CommandContext): string =>
+  `codex exec${provider ? ` ${providerFlags(provider)}` : ""}` +
+  `${model.reasoningEffort === undefined ? "" : ` -c model_reasoning_effort=${model.reasoningEffort}`}` +
+  ` --model "$(cat ${paths.model})" --json --dangerously-bypass-approvals-and-sandbox "$(cat ${paths.prompt})" > ${paths.result}`;
 
 /**
  * A complete harness declaration for Codex `version`. Its fragment installs Codex as root, writes
  * the model ID and the run script, then switches to the image's non-root `node` user. Its reply
- * and token costs are read from its JSON lines. It needs `OPENAI_API_KEY`.
+ * and token costs are read from its JSON lines. It needs `OPENAI_API_KEY`, or, given a
+ * `provider`, which must speak the Responses API, only the provider's key.
  *
  * ```ts
  * // harnessModels/codex-0.166.0/index.ts
  * export default codex({ version: "0.166.0" });
+ *
+ * export default codex({
+ *   version: "0.166.0",
+ *   provider: OPENROUTER,
+ *   models: { "openai/gpt-6.1-sol": [{ reasoningEffort: { values: ["low", "high"] } }] },
+ * });
  * ```
  */
-export function codex({ version, models = CODEX_MODELS }: CodexOptions): HarnessDeclaration<undefined, undefined> {
+export function codex({ version, models = CODEX_MODELS, provider }: CodexOptions): HarnessDeclaration<undefined, undefined> {
+  const commandProvider: CommandProvider | undefined = provider && { baseUrl: provider.baseUrl, apiKeyEnv: provider.apiKeyEnv, wireApi: "responses" };
   return declareHarness({
     version,
     models,
@@ -97,11 +117,11 @@ export function codex({ version, models = CODEX_MODELS }: CodexOptions): Harness
         `RUN npm install -g @openai/codex@${ctx.version}`,
         "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
         writeModel(ctx.modelId),
-        writeRunScript(CODEX_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: undefined })),
+        writeRunScript(CODEX_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: commandProvider })),
         "USER node",
       ].join("\n"),
     collectReply: codexReply,
     collectTokenCosts: (raw, ctx) => codexTokenCosts(raw, ctx.modelId),
-    requiredEnv: ["OPENAI_API_KEY"],
+    requiredEnv: provider ? [provider.apiKeyEnv] : ["OPENAI_API_KEY"],
   });
 }

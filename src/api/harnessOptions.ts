@@ -13,7 +13,7 @@
  */
 // The options every out-of-the-box harness helper shares: `provider`, where the agent sends its
 // requests, and `command`, a function of `CommandContext` that gives the run script's command.
-import type { SettingValue } from "./declarations.ts";
+import type { HarnessModels, SettingValue } from "./declarations.ts";
 import { MODEL_PATH, PROMPT_PATH, RESULT_PATH, USAGE_PATH } from "./files.ts";
 
 /** A model provider other than the agent's own: its API's address, and the variable that holds its key. */
@@ -70,3 +70,33 @@ export function envAssignments(vars: Record<string, string | EnvRef>): string {
     .map(([name, value]) => `${name}=${typeof value === "string" ? quote(value) : `"$${value.env}"`}`)
     .join(" ");
 }
+
+/** `value` single-quoted for the shell, whatever it holds. */
+export const shellQuote = (value: string): string => `'${value.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * A short name for the provider at `baseUrl`, from its host: the label before the top-level
+ * domain, e.g. `openrouter` for `https://openrouter.ai/api/v1`.
+ */
+export function providerId(baseUrl: string): string {
+  const labels = new URL(baseUrl).hostname.split(".");
+  return (labels.length > 1 ? labels[labels.length - 2] : labels[0]) ?? "provider";
+}
+
+/**
+ * A helper's `provider` and `models`: with no provider, the agent's own, and `models` defaults to
+ * its own IDs. With one, `models` is required, as the defaults wouldn't be the provider's IDs.
+ */
+export type ProviderAndModels =
+  | {
+      /** The agent's own provider. */
+      provider?: undefined;
+      /** The models it runs, as `declareHarness`'s `models`. By default, the helper's own list. */
+      models?: HarnessModels;
+    }
+  | {
+      /** Another provider, e.g. `OPENROUTER`. */
+      provider: Provider;
+      /** The models it runs, by the provider's IDs: required, as the defaults are the agent's own provider's. */
+      models: HarnessModels;
+    };
