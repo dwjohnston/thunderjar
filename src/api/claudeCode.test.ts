@@ -128,15 +128,15 @@ USER node`,
 
   describe("with a provider", () => {
     test("passes a custom provider's address and key as Claude Code's, and needs only its key", () => {
-      const deepseek = claudeCode({
+      const custom = claudeCode({
         version: "2.1.311",
-        provider: { baseUrl: "https://api.deepseek.com/anthropic", apiKeyEnv: "DEEPSEEK_API_KEY" },
-        models: { "deepseek-chat": [] }, // DeepSeek's ID, as in the recorded result this file reads
+        provider: { baseUrl: "https://mycustomprovider.com/anthropic", apiKeyEnv: "MY_CUSTOM_PROVIDER_API_KEY" },
+        models: { "my-custom-model": [] },
       });
 
-      expect(deepseek.requiredEnv).toEqual(["DEEPSEEK_API_KEY"]);
-      expect(runScript(deepseek, "deepseek-chat")).toBe(
-        `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY" ANTHROPIC_API_KEY='' claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json --dangerously-skip-permissions > /thunderjar/result.json`,
+      expect(custom.requiredEnv).toEqual(["MY_CUSTOM_PROVIDER_API_KEY"]);
+      expect(runScript(custom, "my-custom-model")).toBe(
+        `ANTHROPIC_BASE_URL=https://mycustomprovider.com/anthropic ANTHROPIC_AUTH_TOKEN="$MY_CUSTOM_PROVIDER_API_KEY" ANTHROPIC_API_KEY='' claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json --dangerously-skip-permissions > /thunderjar/result.json`,
       );
     });
 
