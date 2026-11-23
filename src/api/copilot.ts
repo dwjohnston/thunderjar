@@ -126,7 +126,7 @@ const withUsage = (command: string, { usage, result }: CommandPaths) =>
  * export default copilot({ version: "1.0.105" });
  * ```
  */
-export function copilot({ version, models = COPILOT_MODELS, provider, command = COPILOT_COMMAND }: CopilotOptions): HarnessDeclaration<undefined, undefined> {
+export function copilot({ version, models = COPILOT_MODELS, provider, command = COPILOT_COMMAND, requiredEnv }: CopilotOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     models,
@@ -143,6 +143,6 @@ export function copilot({ version, models = COPILOT_MODELS, provider, command = 
       ].join("\n"),
     collectReply: copilotReply,
     collectTokenCosts: copilotTokenCosts,
-    requiredEnv: provider ? [provider.apiKeyEnv] : ["COPILOT_GITHUB_TOKEN"],
+    requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : ["COPILOT_GITHUB_TOKEN"]),
   });
 }
