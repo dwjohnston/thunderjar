@@ -113,4 +113,17 @@ USER node`,
       );
     });
   });
+
+  test("its command is a function of the model's config, as OpenCode takes it, the version, paths and provider", () => {
+    const custom = opencode({
+      version: "1.19.5",
+      provider: OPENROUTER,
+      models: { "openrouter/openai/gpt-5.5": [{ options: { reasoningEffort: { values: ["low", "high"] } } }] },
+      command: (ctx) => `echo ${ctx.version} ${ctx.modelId} ${JSON.stringify(ctx.model)} ${ctx.provider?.wireApi} > ${ctx.paths.result}`,
+    });
+
+    expect(runScript(custom, "openrouter/openai/gpt-5.5", { "options.reasoningEffort": "high" })).toBe(
+      `echo 1.19.5 openrouter/openai/gpt-5.5 {"options":{"reasoningEffort":"high"}} chat > /thunderjar/result.json`,
+    );
+  });
 });
