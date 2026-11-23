@@ -26,7 +26,7 @@ import type { LocalRemoval } from "../docker/localImages.ts";
 import { type RegistryClient, RegistryError } from "../docker/registry.ts";
 import { moduleLogger } from "../log/logger.ts";
 import type { ContainerRunRecord, ExecutionRecord, PostrunPurge, PurgedFrom, RunDataStore } from "../store/runDataStore.ts";
-import { postrunImage, prerunImage, prerunRepository, storedPrerunImage } from "./images.ts";
+import { postrunImage, prerunImage, prerunRepository, storedPostrunImage, storedPrerunImage } from "./images.ts";
 
 const log = moduleLogger("purge");
 
@@ -100,12 +100,20 @@ export type PostrunTarget = {
 
 /**
  * The postrun image of each of `runs`: locally, by its name under `imagePrefix`, and as its record
- * names it, if that's another; in `imageStore`, as its record names it, if it was pushed there.
+ * names it, if that's another; in `imageStore`, as its record names it, if it names it there, or
+ * else by the name it would have been pushed as. A record made before pushed references were
+ * recorded names its image locally though it was pushed, and can't be told from one never pushed:
+ * for that one, the store just doesn't have the image, which counts as gone.
  */
 export function postrunTargets(runs: ContainerRunRecord[], imagePrefix: string, imageStore: ImageStore | null): PostrunTarget[] {
   return runs.map((record) => {
     const { executionId, permutation, iteration } = record;
-    const stored = imageStore !== null && record.postrunImage.startsWith(`${imageStore.repository}:`) ? record.postrunImage : undefined;
+    const stored =
+      imageStore === null
+        ? undefined
+        : record.postrunImage.startsWith(`${imageStore.repository}:`)
+          ? record.postrunImage
+          : storedPostrunImage(imageStore.repository, executionId, record.permutationHash, iteration);
     return {
       executionId,
       run: `${permutation}-${iteration}`,
@@ -225,7 +233,7 @@ export type PrerunResult = PrerunTarget & { localOutcome?: Outcome; storeOutcome
 /**
  * Purges each of `targets`, one execution's postrun images, from `places`, then marks each run
  * purged from somewhere in `store`, at `purgedAt`, with `reason`. With `recordOnly`, deletes
- * nothing: only marks them. A run whose image isn't in the image store isn't purged from it.
+ * nothing: only marks them. Without an image store, no run is purged from one.
  */
 export async function purgePostruns(
   targets: PostrunTarget[],
