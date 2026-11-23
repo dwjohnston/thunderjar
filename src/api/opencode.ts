@@ -160,7 +160,7 @@ export const OPENCODE_COMMAND = ({ modelId, model, paths, provider }: CommandCon
  * export default opencode({ version: "1.19.5" });
  * ```
  */
-export function opencode({ version, models = OPENCODE_MODELS, provider }: OpenCodeOptions): HarnessDeclaration<undefined, undefined> {
+export function opencode({ version, models = OPENCODE_MODELS, provider, command = OPENCODE_COMMAND }: OpenCodeOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     models: flatModels(models),
@@ -172,7 +172,7 @@ export function opencode({ version, models = OPENCODE_MODELS, provider }: OpenCo
         `RUN mkdir -p ~/.config/opencode && cd ~/.config/opencode && echo '{"dependencies":{"@opencode-ai/plugin":"${ctx.version}"}}' > package.json && npm install --no-audit --no-fund && npm cache clean --force`,
         "USER root",
         writeModel(ctx.modelId),
-        writeRunScript(OPENCODE_COMMAND({ modelId: ctx.modelId, model: modelConfig(ctx.model), version: ctx.version, paths: COMMAND_PATHS, provider: provider && { ...provider, wireApi: "chat" } })),
+        writeRunScript(command({ modelId: ctx.modelId, model: modelConfig(ctx.model), version: ctx.version, paths: COMMAND_PATHS, provider: provider && { ...provider, wireApi: "chat" } })),
         "USER node",
       ].join("\n"),
     collectReply: opencodeReply,
