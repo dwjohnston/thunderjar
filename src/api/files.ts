@@ -35,7 +35,7 @@ export const RESULT_PATH = "/thunderjar/result.json";
 
 /**
  * Where a run script may have the agent write its usage statistics, for an agent that writes them
- * apart from its result, as Copilot does. Outside /thunderjar/, so a run leaves no copy beside its result.
+ * apart from its result, as Copilot does.
  */
 export const USAGE_PATH = "/tmp/copilot-usage.json";
 
