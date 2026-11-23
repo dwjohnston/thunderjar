@@ -726,14 +726,16 @@ export function sqliteStore(options: { path: string }): SqliteStore {
   return { kind: "sqlite", ...options };
 }
 
-export type PostgresStore = { kind: "postgres"; urlEnv: string };
+export type PostgresStore = { kind: "postgres"; urlEnv: string; schema?: string; adminUrlEnv?: string };
 
 /**
  * A Postgres database, shared by every machine that runs Thunderjar against it. `urlEnv` names
  * the environment variable holding its connection URL, e.g. `postgres://user:pass@host/db`, so
- * no credential is ever in the config.
+ * no credential is ever in the config. Its tables are in `schema`, default `thunderjar`, created by
+ * `thunderjar db setup` with the URL in `adminUrlEnv`, default `THUNDERJAR_DB_URL_ADMIN`: the
+ * URL in `urlEnv` needs only to select, insert and update.
  */
-export function postgresStore(options: { urlEnv: string }): PostgresStore {
+export function postgresStore(options: { urlEnv: string; schema?: string; adminUrlEnv?: string }): PostgresStore {
   return { kind: "postgres", ...options };
 }
 
