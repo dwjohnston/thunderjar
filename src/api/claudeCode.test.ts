@@ -131,11 +131,11 @@ USER node`,
       const deepseek = claudeCode({
         version: "2.1.311",
         provider: { baseUrl: "https://api.deepseek.com/anthropic", apiKeyEnv: "DEEPSEEK_API_KEY" },
-        models: { "deepseek-v4-pro": [] },
+        models: { "deepseek-chat": [] }, // DeepSeek's ID, as in the recorded result this file reads
       });
 
       expect(deepseek.requiredEnv).toEqual(["DEEPSEEK_API_KEY"]);
-      expect(fragment(deepseek, "deepseek-v4-pro")).toContain(
+      expect(fragment(deepseek, "deepseek-chat")).toContain(
         `#!/bin/sh
 ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic ANTHROPIC_AUTH_TOKEN="$DEEPSEEK_API_KEY" ANTHROPIC_API_KEY='' claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --output-format json --dangerously-skip-permissions > /thunderjar/result.json
 `,
