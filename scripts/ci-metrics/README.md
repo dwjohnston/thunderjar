@@ -35,10 +35,11 @@ The upload step runs last in each job, even when tests fail, and never fails the
 ## View the dashboard
 
 ```sh
-CI_METRICS_DB_PASSWORD=<password> docker compose -f scripts/ci-metrics/grafana/docker-compose.yml up
+bun run ci-metrics:grafana
 ```
 
-Then open http://localhost:3000.
+- Runs Grafana in Docker, at http://localhost:3000.
+- Reads the database password from `CI_METRICS_DB_PASSWORD`, else `CI_OWNER_PASSWORD`.
 
 - **Job wall-clock time per run**, with a 10-run average to show the trend.
 - **Tests getting slower**: median of the last 7 days against the 30 days before.

@@ -14,6 +14,7 @@ services:
       CI_METRICS_DB_HOST: ${CI_METRICS_DB_HOST:-aws-0-ap-southeast-2.pooler.supabase.com:5432}
       CI_METRICS_DB_USER: ${CI_METRICS_DB_USER:-postgres.oojmoxinrsflssiecitj}
       CI_METRICS_DB_SSLMODE: ${CI_METRICS_DB_SSLMODE:-require}
-      CI_METRICS_DB_PASSWORD: ${CI_METRICS_DB_PASSWORD:?Set CI_METRICS_DB_PASSWORD to the database password}
+      # Falls back to CI_OWNER_PASSWORD.
+      CI_METRICS_DB_PASSWORD: ${CI_METRICS_DB_PASSWORD:-${CI_OWNER_PASSWORD:?Set CI_METRICS_DB_PASSWORD to the database password}}
     volumes:
       - ./provisioning:/etc/grafana/provisioning:ro

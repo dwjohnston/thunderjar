@@ -45,6 +45,7 @@
     "test:fly:real": "THUNDERJAR_FLY_TESTS=1 bun test --timeout 1200000 ./.thunderjar/fly-client/fly.real.test.ts",
     "di:build:sample-repo": "bun scripts/build-sample-repo-image.ts",
     "fixture": "bun scripts/fixture.ts",
+    "ci-metrics:grafana": "docker compose -f scripts/ci-metrics/grafana/docker-compose.yml up",
     "dogfood:local": "bun src/cli/index.ts run compare-models --local",
     "dogfood:remote": "THUNDERJAR_REMOTE=1 bun src/cli/index.ts run compare-models",
     "docs:data": "bun scripts/docs-data.ts",
