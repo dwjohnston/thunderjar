@@ -11,6 +11,40 @@
 
 // Keeps one comment on a pull request that lists the files it changes that need a code owner's
 // approval, each linked to its diff. Run by .github/workflows/codeowners-comment.yml.
+//
+//   REPO=owner/name PR_NUMBER=12 PR_AUTHOR=someone bun scripts/codeowners-comment.ts
+//
+// It reads .github/CODEOWNERS from the working tree, and talks to GitHub with `gh`.
+
+import { $, file } from "bun";
+
+if (import.meta.main) {
+  const pr = { repo: requireEnv("REPO"), number: Number(requireEnv("PR_NUMBER")) };
+  const author = requireEnv("PR_AUTHOR");
+  const codeowners = await file(".github/CODEOWNERS").text();
+
+  const changed = (await $`gh api --paginate repos/${pr.repo}/pulls/${pr.number}/files --jq ${".[].filename"}`.text())
+    .split("\n")
+    .filter(Boolean);
+  const comments: Comment[] = (await $`gh api --paginate repos/${pr.repo}/issues/${pr.number}/comments --jq ${".[] | {id, body}"}`.text())
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Comment);
+  const existing = comments.find((c) => c.body.startsWith(MARKER));
+
+  const action = commentAction(existing, protectedFiles(codeowners, changed, author), pr);
+  if (action.kind === "create") {
+    await $`gh api repos/${pr.repo}/issues/${pr.number}/comments -f body=${action.body}`.quiet();
+  } else if (action.kind === "update" && action.body !== existing?.body) {
+    await $`gh api -X PATCH repos/${pr.repo}/issues/comments/${action.id} -f body=${action.body}`.quiet();
+  }
+}
+
+function requireEnv(name: string): string {
+  const value = Bun.env[name];
+  if (!value) throw new Error(`${name} is not set`);
+  return value;
+}
 
 export type ProtectedFile = { path: string; owners: string[] };
 
