@@ -1,0 +1,19 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Model: claude-opus-5-5
+ * Supervising engineer: David Johnston
+ *
+ * Humans: add your notes here
+ */
+import { declareInitialPrompt, writePrompt } from "thunderjar";
+
+// The ralph loop's prompt from capture 4547635f-2161-4e4a-96b8-5b1b3424a8d0, word for word.
+const prompt = "You are one iteration of a ralph loop. Do the task below, on your own, in one go. No one will answer questions.\n\n- Follow AGENTS.md: red/green commits, a changeset if the package changes.\n- Commit all your work on the current branch. Don't push, and don't open a PR: the loop does both.\n- Leave the task file where it is: the loop moves it to done/.\n- Your final message is used as the PR description, as is. Make it only the PR description, following the tj-meta-pull-request-description skill.\n\nThe task, from project-md/delivery/tasks/4100_code-state-git-checkout.md:\n\n---\nharness: claude-code\nmodel: sonnet\neffort: medium\n---\n\n<!--\n🤖\nThis file was created with AI\n\nHarness: Claude Code\nModel: claude-opus-5-5\nSession Id: session_01LCLeLjFb1Gy2NHaFDTB6tk\nSupervising engineer: David Johnston\n\nSplit from PR #218's roadmap plan.\n\nHumans: add your notes here\n-->\n\n# 4100: `codeStateGitCheckout`\n\nA helper for a code state at a commit, a branch or a tag of a git repository.\n\nRoadmap item 1.\n\n## Version bump type\n\nminor\n\n## Artifacts\n\nAdds `codeStateGitCheckout` to `src/api`, beside `claudeCode`.\n\n```ts\nexport default codeStateGitCheckout({ repo, commit: \"530f477…\" });\nexport default codeStateGitCheckout({ repo, branch: \"main\" });\nexport default codeStateGitCheckout({ repo, tag: \"v0.4.0\" });\n```\n\n1. Config is `{ commit } | { branch } | { tag }`, with the other keys typed `never`.\n   - A bare `ref` string would be ambiguous: `abc123` could be a branch.\n2. Branches and tags pin to a commit through `resolve`, with `git ls-remote` on the host.\n   - The hash changes when the branch moves, so a stale image is never reused.\n   - The run records the commit it resolved to.\n   - Tags are peeled (`refs/tags/<tag>^{}`), so annotated tags give their commit.\n3. Fetches the commit directly (`git fetch origin <sha>`), not a plain clone.\n   - Squash-merged commits work, on hosts that allow it (GitHub does).\n\nOut of scope: a subfolder to start in, installing dependencies.\n\n## Migrate the evals\n\nConvert this repository's code states in `.thunderjar/parameters/codeStates/` to `codeStateGitCheckout`.\n\n- Keep each one's tag or commit, and its comment saying why, so the image stays the same.\n- Today all 9 clone this repository at a tag and remove `origin`. Some also need things this task leaves out of scope:\n  - Installs dependencies: `thunderjar-main`, `thunderjar-gauntlet`, `thunderjar-security-assessment`, `tj-eval-blacksheepcode-start`, `tj-eval-blacksheepcode-new-skills`.\n  - Starts in a subfolder: `thunderjar-nested-skills-a`, `thunderjar-nested-skills-root`.\n  - So expect `thunderjar-start` and `thunderjar-humans-md` to convert, if the helper also removes `origin`.\n- Check: `bun run tj plan <test case>` is unchanged for every test case that uses a converted code state.\n\n\"If appropriate\" means: convert it only where the new helper gives the same result. Leave the rest as they are, and list each one in the PR description with the reason. Leave `fixtures/` alone: tests rely on its files as written.\n\n## Example CLI Output\n\n```sh\n$ thunderjar plan compare-models\n…\ncode state  thunderjar-main  github.com/dwjohnston/thunderjar @ main → 6c21138\n```\n\n## Tests\n\n- Unit tests of the config types and the generated fragment.\n- A `.docker.test.ts` that builds a code state from a tag.\n\n## Human interventions\n\nNone.\n";
+
+export default declareInitialPrompt({
+  applyParameter: () => writePrompt(prompt),
+  timeoutSeconds: 3600,
+});
