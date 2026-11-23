@@ -141,12 +141,22 @@ export function runtimeProblem(runtime: unknown, imageStore: unknown): string | 
   return runnerProblem(fields.runner);
 }
 
+/** A Postgres schema name that needs no quoting, e.g. `thunderjar`. */
+const SCHEMA_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
+
 /** Why `runDataStore` isn't a run data store, or undefined if it is. */
 export function runDataStoreProblem(runDataStore: unknown): string | undefined {
-  const { kind, path, urlEnv } = (runDataStore ?? {}) as { kind?: unknown; path?: unknown; urlEnv?: unknown };
+  const { kind, path, urlEnv, schema, adminUrlEnv } = (runDataStore ?? {}) as { kind?: unknown; path?: unknown; urlEnv?: unknown; schema?: unknown; adminUrlEnv?: unknown };
   if (kind === "sqlite") return typeof path === "string" && path !== "" ? undefined : "sqliteStore's path must be a file path";
   if (kind === "postgres") {
-    return typeof urlEnv === "string" && ENV_NAME.test(urlEnv) ? undefined : `postgresStore's urlEnv, ${show(urlEnv)}, is not an environment variable name`;
+    if (typeof urlEnv !== "string" || !ENV_NAME.test(urlEnv)) return `postgresStore's urlEnv, ${show(urlEnv)}, is not an environment variable name`;
+    if (adminUrlEnv !== undefined && (typeof adminUrlEnv !== "string" || !ENV_NAME.test(adminUrlEnv))) {
+      return `postgresStore's adminUrlEnv, ${show(adminUrlEnv)}, is not an environment variable name`;
+    }
+    if (schema !== undefined && (typeof schema !== "string" || !SCHEMA_NAME.test(schema))) {
+      return `postgresStore's schema, ${show(schema)}, is not a schema name: lower-case letters, digits and _, starting with a letter or _`;
+    }
+    return undefined;
   }
   return 'must be a store, e.g. sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" }) or postgresStore({ urlEnv: "THUNDERJAR_DB_URL" })';
 }
