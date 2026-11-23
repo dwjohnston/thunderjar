@@ -62,7 +62,7 @@ describe.skipIf(!POSTGRES_URL)("db setup with a postgresStore", () => {
     const schema = freshSchema();
     await usePostgres(copy.dir, schema);
 
-    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["db", "setup"], { env: { THUNDERJAR_DB_URL_ADMIN: POSTGRES_URL } });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["db", "setup"], { env: { THUNDERJAR_DB_URL_ADMIN: POSTGRES_URL! } });
 
     expect({ stdout, stderr, exitCode }).toEqual({
       stdout: `The run data store's tables are in the ${schema} schema of Postgres at $THUNDERJAR_DB_URL_ADMIN.\n`,
