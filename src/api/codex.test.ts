@@ -1,6 +1,6 @@
 // The Codex readers, against a `codex exec --json` result: JSON lines, one event each.
 import { describe, expect, test } from "bun:test";
-import { codex, codexReply, codexTokenCosts } from "./codex.ts";
+import { CODEX_REASONING_EFFORTS, codex, codexReply, codexTokenCosts } from "./codex.ts";
 import { declaredBy } from "./declarations.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/codex.result.jsonl`).text();
@@ -61,5 +61,11 @@ codex exec --model "$(cat /thunderjar/model.txt)" --json --dangerously-bypass-ap
 THUNDERJAR_EOF
 USER node`,
     );
+  });
+
+  test("its default models declare the reasoning effort as a variant, passed as model_reasoning_effort", () => {
+    expect(CODEX_REASONING_EFFORTS).toEqual(["low", "medium", "high"]);
+    expect(Object.values(harness.models)).toEqual(Object.keys(harness.models).map(() => [{ reasoningEffort: { values: CODEX_REASONING_EFFORTS } }]));
+    expect(fragment(harness, "gpt-5.5", { reasoningEffort: "high" })).toContain(`\ncodex exec -c model_reasoning_effort=high --model "$(cat /thunderjar/model.txt)" --json`);
   });
 });

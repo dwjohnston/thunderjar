@@ -53,6 +53,9 @@ export function codexTokenCosts(raw: string, modelId: string): TokenCosts {
   };
 }
 
+/** The reasoning efforts Codex takes, as `-c model_reasoning_effort=…`, for a model's `reasoningEffort` setting. */
+export const CODEX_REASONING_EFFORTS = ["low", "medium", "high"] as const;
+
 /** The models `codex` declares unless given others: OpenAI's, as Codex takes them. */
 export const CODEX_MODELS: HarnessModels = {
   "gpt-6.1-sol": [],
