@@ -20,7 +20,7 @@
 // {"type":"thunderjar.usage","data":<the usage file>}.
 import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
-import { COMMAND_PATHS, type CommandContext, type CommandPaths, type HelperOptions } from "./harnessOptions.ts";
+import { COMMAND_PATHS, type CommandContext, type CommandPaths, type CommandProvider, envAssignments, envRef, type HelperOptions, type WireApi } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Event = { type?: unknown; agentId?: unknown; data?: Record<string, unknown> };
@@ -72,13 +72,35 @@ export const COPILOT_MODELS: HarnessModels = {
 export type CopilotOptions = HelperOptions;
 
 /**
+ * The variables that put Copilot in BYOK mode on `provider`, which skips GitHub auth and Copilot's
+ * model routing. The part of the model ID after its last `/` is given as the well-known model ID,
+ * so Copilot applies its settings for that model, e.g. tool support and token limits. The wire API
+ * is only set when it isn't `chat`, Copilot's default. Run `copilot help providers` for the details.
+ */
+const providerEnv = (provider: CommandProvider, modelId: string) => ({
+  COPILOT_PROVIDER_BASE_URL: provider.baseUrl,
+  COPILOT_PROVIDER_API_KEY: envRef(provider.apiKeyEnv),
+  COPILOT_PROVIDER_MODEL_ID: modelId.split("/").pop() ?? modelId,
+  ...(provider.wireApi !== "chat" && { COPILOT_PROVIDER_WIRE_API: provider.wireApi }),
+});
+
+/**
  * The command that runs Copilot: the prompt and model read from their files, so quotes and
  * newlines reach the agent intact, with every tool allowed, its events as JSON lines, and its
- * usage statistics written to `paths.usage`.
+ * usage statistics written to `paths.usage`. Given a provider, it points Copilot at it.
  */
-export const COPILOT_COMMAND = ({ paths }: CommandContext): string =>
+export const COPILOT_COMMAND = ({ modelId, paths, provider }: CommandContext): string =>
+  `${provider ? `${envAssignments(providerEnv(provider, modelId))} ` : ""}` +
   `copilot -p "$(cat ${paths.prompt})" --model "$(cat ${paths.model})" --allow-all-tools --no-color` +
   ` --output-format json --usage-output-file ${paths.usage} > ${paths.result}`;
+
+/**
+ * The API Copilot speaks to a provider for `modelId`: the Responses API for OpenAI's models, as on
+ * Chat Completions Copilot sends a tool without a `name`, and OpenAI rejects every request (400
+ * "Missing required parameter: 'tools[4].name'", gauntlet smoke run 6, openai/gpt-6.1-sol).
+ * Chat Completions for the rest.
+ */
+const wireApiFor = (modelId: string): WireApi => (modelId.startsWith("openai/") ? "responses" : "chat");
 
 /**
  * `command`, wrapped: the usage file is cleared first, then, if the command wrote one, it's
@@ -103,7 +125,7 @@ const withUsage = (command: string, { usage, result }: CommandPaths) =>
  * export default copilot({ version: "1.0.105" });
  * ```
  */
-export function copilot({ version, models = COPILOT_MODELS }: CopilotOptions): HarnessDeclaration<undefined, undefined> {
+export function copilot({ version, models = COPILOT_MODELS, provider }: CopilotOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     models,
@@ -115,11 +137,11 @@ export function copilot({ version, models = COPILOT_MODELS }: CopilotOptions): H
         "RUN copilot --version",
         "USER root",
         writeModel(ctx.modelId),
-        writeRunScript(withUsage(COPILOT_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: undefined }), COMMAND_PATHS)),
+        writeRunScript(withUsage(COPILOT_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: provider && { ...provider, wireApi: wireApiFor(ctx.modelId) } }), COMMAND_PATHS)),
         "USER node",
       ].join("\n"),
     collectReply: copilotReply,
     collectTokenCosts: copilotTokenCosts,
-    requiredEnv: ["COPILOT_GITHUB_TOKEN"],
+    requiredEnv: provider ? [provider.apiKeyEnv] : ["COPILOT_GITHUB_TOKEN"],
   });
 }
