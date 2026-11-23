@@ -47,6 +47,7 @@ Thunderjar is a TypeScript/Bun CLI for
       - `draft`: draft tasks here 
       - `<task-number>_<task-name>.md`: ready tasks here 
 - `scripts/`: release, versioned-docs and lint tooling.
+  - `ci-metrics/`: uploads CI test timings to Supabase, and a local Grafana dashboard for them. See its README.
 - `.changeset/`: pending changesets. 
 - `.release/`: release candidate state (`rc.json`).
 - `.github/`: CI workflows.

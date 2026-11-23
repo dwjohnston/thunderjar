@@ -12,3 +12,6 @@ CLAUDE.local.md
 .env 
 .claude/settings.local.json
 docs/.vitepress/data.generated.json
+
+# JUnit reports for the CI timing metrics
+junit*.xml

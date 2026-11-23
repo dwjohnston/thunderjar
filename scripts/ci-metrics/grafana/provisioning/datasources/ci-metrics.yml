@@ -1,0 +1,15 @@
+# 🤖 This file was created with AI (Claude Code, session_01LCLeLhdFSg6pjhA6B8LSGh).
+apiVersion: 1
+datasources:
+  - name: CI metrics
+    uid: ci-metrics
+    type: grafana-postgresql-datasource
+    url: $CI_METRICS_DB_HOST
+    user: $CI_METRICS_DB_USER
+    isDefault: true
+    jsonData:
+      database: postgres
+      sslmode: $CI_METRICS_DB_SSLMODE
+      postgresVersion: 1500
+    secureJsonData:
+      password: $CI_METRICS_DB_PASSWORD
