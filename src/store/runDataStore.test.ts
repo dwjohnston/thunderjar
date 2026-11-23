@@ -211,13 +211,11 @@ const POSTGRES_URL = Bun.env.THUNDERJAR_POSTGRES_URL;
 
 describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
   const schemas: string[] = [];
-  /** A URL for a fresh, empty schema of the test database, dropped after the test. */
+  /** A URL for a fresh schema of the test database, set up with empty tables, dropped after the test. */
   const freshDatabase = async () => {
     const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
     schemas.push(schema);
-    const admin = new SQL(POSTGRES_URL!);
-    await admin.unsafe(`CREATE SCHEMA ${schema}`);
-    await admin.close();
+    await setupPostgres(POSTGRES_URL!, schema);
     const url = new URL(POSTGRES_URL!);
     url.searchParams.set("options", `-c search_path=${schema}`);
     return url.toString();

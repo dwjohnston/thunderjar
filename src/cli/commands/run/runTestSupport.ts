@@ -2,7 +2,7 @@
 // `bun test --parallel` runs them in two workers.
 import { expect } from "bun:test";
 import { $, Glob, SQL } from "bun";
-import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
+import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, setupPostgres, sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
 import { TMP_DIR } from "../../../testing/cli.ts";
 import type { FakeDocker } from "../../../testing/fakeDocker.ts";
 
@@ -91,11 +91,11 @@ export async function usePostgres(dir: string) {
   );
 }
 
-/** A fresh schema of the Postgres at THUNDERJAR_POSTGRES_URL, and a URL that uses it; dropped when disposed. */
+/** A fresh schema of the Postgres at THUNDERJAR_POSTGRES_URL, set up with empty tables, and a URL that uses it; dropped when disposed. */
 export async function postgresSchema() {
   const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
   const admin = new SQL(Bun.env.THUNDERJAR_POSTGRES_URL!);
-  await admin.unsafe(`CREATE SCHEMA ${schema}`);
+  await setupPostgres(Bun.env.THUNDERJAR_POSTGRES_URL!, schema);
   const url = new URL(Bun.env.THUNDERJAR_POSTGRES_URL!);
   url.searchParams.set("options", `-c search_path=${schema}`);
   return {
