@@ -33,6 +33,9 @@ export const PROMPT_PATH = "/thunderjar/prompt.txt";
 /** Where the run script must leave the agent's result, for `collectReply` and `collectTokenCosts`. */
 export const RESULT_PATH = "/thunderjar/result.json";
 
+/** Where a run script may have the agent write its usage statistics, for an agent that writes them apart from its result. */
+export const USAGE_PATH = "/tmp/thunderjar-usage.json";
+
 /** A heredoc delimiter that isn't a line of `contents`. */
 function delimiterFor(contents: string): string {
   const lines = new Set(contents.split("\n"));
