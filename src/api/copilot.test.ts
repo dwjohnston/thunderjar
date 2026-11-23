@@ -3,6 +3,7 @@
 import { describe, expect, test } from "bun:test";
 import { copilot, copilotReply, copilotTokenCosts } from "./copilot.ts";
 import { declaredBy } from "./declarations.ts";
+import { OPENROUTER } from "./harnessOptions.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/copilot.result.jsonl`).text();
 
@@ -64,5 +65,16 @@ rm -f /tmp/copilot-usage.json; copilot -p "$(cat /thunderjar/prompt.txt)" --mode
 THUNDERJAR_EOF
 USER node`,
     );
+  });
+
+  describe("with a provider", () => {
+    const openRouter = copilot({ version: "1.0.105", provider: OPENROUTER, models: { "anthropic/claude-haiku-5.5": [], "openai/gpt-6.1-sol": [] } });
+
+    test("passes it as COPILOT_PROVIDER_ variables, with the well-known model ID, needing only its key", () => {
+      expect(openRouter.requiredEnv).toEqual(["OPENROUTER_API_KEY"]);
+      expect(fragment(openRouter, "anthropic/claude-haiku-5.5")).toContain(
+        `\nrm -f /tmp/copilot-usage.json; COPILOT_PROVIDER_BASE_URL=https://openrouter.ai/api/v1 COPILOT_PROVIDER_API_KEY="$OPENROUTER_API_KEY" COPILOT_PROVIDER_MODEL_ID=claude-haiku-5.5 copilot -p`,
+      );
+    });
   });
 });
