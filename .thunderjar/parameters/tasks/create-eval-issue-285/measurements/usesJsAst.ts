@@ -22,6 +22,14 @@ export default declareMeasurement({
     selectors: { jsAst: 'Property[key.name="instrument"][value.value="jsAst"]' },
   },
   metrics: {
-    usesJsAst: { score: (files) => files.some(({ file, matches }) => !inStartTask(file) && (matches.jsAst ?? 0) > 0), stat: "rate", better: "higher" },
+    // Doesn't apply when the agent added no measurement.
+    usesJsAst: {
+      score: (files) => {
+        const added = files.filter(({ file }) => !inStartTask(file));
+        return added.length === 0 ? undefined : added.some(({ matches }) => (matches.jsAst ?? 0) > 0);
+      },
+      stat: "rate",
+      better: "higher",
+    },
   },
 });
