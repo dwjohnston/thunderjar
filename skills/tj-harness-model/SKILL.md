@@ -52,6 +52,33 @@ harnessModel: ["claude-code-2.1.311/claude-haiku-5-5", "codex-0.166.0/openai/gpt
 **Why:** each variant is its own permutation. One that changes nothing reruns the same agent under another name.
 
 
+## Claude Code, Codex, Copilot or OpenCode
+
+Use the agent's helper: one call, with its install, run script, reply and token costs built in.
+
+```ts
+// harnessModels/codex-0.166.0/index.ts
+import { codex, OPENROUTER } from "thunderjar";
+
+export default codex({
+  version: "0.166.0",
+  provider: OPENROUTER,
+  models: { "openai/gpt-6-luna": [{ reasoningEffort: { values: ["low", "medium", "high"] } }] },
+});
+```
+
+| Helper | Default provider and key | Model settings it passes |
+|---|---|---|
+| `claudeCode` | Anthropic, `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` | `effort`, as `--effort` |
+| `codex` | OpenAI, `OPENAI_API_KEY` | `reasoningEffort`, as `model_reasoning_effort` |
+| `copilot` | GitHub Copilot, `COPILOT_GITHUB_TOKEN` | `wireApi`, `responses` or `chat` |
+| `opencode` | OpenCode Zen, `OPENCODE_API_KEY` | `options` and `limit`, OpenCode's own per-model config |
+
+- Without `models`, each declares a default list, by its own provider's IDs.
+- `provider`, e.g. `OPENROUTER` or `{ baseUrl, apiKeyEnv }`, runs it elsewhere. It needs `models` then, by that provider's IDs, and only the provider's key.
+- `command`, a function of `{ modelId, model, version, paths, provider }`, replaces the command its run script runs. Use it for anything bespoke, e.g. `MAX_THINKING_TOKENS`.
+- `requiredEnv` replaces the keys it needs.
+
 ## Any other agent
 
 Write it with `declareHarness`. e.g. Codex, on OpenRouter:
@@ -92,7 +119,7 @@ What each part must do:
 6. Switch to a non-root user, e.g. `USER node`.
 7. List the keys it needs in `requiredEnv`.
 
-To measure the agent's reply and token costs, add `collectReply` and `collectTokenCosts`, which read `result.json`. See the Copilot harness in this repo's `.thunderjar/` for a full one.
+To measure the agent's reply and token costs, add `collectReply` and `collectTokenCosts`, which read `result.json`. See `src/api/copilot.ts` in the thunderjar package for a full one.
 
 ## A new version
 
