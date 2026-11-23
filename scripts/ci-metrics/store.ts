@@ -41,7 +41,8 @@ function tablesSql(schema: string): string {
   return `
 -- One row per CI job run, e.g. the "check" job of a workflow run.
 create table if not exists ${schema}.ci_runs (
-  id bigserial primary key,
+  -- Made by the upload, so it needs no RETURNING, which would take SELECT.
+  id uuid primary key,
   run_id bigint not null,
   run_attempt int not null,
   job text not null,
@@ -67,7 +68,7 @@ create index if not exists ci_runs_started_at on ${schema}.ci_runs (started_at);
 -- One row per test per CI job run.
 create table if not exists ${schema}.ci_test_metrics (
   id bigserial primary key,
-  ci_run_id bigint not null references ${schema}.ci_runs (id) on delete cascade,
+  ci_run_id uuid not null references ${schema}.ci_runs (id) on delete cascade,
   -- The job's start, copied here so time series need no join.
   recorded_at timestamptz not null,
   file text not null,
@@ -95,9 +96,14 @@ export async function createTables(sql: SQL, schema = SCHEMA): Promise<void> {
   await sql.unsafe(tablesSql(schema));
 }
 
-/** Records a job run and its tests, replacing an earlier record of the same run attempt and job. */
+/**
+ * Records a job run and its tests. It only inserts, so CI's role needs INSERT and nothing else. A
+ * second record of the same run attempt and job is refused, by ci_runs' unique key: one upload per
+ * job, and a re-run is a new attempt.
+ */
 export async function recordRun(sql: SQL, run: CiRun, report: JunitReport, schema = SCHEMA): Promise<void> {
   const row = {
+    id: crypto.randomUUID(),
     run_id: run.runId,
     run_attempt: run.runAttempt,
     job: run.job,
@@ -116,11 +122,9 @@ export async function recordRun(sql: SQL, run: CiRun, report: JunitReport, schem
     skipped: report.tests.filter((t) => t.status === "skipped").length,
   };
   await sql.begin(async (tx) => {
-    // Deleting cascades to the earlier record's tests.
-    await tx`delete from ${tx(schema)}.ci_runs where run_id = ${row.run_id} and run_attempt = ${row.run_attempt} and job = ${row.job}`;
-    const [{ id }] = await tx`insert into ${tx(schema)}.ci_runs ${tx(row)} returning id`;
+    await tx`insert into ${tx(schema)}.ci_runs ${tx(row)}`;
     const tests = report.tests.map((t) => ({
-      ci_run_id: id,
+      ci_run_id: row.id,
       recorded_at: run.startedAt,
       file: t.file,
       name: t.name,
