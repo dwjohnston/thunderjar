@@ -8,6 +8,7 @@
  * Humans: add your notes here
  */
 import { describe, expect, test } from "bun:test";
+import { $ } from "bun";
 import { commentAction, commentBody, MARKER, protectedFiles } from "./codeowners-comment";
 
 const CODEOWNERS = `
@@ -100,5 +101,29 @@ describe("commentAction", () => {
       id: 7,
       body: [MARKER, "### Changes to files with code owners", "", "This PR no longer changes files that need a code owner's approval.", ""].join("\n"),
     });
+  });
+});
+
+describe("running the script", () => {
+  test("creates the comment through gh when a PR changes protected files", async () => {
+    const dir = (await $`mktemp -d`.text()).trim();
+    await Bun.write(`${dir}/.github/CODEOWNERS`, CODEOWNERS);
+    // A fake gh: lists HUMANS.md as the PR's one changed file, no comments yet, and records each call.
+    await Bun.write(
+      `${dir}/bin/gh`,
+      ["#!/bin/sh", `echo "$*" >> ${dir}/gh-calls`, 'case "$*" in', '  *"/files "*) echo HUMANS.md ;;', "esac"].join("\n"),
+    );
+    await $`chmod +x ${dir}/bin/gh`;
+
+    const run = await $`bun ${import.meta.dir}/codeowners-comment.ts`
+      .cwd(dir)
+      .env({ ...Bun.env, PATH: `${dir}/bin:${Bun.env.PATH}`, REPO: PR.repo, PR_NUMBER: String(PR.number), PR_AUTHOR: "blacksheep-bot" })
+      .nothrow()
+      .quiet();
+    const calls = await Bun.file(`${dir}/gh-calls`).text();
+    await $`rm -rf ${dir}`;
+
+    expect({ exitCode: run.exitCode, stderr: run.stderr.toString() }).toEqual({ exitCode: 0, stderr: "" });
+    expect(calls).toContain(`api repos/${PR.repo}/issues/${PR.number}/comments -f body=${commentBody(FILES, PR)}`);
   });
 });
