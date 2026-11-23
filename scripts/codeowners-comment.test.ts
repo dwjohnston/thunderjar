@@ -83,4 +83,8 @@ describe("commentAction", () => {
   test("creates the comment when protected files change and there is none yet", () => {
     expect(commentAction(undefined, FILES, PR)).toEqual({ kind: "create", body: commentBody(FILES, PR) });
   });
+
+  test("does nothing when no protected files change and there is no comment", () => {
+    expect(commentAction(undefined, [], PR)).toEqual({ kind: "none" });
+  });
 });
