@@ -27,6 +27,13 @@ test("a test file with OpenRouter, as OPENROUTER or written out, has no custom p
   expect((await measured({ "src/api/openRouter.test.ts": "openrouter_only.ts" })).customProviderTest).toBe(false);
 });
 
+// At 8a841e7 the test's provider was DeepSeek. Both files hold the start's own DeepSeek mentions,
+// in its recorded-result tests, which don't count.
+test("PR #282's DeepSeek provider is DeepSeek, its made-up one isn't", async () => {
+  expect(await measured({ "src/api/claudeCode.test.ts": "claudeCode_8a841e7.ts" })).toEqual({ customProviderTest: true, deepSeekProvider: true });
+  expect(await measured({ "src/api/claudeCode.test.ts": "claudeCode_0339eae.ts" })).toEqual({ customProviderTest: true, deepSeekProvider: false });
+});
+
 // Each metric's score, for the added test lines `stdout`.
 const scores = (stdout: string, exitCode = 0) => ({
   customProviderTest: customProviderTest({ exitCode, stdout }),
