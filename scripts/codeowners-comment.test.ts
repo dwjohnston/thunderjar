@@ -92,4 +92,13 @@ describe("commentAction", () => {
     const existing = { id: 7, body: commentBody([{ path: "docs/cli/plan.md", owners: ["@dwjohnston"] }], PR) };
     expect(commentAction(existing, FILES, PR)).toEqual({ kind: "update", id: 7, body: commentBody(FILES, PR) });
   });
+
+  test("edits the comment to say so when the PR no longer changes protected files", () => {
+    const existing = { id: 7, body: commentBody(FILES, PR) };
+    expect(commentAction(existing, [], PR)).toEqual({
+      kind: "update",
+      id: 7,
+      body: [MARKER, "### Changes to files with code owners", "", "This PR no longer changes files that need a code owner's approval.", ""].join("\n"),
+    });
+  });
 });
