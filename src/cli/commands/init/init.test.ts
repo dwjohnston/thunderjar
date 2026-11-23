@@ -147,6 +147,15 @@ export default declareTestCase({
     expect(harness).toEndWith('\nexport default copilot({ version: "1.0.105" });\n');
   });
 
+  test("its OpenCode harness is the library's, pinned by its folder", async () => {
+    await using copy = await copyScenarioProject("0101");
+    await init(copy.dir);
+
+    const harness = await read(copy.dir, `${P}/harnessModels/opencode-1.19.5/index.ts`);
+    expect(harness).toStartWith('import { opencode } from "thunderjar";\n');
+    expect(harness).toEndWith('\nexport default opencode({ version: "1.19.5" });\n');
+  });
+
   test("its base image gives every user a git identity", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
