@@ -49,9 +49,10 @@ export type Comment = { id: number; body: string };
 export type CommentAction = { kind: "create"; body: string } | { kind: "update"; id: number; body: string } | { kind: "none" };
 
 /** What to do to the PR's comments, given the comment this script left before, if any. */
-export function commentAction(_existing: Comment | undefined, files: ProtectedFile[], pr: PullRequest): CommentAction {
+export function commentAction(existing: Comment | undefined, files: ProtectedFile[], pr: PullRequest): CommentAction {
   if (files.length === 0) return { kind: "none" };
-  return { kind: "create", body: commentBody(files, pr) };
+  const body = commentBody(files, pr);
+  return existing ? { kind: "update", id: existing.id, body } : { kind: "create", body };
 }
 
 /** GitHub anchors a file's diff on the PR's files tab with the SHA-256 of its path. */
