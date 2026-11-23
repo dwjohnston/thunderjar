@@ -66,6 +66,8 @@ export const CODEX_MODELS: HarnessModels = {
 export type CodexOptions = {
   /** The version of `@openai/codex` to install, e.g. `"0.166.0"`. */
   version: string;
+  /** The command its run script runs, from the model, version, paths and provider: `CODEX_COMMAND` by default. */
+  command?: (ctx: CommandContext) => string;
 } & ProviderAndModels;
 
 /**
@@ -107,7 +109,7 @@ export const CODEX_COMMAND = ({ model, paths, provider }: CommandContext): strin
  * });
  * ```
  */
-export function codex({ version, models = CODEX_MODELS, provider }: CodexOptions): HarnessDeclaration<undefined, undefined> {
+export function codex({ version, models = CODEX_MODELS, provider, command = CODEX_COMMAND }: CodexOptions): HarnessDeclaration<undefined, undefined> {
   const commandProvider: CommandProvider | undefined = provider && { baseUrl: provider.baseUrl, apiKeyEnv: provider.apiKeyEnv, wireApi: "responses" };
   return declareHarness({
     version,
@@ -117,7 +119,7 @@ export function codex({ version, models = CODEX_MODELS, provider }: CodexOptions
         `RUN npm install -g @openai/codex@${ctx.version}`,
         "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
         writeModel(ctx.modelId),
-        writeRunScript(CODEX_COMMAND({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: commandProvider })),
+        writeRunScript(command({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: commandProvider })),
         "USER node",
       ].join("\n"),
     collectReply: codexReply,
