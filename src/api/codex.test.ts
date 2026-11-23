@@ -23,4 +23,12 @@ describe("codexTokenCosts", () => {
       models: [{ model: "openai/gpt-5.5", inputTokens: 400, outputTokens: 45, cacheReadTokens: 2100, cacheCreationTokens: 0 }],
     });
   });
+
+  test("a run with no turn.completed, or no tokens, is notReported", () => {
+    expect(codexTokenCosts("", "m")).toEqual({ outcome: "unavailable", reason: "notReported" });
+    expect(codexTokenCosts('{"type":"turn.completed","usage":{"input_tokens":0,"output_tokens":0}}', "m")).toEqual({
+      outcome: "unavailable",
+      reason: "notReported",
+    });
+  });
 });
