@@ -241,6 +241,27 @@ describe.skipIf(!POSTGRES_URL)("postgresStore", () => {
     expect(tables).toEqual({ executions: true, container_runs: true });
   });
 
+  test("setupPostgres creates the tables in a schema that exists, as a role that owns it but may not create schemas", async () => {
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    schemas.push(schema);
+    const admin = new SQL(POSTGRES_URL!);
+    await admin.unsafe(`CREATE ROLE ${schema} LOGIN PASSWORD 'owner'`);
+    await admin.unsafe(`CREATE SCHEMA ${schema} AUTHORIZATION ${schema}`);
+    const owner = new URL(POSTGRES_URL!);
+    owner.username = schema;
+    owner.password = "owner";
+
+    try {
+      expect(await setupPostgres(owner.toString(), schema).then(() => "set up", (error: Error) => error.message)).toBe("set up");
+      const [{ tables }] = await admin`SELECT count(*)::int AS tables FROM information_schema.tables WHERE table_schema = ${schema}`;
+      expect(tables).toBe(2);
+    } finally {
+      await admin.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      await admin.unsafe(`DROP ROLE ${schema}`);
+      await admin.close();
+    }
+  });
+
   test("a store with a schema records into, and reads from, that schema's tables", async () => {
     const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
     schemas.push(schema);
