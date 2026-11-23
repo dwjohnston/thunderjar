@@ -22,6 +22,18 @@ afterEach(async () => {
   await admin.close();
 });
 
+test("db setup with a postgresStore whose admin URL is unset says what to set, and changes nothing", async () => {
+  await using copy = await copyScenarioProject("0202");
+  await usePostgres(copy.dir);
+
+  expect(await thunderjar(copy.dir, ["db", "setup"], { env: { THUNDERJAR_DB_URL_ADMIN: "" } })).toEqual({
+    stdout: "",
+    stderr:
+      "Error: db setup creates the run data store's tables with the URL in THUNDERJAR_DB_URL_ADMIN, which is not set.\nExport it with a URL that may create a schema and tables, e.g. the database owner's.\n",
+    exitCode: 1,
+  });
+});
+
 describe.skipIf(!POSTGRES_URL)("db setup with a postgresStore", () => {
   test("creates the schema and the store's tables with the admin URL", async () => {
     await using copy = await copyScenarioProject("0202");
