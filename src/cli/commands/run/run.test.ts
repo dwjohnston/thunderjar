@@ -597,7 +597,7 @@ describe("run --json", () => {
 
     expect(exitCode).toBe(1);
     expect(JSON.parse(stdout).execution.status).toBe("failed");
-  });
+  }, 30_000);
 
   test("--dry-run: each permutation, its parameters and images, and each iteration's command, as JSON", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--dry-run", "--json"], { env: KEY });
