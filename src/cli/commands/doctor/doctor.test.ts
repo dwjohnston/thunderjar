@@ -1,11 +1,30 @@
 import { describe, expect, test } from "bun:test";
-import { thunderjar } from "../../../testing/cli.ts";
+import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
+import { usePostgres } from "../run/runTestSupport.ts";
 
 const REPOSITORY = "ghcr.io/acme/thunderjar-images";
 const PROBE = `${REPOSITORY}:thunderjar-doctor`;
 const REMOTE = "docker --context cloud";
+
+// Only with THUNDERJAR_POSTGRES_URL set to a Postgres it may create schemas in.
+describe.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("doctor with a postgresStore", () => {
+  test("whose tables aren't set up: fails, saying to run db setup", async () => {
+    await using copy = await copyScenarioProject("0202");
+    const schema = `tj_test_${crypto.randomUUID().replaceAll("-", "")}`;
+    await usePostgres(copy.dir, schema);
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["doctor"], { env: { ...docker.env, THUNDERJAR_DB_URL: Bun.env.THUNDERJAR_POSTGRES_URL! } });
+
+    expect({ stdout, stderr, exitCode }).toEqual({
+      stdout: "Config ... ok\nRun data store, Postgres at $THUNDERJAR_DB_URL ... failed\n",
+      stderr: `Error: Thunderjar's tables aren't in the ${schema} schema.\nRun \`thunderjar db setup\` with THUNDERJAR_DB_URL_ADMIN set, to create them.\n`,
+      exitCode: 1,
+    });
+  });
+});
 
 describe("doctor", () => {
   test("0201, with no image store or runtime: says everything runs locally, and asks Docker nothing", async () => {
