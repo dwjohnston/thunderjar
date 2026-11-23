@@ -100,16 +100,14 @@ describe.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("recordRun", () => {
     expect([...tests]).toEqual([{ name: "fast" }]);
   });
 
-  test("createTables replaces an empty ci_test_metrics of another shape, e.g. one made by hand", async () => {
+  test("createTables refuses a ci_test_metrics of another shape, e.g. one made by hand, and leaves it alone", async () => {
     await using db = await freshSchema();
     await db.sql`create table ${db.sql(db.schema)}.ci_test_metrics (id serial primary key, test_name text not null, duration numeric not null)`;
 
-    await expect(createTables(db.sql, db.schema)).resolves.toBeUndefined();
+    await expect(createTables(db.sql, db.schema)).rejects.toThrow(`${db.schema}.ci_test_metrics has another shape: drop or rename it, then run this again`);
 
     const columns = await db.sql`select column_name from information_schema.columns
       where table_name = 'ci_test_metrics' and table_schema = ${db.schema} order by ordinal_position`;
-    expect(columns.map((c: { column_name: string }) => c.column_name)).toEqual([
-      "id", "ci_run_id", "recorded_at", "file", "name", "status", "duration_ms",
-    ]);
+    expect(columns.map((c: { column_name: string }) => c.column_name)).toEqual(["id", "test_name", "duration"]);
   });
 });
