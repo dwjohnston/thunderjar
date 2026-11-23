@@ -118,6 +118,13 @@ export const CLAUDE_CODE_COMMAND = ({ paths, provider }: CommandContext): string
   `${provider ? `${envAssignments(providerEnv(provider))} ` : ""}claude -p "$(cat ${paths.prompt})" --model "$(cat ${paths.model})" --output-format json --dangerously-skip-permissions > ${paths.result}`;
 
 /**
+ * `baseUrl` as `ANTHROPIC_BASE_URL` takes it: without a final `/v1`, which Claude Code adds
+ * itself, as `/v1/messages`. So `OPENROUTER`'s `https://openrouter.ai/api/v1` is
+ * `https://openrouter.ai/api`, its Anthropic-compatible address.
+ */
+const anthropicBaseUrl = (baseUrl: string) => baseUrl.replace(/\/v1\/?$/, "");
+
+/**
  * The variables that point Claude Code at `provider`: its address, and its key as the auth token.
  * `ANTHROPIC_API_KEY` is emptied, so Claude Code doesn't use it in the token's place.
  */
@@ -142,7 +149,7 @@ const providerEnv = (provider: CommandProvider) => ({
  * ```
  */
 export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND, provider }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
-  const commandProvider: CommandProvider | undefined = provider && { ...provider, wireApi: "anthropic" };
+  const commandProvider: CommandProvider | undefined = provider && { ...provider, baseUrl: anthropicBaseUrl(provider.baseUrl), wireApi: "anthropic" };
   return declareHarness({
     version,
     models,
