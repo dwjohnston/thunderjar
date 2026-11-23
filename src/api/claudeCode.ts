@@ -6,7 +6,8 @@
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
 import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
-import { MODEL_PATH, PROMPT_PATH, RESULT_PATH, writeModel, writeRunScript } from "./files.ts";
+import { writeModel, writeRunScript } from "./files.ts";
+import { COMMAND_PATHS, type CommandContext } from "./harnessOptions.ts";
 
 type ModelUsage = {
   inputTokens?: unknown;
@@ -90,16 +91,16 @@ export type ClaudeCodeOptions = {
   version: string;
   /** The models it runs, as `declareHarness`'s `models`, e.g. `{ "claude-haiku-5-5": [] }`. By default, `CLAUDE_CODE_MODELS`. */
   models?: HarnessModels;
-  /** Replaces the command its run script runs: `CLAUDE_CODE_COMMAND` is the default. */
-  command?: string;
+  /** The command its run script runs, from the model, version, paths and provider: `CLAUDE_CODE_COMMAND` by default. */
+  command?: (ctx: CommandContext) => string;
 };
 
 /**
  * The command that runs Claude Code: the prompt and model read from their files, so quotes and
  * newlines reach the agent intact, its result as JSON, without permission prompts.
  */
-export const CLAUDE_CODE_COMMAND =
-  `claude -p "$(cat ${PROMPT_PATH})" --model "$(cat ${MODEL_PATH})" --output-format json --dangerously-skip-permissions > ${RESULT_PATH}`;
+export const CLAUDE_CODE_COMMAND = ({ paths }: CommandContext): string =>
+  `claude -p "$(cat ${paths.prompt})" --model "$(cat ${paths.model})" --output-format json --dangerously-skip-permissions > ${paths.result}`;
 
 /**
  * A complete harness declaration for Claude Code `version`. Its fragment installs Claude Code as
@@ -124,7 +125,7 @@ export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLA
         `RUN npm install -g @anthropic-ai/claude-code@${ctx.version}`,
         "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
         writeModel(ctx.modelId),
-        writeRunScript(command),
+        writeRunScript(command({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: undefined })),
         "USER node",
       ].join("\n"),
     collectReply: claudeCodeReply,
