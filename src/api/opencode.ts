@@ -18,7 +18,7 @@
 // itself, and `opencode`, a whole OpenCode harness.
 import { declareHarness, type HarnessDeclaration, type HarnessModels, type SettingValue, type TokenCosts } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
-import { COMMAND_PATHS, type CommandContext, envAssignments, type HelperOptions } from "./harnessOptions.ts";
+import { COMMAND_PATHS, type CommandContext, type CommandProvider, envAssignments, type HelperOptions } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Part = {
@@ -115,12 +115,18 @@ function modelConfig(model: Record<string, SettingValue>): OpenCodeModelConfig {
 
 /**
  * OpenCode's config for a run, or undefined if it needs none: the model's own config, under its
- * provider, the part of its ID before the first `/`.
+ * provider, the part of its ID before the first `/`. Given a provider, that entry sets it up as an
+ * OpenAI-compatible one, on Chat Completions, its key read from its variable as `{env:…}`.
  */
-function runConfig(modelId: string, model: OpenCodeModelConfig): Record<string, unknown> | undefined {
-  if (Object.keys(model).length === 0) return undefined;
+function runConfig(modelId: string, model: OpenCodeModelConfig, provider: CommandProvider | undefined): Record<string, unknown> | undefined {
+  if (!provider && Object.keys(model).length === 0) return undefined;
   const [providerId, modelName] = modelId.split(/\/(.*)/s) as [string, string | undefined];
-  return { provider: { [providerId]: { models: { [modelName ?? providerId]: model } } } };
+  const setup = provider && {
+    npm: "@ai-sdk/openai-compatible",
+    name: provider.name,
+    options: { baseURL: provider.baseUrl, apiKey: `{env:${provider.apiKeyEnv}}` },
+  };
+  return { provider: { [providerId]: { ...setup, models: { [modelName ?? providerId]: model } } } };
 }
 
 /** What `opencode` gets. `models` take OpenCode's own per-model config. */
@@ -133,8 +139,8 @@ export type OpenCodeOptions = HelperOptions<OpenCodeModels, OpenCodeModelConfig>
  * one (the external_directory permission), then stops, exiting 0 with no reply. A model's own
  * config is passed in `OPENCODE_CONFIG_CONTENT`, which OpenCode merges into its config.
  */
-export const OPENCODE_COMMAND = ({ modelId, model, paths }: CommandContext<OpenCodeModelConfig>): string => {
-  const config = runConfig(modelId, model);
+export const OPENCODE_COMMAND = ({ modelId, model, paths, provider }: CommandContext<OpenCodeModelConfig>): string => {
+  const config = runConfig(modelId, model, provider);
   return (
     envAssignments({ OPENCODE_PERMISSION: JSON.stringify({ external_directory: "allow" }), ...(config && { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) }) }) +
     ` opencode run --model "$(cat ${paths.model})" --format json "$(cat ${paths.prompt})" > ${paths.result}`
@@ -154,7 +160,7 @@ export const OPENCODE_COMMAND = ({ modelId, model, paths }: CommandContext<OpenC
  * export default opencode({ version: "1.19.5" });
  * ```
  */
-export function opencode({ version, models = OPENCODE_MODELS }: OpenCodeOptions): HarnessDeclaration<undefined, undefined> {
+export function opencode({ version, models = OPENCODE_MODELS, provider }: OpenCodeOptions): HarnessDeclaration<undefined, undefined> {
   return declareHarness({
     version,
     models: flatModels(models),
@@ -166,11 +172,11 @@ export function opencode({ version, models = OPENCODE_MODELS }: OpenCodeOptions)
         `RUN mkdir -p ~/.config/opencode && cd ~/.config/opencode && echo '{"dependencies":{"@opencode-ai/plugin":"${ctx.version}"}}' > package.json && npm install --no-audit --no-fund && npm cache clean --force`,
         "USER root",
         writeModel(ctx.modelId),
-        writeRunScript(OPENCODE_COMMAND({ modelId: ctx.modelId, model: modelConfig(ctx.model), version: ctx.version, paths: COMMAND_PATHS, provider: undefined })),
+        writeRunScript(OPENCODE_COMMAND({ modelId: ctx.modelId, model: modelConfig(ctx.model), version: ctx.version, paths: COMMAND_PATHS, provider: provider && { ...provider, wireApi: "chat" } })),
         "USER node",
       ].join("\n"),
     collectReply: opencodeReply,
     collectTokenCosts: (raw, ctx) => opencodeTokenCosts(raw, ctx.modelId),
-    requiredEnv: ["OPENCODE_API_KEY"],
+    requiredEnv: provider ? [provider.apiKeyEnv] : ["OPENCODE_API_KEY"],
   });
 }
