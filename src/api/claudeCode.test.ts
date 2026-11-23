@@ -164,4 +164,8 @@ ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic ANTHROPIC_AUTH_TOKEN="$DEE
     expect(run("claude-opus-5-5", { effort: "xhigh" })).toContain(`--model "$(cat /thunderjar/model.txt)" --effort xhigh --output-format json`);
     expect(run("claude-haiku-4-5-20251001", {})).toContain(`--model "$(cat /thunderjar/model.txt)" --output-format json`);
   });
+
+  test("its required variables can be replaced, e.g. for a command that needs more", () => {
+    expect(claudeCode({ version: "2.1.311", requiredEnv: ["ANTHROPIC_API_KEY", "GITHUB_TOKEN"] }).requiredEnv).toEqual(["ANTHROPIC_API_KEY", "GITHUB_TOKEN"]);
+  });
 });
