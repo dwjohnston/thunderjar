@@ -40,7 +40,7 @@ export type Frames = {
 
 /**
  * Draws what `render(out.isTTY)` returns on `out`, at each `update()`. A renderer for a pipe must
- * only add lines at the end. `render(false)` is the frame without anything counting: while the
+ * only add lines at the end, or finish an open line by adding to its end. `render(false)` is the frame without anything counting: while the
  * terminal's frame differs from it, it's redrawn each second on `clock`.
  */
 export function frames(out: Output, render: (terminal: boolean) => Line[], clock: Clock): Frames {
@@ -51,20 +51,27 @@ export function frames(out: Output, render: (terminal: boolean) => Line[], clock
   // How many rows a line takes on the terminal: a line wider than it wraps.
   const height = (line: string) => (out.columns ? Math.max(1, Math.ceil(Bun.stringWidth(line) / out.columns)) : 1);
 
+  // Piped: all that's been written, so each frame writes only what it adds.
+  let written = "";
+
   const update = () => {
-    const lines = render(out.isTTY).map(text);
-    let first = 0;
-    if (out.isTTY) {
-      while (first < last.length && first < lines.length && lines[first] === last[first]) first++;
-    } else {
-      first = last.length;
+    if (!out.isTTY) {
+      const piped = render(false)
+        .map((line) => (typeof line === "string" ? `${line}\n` : line.open))
+        .join("");
+      if (piped.length > written.length) out.write(piped.slice(written.length));
+      written = piped;
+      return;
     }
+    const lines = render(true).map(text);
+    let first = 0;
+    while (first < last.length && first < lines.length && lines[first] === last[first]) first++;
     const up = last.slice(first).reduce((rows, line) => rows + height(line), 0);
     const tail = lines.slice(first).map((line) => `${line}\n`).join("");
     if (up > 0 || tail !== "") out.write(`${up > 0 ? `\x1b[${up}F\x1b[J` : ""}${tail}`);
     last = lines;
     // Something counts while the frame isn't the one without counting: redraw it each second.
-    const counting = out.isTTY && !sameLines(lines, render(false).map(text));
+    const counting = !sameLines(lines, render(false).map(text));
     if (counting && stopTicking === undefined) stopTicking = every(clock, 1000, update);
     if (!counting) stopTimer();
   };
