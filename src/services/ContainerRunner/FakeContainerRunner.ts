@@ -14,19 +14,32 @@ export type ContainerScript = (context: ContainerScriptContext) => Promise<numbe
 export class FakeContainerRunner implements ContainerRunner {
   readonly killed: string[] = [];
   readonly removed: string[] = [];
+  private readonly scripts: [string, ContainerScript][] = [];
 
   constructor(private readonly clock: Clock) {}
 
   /** Runs `script` for each container whose name ends in `suffix`. */
-  on(_suffix: string, _script: ContainerScript): this {
+  on(suffix: string, script: ContainerScript): this {
+    this.scripts.push([suffix, script]);
     return this;
   }
 
-  spawn(_args: string[], _startMarker?: string): ContainerProcess {
-    return { started: Promise.resolve(), exited: Promise.resolve(0), stderr: Promise.resolve(""), kill: () => {} };
+  spawn(args: string[], _startMarker?: string): ContainerProcess {
+    const name = args[args.indexOf("--name") + 1] ?? "";
+    const script = this.scripts.find(([suffix]) => name.endsWith(suffix))?.[1] ?? noScript;
+    const started = Promise.withResolvers<void>();
+    const ran = script({ clock: this.clock, name, args, start: () => started.resolve() }).then((result) =>
+      typeof result === "number" ? { exitCode: result, stderr: "" } : result,
+    );
+    return { started: started.promise, exited: ran.then((result) => result.exitCode), stderr: ran.then((result) => result.stderr), kill: () => {} };
   }
 
   async kill(_name: string): Promise<void> {}
 
   async remove(_name: string): Promise<void> {}
 }
+
+const noScript: ContainerScript = async ({ start }) => {
+  start();
+  return 0;
+};
