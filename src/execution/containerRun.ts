@@ -1,15 +1,9 @@
 // One container run: its prerun image's `thunderjar-run.sh`, run in a container from the image,
 // in the image's working directory, then committed into its postrun image. The container is
 // removed afterwards, whatever happens.
-import {
-  commitContainer,
-  DockerContainerError,
-  type DockerRuntime,
-  localRuntime,
-  readContainerFile,
-  removeContainer,
-  runContainer,
-} from "../docker/docker.ts";
+import { DockerContainerError, runContainerOn } from "../docker/docker.ts";
+import type { DockerService } from "../docker/dockerService.ts";
+import type { Clock } from "../time/clock.ts";
 import type { Execution } from "../store/runDataStore.ts";
 import { RESULT_PATH, RUN_PATH, START_MARKER, STDERR_PATH, timedRun } from "./runScript.ts";
 import { type SecretSearch, searchableSecrets, searchForSecrets } from "./secretSearch.ts";
@@ -32,8 +26,12 @@ export type ContainerRun = {
   timeoutSeconds: number;
   /** The container's name. */
   container: string;
-  /** Where it runs: the local Docker daemon by default. */
-  runtime?: DockerRuntime;
+  /** The Docker it runs with: the local daemon's, or a runtime's. */
+  docker: DockerService;
+  /** What its timeouts are measured on. */
+  clock: Clock;
+  /** How long its container may take to start, in seconds, before it's given up on: see runContainerOn. */
+  startSeconds: number;
   /** Times its phases: the agent, collecting what it left, and the commit. */
   time?: Timer;
 };
@@ -92,19 +90,25 @@ export function parseExecution(text: string | undefined, timeoutSeconds: number,
  * DockerContainerError if Docker fails otherwise.
  */
 export async function runInContainer(run: ContainerRun): Promise<ContainerRunOutcome> {
-  const runtime = run.runtime ?? localRuntime();
+  const { docker, clock } = run;
   const time = run.time ?? untimed;
   try {
     const stop = await time("agent", () =>
-      runContainer(run.prerunImage, run.container, timedRun(), {
-        env: run.env,
-        runOptions: run.runOptions,
-        setEnv: run.testCaseEnv,
-        secretEnv: run.secretEnv,
-        timeoutSeconds: run.timeoutSeconds,
-        startMarker: START_MARKER,
-        runtime,
-      }),
+      runContainerOn(
+        docker,
+        clock,
+        {
+          image: run.prerunImage,
+          name: run.container,
+          script: timedRun(),
+          env: run.env,
+          runOptions: run.runOptions,
+          setEnv: run.testCaseEnv,
+          secretEnv: run.secretEnv,
+          startMarker: START_MARKER,
+        },
+        { timeoutSeconds: run.timeoutSeconds, startSeconds: run.startSeconds },
+      ),
     );
     if (stop.outcome === "notStarted") {
       const execution: Execution = {
@@ -119,18 +123,18 @@ export async function runInContainer(run: ContainerRun): Promise<ContainerRunOut
     }
     const killedAt = stop.outcome === "timedOut" ? stop.killedAt : undefined;
     const [execution, harnessResult, stderr] = await time("collect", async () => [
-      parseExecution(await readContainerFile(run.container, RUN_PATH, runtime), run.timeoutSeconds, killedAt),
-      (await readContainerFile(run.container, RESULT_PATH, runtime)) ?? null,
-      (await readContainerFile(run.container, STDERR_PATH, runtime)) ?? null,
+      parseExecution(await docker.readFile(run.container, RUN_PATH), run.timeoutSeconds, killedAt),
+      (await docker.readFile(run.container, RESULT_PATH)) ?? null,
+      (await docker.readFile(run.container, STDERR_PATH)) ?? null,
     ] as const);
-    await time("commit", () => commitContainer(run.container, run.postrunImage, run.prerunImage, runtime, run.testCaseEnv));
+    await time("commit", () => docker.commit(run.container, run.postrunImage, run.prerunImage, run.testCaseEnv));
     // Before the postrun image is pushed: in the files it would push, for the values of the
     // variables the agent was given by name. Not at all, and not timed, if there are none.
     const secretNames = searchableSecrets([...run.env, ...(run.secretEnv ?? [])]);
     const secrets =
-      secretNames.length === 0 ? undefined : await time("secretSearch", () => searchForSecrets(run.postrunImage, `${run.container}-secrets`, secretNames, runtime));
+      secretNames.length === 0 ? undefined : await time("secretSearch", () => searchForSecrets(run.postrunImage, `${run.container}-secrets`, secretNames, docker, clock));
     return { execution, harnessResult, stderr, committed: true, ...(secrets !== undefined && { secrets }) };
   } finally {
-    await removeContainer(run.container, runtime).catch(() => {});
+    await docker.removeContainer(run.container).catch(() => {});
   }
 }

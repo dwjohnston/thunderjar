@@ -12,7 +12,8 @@
 // that never starts: it's recorded, with why, but has nothing to measure. The timeout runs from
 // when the agent starts, not from `docker run`: see runContainer.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
-import { cliDockerService, diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
+import { diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
+import type { DockerService } from "../docker/dockerService.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
 import type { Clock } from "../time/clock.ts";
@@ -65,8 +66,12 @@ export type RunHooks = PrerunBuildHooks &
 
 /** What an execution runs on: the services it asks, in place of the ambient APIs. */
 export type ExecutionServices = {
-  /** Times its phases, its records' timestamps and how long it took. */
+  /** The local Docker daemon: a runtime's is this one `on` its command. */
+  docker: DockerService;
+  /** Times its phases, its records' timestamps, how long it took, and its containers' timeouts. */
   clock: Clock;
+  /** How long each container may take to start, in seconds, before it's given up on: see runContainerOn. */
+  startSeconds: number;
 };
 
 export type ExecutionToRun = {
@@ -179,11 +184,13 @@ function containerRunRecord(
  * more builds or iterations start, and those going finish first. The execution is recorded as its
  * first iteration starts, so if one fails before then, nothing is; after, it's recorded as `failed`.
  */
-export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks, { clock }: ExecutionServices): Promise<ExecutionRecord> {
+export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks, services: ExecutionServices): Promise<ExecutionRecord> {
   const { root, testCase, plan, imagePrefix, imageStore = null, build = {}, runtime: remote = null } = run;
+  const { clock, startSeconds } = services;
   if (remote !== null && imageStore === null) throw new Error("A runtime needs an image store: it runs images from it.");
+  // For what doesn't go through `docker` yet: the image store, and a runtime's disk.
   const runtime = remote === null ? localRuntime() : remoteRuntime(remote.command);
-  const docker = cliDockerService(runtime);
+  const docker = remote === null ? services.docker : services.docker.on(remote.command);
   const { executionId } = plan;
   const timer = timings(clock.now);
   const executionStartedAt = clock.now();
@@ -341,7 +348,9 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       secretEnv: permutation.secretEnv,
       timeoutSeconds: permutation.timeoutSeconds,
       container,
-      runtime,
+      docker,
+      clock,
+      startSeconds,
       time: timer.time,
     });
     const ran = { harnessResult: resultFile, harnessStderr: storedStderr(stderr), reply: collectReply(permutation.harness.collectReply, resultFile) };
@@ -393,7 +402,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       const secretEnv = [...new Set([...permutation.env, ...permutation.secretEnv])];
       const open = async (usesContainer: boolean) =>
         usesContainer
-          ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime, secretEnv)
+          ? openMeasurementContext(docker, iteration.postrunImage, `${container}-measure-${++opened}`, recorded, secretEnv)
           : recordedContext(recorded);
       log.debug({ ...at, measurements: measurements.length }, "measuring");
       const measuringAt = clock.now();
@@ -421,7 +430,8 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     await preparing;
     // A container given up on before it started may have been made since, too late to be removed with its run.
     if (notStarted) {
-      await removeContainersNamed(executionContainerPrefix(executionId, imagePrefix), runtime)
+      await docker
+        .removeContainersNamed(executionContainerPrefix(executionId, imagePrefix))
         .then((removed) => removed.length > 0 && log.warn({ executionId, removed }, "removed containers that started too late"))
         .catch((error: unknown) => log.warn({ executionId, err: error }, "couldn't look for containers that started too late"));
     }

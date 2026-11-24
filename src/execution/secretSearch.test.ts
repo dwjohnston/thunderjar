@@ -16,7 +16,8 @@
 // `docker`. Every value here is made up.
 import { $ } from "bun";
 import { afterEach, describe, expect, test } from "bun:test";
-import { localRuntime } from "../docker/docker.ts";
+import { cliDockerService, localRuntime } from "../docker/docker.ts";
+import { systemClock } from "../time/clock.ts";
 import { TMP_DIR } from "../testing/cli.ts";
 import { fakeDocker } from "../testing/fakeDocker.ts";
 import { MIN_SECRET_LENGTH, parseSecretSearch, SECRET_PATHS_KEPT, searchableSecrets, searchForSecrets } from "./secretSearch.ts";
@@ -70,7 +71,7 @@ describe("searchForSecrets", () => {
     Object.assign(Bun.env, docker.env, { TJ_TEST_SECRET_A: A, TJ_TEST_SECRET_B: B, TJ_TEST_SECRET_SHORT: "short" });
     const image = await imageWith({ "/workspace/.env": `KEY=${A}`, "/workspace/notes.md": "nothing here", "/thunderjar/session.jsonl": `{"key":"${A}"}` });
 
-    const search = await searchForSecrets(image, "tj-run-1-secrets", names, localRuntime());
+    const search = await searchForSecrets(image, "tj-run-1-secrets", names, cliDockerService(localRuntime()), systemClock);
 
     expect(search).toEqual({ found: [{ name: "TJ_TEST_SECRET_A", files: 2, paths: ["/thunderjar/session.jsonl", "/workspace/.env"] }] });
     expect(await docker.containers()).toEqual([]);
@@ -85,7 +86,7 @@ describe("searchForSecrets", () => {
     await using docker = await fakeDocker();
     Object.assign(Bun.env, docker.env, { TJ_TEST_SECRET_SHORT: "short" });
 
-    expect(await searchForSecrets("tj-postrun:secrets", "tj-run-1-secrets", names, localRuntime())).toBeUndefined();
+    expect(await searchForSecrets("tj-postrun:secrets", "tj-run-1-secrets", names, cliDockerService(localRuntime()), systemClock)).toBeUndefined();
     expect(await docker.commands()).toEqual([]);
   });
 
@@ -93,7 +94,7 @@ describe("searchForSecrets", () => {
     await using docker = await fakeDocker();
     Object.assign(Bun.env, docker.env, { TJ_TEST_SECRET_A: A });
 
-    expect(await searchForSecrets("tj-postrun:missing", "tj-run-1-secrets", names, localRuntime())).toEqual({
+    expect(await searchForSecrets("tj-postrun:missing", "tj-run-1-secrets", names, cliDockerService(localRuntime()), systemClock)).toEqual({
       failed: "docker: Error response from daemon: No such image: tj-postrun:missing",
     });
     expect(await docker.containers()).toEqual([]);

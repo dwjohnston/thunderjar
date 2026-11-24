@@ -16,7 +16,7 @@
 import { $ } from "bun";
 import { registryHost, type ProjectConfig } from "../config/projectConfig.ts";
 import { ConfigError } from "../config/loader.ts";
-import { localRuntime, login } from "../docker/docker.ts";
+import { cliDockerService, localRuntime, login, startTimeoutSeconds } from "../docker/docker.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { systemClock } from "../time/clock.ts";
 import { type ExecutionRecord, postgresStore, type RunDataStore, sqliteStore } from "../store/runDataStore.ts";
@@ -98,7 +98,7 @@ export async function runSubmission(
       },
       store,
       eventHooks(emit),
-      { clock: systemClock },
+      { docker: cliDockerService(localRuntime()), clock: systemClock, startSeconds: startTimeoutSeconds() },
     );
     running?.(executing);
     const execution = await executing;

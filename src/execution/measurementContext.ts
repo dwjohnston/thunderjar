@@ -2,14 +2,16 @@
 // a container run's measurements, and removed once they're taken. The instrument's logic runs on the host; what it
 // asks of the context runs in the container, so nothing it writes reaches the postrun image.
 import type { MeasurementContext } from "../api/declarations.ts";
-import { type DockerRuntime, localRuntime } from "../docker/docker.ts";
-import { openShellSession } from "../docker/shellSession.ts";
+import type { DockerService } from "../docker/dockerService.ts";
 
 /**
  * Where paths, globs and commands resolve for an instrument that has no container: the default
  * working directory. One with a container uses its image's, where the agent worked.
  */
 export const WORKDIR = "/workspace";
+
+/** How `glob` lists the files under the working directory, as `./<path>` lines. */
+export const LIST_FILES = "find . \\( -type f -o -type l \\)";
 
 /** A MeasurementContext of its own, for one measurement; `close` removes its container. */
 export type OpenedMeasurementContext = MeasurementContext & {
@@ -44,7 +46,7 @@ export function recordedContext({ harnessResult, reply, replies }: Recorded): Op
 const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
 
 /**
- * Starts the measurement container `container` from `postrunImage`, and returns a context over it.
+ * Starts the measurement container `container` from `postrunImage`, with `docker`, and returns a context over it.
  * Each thing asked of it is one command in a shell session in the container: on a remote runtime,
  * one round trip, not a `docker exec` of several. `recorded` is what was recorded of the container
  * run: what the harness's `cli` left, or "" if nothing, and the agent's replies, or why there are
@@ -55,15 +57,15 @@ const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
  * Thunderjar's own environment. Its test case's `env` needs nothing: the postrun image keeps it.
  */
 export async function openMeasurementContext(
+  docker: DockerService,
   postrunImage: string,
   container: string,
   { harnessResult, reply, replies }: Recorded,
-  runtime: DockerRuntime = localRuntime(),
   secretEnv: string[] = [],
 ): Promise<OpenedMeasurementContext> {
   // Safe to give secrets to: a measurement container is removed once its measurements are taken,
   // and never committed, so nothing it's given can reach an image.
-  const session = await openShellSession(postrunImage, container, runtime, secretEnv);
+  const session = await docker.openShellSession(postrunImage, container, secretEnv);
   // Where the agent worked: the postrun image's working directory, as its prerun image's last WORKDIR set it.
   const workdir = session.workdir.startsWith("/") ? session.workdir : WORKDIR;
   const mustRun = async (what: string, command: string, stdin?: string) => {
@@ -82,7 +84,7 @@ export async function openMeasurementContext(
       await mustRun(`can't write ${path}`, `mkdir -p -- "$(dirname -- ${word(path)})" && cat > ${word(path)}`, contents);
     },
     async glob(pattern) {
-      const found = await mustRun(`can't list the files in ${workdir}`, "find . \\( -type f -o -type l \\)");
+      const found = await mustRun(`can't list the files in ${workdir}`, LIST_FILES);
       const glob = new Bun.Glob(pattern);
       return found
         .split("\n")

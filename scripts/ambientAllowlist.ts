@@ -67,7 +67,7 @@ export const AMBIENT_ALLOWLIST: Allowlist = {
   "src/execution/runnerImage.ts": ["crypto.randomUUID", "Bun.env", "Bun.$"],
   "src/execution/runtimeHooks.ts": ["Bun.env", "Bun.spawn"],
   "src/execution/runtimeProbe.ts": ["crypto.randomUUID", "Bun.env", "Bun.$"],
-  "src/execution/secretSearch.ts": ["Date.now", "Bun.env"],
+  "src/execution/secretSearch.ts": ["Bun.env"],
   "src/execution/ulid.ts": ["crypto.getRandomValues"],
   "src/measureTesting/measure.ts": ["crypto.randomUUID", "Bun.env", "Bun.$"],
   "src/store/runDataStore.ts": ["Bun.sleep", "Bun.$", "Bun.SQL", "bun:sqlite"],

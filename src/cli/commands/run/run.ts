@@ -6,7 +6,7 @@ import { checkBuildSecrets, isConcurrency, loadProjectConfig } from "../../../co
 import { givenOverrides, type Overrides } from "../../../config/overrides.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
-import { cliDockerService, DockerUnavailableError, localRuntime } from "../../../docker/docker.ts";
+import { cliDockerService, DockerUnavailableError, localRuntime, startTimeoutSeconds } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { storePrerunImages, submissionEnv, submitExecution } from "../../../execution/onRuntime.ts";
 import { type PlannedExecution, planExecution } from "../../../execution/planExecution.ts";
@@ -262,7 +262,7 @@ async function run(
   const hostTimer = timings(systemClock.now);
   /** The execution, run here: each Docker command given to the local daemon, or the runtime. */
   const executeHere = async ({ store, where }: OpenStore): Promise<Executed> => {
-    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks, { clock: systemClock });
+    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks, { docker: cliDockerService(localRuntime()), clock: systemClock, startSeconds: startTimeoutSeconds() });
     return { execution, recordedIn: where, containerRuns: json ? await store.containerRunsOf(execution.executionId) : [] };
   };
   /** The execution, run by a runner on the runtime: its images stored, then submitted and followed. */

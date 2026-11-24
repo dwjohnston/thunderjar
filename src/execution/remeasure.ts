@@ -17,7 +17,7 @@
 // measurement container from its postrun image, as `run` took them, without running its agent again.
 import type { Reply } from "../api/declarations.ts";
 import type { Measurement } from "../config/measurements.ts";
-import { type DockerRuntime, localRuntime } from "../docker/docker.ts";
+import { cliDockerService, type DockerRuntime, localRuntime } from "../docker/docker.ts";
 import type { ContainerRunRecord, RecordedMeasure } from "../store/runDataStore.ts";
 import { containerName } from "./images.ts";
 import { measureContainerRun } from "./measure.ts";
@@ -51,9 +51,10 @@ export async function remeasureContainerRun(
   const container = containerName(record.executionId, record.permutation, record.iteration, imagePrefix);
   const recorded = recordedOf(record);
   const secretEnv = [...new Set([...(record.harnessEnv ?? []), ...(record.secretEnv ?? [])])];
+  const docker = cliDockerService(runtime);
   let opened = 0;
   return measureContainerRun(measurements, async (usesContainer) =>
-    usesContainer ? openMeasurementContext(record.postrunImage, `${container}-remeasure-${++opened}`, recorded, runtime, secretEnv) : recordedContext(recorded),
+    usesContainer ? openMeasurementContext(docker, record.postrunImage, `${container}-remeasure-${++opened}`, recorded, secretEnv) : recordedContext(recorded),
   );
 }
 

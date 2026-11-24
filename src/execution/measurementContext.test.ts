@@ -1,7 +1,7 @@
 // The measurement context, over the fake Docker: a measurement container from a postrun image
 // the fake made by running and committing a container, as `run` does.
 import { afterEach, describe, expect, test } from "bun:test";
-import { commitContainer, DockerContainerError, removeContainer, runContainer } from "../docker/docker.ts";
+import { cliDockerService, commitContainer, DockerContainerError, localRuntime, removeContainer, runContainer } from "../docker/docker.ts";
 import { fakeDocker } from "../testing/fakeDocker.ts";
 import { openMeasurementContext } from "./measurementContext.ts";
 
@@ -30,7 +30,7 @@ async function postrunImage(script: string) {
 describe("openMeasurementContext", () => {
   test("reads, globs and runs commands in a container from the postrun image, in /workspace", async () => {
     await using docker = await postrunImage("mkdir -p src && echo one > src/isPrime.ts && echo two > README.md && touch .hidden.ts");
-    const ctx = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", { harnessResult: "the result", reply: NO_REPLY, replies: [NO_REPLY] });
+    const ctx = await openMeasurementContext(cliDockerService(localRuntime()), "tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", { harnessResult: "the result", reply: NO_REPLY, replies: [NO_REPLY] });
 
     try {
       expect(ctx.workdir).toBe("/workspace");
@@ -54,7 +54,7 @@ describe("openMeasurementContext", () => {
 
   test("writes files, folders and all, which only that container sees", async () => {
     await using _ = await postrunImage("echo one > isPrime.ts");
-    const first = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", RECORDED);
+    const first = await openMeasurementContext(cliDockerService(localRuntime()), "tj-postrun:x-1-1", "tj-run-x-1-1-measure-1", RECORDED);
     try {
       await first.writeFile("src/deep/isPrime.test.ts", "it's 'quoted'\nand $HOME\n");
       expect(await first.readFile("src/deep/isPrime.test.ts")).toBe("it's 'quoted'\nand $HOME\n");
@@ -63,7 +63,7 @@ describe("openMeasurementContext", () => {
       await first.close();
     }
 
-    const second = await openMeasurementContext("tj-postrun:x-1-1", "tj-run-x-1-1-measure-2", RECORDED);
+    const second = await openMeasurementContext(cliDockerService(localRuntime()), "tj-postrun:x-1-1", "tj-run-x-1-1-measure-2", RECORDED);
     try {
       expect(await second.glob("**/*.ts")).toEqual(["isPrime.ts"]);
     } finally {
@@ -75,7 +75,7 @@ describe("openMeasurementContext", () => {
     await using docker = await fakeDocker();
     Object.assign(Bun.env, docker.env);
 
-    const error = await openMeasurementContext("tj-postrun:missing", "tj-run-x-1-1-measure-1", RECORDED).catch((e: unknown) => e);
+    const error = await openMeasurementContext(cliDockerService(localRuntime()), "tj-postrun:missing", "tj-run-x-1-1-measure-1", RECORDED).catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(DockerContainerError);
     expect((error as Error).message).toBe("docker: Error response from daemon: No such image: tj-postrun:missing");
