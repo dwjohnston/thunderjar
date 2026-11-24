@@ -18,7 +18,7 @@
 import { expect, test } from "bun:test";
 import { FakeClock } from "../fakes/fakeClock.ts";
 import { FakeOutput } from "../fakes/fakeIo.ts";
-import { frames } from "./frames.ts";
+import { frames, type Line } from "./frames.ts";
 
 test("piped, each frame writes only the lines added since the last", () => {
   const out = new FakeOutput();
@@ -31,6 +31,26 @@ test("piped, each frame writes only the lines added since the last", () => {
   view.stop();
 
   expect(out.text()).toBe("a\nb\nc\n");
+});
+
+test("piped, an open line is written without its newline, and the next frame finishes it in place", () => {
+  const out = new FakeOutput();
+  let lines: Line[] = [{ open: "Building b ... " }];
+  const view = frames(out, () => lines, new FakeClock());
+  const writes: string[] = [];
+  const frame = (step: () => void) => {
+    const before = out.text().length;
+    step();
+    writes.push(out.text().slice(before));
+  };
+
+  frame(() => view.update());
+  lines = ["Building b ... done", { open: "Building c ... " }];
+  frame(() => view.update());
+  lines = ["Building b ... done", "Building c ... failed"];
+  frame(() => view.stop());
+
+  expect(writes).toEqual(["Building b ... ", "done\nBuilding c ... ", "failed\n"]);
 });
 
 test("on a terminal, each frame rewrites in place the lines from the first that changed, counting wrapped lines", () => {

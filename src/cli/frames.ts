@@ -21,6 +21,16 @@
 import type { Output } from "../io/io.ts";
 import { type Clock, every } from "../time/clock.ts";
 
+/**
+ * A line that isn't finished yet, e.g. `Building <image> ... ` while it builds. Piped, it's written
+ * without its newline, so whatever reads the pipe sees it now, and the next frame finishes it in
+ * place, e.g. with `done`. On a terminal it's an ordinary line.
+ */
+export type OpenLine = { open: string };
+
+/** A line of a frame. */
+export type Line = string | OpenLine;
+
 export type Frames = {
   /** Draws what the render function returns now. */
   update(): void;
@@ -33,7 +43,7 @@ export type Frames = {
  * only add lines at the end. `render(false)` is the frame without anything counting: while the
  * terminal's frame differs from it, it's redrawn each second on `clock`.
  */
-export function frames(out: Output, render: (terminal: boolean) => string[], clock: Clock): Frames {
+export function frames(out: Output, render: (terminal: boolean) => Line[], clock: Clock): Frames {
   // The last frame's lines.
   let last: string[] = [];
   // Stops the redraw each second, while one is going.
@@ -42,7 +52,7 @@ export function frames(out: Output, render: (terminal: boolean) => string[], clo
   const height = (line: string) => (out.columns ? Math.max(1, Math.ceil(Bun.stringWidth(line) / out.columns)) : 1);
 
   const update = () => {
-    const lines = render(out.isTTY);
+    const lines = render(out.isTTY).map(text);
     let first = 0;
     if (out.isTTY) {
       while (first < last.length && first < lines.length && lines[first] === last[first]) first++;
@@ -54,7 +64,7 @@ export function frames(out: Output, render: (terminal: boolean) => string[], clo
     if (up > 0 || tail !== "") out.write(`${up > 0 ? `\x1b[${up}F\x1b[J` : ""}${tail}`);
     last = lines;
     // Something counts while the frame isn't the one without counting: redraw it each second.
-    const counting = out.isTTY && !sameLines(lines, render(false));
+    const counting = out.isTTY && !sameLines(lines, render(false).map(text));
     if (counting && stopTicking === undefined) stopTicking = every(clock, 1000, update);
     if (!counting) stopTimer();
   };
@@ -70,5 +80,7 @@ export function frames(out: Output, render: (terminal: boolean) => string[], clo
     },
   };
 }
+
+const text = (line: Line) => (typeof line === "string" ? line : line.open);
 
 const sameLines = (a: string[], b: string[]) => a.length === b.length && a.every((line, i) => line === b[i]);
