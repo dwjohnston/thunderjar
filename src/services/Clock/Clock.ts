@@ -10,10 +10,27 @@ export interface Clock {
   sleep(ms: number): Promise<void>;
 }
 
+const realTimers = new Map<number, ReturnType<typeof setTimeout>>();
+let nextId = 1;
+
 /** Real time. */
 export const realClock: Clock = {
   now: () => Date.now(),
-  setTimeout: () => ({ id: 0 }),
-  clearTimeout: () => {},
-  sleep: async () => {},
+  setTimeout: (callback, ms) => {
+    const id = nextId++;
+    realTimers.set(
+      id,
+      setTimeout(() => {
+        realTimers.delete(id);
+        callback();
+      }, ms),
+    );
+    return { id };
+  },
+  clearTimeout: (handle) => {
+    if (handle === undefined) return;
+    clearTimeout(realTimers.get(handle.id));
+    realTimers.delete(handle.id);
+  },
+  sleep: (ms) => Bun.sleep(ms),
 };
