@@ -8,6 +8,12 @@ import { instruments } from "../../../instruments/instruments.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { FAKE_DOCKER, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
+import { FakeClock } from "../../../fakes/fakeClock.ts";
+import { FakeDockerService } from "../../../fakes/fakeDockerService.ts";
+import { FakeIds } from "../../../fakes/fakeIds.ts";
+import { FakeIo } from "../../../fakes/fakeIo.ts";
+import { createApp } from "../../app.ts";
+import type { RunState } from "./runState.ts";
 import { KEY, TEST_CASE_SECRET, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
 
 const KNOWN_INSTRUMENTS = Object.keys(instruments).join(", ");
@@ -63,6 +69,14 @@ export default declareTestCase({
     expect(stdout).not.toContain("env:");
   });
 });
+
+// misbehaving's prerun images, one per harness: see `bun run fixture 0204 build misbehaving --dry-run`.
+const SLEEPER = "thunderjar-prerun:05372d54";
+const CRASHER = "thunderjar-prerun:8458d2af";
+const SILENT = "thunderjar-prerun:53b26258";
+const IS_PRIME = "export const isPrime = (n: number) => n > 1;\n";
+/** When the in-process tests' clocks start: 2026-01-01. Recorded times must be epoch ms. */
+const T0 = 1_767_225_600_000;
 
 describe("0204 misbehaving agents", () => {
   test("an agent that times out is killed, and one that exits non-zero or leaves no result file is marked, each measured all the same", async () => {
@@ -124,6 +138,59 @@ Recorded in <DATA>/runs.sqlite
   }, 30_000);
 
   test("the timeout runs from when the agent starts: a container slower to start than the timeout still ends cleanly, and the one that hangs still times out", async () => {
+    const clock = new FakeClock(T0);
+    const docker = new FakeDockerService({ clock });
+    // Hangs, before doing anything.
+    docker.onExec(SLEEPER, ({ clock, signal }) => clock.sleep(Infinity, { signal }));
+    // Leaves a result file, says why on stderr, exits 1. No isPrime.ts.
+    docker.onExec(CRASHER, ({ files, stderr }) => {
+      files.set("/thunderjar/result.json", '{"error":"crashed"}\n');
+      stderr("fake-crasher: no space left on device");
+      return { exitCode: 1 };
+    });
+    // Its container takes 3s to start, past the 2s timeout. Then it does its work at once, and leaves no result file.
+    docker.onStart(SILENT, ({ clock }) => clock.sleep(3_000));
+    docker.onExec(SILENT, ({ files }) => {
+      files.set("/workspace/isPrime.ts", IS_PRIME);
+      return { exitCode: 0 };
+    });
+    const io = new FakeIo();
+    const app = createApp({ clock, docker, ids: new FakeIds(), io, launch: { cwd: scenario("0204"), env: {} } });
+    const runs = () => app.state<RunState>().containers.map(({ label, run }) => ({ label, ...run }));
+    const notPrime = { isPrimeTsExists: { outcome: "measured" as const, data: false } };
+
+    const exit = app.cli(["run", "misbehaving", "--data-dir", dataDir()]);
+
+    // 1s: the sleeper's agent is running. The others wait their turn.
+    await clock.advance(1_000);
+    expect(runs()).toEqual([
+      { label: "fake-sleeper | plain", status: "running", since: T0 },
+      { label: "fake-crasher | plain", status: "queued" },
+      { label: "fake-silent | plain", status: "queued" },
+    ]);
+
+    // 2s: the sleeper is killed at its timeout. The crasher has run. The silent container is starting.
+    await clock.advance(1_000);
+    expect(runs()).toEqual([
+      { label: "fake-sleeper | plain", status: "timedOut", timeoutSeconds: 2, ms: 2_000, measures: notPrime },
+      { label: "fake-crasher | plain", status: "exited", exitCode: 1, resultFile: true, ms: 0, measures: notPrime },
+      { label: "fake-silent | plain", status: "starting", since: T0 + 2_000 },
+    ]);
+
+    // 4.9s: it has been starting for 2.9s, past the 2s timeout, and isn't killed.
+    await clock.advance(2_900);
+    expect(runs()[2]).toEqual({ label: "fake-silent | plain", status: "starting", since: T0 + 2_000 });
+
+    // 5s: it starts, and its agent finishes at once.
+    await clock.advance(100);
+    expect(await exit).toBe(1);
+    expect(runs()[2]).toEqual({ label: "fake-silent | plain", status: "done", resultFile: false, ms: 0, measures: { isPrimeTsExists: { outcome: "measured", data: true } } });
+    expect(docker.killed).toEqual(["thunderjar-run-00000000000000000000000001-1-1"]);
+    expect(docker.containers()).toEqual([]);
+    expect(io.stderr.text()).toBe("");
+  });
+
+  test("the timeout runs from when the agent starts, through a subprocess, in real time", async () => {
     // fake-silent's container takes 3s to start, past its 2s timeout; its agent then takes no time.
     await using docker = await fakeDocker({ slowStart: { "-3-1": 3 } });
     const data = dataDir();

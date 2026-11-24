@@ -13,7 +13,12 @@
  */
 // What `run` is doing, as data: each container run of its execution, and where it is. run
 // publishes it, for `app.state()`, and renderRun draws it.
+import type { TestCaseDeclaration } from "../../../api/declarations.ts";
+import type { PlannedExecution } from "../../../execution/planExecution.ts";
+import type { RunHooks } from "../../../execution/runExecution.ts";
 import type { RecordedOutcome } from "../../../store/runDataStore.ts";
+import type { Clock } from "../../../time/clock.ts";
+import { label } from "./runDisplay.ts";
 
 /** A container run's measures, by name. */
 export type Measures = Record<string, RecordedOutcome>;
@@ -42,3 +47,20 @@ export type ContainerState = {
 };
 
 export type RunState = { executionId: string; containers: ContainerState[] };
+
+/** The state of `plan`'s execution, every container run queued, and the hooks that keep it up to date, on `clock`. */
+export function trackRun(plan: PlannedExecution, testCase: TestCaseDeclaration, _clock: Clock): { state: RunState; hooks: RunHooks } {
+  const permutations = plan.permutations.length;
+  const state: RunState = {
+    executionId: plan.executionId,
+    containers: plan.permutations.flatMap((permutation) =>
+      permutation.iterations.map((iteration) => ({
+        permutation: [permutation.number, permutations] as [number, number],
+        iteration: [iteration.number, testCase.iterations] as [number, number],
+        label: label(testCase, permutation),
+        run: { status: "queued" } as const,
+      })),
+    ),
+  };
+  return { state, hooks: {} };
+}

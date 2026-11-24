@@ -11,7 +11,7 @@ import type { Ids } from "../../../execution/ids.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { storePrerunImages, submissionEnv, submitExecution } from "../../../execution/onRuntime.ts";
 import { type PlannedExecution, planExecution } from "../../../execution/planExecution.ts";
-import { removeExecutionContainers, runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
+import { mergeHooks, removeExecutionContainers, runExecution, runsConcurrently } from "../../../execution/runExecution.ts";
 import { storeRunnerImage } from "../../../execution/runnerImage.ts";
 import { planData, type Submission } from "../../../execution/runnerSpec.ts";
 import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
@@ -29,6 +29,7 @@ import { overridesOf, withOverrideOptions } from "../../overrides.ts";
 import { type Printer, printer } from "../../output.ts";
 import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.ts";
 import { runDisplay, showSecrets, showTimings, showUnclean, showUnsearched, storeFailure } from "./runDisplay.ts";
+import { trackRun } from "./runState.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
 const FIELD_INDENT = "    ";
@@ -203,6 +204,9 @@ async function run(ctx: CommandRun, out: Printer, { name, imagePrefix, dataDir, 
   const done = paint.green("done");
   const display = runDisplay({ testCase, permutations: plan.permutations.length, concurrent, stored: imageStore !== null, remote: runtime !== null, out, clock });
   const { open, close, fail } = display;
+  // What it's doing, as data, for `app.state()`.
+  const tracked = trackRun(plan, testCase, clock);
+  ctx.publish(tracked.state);
 
   out.print(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
   if (runtime !== null && runner === undefined) out.print(paint.dim(`Running containers with \`${runtime.command.join(" ")}\``));
@@ -278,7 +282,7 @@ async function run(ctx: CommandRun, out: Printer, { name, imagePrefix, dataDir, 
   const hostTimer = timings(() => clock.now());
   /** The execution, run here: each Docker command given to the local daemon, or the runtime. */
   const executeHere = async ({ store, where }: OpenStore): Promise<Executed> => {
-    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks, {
+    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, mergeHooks(display.hooks, tracked.hooks), {
       docker: ctx.docker,
       clock,
       startSeconds: startTimeoutSeconds(launch.env),

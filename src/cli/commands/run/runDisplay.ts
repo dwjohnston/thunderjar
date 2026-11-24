@@ -68,7 +68,7 @@ const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
  * What tells `permutation` apart from the rest of `testCase`'s: each other axis that varies, then
  * its harness, by name alone unless two of the test case's pairs share one, and its initial prompt.
  */
-function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutation): string {
+export function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutation): string {
   const varying = AXES.filter((axis) => axis !== "harnessModel" && axis !== "initialPrompt" && testCase[axis].length > 1);
   const harnesses = new Set(testCase.harnessModel.map((pair) => parsePair(pair).harness));
   const harness = harnesses.size === testCase.harnessModel.length ? parsePair(permutation.harnessModel).harness : permutation.harnessModel;
