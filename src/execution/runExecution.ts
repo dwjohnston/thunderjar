@@ -15,6 +15,7 @@ import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaratio
 import { cliDockerService, diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
+import type { Clock } from "../time/clock.ts";
 import { givenOverrides, hasOverrides, type Overrides } from "../config/overrides.ts";
 import { AXES, matrixShape, parsePair } from "../config/permutations.ts";
 import type {
@@ -60,6 +61,12 @@ export type RunHooks = PrerunBuildHooks &
   onDone?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
   /** Called once, as the execution ends, however it ends, with how long each of its phases took. */
   onTimings?: (timings: ExecutionTimings) => void;
+};
+
+/** What an execution runs on: the services it asks, in place of the ambient APIs. */
+export type ExecutionServices = {
+  /** Times its phases, its records' timestamps and how long it took. */
+  clock: Clock;
 };
 
 export type ExecutionToRun = {
@@ -172,14 +179,14 @@ function containerRunRecord(
  * more builds or iterations start, and those going finish first. The execution is recorded as its
  * first iteration starts, so if one fails before then, nothing is; after, it's recorded as `failed`.
  */
-export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks = {}): Promise<ExecutionRecord> {
+export async function runExecution(run: ExecutionToRun, store: RunDataStore, hooks: RunHooks, { clock }: ExecutionServices): Promise<ExecutionRecord> {
   const { root, testCase, plan, imagePrefix, imageStore = null, build = {}, runtime: remote = null } = run;
   if (remote !== null && imageStore === null) throw new Error("A runtime needs an image store: it runs images from it.");
   const runtime = remote === null ? localRuntime() : remoteRuntime(remote.command);
   const docker = cliDockerService(runtime);
   const { executionId } = plan;
-  const timer = timings();
-  const executionStartedAt = Date.now();
+  const timer = timings(clock.now);
+  const executionStartedAt = clock.now();
   log.info(
     { executionId, testCase: run.name, task: testCase.task, permutations: plan.permutations.length, imageStore: imageStore?.repository, runtime: remote?.command, concurrency: run.concurrency ?? 1 },
     "execution starting",
@@ -303,7 +310,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   let recording: Promise<void> | undefined;
   const recordStart = () => {
     if (recording === undefined) {
-      startedAt = new Date().toISOString();
+      startedAt = new Date(clock.now()).toISOString();
       recording = store.recordExecution(executionRecord("running"));
     }
     return recording;
@@ -389,10 +396,10 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
           ? openMeasurementContext(iteration.postrunImage, `${container}-measure-${++opened}`, recorded, runtime, secretEnv)
           : recordedContext(recorded);
       log.debug({ ...at, measurements: measurements.length }, "measuring");
-      const measuringAt = Date.now();
+      const measuringAt = clock.now();
       // One measurement container for all of them: on a remote runtime, each takes seconds to start.
-      const result = await timer.time("measure", () => measureContainerRun(measurements, open));
-      log.info({ ...at, ms: Date.now() - measuringAt, containers: opened, result }, "measured");
+      const result = await timer.time("measure", () => measureContainerRun(measurements, open, () => new Date(clock.now())));
+      log.info({ ...at, ms: clock.now() - measuringAt, containers: opened, result }, "measured");
       await store.recordContainerRun({ ...record, result });
       hooks.onMeasured?.(permutation, iteration, result);
     }
@@ -424,9 +431,9 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     hooks.onTimings?.(spent);
     if (recording !== undefined) {
       await recording;
-      finished = executionRecord(status, new Date().toISOString());
+      finished = executionRecord(status, new Date(clock.now()).toISOString());
       await store.recordExecution(finished);
-      log.info({ executionId, status, ms: Date.now() - executionStartedAt }, "execution finished");
+      log.info({ executionId, status, ms: clock.now() - executionStartedAt }, "execution finished");
     }
   }
   return finished as ExecutionRecord;

@@ -17,6 +17,7 @@ import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execut
 import { timings } from "../../../execution/timings.ts";
 import { ulid } from "../../../execution/ulid.ts";
 import { RunDataStoreError } from "../../../store/runDataStore.ts";
+import { systemClock } from "../../../time/clock.ts";
 import { type Paint, painter, plain } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, type OpenStore, openStore } from "../../dataDir.ts";
@@ -258,10 +259,10 @@ async function run(
   process.on("SIGINT", onInt);
   process.on("SIGTERM", onTerm);
   // What this does itself, with a runner: have the runtime build and push the images. The runner times the rest.
-  const hostTimer = timings();
+  const hostTimer = timings(systemClock.now);
   /** The execution, run here: each Docker command given to the local daemon, or the runtime. */
   const executeHere = async ({ store, where }: OpenStore): Promise<Executed> => {
-    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks);
+    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks, { clock: systemClock });
     return { execution, recordedIn: where, containerRuns: json ? await store.containerRunsOf(execution.executionId) : [] };
   };
   /** The execution, run by a runner on the runtime: its images stored, then submitted and followed. */

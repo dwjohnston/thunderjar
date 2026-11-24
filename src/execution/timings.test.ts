@@ -39,5 +39,5 @@ test("times a job that throws, and rethrows", async () => {
 });
 
 test("returns what the job returns", async () => {
-  expect(await timings().time("measure", async () => 42)).toBe(42);
+  expect(await timings(Date.now).time("measure", async () => 42)).toBe(42);
 });

@@ -27,7 +27,7 @@ export type ExecutionTimings = { wallMs: number; phases: Partial<Record<Phase, P
 export type Timer = <T>(phase: Phase, job: () => Promise<T>) => Promise<T>;
 
 /** A timer, and what it has timed so far. With several jobs at once, a phase's total can exceed the wall time. */
-export function timings(now: () => number = Date.now): { time: Timer; summary: () => ExecutionTimings } {
+export function timings(now: () => number): { time: Timer; summary: () => ExecutionTimings } {
   const startedAt = now();
   const totals = new Map<Phase, PhaseTiming>();
   const time: Timer = async (phase, job) => {
