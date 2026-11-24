@@ -34,13 +34,23 @@ export type Frames = {
  * terminal's frame differs from it, it's redrawn each second on `clock`.
  */
 export function frames(out: Output, render: (terminal: boolean) => string[], _clock: Clock): Frames {
-  // How many lines have been written.
-  let written = 0;
+  // The last frame's lines.
+  let last: string[] = [];
+  // How many rows a line takes on the terminal: a line wider than it wraps.
+  const height = (line: string) => (out.columns ? Math.max(1, Math.ceil(Bun.stringWidth(line) / out.columns)) : 1);
+
   const update = () => {
     const lines = render(out.isTTY);
-    const added = lines.slice(written);
-    if (added.length > 0) out.write(added.map((line) => `${line}\n`).join(""));
-    written = lines.length;
+    let first = 0;
+    if (out.isTTY) {
+      while (first < last.length && first < lines.length && lines[first] === last[first]) first++;
+    } else {
+      first = last.length;
+    }
+    const up = last.slice(first).reduce((rows, line) => rows + height(line), 0);
+    const tail = lines.slice(first).map((line) => `${line}\n`).join("");
+    if (up > 0 || tail !== "") out.write(`${up > 0 ? `\x1b[${up}F\x1b[J` : ""}${tail}`);
+    last = lines;
   };
   return { update, stop: update };
 }
