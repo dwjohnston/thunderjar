@@ -56,3 +56,16 @@ test("an aborted sleep rejects with the signal's reason, and never fires", async
 
   expect(outcomes).toEqual(["aborted sleep rejected: stopped", "other sleep fired@200"]);
 });
+
+test("advance throws, rather than hangs, if nothing waits on the clock", async () => {
+  const clock = new FakeClock(0, { graceMs: 10 });
+
+  const outcome = await clock.advance(100).then(
+    () => "moved on",
+    (error: Error) => error.message,
+  );
+
+  expect(outcome).toBe(
+    "FakeClock.advance(100): nothing waited on the clock within 10ms. The code under test finished, or is doing real I/O between clock waits, where only services may.",
+  );
+});

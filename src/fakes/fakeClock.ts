@@ -25,10 +25,15 @@ async function settle(): Promise<void> {
 }
 
 /**
- * How long, in real time, `advance` waits for the code under test to reach the clock: it may still
- * be loading config or hashing files.
+ * How long, by default, in real time, `advance` waits for the code under test to reach the clock:
+ * it may still be loading config or hashing files.
  */
 const GRACE_MS = 5_000;
+
+export type FakeClockOptions = {
+  /** How long, in real time, `advance` waits for the code under test to reach the clock. 5s by default. */
+  graceMs?: number;
+};
 
 /** A sleep that hasn't fired: when it's due, and how to fire it. */
 type Sleeper = { due: number; fire: () => void };
@@ -39,10 +44,12 @@ export class FakeClock implements Clock {
   #sleepers: Sleeper[] = [];
   /** Called when a sleep begins: `advance` may be waiting for one. */
   #onSleep: () => void = () => {};
+  readonly #graceMs: number;
 
   /** Starts at `start`: 0 by default, or epoch milliseconds for code that shows dates. */
-  constructor(start = 0) {
+  constructor(start = 0, { graceMs = GRACE_MS }: FakeClockOptions = {}) {
     this.#now = start;
+    this.#graceMs = graceMs;
   }
 
   now(): number {
@@ -80,7 +87,7 @@ export class FakeClock implements Clock {
    * under test must keep this invariant: **between clock waits, only services do I/O**, and a fake
    * service does none.
    */
-  async advance(ms: number): Promise<void> {
+  async advance(ms: number, _options: { work?: PromiseLike<unknown> } = {}): Promise<void> {
     await this.#somethingWaiting();
     const target = this.#now + ms;
     for (let next = this.#next(target); next !== undefined; next = this.#next(target)) {
@@ -92,13 +99,13 @@ export class FakeClock implements Clock {
     this.#now = target;
   }
 
-  /** Resolves once a sleep is waiting on the clock, or after GRACE_MS in real time. */
+  /** Resolves once a sleep is waiting on the clock, or after the grace in real time. */
   async #somethingWaiting(): Promise<void> {
     if (this.#sleepers.length > 0) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     await new Promise<void>((resolve) => {
       this.#onSleep = resolve;
-      timer = setTimeout(resolve, GRACE_MS);
+      timer = setTimeout(resolve, this.#graceMs);
     });
     clearTimeout(timer);
     this.#onSleep = () => {};
