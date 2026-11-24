@@ -23,7 +23,7 @@ export class FakeContainerRunner implements ContainerRunner {
   }
 
   spawn(_args: string[], _startMarker?: string): ContainerProcess {
-    return { started: Promise.resolve(), exited: Promise.resolve(1), stderr: Promise.resolve(""), kill: () => {} };
+    return { started: Promise.resolve(), exited: Promise.resolve(0), stderr: Promise.resolve(""), kill: () => {} };
   }
 
   async kill(_name: string): Promise<void> {}
