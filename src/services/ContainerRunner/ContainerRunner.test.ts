@@ -35,4 +35,20 @@ describe("FakeContainerRunner", () => {
     expect(await container.exited).toBe(2);
     expect(await container.stderr).toBe("boom");
   });
+
+  test("kill ends a hanging container with 137, and records it", async () => {
+    const clock = new FakeClock();
+    const runner = new FakeContainerRunner(clock).on("-1-1", async ({ clock, start }) => {
+      start();
+      await clock.sleep(300_000);
+      return 0;
+    });
+    const container = runner.spawn(args("tj-1-1"), "STARTED");
+    await container.started;
+
+    await runner.kill("tj-1-1");
+
+    expect(await Promise.race([container.exited, clock.advance(0).then(() => "still running")])).toBe(137);
+    expect(runner.killed).toEqual(["tj-1-1"]);
+  });
 });
