@@ -52,7 +52,7 @@ export function undeclaredFolders(srcFiles: string[], layers: readonly string[])
  * Overrides replace the top-level rule rather than adding to it, so each one repeats the
  * top-level no-restricted-imports options.
  */
-export function generateOverrides(layers: readonly string[], depth: number, base: RestrictedImportsOptions = {}): Override[] {
+export function generateOverrides(layers: readonly string[], depth: number, base: RestrictedImportsOptions = {}, _testLayers: readonly string[] = []): Override[] {
   const overrides: Override[] = [];
   layers.forEach((layer, i) => {
     const later = layers.slice(i + 1);

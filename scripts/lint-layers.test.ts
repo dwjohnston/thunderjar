@@ -4,9 +4,9 @@ import { applyLayers, generateOverrides, maxDepth, renderConfig, undeclaredFolde
 
 const NODE_BAN = { regex: "^node:" };
 
-/** The messages of the patterns that ban `specifier` when imported from `from`, as oxlint would apply them. */
+/** The messages of the patterns that ban `specifier` when imported from `from`, as oxlint would apply them: the last override matching `from` wins. */
 function bans(overrides: Override[], from: string, specifier: string): string[] {
-  const override = overrides.find((o) => o.files.some((glob) => new Bun.Glob(glob).match(from)));
+  const override = overrides.findLast((o) => o.files.some((glob) => new Bun.Glob(glob).match(from)));
   if (!override) return [];
   const [, options] = override.rules["no-restricted-imports"] as [string, { patterns: { regex: string; message?: string }[] }];
   return options.patterns.filter((p) => new RegExp(p.regex).test(specifier)).map((p) => p.message ?? p.regex);
@@ -66,6 +66,16 @@ describe("generateOverrides", () => {
 
   test("generates nothing for a single layer", () => {
     expect(generateOverrides(["cli"], 3, { patterns: [NODE_BAN] })).toEqual([]);
+  });
+
+  test("lets any test import a test-only layer, which no other code may", () => {
+    const withFakes = generateOverrides(["project", "cli", "fakes"], 3, { patterns: [NODE_BAN] }, ["fakes"]);
+
+    expect(bans(withFakes, "src/cli/commands/build/build.test.ts", "../../../fakes/fakeIo.ts")).toEqual([]);
+    expect(bans(withFakes, "src/project/a.test.ts", "../fakes/fakeIo.ts")).toEqual([]);
+    expect(bans(withFakes, "src/cli/commands/build/build.ts", "../../../fakes/fakeIo.ts")).toHaveLength(1);
+    expect(bans(withFakes, "src/project/a.test.ts", "../cli/x.ts")).toHaveLength(1);
+    expect(bans(withFakes, "src/project/a.test.ts", "node:fs")).toEqual(["^node:"]);
   });
 });
 
