@@ -134,7 +134,8 @@ console.log(`docker failed: ${stderr}`);
 `src/` is moving its ambient non-determinism (the clock, random IDs, the environment, the terminal, subprocesses, the network) behind services, so tests can fake them. `bun run lint` bans those APIs in `src/`, each with a message naming its service. The bans are in `scripts/ambient.ts`.
 
 - Today's offenders are in `scripts/ambientAllowlist.ts`, file by file. It may only shrink: lint fails on an entry a file no longer needs.
-- Tests and `src/testing/` are exempt.
+- The services' real implementations, e.g. `systemClock` in `src/time/clock.ts`, are in `AMBIENT_IMPLEMENTATIONS` in `scripts/ambient.ts`. That list doesn't shrink: it's where the ambient APIs belong for good.
+- Tests and `src/testing/` are exempt. `src/fakes/` isn't: fakes run on the fake clock, in memory.
 - `new Date()` and `import { $ } from "bun"` are caught by a rule of our own, in `scripts/oxlint-plugin.ts`.
 
 ✅ **Do** take the clock, IDs, environment or output as a parameter, or from the service the message names.

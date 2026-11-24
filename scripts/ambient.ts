@@ -106,6 +106,26 @@ export const AMBIENT_EXEMPT: readonly string[] = [
 /** Which file may break which bans, e.g. `{ "src/cli/colour.ts": ["process.env"] }`. */
 export type Allowlist = Readonly<Record<string, readonly string[]>>;
 
+/**
+ * The services' real implementations, and which bans each breaks: where the ambient APIs belong
+ * for good. Unlike scripts/ambientAllowlist.ts, this list doesn't shrink: each entry is the one
+ * place its API is read, e.g. `Date.now` in `systemClock`.
+ *
+ * ✅ Add a file here when it's a service's real implementation, or the composition root.
+ * ❌ Don't add a file here to dodge the allowlist: anything else takes the service instead.
+ */
+export const AMBIENT_IMPLEMENTATIONS: Allowlist = {
+  "src/io/io.ts": ["process.stdout", "process.stderr"],
+  "src/time/clock.ts": ["Date.now", "setTimeout"],
+};
+
+/** `a` and `b` together: each file may break the bans either allows it. */
+export function mergeAllowlists(a: Allowlist, b: Allowlist): Allowlist {
+  const merged: Record<string, string[]> = {};
+  for (const list of [a, b]) for (const [path, ids] of Object.entries(list)) merged[path] = [...new Set([...(merged[path] ?? []), ...ids])];
+  return merged;
+}
+
 export const AMBIENT_RULES = ["no-restricted-globals", "no-restricted-properties", "thunderjar/no-ambient"] as const;
 
 /** The oxlint rules that enforce `bans`, "off" for a rule with none to enforce. */

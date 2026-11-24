@@ -33,6 +33,218 @@
     },
     {
       "files": [
+        "src/time/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./io(/|$)", "message": "src/time may not import from src/io: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./log(/|$)", "message": "src/time may not import from src/log: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./testing(/|$)", "message": "src/time may not import from src/testing: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./api(/|$)", "message": "src/time may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./instruments(/|$)", "message": "src/time may not import from src/instruments: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./config(/|$)", "message": "src/time may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./docker(/|$)", "message": "src/time may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./store(/|$)", "message": "src/time may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./execution(/|$)", "message": "src/time may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/time may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./capture(/|$)", "message": "src/time may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/time/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./\\.\\./io(/|$)", "message": "src/time may not import from src/io: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./log(/|$)", "message": "src/time may not import from src/log: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./testing(/|$)", "message": "src/time may not import from src/testing: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./api(/|$)", "message": "src/time may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./instruments(/|$)", "message": "src/time may not import from src/instruments: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./config(/|$)", "message": "src/time may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./docker(/|$)", "message": "src/time may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./store(/|$)", "message": "src/time may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/time may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/time may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/time may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/time/*/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./\\.\\./\\.\\./io(/|$)", "message": "src/time may not import from src/io: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./log(/|$)", "message": "src/time may not import from src/log: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./testing(/|$)", "message": "src/time may not import from src/testing: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./api(/|$)", "message": "src/time may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./instruments(/|$)", "message": "src/time may not import from src/instruments: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./config(/|$)", "message": "src/time may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./docker(/|$)", "message": "src/time may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./store(/|$)", "message": "src/time may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/time may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/time may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/time may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/time/*/*/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./io(/|$)", "message": "src/time may not import from src/io: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./log(/|$)", "message": "src/time may not import from src/log: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./testing(/|$)", "message": "src/time may not import from src/testing: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./api(/|$)", "message": "src/time may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./instruments(/|$)", "message": "src/time may not import from src/instruments: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./config(/|$)", "message": "src/time may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./docker(/|$)", "message": "src/time may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./store(/|$)", "message": "src/time may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/time may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/time may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/time may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/io/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./log(/|$)", "message": "src/io may not import from src/log: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./testing(/|$)", "message": "src/io may not import from src/testing: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./api(/|$)", "message": "src/io may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./instruments(/|$)", "message": "src/io may not import from src/instruments: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./config(/|$)", "message": "src/io may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./docker(/|$)", "message": "src/io may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./store(/|$)", "message": "src/io may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./execution(/|$)", "message": "src/io may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/io may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./capture(/|$)", "message": "src/io may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/io/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./\\.\\./log(/|$)", "message": "src/io may not import from src/log: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./testing(/|$)", "message": "src/io may not import from src/testing: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./api(/|$)", "message": "src/io may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./instruments(/|$)", "message": "src/io may not import from src/instruments: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./config(/|$)", "message": "src/io may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./docker(/|$)", "message": "src/io may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./store(/|$)", "message": "src/io may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/io may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/io may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/io may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/io/*/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./\\.\\./\\.\\./log(/|$)", "message": "src/io may not import from src/log: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./testing(/|$)", "message": "src/io may not import from src/testing: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./api(/|$)", "message": "src/io may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./instruments(/|$)", "message": "src/io may not import from src/instruments: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./config(/|$)", "message": "src/io may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./docker(/|$)", "message": "src/io may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./store(/|$)", "message": "src/io may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/io may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/io may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/io may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/io/*/*/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./log(/|$)", "message": "src/io may not import from src/log: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./testing(/|$)", "message": "src/io may not import from src/testing: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./api(/|$)", "message": "src/io may not import from src/api: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./instruments(/|$)", "message": "src/io may not import from src/instruments: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./config(/|$)", "message": "src/io may not import from src/config: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./docker(/|$)", "message": "src/io may not import from src/docker: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./store(/|$)", "message": "src/io may not import from src/store: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/io may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/io may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/io may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
         "src/log/*"
       ],
       "rules": {
@@ -3710,6 +3922,45 @@
     },
     {
       "files": [
+        "src/io/io.ts"
+      ],
+      "rules": {
+        "no-restricted-properties": [
+          "error",
+          { "object": "Date", "property": "now", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "performance", "property": "now", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "nanoseconds", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "sleep", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "sleepSync", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Math", "property": "random", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "crypto", "property": "randomUUID", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "crypto", "property": "getRandomValues", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "randomUUIDv7", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "env", "message": "Use the launch service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "env", "message": "Use the launch service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "cwd", "message": "Use the launch service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "chdir", "message": "Use the launch service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "argv", "message": "Take the arguments as a parameter: app.cli(args) will. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "stdin", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "stdin", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "stdout", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "stderr", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "on", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "once", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "off", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "exit", "message": "Return the exit code instead: only src/cli/index.ts exits. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "exitCode", "message": "Return the exit code instead: only src/cli/index.ts sets it. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "spawn", "message": "Run it through the service for what it does: DockerService, Git, HarnessAdapters, RuntimeHooks, HostExec or ThunderjarPackage. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "spawnSync", "message": "Run it through the service for what it does: DockerService, Git, HarnessAdapters, RuntimeHooks, HostExec or ThunderjarPackage. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "$", "message": "Run it through the service for what it does: DockerService, Git, HarnessAdapters, RuntimeHooks, HostExec or ThunderjarPackage. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "serve", "message": "Use the ViewServer service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "which", "message": "Use the HarnessAdapters service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "SQL", "message": "Use the RunDataStore service instead. See \"Ambient APIs\" in AGENTS.md." }
+        ]
+      }
+    },
+    {
+      "files": [
         "src/measureTesting/measure.ts"
       ],
       "rules": {
@@ -3821,6 +4072,51 @@
               { "id": "Bun.which", "kind": "property", "message": "Use the HarnessAdapters service instead. See \"Ambient APIs\" in AGENTS.md." }
             ]
           }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/time/clock.ts"
+      ],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "setInterval", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "name": "fetch", "message": "Use the ImageRegistry service instead. See \"Ambient APIs\" in AGENTS.md." }
+        ],
+        "no-restricted-properties": [
+          "error",
+          { "object": "performance", "property": "now", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "nanoseconds", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "sleep", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "sleepSync", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Math", "property": "random", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "crypto", "property": "randomUUID", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "crypto", "property": "getRandomValues", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "randomUUIDv7", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "env", "message": "Use the launch service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "env", "message": "Use the launch service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "cwd", "message": "Use the launch service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "chdir", "message": "Use the launch service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "argv", "message": "Take the arguments as a parameter: app.cli(args) will. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "stdout", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "stderr", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "stdin", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "stdin", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "stdout", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "stderr", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "on", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "once", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "off", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "exit", "message": "Return the exit code instead: only src/cli/index.ts exits. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "process", "property": "exitCode", "message": "Return the exit code instead: only src/cli/index.ts sets it. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "spawn", "message": "Run it through the service for what it does: DockerService, Git, HarnessAdapters, RuntimeHooks, HostExec or ThunderjarPackage. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "spawnSync", "message": "Run it through the service for what it does: DockerService, Git, HarnessAdapters, RuntimeHooks, HostExec or ThunderjarPackage. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "$", "message": "Run it through the service for what it does: DockerService, Git, HarnessAdapters, RuntimeHooks, HostExec or ThunderjarPackage. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "serve", "message": "Use the ViewServer service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "which", "message": "Use the HarnessAdapters service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "SQL", "message": "Use the RunDataStore service instead. See \"Ambient APIs\" in AGENTS.md." }
         ]
       }
     }

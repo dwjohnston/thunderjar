@@ -10,7 +10,18 @@
 //
 // Folders in NOT_LAYERS, e.g. src/gauntlet, are skipped.
 import { $, file, write } from "bun";
-import { AMBIENT_BANS, AMBIENT_EXEMPT, ambientOverrides, offenders, renderAllowlist, staleEntries, type Allowlist, type Ban } from "./ambient.ts";
+import {
+  AMBIENT_BANS,
+  AMBIENT_EXEMPT,
+  AMBIENT_IMPLEMENTATIONS,
+  ambientOverrides,
+  mergeAllowlists,
+  offenders,
+  renderAllowlist,
+  staleEntries,
+  type Allowlist,
+  type Ban,
+} from "./ambient.ts";
 import { AMBIENT_ALLOWLIST } from "./ambientAllowlist.ts";
 import { LAYERS, NOT_LAYERS, SRC_RULES } from "./layers.ts";
 
@@ -81,9 +92,12 @@ export function applyLayers(
   return { ...config, overrides: [...src, ...generateOverrides(layers, maxDepth(srcFiles), base), ...bans] };
 }
 
-/** The bans each file in src/ breaks, linting with `config` minus its allowlist. */
+/**
+ * The bans each file in src/ breaks, linting with `config` minus its allowlist. The services' real
+ * implementations, in AMBIENT_IMPLEMENTATIONS, stay allowed, so they're never offenders.
+ */
 async function findOffenders(config: OxlintConfig, layers: readonly string[], srcFiles: string[]): Promise<Allowlist> {
-  const unrelaxed = applyLayers(config, layers, srcFiles, SRC_RULES, { bans: AMBIENT_BANS, exempt: AMBIENT_EXEMPT, allowlist: {} });
+  const unrelaxed = applyLayers(config, layers, srcFiles, SRC_RULES, { bans: AMBIENT_BANS, exempt: AMBIENT_EXEMPT, allowlist: AMBIENT_IMPLEMENTATIONS });
   // Override globs are relative to the config file, so it goes beside .oxlintrc.json.
   const tmp = file(`${REPO_ROOT}/.oxlintrc.no-allowlist.tmp.json`);
   await write(tmp, renderConfig(unrelaxed));
@@ -126,7 +140,7 @@ if (import.meta.main) {
 
   const configFile = file(`${REPO_ROOT}/${CONFIG_FILE}`);
   const before = await configFile.text();
-  const ambient = { bans: AMBIENT_BANS, exempt: AMBIENT_EXEMPT, allowlist: AMBIENT_ALLOWLIST };
+  const ambient = { bans: AMBIENT_BANS, exempt: AMBIENT_EXEMPT, allowlist: mergeAllowlists(AMBIENT_ALLOWLIST, AMBIENT_IMPLEMENTATIONS) };
   const after = renderConfig(applyLayers(JSON.parse(before), LAYERS, srcFiles, SRC_RULES, ambient));
   if (process.argv.includes("--seed-allowlist")) {
     await write(`${REPO_ROOT}/${ALLOWLIST_FILE}`, renderAllowlist(await findOffenders(JSON.parse(before), LAYERS, srcFiles)));
