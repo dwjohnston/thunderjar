@@ -51,4 +51,18 @@ describe("FakeContainerRunner", () => {
     expect(await Promise.race([container.exited, clock.advance(0).then(() => "still running")])).toBe(137);
     expect(runner.killed).toEqual(["tj-1-1"]);
   });
+
+  test("remove ends a container that never started with 137, and records it", async () => {
+    const clock = new FakeClock();
+    const runner = new FakeContainerRunner(clock).on("-2-1", async ({ clock }) => {
+      await clock.sleep(300_000);
+      return 0;
+    });
+    const container = runner.spawn(args("tj-2-1"), "STARTED");
+
+    await runner.remove("tj-2-1");
+
+    expect(await Promise.race([container.exited, clock.advance(0).then(() => "still running")])).toBe(137);
+    expect(runner.removed).toEqual(["tj-2-1"]);
+  });
 });
