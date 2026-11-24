@@ -17,6 +17,7 @@
 // `frames` draws what this returns, piped or on a terminal.
 
 import { type Paint, plain } from "../../colour.ts";
+import type { Line } from "../../frames.ts";
 import { elapsed } from "../../waitingLine.ts";
 import type { BuildState } from "./buildState.ts";
 
@@ -33,7 +34,7 @@ export type RenderOptions = {
  * The lines `state` draws: the runtime it builds on, a line for each image built, and each push,
  * then, once every one is done, a count.
  */
-export function renderBuild(state: BuildState, options: RenderOptions): string[] {
+export function renderBuild(state: BuildState, options: RenderOptions): Line[] {
   return [...headerLines(state, options), ...imageLines(state, options), ...pushLines(state, options), ...summaryLines(state, options)];
 }
 
@@ -43,36 +44,36 @@ export function headerLines(state: BuildState, { paint = plain }: RenderOptions)
 }
 
 /**
- * `<label> ... done`, or `failed`, for what's ended, and, on a terminal, how long what's going has
- * been, in place of `done`.
+ * `<label> ... done`, or `failed`, for what's ended, and, for what's going, on a terminal how long
+ * it has been, in place of `done`, and piped an open line, finished when it ends.
  */
 function waitingLines(
   entries: { label: string; status: string; since?: number }[],
   going: string,
   ended: string,
   { terminal, now = 0, paint = plain }: RenderOptions,
-): string[] {
-  return entries.flatMap(({ label, status, since }) => {
+): Line[] {
+  return entries.flatMap<Line>(({ label, status, since }) => {
     const start = `${label} ${paint.dim("...")} `;
     if (status === ended) return [`${start}${paint.green("done")}`];
     if (status === "failed") return [`${start}${paint.red("failed")}`];
-    if (status === going && terminal) return [`${start}${paint.dim(elapsed(now - (since as number)))}`];
+    if (status === going) return [terminal ? `${start}${paint.dim(elapsed(now - (since as number)))}` : { open: start }];
     return [];
   });
 }
 
 /**
- * `Building <image> ... done` for each image built, in plan's order, or `failed`, and, on a
- * terminal, how long the one building has been, in place of `done`.
+ * `Building <image> ... done` for each image built, in plan's order, or `failed`, and, for the one
+ * building, on a terminal how long it has been, in place of `done`, and piped its label.
  */
-export function imageLines(state: BuildState, options: RenderOptions): string[] {
+export function imageLines(state: BuildState, options: RenderOptions): Line[] {
   const paint = options.paint ?? plain;
   const entries = state.images.map((entry) => ({ label: `Building ${paint.cyan(entry.image)}`, status: entry.status, since: "since" in entry ? entry.since : undefined }));
   return waitingLines(entries, "building", "built", options);
 }
 
 /** `Pushing <reference> ... done` for each push, in plan's order, as imageLines does for builds. */
-export function pushLines(state: BuildState, options: RenderOptions): string[] {
+export function pushLines(state: BuildState, options: RenderOptions): Line[] {
   const paint = options.paint ?? plain;
   const entries = (state.pushes ?? []).map((entry) => ({ label: `Pushing ${paint.cyan(entry.reference)}`, status: entry.status, since: "since" in entry ? entry.since : undefined }));
   return waitingLines(entries, "pushing", "pushed", options);
