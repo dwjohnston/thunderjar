@@ -14,4 +14,25 @@ describe("FakeContainerRunner", () => {
     expect(await container.exited).toBe(0);
     expect(await container.stderr).toBe("");
   });
+
+  test("a scripted container runs on the fake clock, chosen by the end of its name", async () => {
+    const clock = new FakeClock();
+    const runner = new FakeContainerRunner(clock).on("-3-1", async ({ clock, start }) => {
+      await clock.sleep(3_000);
+      start();
+      await clock.sleep(1_000);
+      return { exitCode: 2, stderr: "boom" };
+    });
+    const container = runner.spawn(args("tj-3-1"), "STARTED");
+    let startedAt: number | undefined;
+    void container.started.then(() => (startedAt = clock.now()));
+
+    await clock.advance(2_000);
+    expect(startedAt).toBeUndefined();
+    await clock.advance(2_000);
+
+    expect(startedAt).toBe(3_000);
+    expect(await container.exited).toBe(2);
+    expect(await container.stderr).toBe("boom");
+  });
 });
