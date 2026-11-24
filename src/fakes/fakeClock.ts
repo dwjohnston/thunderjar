@@ -89,6 +89,11 @@ export class FakeClock implements Clock {
    */
   async advance(ms: number, _options: { work?: PromiseLike<unknown> } = {}): Promise<void> {
     await this.#somethingWaiting();
+    if (this.#sleepers.length === 0) {
+      throw new Error(
+        `FakeClock.advance(${ms}): nothing waited on the clock within ${this.#graceMs}ms. The code under test finished, or is doing real I/O between clock waits, where only services may.`,
+      );
+    }
     const target = this.#now + ms;
     for (let next = this.#next(target); next !== undefined; next = this.#next(target)) {
       this.#sleepers.splice(this.#sleepers.indexOf(next), 1);
