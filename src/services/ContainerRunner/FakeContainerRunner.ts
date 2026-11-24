@@ -31,12 +31,13 @@ export class FakeContainerRunner implements ContainerRunner {
     const script = this.scripts.find(([suffix]) => name.endsWith(suffix))?.[1] ?? noScript;
     const started = Promise.withResolvers<void>();
     const ended = Promise.withResolvers<{ exitCode: number; stderr: string }>();
-    this.enders.set(name, () => ended.resolve({ exitCode: KILLED, stderr: "" }));
+    const end = () => ended.resolve({ exitCode: KILLED, stderr: "" });
+    this.enders.set(name, end);
     const ran = Promise.race([
       script({ clock: this.clock, name, args, start: () => started.resolve() }).then((result) => (typeof result === "number" ? { exitCode: result, stderr: "" } : result)),
       ended.promise,
     ]);
-    return { started: started.promise, exited: ran.then((result) => result.exitCode), stderr: ran.then((result) => result.stderr), kill: () => {} };
+    return { started: started.promise, exited: ran.then((result) => result.exitCode), stderr: ran.then((result) => result.stderr), kill: end };
   }
 
   async kill(name: string): Promise<void> {
