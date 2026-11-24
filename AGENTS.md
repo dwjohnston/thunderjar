@@ -129,6 +129,30 @@ console.log(`docker failed: ${stderr}`);
 
 **Why:** stdout is the command's output, which users and tests read, and on a terminal parts of it are redrawn in place. Log lines written to the terminal in between would garble that, so the log goes to a file, where it can say far more, e.g. Docker's whole error, where the output shows only its last line.
 
+## Ambient APIs
+
+`src/` is moving its ambient non-determinism (the clock, random IDs, the environment, the terminal, subprocesses, the network) behind services, so tests can fake them. `bun run lint` bans those APIs in `src/`, each with a message naming its service. The bans are in `scripts/ambient.ts`.
+
+- Today's offenders are in `scripts/ambientAllowlist.ts`, file by file. It may only shrink: lint fails on an entry a file no longer needs.
+- Tests, `src/testing/` and `view`'s browser app are exempt.
+- `new Date()` and `import { $ } from "bun"` are caught by a rule of our own, in `scripts/oxlint-plugin.ts`.
+
+✅ **Do** take the clock, IDs, environment or output as a parameter, or from the service the message names.
+
+✅ **Do** delete a file's entry once it no longer needs it, then run `bun run lint:generate`.
+
+❌ **Don't** add an entry to the allowlist to make lint pass, or run `bun run lint:allowlist`, which rewrites it from what oxlint finds, to the same end.
+
+```ts
+// ✅ Do
+export function isStale(startedAt: Date, now: Date) { … }
+
+// ❌ Don't
+export function isStale(startedAt: Date) { return Date.now() - startedAt.getTime() > DAY; }
+```
+
+**Why:** a test can't control what code reads behind its back. Banning new uses now means the list only shrinks as each service lands.
+
 ## Versioning while in 0.x
 
 While the package is below 1.0.0, shift every changeset bump down one level.
