@@ -50,6 +50,11 @@ export type RunHooks = PrerunBuildHooks &
   /** Called as each iteration's container run starts. */
   onRunning?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
   /**
+   * Called once each iteration's container has started, so its agent is running and its timeout
+   * counting. Not if it never starts.
+   */
+  onStarted?: (permutation: PlannedPermutation, iteration: PlannedIteration) => void;
+  /**
    * Called as each iteration's container run finishes, however its agent exited, or if it timed
    * out, with its record, before it's measured.
    */
@@ -73,6 +78,22 @@ export type ExecutionServices = {
   /** How long each container may take to start, in seconds, before it's given up on: see runContainerOn. */
   startSeconds: number;
 };
+
+/** Hooks that call each of `all`'s, in turn, e.g. a display's, then a state's. */
+export function mergeHooks(...all: RunHooks[]): RunHooks {
+  const merged: Record<string, (...args: never[]) => void> = {};
+  for (const hooks of all) {
+    for (const [name, hook] of Object.entries(hooks) as [string, ((...args: never[]) => void) | undefined][]) {
+      if (hook === undefined) continue;
+      const before = merged[name];
+      merged[name] = before === undefined ? hook : (...args) => {
+        before(...args);
+        hook(...args);
+      };
+    }
+  }
+  return merged as RunHooks;
+}
 
 export type ExecutionToRun = {
   /** The `.thunderjar/` folder. */
@@ -351,6 +372,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       docker,
       clock,
       startSeconds,
+      onStarted: () => hooks.onStarted?.(permutation, iteration),
       time: timer.time,
     });
     const ran = { harnessResult: resultFile, harnessStderr: storedStderr(stderr), reply: collectReply(permutation.harness.collectReply, resultFile) };

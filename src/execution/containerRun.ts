@@ -32,6 +32,8 @@ export type ContainerRun = {
   clock: Clock;
   /** How long its container may take to start, in seconds, before it's given up on: see runContainerOn. */
   startSeconds: number;
+  /** Called once its container has started, so its agent is running. Not if it never starts. */
+  onStarted?: () => void;
   /** Times its phases: the agent, collecting what it left, and the commit. */
   time?: Timer;
 };
@@ -107,7 +109,7 @@ export async function runInContainer(run: ContainerRun): Promise<ContainerRunOut
           secretEnv: run.secretEnv,
           startMarker: START_MARKER,
         },
-        { timeoutSeconds: run.timeoutSeconds, startSeconds: run.startSeconds },
+        { timeoutSeconds: run.timeoutSeconds, startSeconds: run.startSeconds, onStarted: run.onStarted },
       ),
     );
     if (stop.outcome === "notStarted") {
