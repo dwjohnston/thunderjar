@@ -168,6 +168,24 @@ describe("0202 typical project, in-process", () => {
     expect(await exit).toBe(0);
     expect(app.state<BuildState>().images.filter(({ status }) => status === "built")).toHaveLength(6);
   });
+
+  test("piped, the image building is named while it builds, and its line finished when it's built", async () => {
+    const clock = new FakeClock();
+    const docker = new FakeDockerService({ images: PRESENT });
+    // Every build takes 10s.
+    docker.onBuild(() => clock.sleep(10_000));
+    const io = new FakeIo();
+    const app = createApp({ clock, docker, io, launch: { cwd: scenario("0202"), env: {} } });
+
+    const exit = app.cli(["build", "is-prime-baseline"]);
+
+    // 15s: the first missing image is built, the second is half-way.
+    await clock.advance(15_000);
+    expect(io.stdout.text()).toBe("Building thunderjar-prerun:602318c8 ... done\nBuilding thunderjar-prerun:e4f0784f ... ");
+
+    await clock.advance(45_000);
+    expect(await exit).toBe(0);
+  });
 });
 
 /** The commands the fake was given, with each build context's temporary path replaced. */
