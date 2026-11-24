@@ -26,3 +26,17 @@ test("advance fires each sleep due by then, in time order, at its time", async (
 
   expect({ fired, now: clock.now() }).toEqual({ fired: ["a@100", "b@300"], now: 500 });
 });
+
+test("advance first waits for the code under test to reach the clock, e.g. after reading a file", async () => {
+  const clock = new FakeClock();
+  let done = false;
+  void (async () => {
+    await Bun.file(import.meta.path).text();
+    await clock.sleep(100);
+    done = true;
+  })();
+
+  await clock.advance(100);
+
+  expect(done).toBe(true);
+});
