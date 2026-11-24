@@ -28,9 +28,17 @@ export type Output = {
   write(text: string): void;
 };
 
+/** A signal asking the command to stop: Ctrl-C, or e.g. a cancelled CI job. */
+export type StopSignal = "SIGINT" | "SIGTERM";
+
 export interface Io {
   readonly stdout: Output;
   readonly stderr: Output;
+  /**
+   * Calls `handler` each time the command is asked to stop, in place of the default, which ends
+   * the process. Returns the function that stops listening.
+   */
+  onStop(handler: (signal: StopSignal) => void): () => void;
 }
 
 /** `stream` as an Output, reading `isTTY` and `columns` each time, since a terminal can be resized. */
@@ -46,5 +54,18 @@ const outputOf = (stream: () => NodeJS.WriteStream): Output => ({
 
 /** The process's own stdout and stderr. */
 export function processIo(): Io {
-  return { stdout: outputOf(() => process.stdout), stderr: outputOf(() => process.stderr) };
+  return {
+    stdout: outputOf(() => process.stdout),
+    stderr: outputOf(() => process.stderr),
+    onStop(handler) {
+      const onInt = () => handler("SIGINT");
+      const onTerm = () => handler("SIGTERM");
+      process.on("SIGINT", onInt);
+      process.on("SIGTERM", onTerm);
+      return () => {
+        process.off("SIGINT", onInt);
+        process.off("SIGTERM", onTerm);
+      };
+    },
+  };
 }

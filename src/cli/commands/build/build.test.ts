@@ -6,6 +6,7 @@ import { describe, expect, test } from "bun:test";
 import { writeModel, writePrompt, writeRunScript } from "../../../api/files.ts";
 import { FakeClock } from "../../../fakes/fakeClock.ts";
 import { FakeDockerService } from "../../../fakes/fakeDockerService.ts";
+import { FakeIds } from "../../../fakes/fakeIds.ts";
 import { FakeIo } from "../../../fakes/fakeIo.ts";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
@@ -119,7 +120,7 @@ describe("0202 typical project, in-process", () => {
   test("builds only the missing prerun images, in plan's order", async () => {
     const clock = new FakeClock();
     const docker = new FakeDockerService({ images: PRESENT });
-    const app = createApp({ clock, docker, io: new FakeIo(), launch: { cwd: scenario("0202"), env: {} } });
+    const app = createApp({ clock, docker, ids: new FakeIds(), io: new FakeIo(), launch: { cwd: scenario("0202"), env: {} } });
 
     expect(await app.cli(["build", "is-prime-baseline"])).toBe(0);
 
@@ -143,7 +144,7 @@ describe("0202 typical project, in-process", () => {
     const docker = new FakeDockerService({ images: PRESENT });
     // Every build takes 10s.
     docker.onBuild(() => clock.sleep(10_000));
-    const app = createApp({ clock, docker, io: new FakeIo(), launch: { cwd: scenario("0202"), env: {} } });
+    const app = createApp({ clock, docker, ids: new FakeIds(), io: new FakeIo(), launch: { cwd: scenario("0202"), env: {} } });
 
     const exit = app.cli(["build", "is-prime-baseline"]);
 
@@ -175,7 +176,7 @@ describe("0202 typical project, in-process", () => {
     // Every build takes 10s.
     docker.onBuild(() => clock.sleep(10_000));
     const io = new FakeIo();
-    const app = createApp({ clock, docker, io, launch: { cwd: scenario("0202"), env: {} } });
+    const app = createApp({ clock, docker, ids: new FakeIds(), io, launch: { cwd: scenario("0202"), env: {} } });
 
     const exit = app.cli(["build", "is-prime-baseline"]);
 

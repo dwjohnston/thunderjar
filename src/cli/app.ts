@@ -15,10 +15,11 @@
 // The composition root: `createApp` takes the services, and runs the CLI with them. src/cli/index.ts
 // gives it the real ones; a test gives it fakes, and runs the CLI in its own process:
 //
-//   const app = createApp({ clock, docker, io: new FakeIo(), launch: { cwd: scenario("0202"), env: {} } });
+//   const app = createApp({ clock, docker, ids: new FakeIds(), io: new FakeIo(), launch: { cwd: scenario("0202"), env: {} } });
 //   expect(await app.cli(["build", "is-prime-baseline"])).toBe(0);
 import { CommanderError } from "commander";
 import type { DockerService } from "../docker/dockerService.ts";
+import type { Ids } from "../execution/ids.ts";
 import type { Io } from "../io/io.ts";
 import type { LogLevel } from "../log/logger.ts";
 import type { Clock } from "../time/clock.ts";
@@ -38,6 +39,7 @@ export type Launch = {
 export type AppServices = {
   clock: Clock;
   docker: DockerService;
+  ids: Ids;
   io: Io;
   launch: Launch;
   /** Opens the diagnostic log. index.ts passes configureLog; a test leaves it out, and nothing is logged. */

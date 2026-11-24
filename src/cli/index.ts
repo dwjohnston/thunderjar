@@ -11,6 +11,7 @@ if (command === "capture" && isHook(hook)) {
 } else {
   const { createApp } = await import("./app.ts");
   const { cliDockerService, localRuntime } = await import("../docker/docker.ts");
+  const { systemIds } = await import("../execution/ids.ts");
   const { processIo } = await import("../io/io.ts");
   const { configureLog } = await import("../log/logger.ts");
   const { systemClock } = await import("../time/clock.ts");
@@ -18,12 +19,15 @@ if (command === "capture" && isHook(hook)) {
   const app = createApp({
     clock: systemClock,
     docker: cliDockerService(localRuntime(env), env),
+    ids: systemIds(systemClock),
     io: processIo(),
     launch: { cwd: process.cwd(), env },
     log: configureLog,
   });
   const code = await app.cli(args);
-  // Not process.exit: `view` keeps serving after its command returns, and the commands not yet on
-  // createApp set process.exitCode themselves.
+  // Interrupted: ends now, whatever is still running or pending, as it always has.
+  if (code === 130 || code === 143) process.exit(code);
+  // Otherwise not process.exit: `view` keeps serving after its command returns, and the commands
+  // not yet on createApp set process.exitCode themselves.
   if (code !== 0) process.exitCode = code;
 }

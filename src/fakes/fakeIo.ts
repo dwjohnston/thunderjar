@@ -14,7 +14,7 @@
 
 // An Io for tests: what a command writes is kept as text, for the test to read.
 
-import type { Io, Output } from "../io/io.ts";
+import type { Io, Output, StopSignal } from "../io/io.ts";
 
 /** One stream: a pipe by default, or a terminal `columns` wide. */
 export class FakeOutput implements Output {
@@ -42,14 +42,25 @@ export type FakeIoOptions = {
   columns?: number;
 };
 
-/** stdout and stderr, each a pipe unless `options` makes it a terminal. */
+/** stdout and stderr, each a pipe unless `options` makes it a terminal. A test asks the command to stop with `stop`. */
 export class FakeIo implements Io {
   readonly stdout: FakeOutput;
   readonly stderr: FakeOutput;
+  readonly #onStop = new Set<(signal: StopSignal) => void>();
 
   constructor({ stdout = "pipe", stderr = "pipe", columns = 80 }: FakeIoOptions = {}) {
     const output = (kind: "pipe" | "terminal") => (kind === "terminal" ? new FakeOutput(true, columns) : new FakeOutput());
     this.stdout = output(stdout);
     this.stderr = output(stderr);
+  }
+
+  onStop(handler: (signal: StopSignal) => void): () => void {
+    this.#onStop.add(handler);
+    return () => void this.#onStop.delete(handler);
+  }
+
+  /** Asks the command to stop, as Ctrl-C (`SIGINT`) or a cancelled job (`SIGTERM`) would. */
+  stop(signal: StopSignal): void {
+    for (const handler of this.#onStop) handler(signal);
   }
 }
