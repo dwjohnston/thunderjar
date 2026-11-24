@@ -12,7 +12,7 @@
 // that never starts: it's recorded, with why, but has nothing to measure. The timeout runs from
 // when the agent starts, not from `docker run`: see runContainer.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
-import { diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
+import { cliDockerService, diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { givenOverrides, hasOverrides, type Overrides } from "../config/overrides.ts";
@@ -176,6 +176,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   const { root, testCase, plan, imagePrefix, imageStore = null, build = {}, runtime: remote = null } = run;
   if (remote !== null && imageStore === null) throw new Error("A runtime needs an image store: it runs images from it.");
   const runtime = remote === null ? localRuntime() : remoteRuntime(remote.command);
+  const docker = cliDockerService(runtime);
   const { executionId } = plan;
   const timer = timings();
   const executionStartedAt = Date.now();
@@ -214,7 +215,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   const hashed = plan.permutations.map(({ permutation }) => permutation);
   // From the store, none is looked for: whether it's built says nothing. Otherwise each is looked for
   // where it's built: on the runtime, if there's one.
-  const images = run.prerunFromStore ? storedPrerunImages(hashed, imagePrefix) : await prerunImages(hashed, imagePrefix, runtime);
+  const images = run.prerunFromStore ? storedPrerunImages(hashed, imagePrefix) : await prerunImages(hashed, imagePrefix, docker);
   // Asked of the registry for every image at once, rather than as each one's turn to build comes.
   if (imageStore !== null && !run.prerunFromStore) for (const { permutation } of images) void inStore(storedPrerunImage(imageStore.repository, permutation.imageHash));
   // A remote runtime runs each prerun image as the image store has it, by its stored reference.
@@ -246,7 +247,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       return;
     }
     if (reference === undefined) {
-      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build, runtime));
+      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build, docker));
       ready.get(image.permutation.imageHash)?.resolve();
       return;
     }
@@ -257,7 +258,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
       log.info({ image: image.image, reference }, "prerun image already in the image store: not built or pushed");
     } else {
       // Built, and pushed from, the runtime's daemon, if there's one: it never leaves it.
-      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build, runtime));
+      if (!exists) await timer.time("build", () => buildPrerunImage(root, image, hooks, build, docker));
       if (stored) log.info({ image: image.image, reference }, "prerun image already in the image store: not pushed");
       else await timer.time("pushPrerun", () => pushToStore(image.image, reference, hooks, runtime));
     }

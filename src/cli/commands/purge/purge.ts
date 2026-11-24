@@ -19,7 +19,7 @@ import { Command, Option } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadProjectConfig, registryHost } from "../../../config/projectConfig.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
-import { DockerUnavailableError } from "../../../docker/docker.ts";
+import { cliDockerService, DockerUnavailableError, localRuntime } from "../../../docker/docker.ts";
 import { removeLocalImage } from "../../../docker/localImages.ts";
 import { registryClient, RegistryError } from "../../../docker/registry.ts";
 import { hashPermutations } from "../../../execution/hashPermutations.ts";
@@ -143,7 +143,7 @@ async function purgeImage(cwd: string, executionIds: string[], options: ImageOpt
   const paint = painter();
 
   try {
-    if (contactsStore) await checkImageStore(imageStore);
+    if (contactsStore) await checkImageStore(imageStore, cliDockerService(localRuntime()));
 
     let executions: ExecutionTargets[] = [];
     let running: ExecutionRecord[] = [];

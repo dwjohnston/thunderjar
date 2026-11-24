@@ -6,7 +6,8 @@
 import type { ImageStore } from "../api/declarations.ts";
 import type { HashedPermutation } from "../config/permutations.ts";
 import { registryHost } from "../config/projectConfig.ts";
-import { checkLogin, DockerLoginError, type DockerRuntime, localRuntime, pullImage, pushImage } from "../docker/docker.ts";
+import { DockerLoginError, type DockerRuntime, localRuntime, pullImage, pushImage } from "../docker/docker.ts";
+import type { DockerService } from "../docker/dockerService.ts";
 import { prerunImage, storedPrerunImage } from "./images.ts";
 
 /** Thrown when Docker has no valid login for the image store's registry. */
@@ -21,14 +22,14 @@ export class ImageStoreLoginError extends Error {
 }
 
 /**
- * Checks that images can be pushed to `imageStore`: that Docker holds a valid login for its
+ * Checks that images can be pushed to `imageStore`: that `docker` holds a valid login for its
  * registry. Does nothing for `null`. Throws an ImageStoreLoginError, or a DockerUnavailableError.
  */
-export async function checkImageStore(imageStore: ImageStore | null): Promise<void> {
+export async function checkImageStore(imageStore: ImageStore | null, docker: DockerService): Promise<void> {
   if (imageStore === null) return;
   const host = registryHost(imageStore.repository);
   try {
-    await checkLogin(host);
+    await docker.checkLogin(host);
   } catch (error) {
     if (error instanceof DockerLoginError) throw new ImageStoreLoginError(imageStore.repository, host, error.message);
     throw error;
@@ -50,24 +51,27 @@ export async function pushToStore(image: string, reference: string, hooks: PushH
 }
 
 /**
- * Pushes the prerun image of each of `permutations` to `imageStore`, from `runtime`'s daemon, the
- * local one by default, once per image hash, whether it was just built or already existed, so the
- * store has every image an execution starts from. Does nothing for `null`. Throws a
- * DockerPushError, after which nothing else is pushed.
+ * Pushes the prerun image of each of `permutations` to `imageStore`, from `docker`'s daemon, once
+ * per image hash, whether it was just built or already existed, so the store has every image an
+ * execution starts from. Does nothing for `null`. Throws a DockerPushError, after which nothing
+ * else is pushed.
  */
 export async function pushPrerunImages(
   permutations: HashedPermutation[],
   imageStore: ImageStore | null,
-  imagePrefix?: string,
-  hooks: PushHooks = {},
-  runtime: DockerRuntime = localRuntime(),
+  imagePrefix: string | undefined,
+  hooks: PushHooks,
+  docker: DockerService,
 ): Promise<string[]> {
   if (imageStore === null) return [];
   const hashes = [...new Set(permutations.map(({ imageHash }) => imageHash))];
   const pushed: string[] = [];
   for (const hash of hashes) {
+    const image = prerunImage(hash, imagePrefix);
     const reference = storedPrerunImage(imageStore.repository, hash);
-    await pushToStore(prerunImage(hash, imagePrefix), reference, hooks, runtime);
+    hooks.onPushing?.(image, reference);
+    await docker.push(image, reference);
+    hooks.onPushed?.(image, reference);
     pushed.push(reference);
   }
   return pushed;

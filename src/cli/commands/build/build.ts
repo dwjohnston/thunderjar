@@ -3,7 +3,7 @@ import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import type { Overrides } from "../../../config/overrides.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
-import { DockerBuildError, DockerPushError, DockerUnavailableError, localRuntime, remoteRuntime } from "../../../docker/docker.ts";
+import { cliDockerService, DockerBuildError, DockerPushError, DockerUnavailableError, localRuntime, remoteRuntime } from "../../../docker/docker.ts";
 import { prerunImage } from "../../../execution/images.ts";
 import { checkImageStore, ImageStoreLoginError, pushPrerunImages } from "../../../execution/imageStore.ts";
 import { buildPrerunImages } from "../../../execution/prerunBuilds.ts";
@@ -57,7 +57,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
   const root = await findThunderjarRoot(cwd);
   const { imageStore, build: buildOptions, runtime: config } = await loadProjectConfig(root);
   // Where images are built, and pushed from: the runtime, which runs them, unless --local.
-  const runtime = local || config === null ? localRuntime() : remoteRuntime(config.command);
+  const docker = cliDockerService(local || config === null ? localRuntime() : remoteRuntime(config.command));
   const testCase = await loadTestCase(root, name, overrides);
   checkBuildSecrets(buildOptions);
   const permutations = await hashPermutations(root, testCase);
@@ -70,7 +70,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
   const done = paint.green("done");
   try {
     if (!local && config !== null) print(paint.dim(`Building with \`${config.command.join(" ")}\``));
-    await checkImageStore(imageStore);
+    await checkImageStore(imageStore, docker);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
       onBuilding: (image) => {
         if (concurrent) return print(`Building ${paint.cyan(image)}`);
@@ -80,7 +80,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
         if (concurrent) return print(`Built ${paint.cyan(image)}`);
         line?.finish(done);
       },
-    }, buildOptions, runtime);
+    }, buildOptions, docker);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
       onPushing: (_image, reference) => {
         line = waitingLine(`Pushing ${paint.cyan(reference)} ${ellipsis} `);
@@ -88,7 +88,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
       onPushed: () => {
         line?.finish(done);
       },
-    }, runtime);
+    }, docker);
     if (json) printJson({ built, present, pushed });
     else print(
       [

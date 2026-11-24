@@ -6,7 +6,7 @@ import { checkBuildSecrets, isConcurrency, loadProjectConfig } from "../../../co
 import { givenOverrides, type Overrides } from "../../../config/overrides.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
-import { DockerUnavailableError } from "../../../docker/docker.ts";
+import { cliDockerService, DockerUnavailableError, localRuntime } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { storePrerunImages, submissionEnv, submitExecution } from "../../../execution/onRuntime.ts";
 import { type PlannedExecution, planExecution } from "../../../execution/planExecution.ts";
@@ -163,7 +163,7 @@ async function run(
   await checkRequiredEnv(root, testCase);
   checkBuildSecrets(build);
   try {
-    await checkImageStore(imageStore);
+    await checkImageStore(imageStore, cliDockerService(localRuntime()));
   } catch (caught) {
     if (caught instanceof ImageStoreLoginError) {
       error(caught.message);

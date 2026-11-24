@@ -65,7 +65,6 @@ export const AMBIENT_ALLOWLIST: Allowlist = {
   "src/execution/hashPermutations.ts": ["Bun.$"],
   "src/execution/measure.ts": ["new Date()"],
   "src/execution/onRuntime.ts": ["Bun.sleep", "Bun.env"],
-  "src/execution/prerunBuilds.ts": ["crypto.randomUUID", "Bun.env", "Bun.$"],
   "src/execution/purge.ts": ["Date.now"],
   "src/execution/runExecution.ts": ["Date.now", "new Date()"],
   "src/execution/runner.ts": ["Date.now", "Bun.sleep", "Bun.env", "Bun.$"],

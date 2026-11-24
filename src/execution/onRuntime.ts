@@ -17,6 +17,7 @@ import type { BuildOptions, ImageStore } from "../api/declarations.ts";
 import { ConfigError } from "../config/loader.ts";
 import type { ProjectConfig } from "../config/projectConfig.ts";
 import {
+  cliDockerService,
   containerState,
   DockerContainerError,
   followLogs,
@@ -66,10 +67,11 @@ export async function storePrerunImages(
   time: Timer = untimed,
 ): Promise<void> {
   const runtime = remoteRuntime(command);
+  const docker = cliDockerService(runtime);
   const images = await prerunImages(
     plan.permutations.map(({ permutation }) => permutation),
     imagePrefix,
-    runtime,
+    docker,
   );
   let failed = false;
   await inParallel(
@@ -82,7 +84,7 @@ export async function storePrerunImages(
           log.info({ image: image.image, reference }, "prerun image already in the image store: not built or pushed");
           return;
         }
-        if (!exists) await time("build", () => buildPrerunImage(root, image, hooks, build, runtime));
+        if (!exists) await time("build", () => buildPrerunImage(root, image, hooks, build, docker));
         await time("pushPrerun", () => pushToStore(image.image, reference, hooks, runtime));
       } catch (error) {
         failed = true;

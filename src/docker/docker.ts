@@ -8,6 +8,7 @@
 import { $ } from "bun";
 import type { BuildOptions } from "../api/declarations.ts";
 import { moduleLogger } from "../log/logger.ts";
+import type { BuildContext, DockerService } from "./dockerService.ts";
 
 const log = moduleLogger("docker");
 
@@ -50,7 +51,10 @@ export class DockerPullError extends Error {
   }
 }
 
-const dockerBinary = () => Bun.env.THUNDERJAR_DOCKER || "docker";
+/** Environment variables, e.g. `launch.env`. */
+type Env = Record<string, string | undefined>;
+
+const dockerBinary = (env: Env = Bun.env) => env.THUNDERJAR_DOCKER || "docker";
 
 /**
  * Where containers run: the command put in front of each `docker` subcommand, and whether `run`
@@ -59,8 +63,8 @@ const dockerBinary = () => Bun.env.THUNDERJAR_DOCKER || "docker";
  */
 export type DockerRuntime = { command: string[]; pull: "never" | "missing" };
 
-/** The local Docker daemon. */
-export const localRuntime = (): DockerRuntime => ({ command: [dockerBinary()], pull: "never" });
+/** The local Docker daemon: `docker`, or the executable `env.THUNDERJAR_DOCKER` names. */
+export const localRuntime = (env: Env = Bun.env): DockerRuntime => ({ command: [dockerBinary(env)], pull: "never" });
 
 /** A runtime given by `command`, e.g. `["docker", "--context", "cloud"]`, pulling images it doesn't have. */
 export const remoteRuntime = (command: string[]): DockerRuntime => ({ command, pull: "missing" });
@@ -677,4 +681,44 @@ export async function login(host: string, username: string, password: string): P
   const result = await $`${binary} login ${host} --username ${username} --password-stdin < ${new Response(password)}`.quiet().nothrow();
   log.debug({ host, exitCode: result.exitCode }, "logged in to registry");
   if (result.exitCode !== 0) throw new DockerLoginError(reasonOf(result.stderr)?.replace(/^error: /i, "") || `\`${binary} login\` exited ${result.exitCode}`);
+}
+
+/** Whether `path`, an absolute path, is a folder. */
+async function isFolder(path: string): Promise<boolean> {
+  try {
+    return (await Bun.file(path).stat()).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Builds `context` in `runtime`, from a build context assembled in a fresh folder under
+ * `env.TMPDIR`, outside the project, and removed afterwards, whether or not the build succeeds.
+ */
+async function buildFrom({ image, dockerfile, folders, options }: BuildContext, runtime: DockerRuntime, env: Env): Promise<void> {
+  const dir = `${env.TMPDIR || "/tmp"}/thunderjar-build-${crypto.randomUUID()}`;
+  await $`mkdir -p ${dir}`.quiet();
+  try {
+    for (const { from, to } of folders) {
+      if (!(await isFolder(from))) continue;
+      await $`mkdir -p ${dir}/${to}`.quiet();
+      await $`cp -RL ${from}/. ${dir}/${to}`.quiet();
+    }
+    await Bun.write(`${dir}/Dockerfile`, dockerfile);
+    await buildImage(dir, image, options, runtime);
+  } finally {
+    await $`rm -rf ${dir}`.quiet();
+  }
+}
+
+/** Docker over its CLI, sending commands to `runtime`, and given `env`'s TMPDIR for build contexts. */
+export function cliDockerService(runtime: DockerRuntime, env: Env = Bun.env): DockerService {
+  return {
+    imagesIn: (repository) => imagesIn(repository, runtime),
+    build: (context) => buildFrom(context, runtime, env),
+    checkLogin: (host) => checkLogin(host),
+    push: (image, reference) => pushImage(image, reference, runtime),
+    on: (command) => cliDockerService(remoteRuntime(command), env),
+  };
 }

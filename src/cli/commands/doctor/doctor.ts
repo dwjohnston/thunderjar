@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
 import { loadProjectConfig } from "../../../config/projectConfig.ts";
-import { DockerBuildError, DockerPullError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
+import { cliDockerService, DockerBuildError, DockerPullError, DockerPushError, DockerUnavailableError, localRuntime } from "../../../docker/docker.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { probeRuntime } from "../../../execution/runtimeProbe.ts";
 import { RunDataStoreError } from "../../../store/runDataStore.ts";
@@ -70,7 +70,7 @@ async function doctor(cwd: string, json = false): Promise<void> {
     } else {
       current = { check: "imageStore", status: "ok", target: imageStore.repository };
       line = waitingLine(`Docker login for ${imageStore.repository} ... `);
-      await checkImageStore(imageStore);
+      await checkImageStore(imageStore, cliDockerService(localRuntime()));
       line.finish("ok");
       line = undefined;
       checks.push(current);
