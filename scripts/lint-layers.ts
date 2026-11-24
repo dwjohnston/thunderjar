@@ -70,7 +70,25 @@ export function applyLayers(
   return { ...config, overrides: [...src, ...generateOverrides(layers, maxDepth(srcFiles), base)] };
 }
 
-export const renderConfig = (config: OxlintConfig) => `${JSON.stringify(config, null, 2)}\n`;
+/**
+ * `config` as JSON, with each object of plain values on one line, e.g. a rule's
+ * `{ "object": "Date", "property": "now", "message": "…" }`, so the file stays short.
+ */
+export const renderConfig = (config: OxlintConfig) => `${render(config, "")}\n`;
+
+function render(value: unknown, indent: string): string {
+  const isLeaf = (v: unknown) => v === null || typeof v !== "object";
+  if (isLeaf(value)) return JSON.stringify(value);
+  const inner = `${indent}  `;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "[]";
+    return `[\n${value.map((v) => `${inner}${render(v, inner)}`).join(",\n")}\n${indent}]`;
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return "{}";
+  if (entries.every(([, v]) => isLeaf(v))) return `{ ${entries.map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(", ")} }`;
+  return `{\n${entries.map(([k, v]) => `${inner}${JSON.stringify(k)}: ${render(v, inner)}`).join(",\n")}\n${indent}}`;
+}
 
 if (import.meta.main) {
   const allSrcFiles = await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: `${REPO_ROOT}/src` }));

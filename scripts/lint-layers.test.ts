@@ -113,6 +113,12 @@ describe("applyLayers", () => {
     expect(applyLayers(stale, ["cli"], ["cli/a.ts"]).overrides).toEqual([]);
   });
 
+  test("renders an object of plain values on one line", () => {
+    expect(renderConfig({ rules: { a: ["error", { object: "Date", property: "now" }] }, overrides: [] })).toBe(
+      `{\n  "rules": {\n    "a": [\n      "error",\n      { "object": "Date", "property": "now" }\n    ]\n  },\n  "overrides": []\n}\n`,
+    );
+  });
+
   test("renders the same config the same way", () => {
     const rendered = renderConfig(applyLayers(config, ["project", "cli"], ["project/a.ts"]));
     expect(renderConfig(applyLayers(JSON.parse(rendered), ["project", "cli"], ["project/a.ts"]))).toBe(rendered);
