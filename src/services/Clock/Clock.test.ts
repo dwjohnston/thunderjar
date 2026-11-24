@@ -25,4 +25,19 @@ describe("FakeClock", () => {
 
     expect(fired).toBe(false);
   });
+
+  test("advance settles promises between timers, so chained sleeps each wake at their time", async () => {
+    const clock = new FakeClock();
+    const woke: number[] = [];
+    void (async () => {
+      for (let i = 0; i < 3; i++) {
+        await clock.sleep(100);
+        woke.push(clock.now());
+      }
+    })();
+
+    await clock.advance(250);
+
+    expect(woke).toEqual([100, 200]);
+  });
 });
