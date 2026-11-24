@@ -27,6 +27,7 @@ Snapshot of 2026-11-24. Covers the default `bun test` suite (98 files, 1070 test
 |---|---|---|---|
 | `src/capture/branch.test.ts` | "pushes only a branch store to a remote…" | `afterEach` runs `rm -rf` without `.nothrow()` while a git process may still write into the folder. | Open, [dwjohnston/thunderjar#234](https://github.com/dwjohnston/thunderjar/issues/234). |
 | `src/capture/capture.test.ts`, `src/cli/logging.test.ts` | the verbose logging test | Bun faulted (`EEXIST` from `epoll_ctl`) on pino's lazy first load under `--parallel`. | Worked around in 6aacf40 by loading pino before any test runs. |
+| `.thunderjar/fly-client/watch.test.ts` (`bun run test:fly`) | "stops the machine once the stop deadline has passed" | The fake `fly` rewrote `machines.json` in place. The test could read it half-written, and `eventually(...).catch(() => {})` swallowed the parse error, so it failed in 131ms instead of retrying. Failed CI on [dwjohnston/thunderjar#304](https://github.com/dwjohnston/thunderjar/pull/304). | Fixed in #304: the fake writes to a temp file, then renames. |
 | `src/execution/containerRun.test.ts` | "works with the real date" | `date` and Bun's clock disagree. CI once had `date` 253ms ahead. | Tolerance widened to ±1000ms. |
 
 ## Slow, or reliant on real timers
