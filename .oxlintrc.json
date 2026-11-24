@@ -52,7 +52,8 @@
               { "regex": "^\\.\\./execution(/|$)", "message": "src/time may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/time may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/time may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/time may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -79,7 +80,8 @@
               { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/time may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/time may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/time may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/time may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -106,7 +108,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/time may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/time may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/time may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/time may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -133,7 +136,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/time may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/time may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/time may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/time may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/time may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -159,7 +163,8 @@
               { "regex": "^\\.\\./execution(/|$)", "message": "src/io may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/io may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/io may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/io may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -185,7 +190,8 @@
               { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/io may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/io may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/io may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/io may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -211,7 +217,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/io may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/io may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/io may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/io may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -237,7 +244,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/io may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/io may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/io may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/io may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/io may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -262,7 +270,8 @@
               { "regex": "^\\.\\./execution(/|$)", "message": "src/log may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/log may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/log may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/log may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/log may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/log may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -287,7 +296,8 @@
               { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/log may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/log may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/log may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/log may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/log may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/log may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -312,7 +322,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/log may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/log may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/log may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/log may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/log may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/log may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -337,7 +348,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/log may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/log may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/log may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/log may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/log may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/log may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -361,7 +373,8 @@
               { "regex": "^\\.\\./execution(/|$)", "message": "src/testing may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/testing may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/testing may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/testing may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -385,7 +398,8 @@
               { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/testing may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/testing may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/testing may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/testing may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -409,7 +423,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/testing may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/testing may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/testing may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/testing may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -433,7 +448,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/testing may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/testing may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/testing may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/testing may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/testing may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -456,7 +472,8 @@
               { "regex": "^\\.\\./execution(/|$)", "message": "src/api may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/api may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/api may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/api may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -479,7 +496,8 @@
               { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/api may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/api may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/api may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/api may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -502,7 +520,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/api may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/api may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/api may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/api may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -525,7 +544,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/api may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/api may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/api may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/api may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/api may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -547,7 +567,8 @@
               { "regex": "^\\.\\./execution(/|$)", "message": "src/instruments may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/instruments may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/instruments may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/instruments may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/instruments may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/instruments may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -569,7 +590,8 @@
               { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/instruments may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/instruments may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/instruments may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/instruments may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/instruments may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/instruments may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -591,7 +613,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/instruments may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/instruments may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/instruments may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/instruments may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/instruments may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/instruments may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -613,7 +636,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/instruments may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/instruments may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/instruments may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/instruments may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/instruments may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/instruments may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -634,7 +658,8 @@
               { "regex": "^\\.\\./execution(/|$)", "message": "src/config may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/config may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/config may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/config may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -655,7 +680,8 @@
               { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/config may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/config may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/config may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/config may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -676,7 +702,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/config may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/config may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/config may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/config may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -697,7 +724,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/config may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/config may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/config may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/config may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/config may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -717,7 +745,8 @@
               { "regex": "^\\.\\./execution(/|$)", "message": "src/docker may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/docker may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/docker may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/docker may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/docker may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/docker may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -737,7 +766,8 @@
               { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/docker may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/docker may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/docker may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/docker may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/docker may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/docker may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -757,7 +787,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/docker may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/docker may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/docker may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/docker may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/docker may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/docker may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -777,7 +808,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/docker may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/docker may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/docker may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/docker may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/docker may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/docker may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -796,7 +828,8 @@
               { "regex": "^\\.\\./execution(/|$)", "message": "src/store may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/store may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/store may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/store may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/store may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/store may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -815,7 +848,8 @@
               { "regex": "^\\.\\./\\.\\./execution(/|$)", "message": "src/store may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/store may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/store may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/store may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/store may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/store may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -834,7 +868,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/store may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/store may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/store may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/store may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/store may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/store may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -853,7 +888,8 @@
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./execution(/|$)", "message": "src/store may not import from src/execution: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/store may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/store may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/store may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/store may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/store may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -871,7 +907,8 @@
               { "regex": "^node:" },
               { "regex": "^\\.\\./measureTesting(/|$)", "message": "src/execution may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/execution may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/execution may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/execution may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/execution may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -889,7 +926,8 @@
               { "regex": "^node:" },
               { "regex": "^\\.\\./\\.\\./measureTesting(/|$)", "message": "src/execution may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/execution may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/execution may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/execution may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/execution may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -907,7 +945,8 @@
               { "regex": "^node:" },
               { "regex": "^\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/execution may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/execution may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/execution may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/execution may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/execution may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -925,7 +964,8 @@
               { "regex": "^node:" },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./measureTesting(/|$)", "message": "src/execution may not import from src/measureTesting: a layer may only import from the layers before it. See scripts/layers.ts." },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/execution may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/execution may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/execution may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/execution may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -942,7 +982,8 @@
             "patterns": [
               { "regex": "^node:" },
               { "regex": "^\\.\\./capture(/|$)", "message": "src/measureTesting may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/measureTesting may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/measureTesting may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/measureTesting may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -959,7 +1000,8 @@
             "patterns": [
               { "regex": "^node:" },
               { "regex": "^\\.\\./\\.\\./capture(/|$)", "message": "src/measureTesting may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/measureTesting may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/measureTesting may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/measureTesting may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -976,7 +1018,8 @@
             "patterns": [
               { "regex": "^node:" },
               { "regex": "^\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/measureTesting may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/measureTesting may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/measureTesting may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/measureTesting may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -993,7 +1036,8 @@
             "patterns": [
               { "regex": "^node:" },
               { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./capture(/|$)", "message": "src/measureTesting may not import from src/capture: a layer may only import from the layers before it. See scripts/layers.ts." },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/measureTesting may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/measureTesting may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/measureTesting may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -1009,7 +1053,8 @@
           {
             "patterns": [
               { "regex": "^node:" },
-              { "regex": "^\\.\\./cli(/|$)", "message": "src/capture may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./cli(/|$)", "message": "src/capture may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/capture may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -1025,7 +1070,8 @@
           {
             "patterns": [
               { "regex": "^node:" },
-              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/capture may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./cli(/|$)", "message": "src/capture may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/capture may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -1041,7 +1087,8 @@
           {
             "patterns": [
               { "regex": "^node:" },
-              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/capture may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/capture may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/capture may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
@@ -1057,7 +1104,72 @@
           {
             "patterns": [
               { "regex": "^node:" },
-              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/capture may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." }
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./cli(/|$)", "message": "src/capture may not import from src/cli: a layer may only import from the layers before it. See scripts/layers.ts." },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/capture may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/cli/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./fakes(/|$)", "message": "src/cli may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/cli/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./\\.\\./fakes(/|$)", "message": "src/cli may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/cli/*/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/cli may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/cli/*/*/*/*"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              { "regex": "^node:" },
+              { "regex": "^\\.\\./\\.\\./\\.\\./\\.\\./fakes(/|$)", "message": "src/cli may not import from src/fakes: a layer may only import from the layers before it. See scripts/layers.ts." }
             ]
           }
         ]
