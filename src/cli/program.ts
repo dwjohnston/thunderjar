@@ -110,7 +110,7 @@ export function createProgram(run?: CommandRun): Command {
     .addCommand(createGenerateCommand())
     .addCommand(createPlanCommand())
     .addCommand(createBuildCommand(run))
-    .addCommand(createRunCommand())
+    .addCommand(createRunCommand(run))
     .addCommand(createAttachCommand())
     // What a runtime's runner runs, not a command for a user: left out of --help.
     .addCommand(createRunnerCommand(), { hidden: true })

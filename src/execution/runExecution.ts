@@ -12,7 +12,7 @@
 // that never starts: it's recorded, with why, but has nothing to measure. The timeout runs from
 // when the agent starts, not from `docker run`: see runContainer.
 import type { BuildOptions, ImageStore, Reply, RuntimeConfig, TestCaseDeclaration, TokenCosts } from "../api/declarations.ts";
-import { diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime, removeContainersNamed } from "../docker/docker.ts";
+import { diskUsage, imagesIn, inRegistry, localRuntime, remoteRuntime } from "../docker/docker.ts";
 import type { DockerService } from "../docker/dockerService.ts";
 import { loadMeasurements } from "../config/measurements.ts";
 import { moduleLogger } from "../log/logger.ts";
@@ -134,12 +134,12 @@ export type ExecutionToRun = {
 export const runsConcurrently = (concurrency = 1, build: BuildOptions = {}): boolean => concurrency > 1 || (build.concurrency ?? 1) > 1;
 
 /**
- * Removes every container of execution `executionId`, where they run: `runtime`, or the local
- * Docker daemon for `null`. For an execution that's interrupted, so its agents stop, and none is left on
+ * Removes every container of execution `executionId` with `docker`, where they run: the local
+ * daemon's, or a runtime's. For an execution that's interrupted, so its agents stop, and none is left on
  * a runtime that's about to be stopped. Returns their names. Throws a DockerContainerError.
  */
-export async function removeExecutionContainers(executionId: string, imagePrefix: string | undefined, runtime: RuntimeConfig | null): Promise<string[]> {
-  const removed = await removeContainersNamed(executionContainerPrefix(executionId, imagePrefix), runtime === null ? localRuntime() : remoteRuntime(runtime.command));
+export async function removeExecutionContainers(docker: DockerService, executionId: string, imagePrefix: string | undefined): Promise<string[]> {
+  const removed = await docker.removeContainersNamed(executionContainerPrefix(executionId, imagePrefix));
   log.warn({ executionId, removed }, "execution interrupted: removed its containers");
   return removed;
 }
@@ -213,7 +213,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
   const runtime = remote === null ? localRuntime() : remoteRuntime(remote.command);
   const docker = remote === null ? services.docker : services.docker.on(remote.command);
   const { executionId } = plan;
-  const timer = timings(clock.now);
+  const timer = timings(() => clock.now());
   const executionStartedAt = clock.now();
   log.info(
     { executionId, testCase: run.name, task: testCase.task, permutations: plan.permutations.length, imageStore: imageStore?.repository, runtime: remote?.command, concurrency: run.concurrency ?? 1 },

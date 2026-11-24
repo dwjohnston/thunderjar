@@ -6,7 +6,8 @@ import { checkBuildSecrets, isConcurrency, loadProjectConfig } from "../../../co
 import { givenOverrides, type Overrides } from "../../../config/overrides.ts";
 import { checkRequiredEnv } from "../../../config/requiredEnv.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
-import { cliDockerService, DockerUnavailableError, localRuntime, startTimeoutSeconds } from "../../../docker/docker.ts";
+import { DockerUnavailableError, startTimeoutSeconds } from "../../../docker/docker.ts";
+import type { Ids } from "../../../execution/ids.ts";
 import { checkImageStore, ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { storePrerunImages, submissionEnv, submitExecution } from "../../../execution/onRuntime.ts";
 import { type PlannedExecution, planExecution } from "../../../execution/planExecution.ts";
@@ -15,17 +16,17 @@ import { storeRunnerImage } from "../../../execution/runnerImage.ts";
 import { planData, type Submission } from "../../../execution/runnerSpec.ts";
 import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
 import { timings } from "../../../execution/timings.ts";
-import { systemIds } from "../../../execution/ids.ts";
+import type { StopSignal } from "../../../io/io.ts";
 import { RunDataStoreError } from "../../../store/runDataStore.ts";
-import { systemClock } from "../../../time/clock.ts";
-import { type Paint, painter, plain } from "../../colour.ts";
-import { reportingConfigErrors } from "../../configErrors.ts";
+import type { CommandRun, Env } from "../../app.ts";
+import { type Paint, plain } from "../../colour.ts";
+import { exitCodeOf } from "../../configErrors.ts";
 import { dataDirOption, displayPath, type OpenStore, openStore } from "../../dataDir.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { envEntry } from "../../format.ts";
 import { jsonOption } from "../../json.ts";
 import { overridesOf, withOverrideOptions } from "../../overrides.ts";
-import { print, printError as error, printJson, printWarning, processPrinter } from "../../output.ts";
+import { type Printer, printer } from "../../output.ts";
 import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.ts";
 import { runDisplay, showSecrets, showTimings, showUnclean, showUnsearched, storeFailure } from "./runDisplay.ts";
 
@@ -97,30 +98,42 @@ export function executionPlanJson({ executionId, permutations }: PlannedExecutio
 
 /**
  * What an execution of test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it,
- * would do, each list `overrides` gives in place of its own.
+ * would do, each list `overrides` gives in place of its own, with its ID from `ids`. `env` is the
+ * environment its harnesses' variables are looked for in.
  */
-export async function planDryRun(cwd: string, name: string, imagePrefix?: string, overrides: Overrides = {}): Promise<PlannedExecution> {
+export async function planDryRun(cwd: string, name: string, ids: Ids, env: Env, imagePrefix?: string, overrides: Overrides = {}): Promise<PlannedExecution> {
   const root = await findThunderjarRoot(cwd);
-  const executionId = systemIds(systemClock).executionId();
+  const executionId = ids.executionId();
   const testCase = await loadTestCase(root, name, overrides);
-  await checkRequiredEnv(root, testCase);
+  await checkRequiredEnv(root, testCase, env);
   return planExecution(root, testCase, executionId, imagePrefix);
 }
 
 /** What an execution of test case `name` would do, as text. See `planDryRun`. */
-export async function dryRun(cwd: string, name: string, imagePrefix?: string, overrides: Overrides = {}, paint: Paint = plain): Promise<string> {
-  return renderExecution(await planDryRun(cwd, name, imagePrefix, overrides), paint);
+export async function dryRun(cwd: string, name: string, ids: Ids, env: Env, imagePrefix?: string, overrides: Overrides = {}, paint: Paint = plain): Promise<string> {
+  return renderExecution(await planDryRun(cwd, name, ids, env, imagePrefix, overrides), paint);
 }
 
 /** How long an interrupted `run` waits for its execution to be recorded as failed, before it runs afterExecution. */
 const INTERRUPT_SETTLE_MS = 15_000;
 
+type RunArgs = {
+  name: string;
+  imagePrefix: string;
+  dataDir?: string;
+  local: boolean;
+  concurrency?: number;
+  overrides: Overrides;
+  json: boolean;
+  timings: boolean;
+};
+
 /**
- * Runs test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above it: builds its
+ * Runs test case `name`, of the nearest `.thunderjar/` folder in `ctx`'s cwd or above it: builds its
  * missing prerun images, then runs each iteration in a container, writing a line for each as it
  * finishes, and one of its measures once they're taken, and records them in the run data store
  * the config names, or the one in `dataDir`. With an image store, pushes each prerun image once built, and each postrun
- * image once its container run is recorded, writing `Pushing <reference> ... done`. Exits 1 if
+ * image once its container run is recorded, writing `Pushing <reference> ... done`. Returns 1 if
  * any agent exits non-zero or times out, or with an error if Docker fails, or, before anything is
  * built, if a variable a harness needs is unset or Docker has no login for the image store.
  *
@@ -136,21 +149,17 @@ const INTERRUPT_SETTLE_MS = 15_000;
  * With `json`, once the execution is recorded, prints it as JSON, with where it's recorded and each
  * of its container runs' records, whether it's complete or failed. If it stops on an error, prints
  * nothing on stdout.
+ *
+ * Asked to stop, by Ctrl-C (SIGINT) or SIGTERM, it removes the execution's containers, waits for
+ * it to be recorded as failed, runs afterExecution, and returns 130 or 143: src/cli/index.ts then
+ * ends the process at once. Following a runner, it leaves the execution to it.
  */
-async function run(
-  cwd: string,
-  name: string,
-  imagePrefix: string,
-  dataDir?: string,
-  local = false,
-  concurrencyOption?: number,
-  overrides: Overrides = {},
-  json = false,
-  showsTimings = false,
-): Promise<void> {
+async function run(ctx: CommandRun, out: Printer, { name, imagePrefix, dataDir, local, concurrency: concurrencyOption, overrides, json, timings: showsTimings }: RunArgs): Promise<number> {
+  const { clock, launch } = ctx;
+  const { cwd } = launch;
   const root = await findThunderjarRoot(cwd);
   const config = await loadProjectConfig(root);
-  for (const deprecation of config.deprecations) printWarning(deprecation);
+  for (const deprecation of config.deprecations) out.printWarning(deprecation);
   const { imageStore, build } = config;
   const runtime = local ? null : config.runtime;
   // With a runner, the whole execution runs on the runtime, and this only submits and follows it.
@@ -161,47 +170,45 @@ async function run(
   const concurrency = concurrencyOption ?? runtime?.concurrency ?? 1;
   const concurrent = runsConcurrently(concurrency, build);
   const testCase = await loadTestCase(root, name, overrides);
-  await checkRequiredEnv(root, testCase);
-  checkBuildSecrets(build);
+  await checkRequiredEnv(root, testCase, launch.env);
+  checkBuildSecrets(build, launch.env);
   try {
-    await checkImageStore(imageStore, cliDockerService(localRuntime()));
+    await checkImageStore(imageStore, ctx.docker);
   } catch (caught) {
     if (caught instanceof ImageStoreLoginError) {
-      error(caught.message);
+      out.printError(caught.message);
     } else if (caught instanceof DockerUnavailableError) {
-      error(`Docker can't be reached, so nothing can be run: ${caught.message}`);
+      out.printError(`Docker can't be reached, so nothing can be run: ${caught.message}`);
     } else {
       throw caught;
     }
-    process.exitCode = 1;
-    return;
+    return 1;
   }
-  const plan = await planExecution(root, testCase, systemIds(systemClock).executionId(), imagePrefix);
+  const plan = await planExecution(root, testCase, ctx.ids.executionId(), imagePrefix);
   // The variables the runner is sent: any that's unset is found out here, before anything is built.
   const runnerEnv = runner === undefined ? undefined : submissionEnv(plan, config.runDataStore, runner);
   // The runner opens the store, on the runtime: this needn't reach it.
-  const opened = runner === undefined ? await openStore(cwd, dataDir, root) : undefined;
+  const opened = runner === undefined ? await openStore(cwd, dataDir, root, launch.env) : undefined;
   // Before anything is built or started: otherwise it's found out as the first container run is recorded.
   try {
     await opened?.store.check();
   } catch (caught) {
     if (!(caught instanceof RunDataStoreError)) throw caught;
-    error(storeFailure(cwd, caught, "so nothing was run"));
-    process.exitCode = 1;
-    return;
+    out.printError(storeFailure(cwd, caught, "so nothing was run"));
+    return 1;
   }
   // Colour for what's written while running, on a terminal.
-  const paint = painter();
+  const { paint } = out;
   const ellipsis = paint.dim("...");
   const done = paint.green("done");
-  const display = runDisplay({ testCase, permutations: plan.permutations.length, concurrent, stored: imageStore !== null, remote: runtime !== null, out: processPrinter(), clock: systemClock });
+  const display = runDisplay({ testCase, permutations: plan.permutations.length, concurrent, stored: imageStore !== null, remote: runtime !== null, out, clock });
   const { open, close, fail } = display;
 
-  print(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
-  if (runtime !== null && runner === undefined) print(paint.dim(`Running containers with \`${runtime.command.join(" ")}\``));
-  if (runtime !== null && runner !== undefined) print(paint.dim(`Running the execution on the runtime, in a runner started with \`${runtime.command.join(" ")}\``));
-  if (concurrency > 1) print(paint.dim(`Up to ${concurrency} containers at once`));
-  if (build.concurrency > 1) print(paint.dim(`Building up to ${build.concurrency} prerun images at once`));
+  out.print(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
+  if (runtime !== null && runner === undefined) out.print(paint.dim(`Running containers with \`${runtime.command.join(" ")}\``));
+  if (runtime !== null && runner !== undefined) out.print(paint.dim(`Running the execution on the runtime, in a runner started with \`${runtime.command.join(" ")}\``));
+  if (concurrency > 1) out.print(paint.dim(`Up to ${concurrency} containers at once`));
+  if (build.concurrency > 1) out.print(paint.dim(`Building up to ${build.concurrency} prerun images at once`));
   const facts: RunFacts = {
     executionId: plan.executionId,
     concurrency,
@@ -219,53 +226,63 @@ async function run(
     } catch (caught) {
       if (!(caught instanceof RuntimeHookError)) throw caught;
       fail();
-      error(`The runtime's ${hook} failed: ${caught.message}`);
-      process.exitCode = 1;
+      out.printError(`The runtime's ${hook} failed: ${caught.message}`);
       return false;
     }
   };
   if (!(await runHook("beforeExecution"))) {
     display.stop();
-    return;
+    return 1;
   }
+  // Where its containers run: the local daemon, or the runtime's.
+  const docker = runtime === null ? ctx.docker : ctx.docker.on(runtime.command);
   // Ctrl-C, or a cancelled CI job: without this, its containers would keep running, their agents
   // still spending, and a runtime started by beforeExecution would never be released by afterExecution.
   let interrupted = false;
+  // Its exit code, once `interrupt` is done: 130 for SIGINT, 143 for SIGTERM.
+  const interruption = Promise.withResolvers<number>();
   let executing: Promise<Executed> | undefined;
   // Once the execution is a runner's, on the runtime: it's left to carry on, and only followed.
   let submitted = false;
   const following = new AbortController();
-  const interrupt = (signal: "SIGINT" | "SIGTERM") => {
+  const interrupt = (signal: StopSignal) => {
     if (interrupted) return;
     interrupted = true;
+    const code = signal === "SIGINT" ? 130 : 143;
     void (async () => {
-      display.stop();
-      if (submitted) {
-        following.abort();
-        error(detachedMessage(signal, plan.executionId));
-        process.exit(signal === "SIGINT" ? 130 : 143);
-      }
-      error(`Interrupted (${signal}): stopping execution ${plan.executionId}'s containers${runtime === null ? "" : " on the runtime"}.`);
       try {
-        await removeExecutionContainers(plan.executionId, imagePrefix, runtime);
-      } catch (caught) {
-        error(`Couldn't remove its containers: ${caught instanceof Error ? caught.message : String(caught)}`);
+        display.stop();
+        if (submitted) {
+          following.abort();
+          out.printError(detachedMessage(signal, plan.executionId));
+          return;
+        }
+        out.printError(`Interrupted (${signal}): stopping execution ${plan.executionId}'s containers${runtime === null ? "" : " on the runtime"}.`);
+        try {
+          await removeExecutionContainers(docker, plan.executionId, imagePrefix);
+        } catch (caught) {
+          out.printError(`Couldn't remove its containers: ${caught instanceof Error ? caught.message : String(caught)}`);
+        }
+        // Its container runs fail, now their containers are gone: once they have, the execution is recorded as failed.
+        const settled = new AbortController();
+        await Promise.race([executing?.catch(() => {}), clock.sleep(INTERRUPT_SETTLE_MS, { signal: settled.signal }).catch(() => {})]);
+        settled.abort();
+        await runHook("afterExecution");
+      } finally {
+        interruption.resolve(code);
       }
-      // Its container runs fail, now their containers are gone: once they have, the execution is recorded as failed.
-      await Promise.race([executing?.catch(() => {}), Bun.sleep(INTERRUPT_SETTLE_MS)]);
-      await runHook("afterExecution");
-      process.exit(signal === "SIGINT" ? 130 : 143);
     })();
   };
-  const onInt = () => interrupt("SIGINT");
-  const onTerm = () => interrupt("SIGTERM");
-  process.on("SIGINT", onInt);
-  process.on("SIGTERM", onTerm);
+  const stopListening = ctx.io.onStop(interrupt);
   // What this does itself, with a runner: have the runtime build and push the images. The runner times the rest.
-  const hostTimer = timings(systemClock.now);
+  const hostTimer = timings(() => clock.now());
   /** The execution, run here: each Docker command given to the local daemon, or the runtime. */
   const executeHere = async ({ store, where }: OpenStore): Promise<Executed> => {
-    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks, { docker: cliDockerService(localRuntime()), clock: systemClock, startSeconds: startTimeoutSeconds() });
+    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks, {
+      docker: ctx.docker,
+      clock,
+      startSeconds: startTimeoutSeconds(launch.env),
+    });
     return { execution, recordedIn: where, containerRuns: json ? await store.containerRunsOf(execution.executionId) : [] };
   };
   /** The execution, run by a runner on the runtime: its images stored, then submitted and followed. */
@@ -294,35 +311,43 @@ async function run(
     submitted = true;
     return followToEnd(command, plan.executionId, imagePrefix, root, () => ({ hooks: display.hooks, plan: submission.plan }), following.signal);
   };
+  let exitCode = 0;
   try {
     executing = opened !== undefined ? executeHere(opened) : executeOnRuntime((runtime as NonNullable<typeof runtime>).command, runner as NonNullable<typeof runner>, runnerEnv as Record<string, string>);
-    const { execution: record, recordedIn: where, containerRuns } = await executing;
-    display.stop();
-    for (const line of showUnclean(display.unclean, facts.containers, paint)) print(line);
-    for (const line of showSecrets(display.secrets, facts.containers, paint)) print(line);
-    for (const line of showUnsearched(display.unsearched, facts.containers, paint)) print(line);
-    print(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
-    if (json) printJson({ execution: record, recordedIn: where, containerRuns });
-    if (record.status === "failed") process.exitCode = 1;
+    // Interrupted while following a runner, it never ends: `interrupt` says so, and is done.
+    const ended = await Promise.race([executing, interruption.promise.then(() => undefined)]);
+    if (ended !== undefined && !interrupted) {
+      const { execution: record, recordedIn: where, containerRuns } = ended;
+      display.stop();
+      for (const line of showUnclean(display.unclean, facts.containers, paint)) out.print(line);
+      for (const line of showSecrets(display.secrets, facts.containers, paint)) out.print(line);
+      for (const line of showUnsearched(display.unsearched, facts.containers, paint)) out.print(line);
+      out.print(paint.dim(`Recorded in ${displayPath(cwd, where)}`));
+      if (json) out.printJson({ execution: record, recordedIn: where, containerRuns });
+      if (record.status === "failed") exitCode = 1;
+    }
   } catch (caught) {
-    // Its containers were removed under it, or it was left to its runner: `interrupt` says so, and ends the process.
-    if (interrupted) return await new Promise<never>(() => {});
-    if (!display.reportFailure(caught, cwd) && !reportRunnerFailure(caught, plan.executionId)) throw caught;
-    process.exitCode = 1;
+    // Its containers were removed under it: `interrupt` says so, and is done.
+    if (!interrupted) {
+      if (!display.reportFailure(caught, cwd) && !reportRunnerFailure(caught, plan.executionId)) throw caught;
+      exitCode = 1;
+    }
   } finally {
     display.stop();
-    // `interrupt` runs afterExecution itself, and ends the process.
-    if (interrupted) await new Promise<never>(() => {});
-    process.off("SIGINT", onInt);
-    process.off("SIGTERM", onTerm);
-    // So a runtime started for the execution is released, however it ended. None with a runner.
-    await runHook("afterExecution");
-    const spent = mergeTimings(hostTimer.summary(), display.timings(), runner !== undefined);
-    if (showsTimings && spent !== undefined) print(showTimings(spent));
+    // `interrupt` runs afterExecution itself.
+    if (!interrupted) {
+      stopListening();
+      // So a runtime started for the execution is released, however it ended. None with a runner.
+      if (!(await runHook("afterExecution"))) exitCode = 1;
+      const spent = mergeTimings(hostTimer.summary(), display.timings(), runner !== undefined);
+      if (showsTimings && spent !== undefined) out.print(showTimings(spent));
+    }
   }
+  return interrupted ? await interruption.promise : exitCode;
 }
 
-export function createRunCommand(): Command {
+/** `run`, running with `ctx`'s services. Without `ctx`, it only describes itself, e.g. for the docs. */
+export function createRunCommand(ctx?: CommandRun): Command {
   return withOverrideOptions(new Command("run"))
     .description(
       "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, builds the prerun images on it and runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency. Builds up to the config's build concurrency of prerun images at once. With more than one of either, each iteration starts as soon as its own prerun image is ready. --iterations overrides the test case's iterations.",
@@ -345,16 +370,31 @@ export function createRunCommand(): Command {
     .addOption(dataDirOption())
     .addOption(jsonOption())
     .action(
-      reportingConfigErrors(
-        async (
-          name: string,
-          options: Overrides & { dryRun?: boolean; local?: boolean; concurrency?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean },
-        ) => {
-          const overrides = overridesOf(options);
-          if (options.dryRun && options.json) printJson(executionPlanJson(await planDryRun(process.cwd(), name, options.imagePrefix, overrides), overrides));
-          else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, overrides, painter()));
-          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, overrides, options.json, options.timings);
-        },
-      ),
+      async (
+        name: string,
+        options: Overrides & { dryRun?: boolean; local?: boolean; concurrency?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean },
+      ) => {
+        if (ctx === undefined) throw new Error("run runs through createApp, with its services.");
+        const out = printer(ctx.io, { json: options.json, env: ctx.launch.env });
+        const { cwd, env } = ctx.launch;
+        const overrides = overridesOf(options);
+        ctx.exitCode = await exitCodeOf(out, async () => {
+          if (options.dryRun && options.json) out.printJson(executionPlanJson(await planDryRun(cwd, name, ctx.ids, env, options.imagePrefix, overrides), overrides));
+          else if (options.dryRun) out.print(await dryRun(cwd, name, ctx.ids, env, options.imagePrefix, overrides, out.paint));
+          else {
+            return run(ctx, out, {
+              name,
+              imagePrefix: options.imagePrefix,
+              dataDir: options.dataDir,
+              local: options.local ?? false,
+              concurrency: options.concurrency,
+              overrides,
+              json: options.json ?? false,
+              timings: options.timings ?? false,
+            });
+          }
+          return 0;
+        });
+      },
     );
 }

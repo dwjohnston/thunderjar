@@ -11,6 +11,7 @@
 
 import { Command } from "commander";
 import { findThunderjarRoot } from "../../../config/loader.ts";
+import { cliDockerService, localRuntime } from "../../../docker/docker.ts";
 import { removeExecutionContainers } from "../../../execution/runExecution.ts";
 import { receiveSubmission, runSubmission } from "../../../execution/runner.ts";
 import { failureOf, type RunnerEvent } from "../../../execution/runnerEvents.ts";
@@ -45,7 +46,7 @@ async function runner(cwd: string, submissionPath: string): Promise<void> {
     if (stopping) return;
     stopping = true;
     void (async () => {
-      await removeExecutionContainers(submission.plan.executionId, submission.imagePrefix, null).catch(() => {});
+      await removeExecutionContainers(cliDockerService(localRuntime()), submission.plan.executionId, submission.imagePrefix).catch(() => {});
       await Promise.race([executing?.catch(() => {}), Bun.sleep(STOP_SETTLE_MS)]);
       process.exit(signal === "SIGINT" ? 130 : 143);
     })();

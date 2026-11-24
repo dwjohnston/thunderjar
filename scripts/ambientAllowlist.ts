@@ -40,7 +40,6 @@ export const AMBIENT_ALLOWLIST: Allowlist = {
   "src/cli/commands/purge/capture.ts": ["Date.now", "process.cwd", "process.stdin", "process.exitCode"],
   "src/cli/commands/purge/purge.ts": ["new Date()", "process.cwd", "process.stdin", "process.exitCode", "Bun.spawn"],
   "src/cli/commands/remeasure/remeasure.ts": ["process.cwd", "process.exitCode"],
-  "src/cli/commands/run/run.ts": ["Bun.sleep", "process.cwd", "process.on", "process.off", "process.exit", "process.exitCode"],
   "src/cli/commands/runner/runner.ts": ["Bun.sleep", "process.cwd", "process.on", "process.exit", "process.exitCode"],
   "src/cli/commands/show/show.ts": ["process.cwd", "process.exitCode"],
   "src/cli/commands/view/app/App.tsx": ["fetch"],
