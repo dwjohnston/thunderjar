@@ -49,9 +49,21 @@ export class FakeClock implements Clock {
     return this.#now;
   }
 
-  sleep(ms: number, _options: { signal?: AbortSignal } = {}): Promise<void> {
-    return new Promise((resolve) => {
-      this.#sleepers.push({ due: this.#now + ms, fire: resolve });
+  sleep(ms: number, { signal }: { signal?: AbortSignal } = {}): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) return reject(signal.reason);
+      const sleeper = { due: this.#now + ms, fire: resolve };
+      this.#sleepers.push(sleeper);
+      signal?.addEventListener(
+        "abort",
+        () => {
+          const index = this.#sleepers.indexOf(sleeper);
+          if (index === -1) return;
+          this.#sleepers.splice(index, 1);
+          reject(signal.reason);
+        },
+        { once: true },
+      );
       this.#onSleep();
     });
   }
