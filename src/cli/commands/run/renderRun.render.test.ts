@@ -51,3 +51,16 @@ test("timed out, exited non-zero, and done without a result file each say so, wi
     "      isPrimeTsExists: true",
   ]);
 });
+
+test("on a terminal, a container still starting past its agent's timeout counts up, and says it's starting", () => {
+  const state = misbehaving({ status: "starting", since: T0 + 2_000 });
+
+  expect(renderRun(state, { now: T0 + 4_900, terminal: true })).toEqual([
+    "Execution 00000000000000000000000001",
+    " 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after 2s",
+    "      isPrimeTsExists: false",
+    " 2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (0ms)",
+    "      isPrimeTsExists: false",
+    " 3/3  iteration 1/1  fake-silent | plain  ... starting 2s",
+  ]);
+});
