@@ -78,18 +78,24 @@ export class FakeClock implements Clock {
   /**
    * Moves time on by `ms`.
    *
-   * First waits, in real time, until something is waiting on the clock: the code under test may
-   * still be doing real I/O, e.g. loading config. Then fires each sleep due by then, in time order
-   * (in the order they began, for the same time), with `now()` at its time, and lets the code under
-   * test run on after each.
+   * First waits, in real time, until something is waiting on the clock, or `work` has finished:
+   * the code under test may still be doing real I/O, e.g. loading config. Throws, rather than
+   * hangs, if neither happens within the grace (5s by default). Then fires each sleep due by then,
+   * in time order (in the order they began, for the same time), with `now()` at its time, and lets
+   * the code under test run on after each.
    *
    * Between sleeps, it only waits for microtasks and a few turns of the event loop, so the code
    * under test must keep this invariant: **between clock waits, only services do I/O**, and a fake
    * service does none.
    */
-  async advance(ms: number, _options: { work?: PromiseLike<unknown> } = {}): Promise<void> {
-    await this.#somethingWaiting();
-    if (this.#sleepers.length === 0) {
+  async advance(ms: number, { work }: { work?: PromiseLike<unknown> } = {}): Promise<void> {
+    const finished = { value: false };
+    void work?.then(
+      () => void (finished.value = true),
+      () => void (finished.value = true),
+    );
+    await this.#somethingWaiting(work);
+    if (this.#sleepers.length === 0 && !finished.value) {
       throw new Error(
         `FakeClock.advance(${ms}): nothing waited on the clock within ${this.#graceMs}ms. The code under test finished, or is doing real I/O between clock waits, where only services may.`,
       );
@@ -104,13 +110,17 @@ export class FakeClock implements Clock {
     this.#now = target;
   }
 
-  /** Resolves once a sleep is waiting on the clock, or after the grace in real time. */
-  async #somethingWaiting(): Promise<void> {
+  /** Resolves once a sleep is waiting on the clock, `work` has settled, or after the grace in real time. */
+  async #somethingWaiting(work?: PromiseLike<unknown>): Promise<void> {
     if (this.#sleepers.length > 0) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     await new Promise<void>((resolve) => {
       this.#onSleep = resolve;
       timer = setTimeout(resolve, this.#graceMs);
+      work?.then(
+        () => resolve(),
+        () => resolve(),
+      );
     });
     clearTimeout(timer);
     this.#onSleep = () => {};
