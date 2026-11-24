@@ -69,3 +69,17 @@ test("advance throws, rather than hangs, if nothing waits on the clock", async (
     "FakeClock.advance(100): nothing waited on the clock within 10ms. The code under test finished, or is doing real I/O between clock waits, where only services may.",
   );
 });
+
+test("advance moves time on, with nothing waiting on the clock, once the work it's given has finished", async () => {
+  const clock = new FakeClock(0, { graceMs: 2_000 });
+  const work = (async () => {
+    await Bun.file(import.meta.path).text();
+  })();
+
+  const outcome = await clock.advance(100, { work }).then(
+    () => clock.now(),
+    (error: Error) => error.message,
+  );
+
+  expect(outcome).toBe(100);
+});
