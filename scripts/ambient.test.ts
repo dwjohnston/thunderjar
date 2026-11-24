@@ -130,9 +130,9 @@ export function f() {
   Date.now(); new Date(); performance.now(); Bun.nanoseconds(); Bun.sleep(1); Bun.sleepSync(1);
   setTimeout(() => {}, 1); setInterval(() => {}, 1);
   Math.random(); crypto.randomUUID(); crypto.getRandomValues(new Uint8Array(1)); Bun.randomUUIDv7();
-  const { env } = process; process.cwd(); Bun.env.X; process.argv.at(0);
+  const { env } = process; process.cwd(); process.chdir("x"); Bun.env.X; process.argv.at(0);
   process.stdout.write(""); process.stderr.write(""); process.stdin.read(); Bun.stdin.text(); Bun.stdout.size; Bun.stderr.size;
-  process.on("SIGINT", () => {}); process.once("SIGINT", () => {}); process.exit(1);
+  process.on("SIGINT", () => {}); process.once("SIGINT", () => {}); process.off("SIGINT", () => {}); process.exit(1); process.exitCode = 1;
   Bun.spawn(["x"]); Bun.spawnSync(["x"]); Bun.$\`x\`; fetch("x"); Bun.serve({ fetch: () => new Response() }); Bun.which("x"); Bun.SQL.name;
   return [env, $, sleep, spawn, which, Database, new Date(0)];
 }

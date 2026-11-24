@@ -62,6 +62,7 @@ export const AMBIENT_BANS: readonly Ban[] = [
   launch("process.env"),
   launch("Bun.env"),
   launch("process.cwd"),
+  launch("process.chdir"),
   ban("property", `Take the arguments as a parameter: app.cli(args) will. ${SEE}`)("process.argv"),
   // Io
   io("process.stdout"),
@@ -72,7 +73,9 @@ export const AMBIENT_BANS: readonly Ban[] = [
   io("Bun.stderr"),
   io("process.on"),
   io("process.once"),
+  io("process.off"),
   ban("property", `Return the exit code instead: only src/cli/index.ts exits. ${SEE}`)("process.exit"),
+  ban("property", `Return the exit code instead: only src/cli/index.ts sets it. ${SEE}`)("process.exitCode"),
   // Subprocesses
   subprocess("Bun.spawn"),
   subprocess("Bun.spawnSync"),
