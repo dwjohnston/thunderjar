@@ -55,8 +55,12 @@ beforeEach(async () => {
   await commitFile("README.md", "hello\n", "init");
 });
 
+// A git process from the test can still be writing into `dir` when this runs, so `rm` reports
+// "Directory not empty" (issue #234). Retry once, then leave the temp folder rather than fail.
 afterEach(async () => {
-  await $`rm -rf ${dir}`.quiet();
+  if ((await $`rm -rf ${dir}`.quiet().nothrow()).exitCode === 0) return;
+  await Bun.sleep(100);
+  await $`rm -rf ${dir}`.quiet().nothrow();
 });
 
 describe("configuredStore", () => {
