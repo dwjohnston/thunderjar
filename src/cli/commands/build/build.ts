@@ -3,18 +3,20 @@ import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import type { Overrides } from "../../../config/overrides.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
-import { cliDockerService, DockerBuildError, DockerPushError, DockerUnavailableError, localRuntime, remoteRuntime } from "../../../docker/docker.ts";
+import { DockerBuildError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { prerunImage } from "../../../execution/images.ts";
 import { checkImageStore, ImageStoreLoginError, pushPrerunImages } from "../../../execution/imageStore.ts";
 import { buildPrerunImages } from "../../../execution/prerunBuilds.ts";
 import { hashPermutations } from "../../../execution/hashPermutations.ts";
-import { type Paint, painter, plain } from "../../colour.ts";
-import { reportingConfigErrors } from "../../configErrors.ts";
+import { every } from "../../../time/clock.ts";
+import type { CommandRun } from "../../app.ts";
+import { type Paint, plain } from "../../colour.ts";
+import { exitCodeOf } from "../../configErrors.ts";
 import { pushFailure } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { overridesOf, withOverrideOptions } from "../../overrides.ts";
-import { print, printError, printJson } from "../../output.ts";
+import { type Printer, printer } from "../../output.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /**
@@ -41,83 +43,89 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string, pa
   return images.map(({ prerunImage, dockerfile }) => `${paint.bold("#")} ${paint.cyan(prerunImage)}\n${dockerfile.trimEnd()}`).join("\n\n");
 }
 
+type BuildArgs = { name: string; imagePrefix?: string; json: boolean; local: boolean; overrides: Overrides };
+
 /**
- * Builds each prerun image test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above
- * it, needs that doesn't exist yet, on the config's runtime's daemon, unless `local` or there's
+ * Builds each prerun image test case `name`, of the nearest `.thunderjar/` folder in `run`'s cwd or
+ * above it, needs that doesn't exist yet, on the config's runtime's daemon, unless `local` or there's
  * none, writing `Building <image> ... done` for each, or, with a build
  * concurrency above 1, building that many at once and writing `Building <image>` and `Built <image>`
  * as each starts and ends. Then, with an
- * image store, pushes each of them, writing `Pushing <reference> ... done`, then a count. Exits 1
- * with an error if a build secret's variable is unset, Docker can't be reached, has no login for the
+ * image store, pushes each of them, writing `Pushing <reference> ... done`, then a count. Returns 1,
+ * after writing an error, if a build secret's variable is unset, Docker can't be reached, has no login for the
  * image store's registry (before anything is built), or a build or push fails. With `json`, prints
  * the images built, those already present and the references pushed as JSON once it's done. Each
  * list `overrides` gives replaces the test case's own.
  */
-async function build(cwd: string, name: string, imagePrefix?: string, json = false, local = false, overrides: Overrides = {}): Promise<void> {
-  const root = await findThunderjarRoot(cwd);
+async function build(run: CommandRun, out: Printer, { name, imagePrefix, json, local, overrides }: BuildArgs): Promise<number> {
+  const root = await findThunderjarRoot(run.launch.cwd);
   const { imageStore, build: buildOptions, runtime: config } = await loadProjectConfig(root);
   // Where images are built, and pushed from: the runtime, which runs them, unless --local.
-  const docker = cliDockerService(local || config === null ? localRuntime() : remoteRuntime(config.command));
+  const docker = local || config === null ? run.docker : run.docker.on(config.command);
   const testCase = await loadTestCase(root, name, overrides);
-  checkBuildSecrets(buildOptions);
+  checkBuildSecrets(buildOptions, run.launch.env);
   const permutations = await hashPermutations(root, testCase);
   const concurrent = buildOptions.concurrency > 1;
-  // The line that's waiting for how its build or push ends.
+  // The line that's waiting for how its build or push ends, counting up on the app's clock.
   let line: WaitingLine | undefined;
+  const wait = (label: string) =>
+    waitingLine(label, { out: out.text, now: () => run.clock.now(), ticker: (tick) => every(run.clock, 1000, tick), colour: out.paint.enabled });
   // Colour for what's written while building, on a terminal.
-  const paint = painter();
+  const { paint } = out;
   const ellipsis = paint.dim("...");
   const done = paint.green("done");
   try {
-    if (!local && config !== null) print(paint.dim(`Building with \`${config.command.join(" ")}\``));
+    if (!local && config !== null) out.print(paint.dim(`Building with \`${config.command.join(" ")}\``));
     await checkImageStore(imageStore, docker);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
       onBuilding: (image) => {
-        if (concurrent) return print(`Building ${paint.cyan(image)}`);
-        line = waitingLine(`Building ${paint.cyan(image)} ${ellipsis} `);
+        if (concurrent) return out.print(`Building ${paint.cyan(image)}`);
+        line = wait(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
       onBuilt: (image) => {
-        if (concurrent) return print(`Built ${paint.cyan(image)}`);
+        if (concurrent) return out.print(`Built ${paint.cyan(image)}`);
         line?.finish(done);
       },
     }, buildOptions, docker);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
       onPushing: (_image, reference) => {
-        line = waitingLine(`Pushing ${paint.cyan(reference)} ${ellipsis} `);
+        line = wait(`Pushing ${paint.cyan(reference)} ${ellipsis} `);
       },
       onPushed: () => {
         line?.finish(done);
       },
     }, docker);
-    if (json) printJson({ built, present, pushed });
-    else print(
+    if (json) out.printJson({ built, present, pushed });
+    else out.print(
       [
         paint.green(`${built.length} built`),
         paint.dim(`${present.length} already present`),
         ...(imageStore ? [paint.green(`${pushed.length} pushed`)] : []),
       ].join(paint.dim(", ")),
     );
+    return 0;
   } catch (error) {
     if (error instanceof DockerUnavailableError) {
-      printError(`Docker can't be reached, so no image can be built: ${error.message}`);
+      out.printError(`Docker can't be reached, so no image can be built: ${error.message}`);
     } else if (error instanceof ImageStoreLoginError) {
-      printError(error.message);
+      out.printError(error.message);
     } else if (error instanceof DockerBuildError) {
       line?.fail();
-      printError(`Building ${error.image} failed: ${error.message}`);
+      out.printError(`Building ${error.image} failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
       line?.fail();
-      printError(pushFailure(error.reference, error));
+      out.printError(pushFailure(error.reference, error));
     } else {
       throw error;
     }
-    process.exitCode = 1;
+    return 1;
   } finally {
     line?.stop();
   }
 }
 
-export function createBuildCommand(): Command {
+/** `build`, running with `run`'s services. Without `run`, it only describes itself, e.g. for the docs. */
+export function createBuildCommand(run?: CommandRun): Command {
   return withOverrideOptions(new Command("build"))
     .description(
       "Build the prerun Docker image of each permutation of a test case, unless it already exists. Permutations with the same hash share one image. With a runtime in thunderjar.config.ts, they're built on its Docker daemon, unless --local is given. With an image store, each is then pushed there, after checking your docker login for its registry.",
@@ -127,12 +135,16 @@ export function createBuildCommand(): Command {
     .option("--local", "build on the local Docker daemon, even if thunderjar.config.ts gives a runtime")
     .addOption(imagePrefixOption())
     .addOption(jsonOption())
-    .action(
-      reportingConfigErrors(async (name: string, options: Overrides & { dryRun?: boolean; imagePrefix: string; json?: boolean; local?: boolean }) => {
-        const overrides = overridesOf(options);
-        if (options.dryRun && options.json) printJson(await prerunDockerfiles(process.cwd(), name, options.imagePrefix, overrides));
-        else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter(), overrides));
-        else await build(process.cwd(), name, options.imagePrefix, options.json, options.local, overrides);
-      }),
-    );
+    .action(async (name: string, options: Overrides & { dryRun?: boolean; imagePrefix: string; json?: boolean; local?: boolean }) => {
+      if (run === undefined) throw new Error("build runs through createApp, with its services.");
+      const out = printer(run.io, { json: options.json, env: run.launch.env });
+      const { cwd } = run.launch;
+      const overrides = overridesOf(options);
+      run.exitCode = await exitCodeOf(out, async () => {
+        if (options.dryRun && options.json) out.printJson(await prerunDockerfiles(cwd, name, options.imagePrefix, overrides));
+        else if (options.dryRun) out.print(await dryRun(cwd, name, options.imagePrefix, out.paint, overrides));
+        else return build(run, out, { name, imagePrefix: options.imagePrefix, json: options.json ?? false, local: options.local ?? false, overrides });
+        return 0;
+      });
+    });
 }

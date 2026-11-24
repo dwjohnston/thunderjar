@@ -17,7 +17,8 @@ import { createRunnerCommand } from "./commands/runner/runner.ts";
 import { createShowCommand } from "./commands/show/show.ts";
 import { createViewCommand } from "./commands/view/view.ts";
 import { ConfigError, findThunderjarRoot } from "../config/loader.ts";
-import { configureLog, DEFAULT_LOG_LEVEL, LOG_LEVELS, type LogLevel, moduleLogger } from "../log/logger.ts";
+import { DEFAULT_LOG_LEVEL, LOG_LEVELS, type LogLevel, moduleLogger } from "../log/logger.ts";
+import type { CommandRun } from "./app.ts";
 import { resolvePath } from "./dataDir.ts";
 import { textToStderr } from "./textOutput.ts";
 
@@ -52,24 +53,35 @@ const HELP_STYLES = {
 type LogOptions = { logFile?: string; logLevel?: LogLevel; verbose?: boolean };
 
 /**
- * Where `command`'s diagnostic log goes: `--log-file`, or a new file in `.thunderjar/logs/`,
- * named for when it started and the command, e.g. `2026-11-11T06-07-11.679Z-run.log`. Outside a
- * project, e.g. before `init`, there's no log without `--log-file`.
+ * Where `command`'s diagnostic log goes: `logFile`, or a new file in `.thunderjar/logs/` of the
+ * project `cwd` is in, named for when it started, `now`, and the command, e.g.
+ * `2026-11-11T06-07-11.679Z-run.log`. Outside a project, e.g. before `init`, there's no log
+ * without `logFile`.
  */
-async function logFile({ logFile }: LogOptions, command: string): Promise<string | undefined> {
-  const cwd = process.cwd();
+async function logPath(logFile: string | undefined, cwd: string, now: number, command: string): Promise<string | undefined> {
   // An empty THUNDERJAR_LOG_FILE is no file.
   if (logFile) return resolvePath(cwd, logFile);
   try {
     const root = await findThunderjarRoot(cwd);
-    return `${root}/logs/${new Date().toISOString().replaceAll(":", "-")}-${command}.log`;
+    return `${root}/logs/${new Date(now).toISOString().replaceAll(":", "-")}-${command}.log`;
   } catch (error) {
     if (error instanceof ConfigError) return undefined;
     throw error;
   }
 }
 
-export function createProgram(): Command {
+/** `command` and every command under it. */
+const allCommands = (command: Command): Command[] => [command, ...command.commands.flatMap(allCommands)];
+
+/** `value` if it's a log level. */
+const logLevel = (value: string | undefined): LogLevel | undefined => (LOG_LEVELS as readonly string[]).includes(value ?? "") ? (value as LogLevel) : undefined;
+
+/**
+ * The CLI, as a commander program, running its commands with `run`'s services, and writing its
+ * help and argument errors to `run.io`. Without `run`, e.g. for scripts/docs-data.ts, it only
+ * describes the commands: running one throws.
+ */
+export function createProgram(run?: CommandRun): Command {
   const program = new Command()
     .name("thunderjar")
     .description(pkg.description)
@@ -82,16 +94,22 @@ export function createProgram(): Command {
       if (command.parent?.name() === "capture" && (command.name() === "prompt" || command.name() === "stop")) return;
       // With --json, stdout is the JSON alone, so everything else a command writes goes to stderr.
       if (command.opts<{ json?: boolean }>().json) textToStderr();
+      if (run?.log === undefined) return;
       const options = program.opts<LogOptions>();
-      const path = await logFile(options, command.name());
+      // From the command line, or else the environment the command was launched with. Commander's
+      // own fallback, `.env()`, reads the process's, which isn't the command's in a test.
+      const given = (name: keyof LogOptions) => program.getOptionValueSource(name) === "cli";
+      const file = given("logFile") ? options.logFile : run.launch.env.THUNDERJAR_LOG_FILE;
+      const level = given("logLevel") ? options.logLevel : logLevel(run.launch.env.THUNDERJAR_LOG_LEVEL);
+      const path = await logPath(file, run.launch.cwd, run.clock.now(), command.name());
       if (path === undefined) return;
-      configureLog({ path, level: options.verbose ? "debug" : (options.logLevel ?? DEFAULT_LOG_LEVEL) });
-      log.debug({ command: command.name(), args: command.args, options: command.opts(), version: pkg.version, cwd: process.cwd() }, "command started");
+      run.log({ path, level: options.verbose ? "debug" : (level ?? DEFAULT_LOG_LEVEL) });
+      log.debug({ command: command.name(), args: command.args, options: command.opts(), version: pkg.version, cwd: run.launch.cwd }, "command started");
     })
     .addCommand(createInitCommand())
     .addCommand(createGenerateCommand())
     .addCommand(createPlanCommand())
-    .addCommand(createBuildCommand())
+    .addCommand(createBuildCommand(run))
     .addCommand(createRunCommand())
     .addCommand(createAttachCommand())
     // What a runtime's runner runs, not a command for a user: left out of --help.
@@ -105,7 +123,13 @@ export function createProgram(): Command {
     .addCommand(createCheckoutCommand())
     .addCommand(createPurgeCommand())
     .addCommand(createCaptureCommand());
-  // Commands made on their own and added don't inherit the program's help settings.
-  for (const command of [program, ...program.commands, ...program.commands.flatMap((c) => c.commands)]) command.configureHelp(HELP_STYLES);
+  // Commands made on their own and added don't inherit the program's settings.
+  for (const command of allCommands(program)) {
+    command.configureHelp(HELP_STYLES);
+    if (run === undefined) continue;
+    // Throws, where commander would exit: createApp returns the exit code.
+    command.exitOverride();
+    command.configureOutput({ writeOut: (text) => run.io.stdout.write(text), writeErr: (text) => run.io.stderr.write(text) });
+  }
   return program;
 }

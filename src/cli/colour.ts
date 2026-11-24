@@ -33,9 +33,9 @@ const STYLES = {
 
 type Style = keyof typeof STYLES;
 
-/** Whether text written to `out` should be coloured. */
-export function colourFor(out: { isTTY?: boolean } = textOutput()): boolean {
-  const { NO_COLOR, FORCE_COLOR, TERM } = process.env;
+/** Whether text written to `out` should be coloured, given the environment variables `env`. */
+export function colourFor(out: { isTTY?: boolean } = textOutput(), env: Record<string, string | undefined> = process.env): boolean {
+  const { NO_COLOR, FORCE_COLOR, TERM } = env;
   if (NO_COLOR !== undefined && NO_COLOR !== "") return false;
   if (FORCE_COLOR !== undefined && FORCE_COLOR !== "" && FORCE_COLOR !== "0") return true;
   return out.isTTY === true && TERM !== "dumb";

@@ -115,6 +115,8 @@ export type Allowlist = Readonly<Record<string, readonly string[]>>;
  * ❌ Don't add a file here to dodge the allowlist: anything else takes the service instead.
  */
 export const AMBIENT_IMPLEMENTATIONS: Allowlist = {
+  // The composition root's caller: builds the real services from the process.
+  "src/cli/index.ts": ["process.env", "process.cwd", "process.argv", "process.exitCode"],
   // Waits in real time for the code under test to reach the fake clock.
   "src/fakes/fakeClock.ts": ["setTimeout"],
   "src/io/io.ts": ["process.stdout", "process.stderr"],
