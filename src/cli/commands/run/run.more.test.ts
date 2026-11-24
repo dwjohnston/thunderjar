@@ -188,6 +188,15 @@ Recorded in <DATA>/runs.sqlite
     expect(docker.killed).toEqual(["thunderjar-run-00000000000000000000000001-1-1"]);
     expect(docker.containers()).toEqual([]);
     expect(io.stderr.text()).toBe("");
+    // What the user reads: the slow-starting container is done, not failed to start or timed out.
+    expect(io.stdout.text()).toContain(`
+ 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after 2s
+      isPrimeTsExists: false
+ 2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (0ms)
+      isPrimeTsExists: false
+ 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (0ms)
+      isPrimeTsExists: true
+`);
   });
 
   test("a container that never starts is that run's outcome, given up on before it exists, and the execution goes on to the end", async () => {
