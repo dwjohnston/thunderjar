@@ -67,6 +67,12 @@ export type RunningContainer = {
    * stderr, for when it failed.
    */
   exited: Promise<{ exitCode: number; stderr: string; reason: string }>;
+  /**
+   * Resolves the moment `docker run` ends, before its output is drained, which `exited` waits for.
+   * A timeout checks it to tell a container that finished just as the time ran out. Without it,
+   * `exited` is used.
+   */
+  ended?: Promise<unknown>;
   /** Stops waiting on it: ends the `docker run` that waits for it, not the container. */
   abandon(): void;
 };

@@ -328,7 +328,7 @@ function startContainer(spec: RunSpec, runtime: DockerRuntime, env: Env): Runnin
     clearTimeout(waiting);
     return { exitCode, stderr, reason: reasonOf(stderr) || `${named(runtime, "run")} exited ${exitCode}` };
   })();
-  return { started, exited, abandon: () => child.kill("SIGKILL") };
+  return { started, exited, ended: child.exited, abandon: () => child.kill("SIGKILL") };
 }
 
 /**
@@ -441,7 +441,7 @@ const KILL_RETRY_MS = 2000;
 async function killTimedOut(docker: DockerService, clock: Clock, name: string, running: RunningContainer): Promise<number | undefined> {
   const killedAt = clock.now();
   let finished = false;
-  void running.exited.then(() => (finished = true));
+  void (running.ended ?? running.exited).then(() => (finished = true));
   for (let attempt = 1; attempt <= KILL_ATTEMPTS; attempt++) {
     try {
       await docker.kill(name);
