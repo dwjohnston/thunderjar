@@ -15,3 +15,6 @@ docs/.vitepress/data.generated.json
 
 # JUnit reports for the CI timing metrics
 junit*.xml
+
+# Written and deleted by `bun scripts/lint-layers.ts --check`
+.oxlintrc.no-allowlist.tmp.json

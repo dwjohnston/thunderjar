@@ -34,6 +34,7 @@
     "build": "rm -rf dist && bun build src/cli/index.ts --target bun --outdir dist --entry-naming [name].[ext] --production",
     "lint": "bun scripts/lint-layers.ts --check && oxlint",
     "lint:generate": "bun scripts/lint-layers.ts",
+    "lint:allowlist": "bun scripts/lint-layers.ts --seed-allowlist && bun scripts/lint-layers.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test --parallel",
     "test:measurements": "bun test ./.thunderjar/parameters/tasks/*/measurements/tests",

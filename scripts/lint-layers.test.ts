@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ambientOverrides } from "./ambient";
 import { applyLayers, generateOverrides, maxDepth, renderConfig, undeclaredFolders, type Override } from "./lint-layers";
 
 const NODE_BAN = { regex: "^node:" };
@@ -111,6 +112,15 @@ describe("applyLayers", () => {
   test("replaces existing overrides", () => {
     const stale = { ...config, overrides: [{ files: ["src/old/*"], rules: {} }] };
     expect(applyLayers(stale, ["cli"], ["cli/a.ts"]).overrides).toEqual([]);
+  });
+
+  test("adds the ambient bans' overrides last", () => {
+    const ambient = { bans: [{ id: "Date.now", kind: "property" as const, message: "Use the Clock service instead." }], exempt: [], allowlist: {} };
+    const applied = applyLayers(config, ["project", "cli"], ["project/a.ts"], {}, ambient);
+    expect(applied.overrides).toEqual([
+      ...generateOverrides(["project", "cli"], 1, { patterns: [NODE_BAN] }),
+      ...ambientOverrides(ambient.bans, ambient.exempt, ambient.allowlist),
+    ]);
   });
 
   test("renders an object of plain values on one line", () => {

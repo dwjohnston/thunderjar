@@ -2,14 +2,21 @@
 // Turns the layers in scripts/layers.ts into the "overrides" of .oxlintrc.json.
 //
 //   bun scripts/lint-layers.ts           rewrite .oxlintrc.json
-//   bun scripts/lint-layers.ts --check   fail if .oxlintrc.json is out of date, or a folder in src/ is not a layer
+//   bun scripts/lint-layers.ts --check   fail if .oxlintrc.json is out of date, a folder in src/ is not a layer,
+//                                        or scripts/ambientAllowlist.ts lists a ban a file no longer breaks
+//   bun scripts/lint-layers.ts --seed-allowlist   rewrite scripts/ambientAllowlist.ts from what oxlint finds
+//
+// It also writes the overrides that ban ambient APIs in src/: see scripts/ambient.ts.
 //
 // Folders in NOT_LAYERS, e.g. src/gauntlet, are skipped.
-import { file, write } from "bun";
+import { $, file, write } from "bun";
+import { AMBIENT_BANS, AMBIENT_EXEMPT, ambientOverrides, offenders, renderAllowlist, staleEntries, type Allowlist, type Ban } from "./ambient.ts";
+import { AMBIENT_ALLOWLIST } from "./ambientAllowlist.ts";
 import { LAYERS, NOT_LAYERS, SRC_RULES } from "./layers.ts";
 
 const REPO_ROOT = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const CONFIG_FILE = ".oxlintrc.json";
+const ALLOWLIST_FILE = "scripts/ambientAllowlist.ts";
 
 type RestrictedImportsOptions = { patterns?: unknown[]; [key: string]: unknown };
 export type Override = { files: string[]; rules: Record<string, unknown> };
@@ -54,20 +61,38 @@ export function generateOverrides(layers: readonly string[], depth: number, base
   return overrides;
 }
 
+export type Ambient = { bans: readonly Ban[]; exempt: readonly string[]; allowlist: Allowlist };
+
 /**
  * `config` with its overrides generated from `layers`, after one applying `srcRules` to every file
- * in src/, if there are any.
+ * in src/, if there are any, and followed by those banning the `ambient` APIs, if given.
  */
 export function applyLayers(
   config: OxlintConfig,
   layers: readonly string[],
   srcFiles: string[],
   srcRules: Readonly<Record<string, unknown>> = {},
+  ambient?: Ambient,
 ): OxlintConfig {
   const rule = config.rules?.["no-restricted-imports"];
   const base = Array.isArray(rule) ? ((rule[1] ?? {}) as RestrictedImportsOptions) : {};
   const src = Object.keys(srcRules).length > 0 ? [{ files: ["src/**"], rules: { ...srcRules } }] : [];
-  return { ...config, overrides: [...src, ...generateOverrides(layers, maxDepth(srcFiles), base)] };
+  const bans = ambient ? ambientOverrides(ambient.bans, ambient.exempt, ambient.allowlist) : [];
+  return { ...config, overrides: [...src, ...generateOverrides(layers, maxDepth(srcFiles), base), ...bans] };
+}
+
+/** The bans each file in src/ breaks, linting with `config` minus its allowlist. */
+async function findOffenders(config: OxlintConfig, layers: readonly string[], srcFiles: string[]): Promise<Allowlist> {
+  const unrelaxed = applyLayers(config, layers, srcFiles, SRC_RULES, { bans: AMBIENT_BANS, exempt: AMBIENT_EXEMPT, allowlist: {} });
+  // Override globs are relative to the config file, so it goes beside .oxlintrc.json.
+  const tmp = file(`${REPO_ROOT}/.oxlintrc.no-allowlist.tmp.json`);
+  await write(tmp, renderConfig(unrelaxed));
+  try {
+    const { stdout } = await $`${REPO_ROOT}/node_modules/.bin/oxlint -c ${tmp.name} --format json src`.cwd(REPO_ROOT).nothrow().quiet();
+    return offenders(JSON.parse(stdout.toString()).diagnostics, AMBIENT_BANS);
+  } finally {
+    await tmp.delete();
+  }
 }
 
 /**
@@ -101,10 +126,21 @@ if (import.meta.main) {
 
   const configFile = file(`${REPO_ROOT}/${CONFIG_FILE}`);
   const before = await configFile.text();
-  const after = renderConfig(applyLayers(JSON.parse(before), LAYERS, srcFiles, SRC_RULES));
-  if (process.argv.includes("--check")) {
+  const ambient = { bans: AMBIENT_BANS, exempt: AMBIENT_EXEMPT, allowlist: AMBIENT_ALLOWLIST };
+  const after = renderConfig(applyLayers(JSON.parse(before), LAYERS, srcFiles, SRC_RULES, ambient));
+  if (process.argv.includes("--seed-allowlist")) {
+    await write(`${REPO_ROOT}/${ALLOWLIST_FILE}`, renderAllowlist(await findOffenders(JSON.parse(before), LAYERS, srcFiles)));
+    console.log(`updated ${ALLOWLIST_FILE}. Run \`bun run lint:generate\`.`);
+  } else if (process.argv.includes("--check")) {
     if (after !== before) {
-      console.error(`${CONFIG_FILE} is out of date with scripts/layers.ts. Run \`bun run lint:generate\`.`);
+      console.error(`${CONFIG_FILE} is out of date with scripts/layers.ts or ${ALLOWLIST_FILE}. Run \`bun run lint:generate\`.`);
+      process.exit(1);
+    }
+    const stale = staleEntries(AMBIENT_ALLOWLIST, await findOffenders(JSON.parse(before), LAYERS, srcFiles));
+    if (stale.length > 0) {
+      console.error(
+        [`${ALLOWLIST_FILE} allows bans these files no longer break. Delete them, then run \`bun run lint:generate\`:`, ...stale.map((s) => `  ${s}`)].join("\n"),
+      );
       process.exit(1);
     }
   } else if (after !== before) {
