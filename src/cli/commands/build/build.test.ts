@@ -12,6 +12,7 @@ import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 import { createApp } from "../../app.ts";
+import type { BuildState } from "./buildState.ts";
 
 const SNERK = `RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md`;
 const GLURK = `RUN echo "Prefer one clear expression to a loop." > /workspace/FAKE_INSTRUCTIONS.md`;
@@ -135,6 +136,37 @@ describe("0202 typical project, in-process", () => {
         { image: "thunderjar-prerun:3a7b72ac", status: "built", ms: 0 },
       ],
     });
+  });
+
+  test("while building: one image at a time, in plan's order, each counting from when it started", async () => {
+    const clock = new FakeClock();
+    const docker = new FakeDockerService({ images: PRESENT });
+    // Every build takes 10s.
+    docker.onBuild(() => clock.sleep(10_000));
+    const app = createApp({ clock, docker, io: new FakeIo(), launch: { cwd: scenario("0202"), env: {} } });
+
+    const exit = app.cli(["build", "is-prime-baseline"]);
+
+    // 15s: the first missing image is built, the second is half-way, the rest wait.
+    await clock.advance(15_000);
+    expect(app.state()).toEqual({
+      images: [
+        { image: "thunderjar-prerun:ded54607", status: "present" },
+        { image: "thunderjar-prerun:602318c8", status: "built", ms: 10_000 },
+        { image: "thunderjar-prerun:e4f0784f", status: "building", since: 10_000 },
+        { image: "thunderjar-prerun:35965dab", status: "queued" },
+        { image: "thunderjar-prerun:62ee2f93", status: "present" },
+        { image: "thunderjar-prerun:0438baeb", status: "queued" },
+        { image: "thunderjar-prerun:3b9c542f", status: "queued" },
+        { image: "thunderjar-prerun:3a7b72ac", status: "queued" },
+      ],
+    });
+    expect(docker.building()).toEqual(["thunderjar-prerun:e4f0784f"]);
+
+    // 60s: all six built.
+    await clock.advance(45_000);
+    expect(await exit).toBe(0);
+    expect(app.state<BuildState>().images.filter(({ status }) => status === "built")).toHaveLength(6);
   });
 });
 
