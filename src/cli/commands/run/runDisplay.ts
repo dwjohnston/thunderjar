@@ -54,11 +54,15 @@ const showOutcome = (outcome: RecordedOutcome, paint: Paint) =>
       ? paint.yellow(`skipped${outcome.reason ? ` (${outcome.reason})` : ""}`)
       : paint.red(`erroredWhileMeasuring (${outcome.error.message})`);
 
-/** A container run's measures, on one line: `<name>: <value>`, three spaces apart. */
-const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
-  Object.entries(result)
-    .map(([name, { outcome }]) => `${paint.blue(`${name}:`)} ${showOutcome(outcome, paint)}`)
+/** Measures' outcomes, by name, on one line: `<name>: <value>`, three spaces apart. */
+export const showOutcomes = (outcomes: Record<string, RecordedOutcome>, paint: Paint) =>
+  Object.entries(outcomes)
+    .map(([name, outcome]) => `${paint.blue(`${name}:`)} ${showOutcome(outcome, paint)}`)
     .join("   ");
+
+/** A container run's measures, on one line: see showOutcomes. */
+const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
+  showOutcomes(Object.fromEntries(Object.entries(result).map(([name, { outcome }]) => [name, outcome])), paint);
 
 /**
  * What tells `permutation` apart from the rest of `testCase`'s: each other axis that varies, then
