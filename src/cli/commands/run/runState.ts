@@ -16,7 +16,7 @@
 import type { TestCaseDeclaration } from "../../../api/declarations.ts";
 import type { PlannedExecution } from "../../../execution/planExecution.ts";
 import type { RunHooks } from "../../../execution/runExecution.ts";
-import type { RecordedOutcome } from "../../../store/runDataStore.ts";
+import type { ContainerRunRecord, RecordedOutcome } from "../../../store/runDataStore.ts";
 import type { Clock } from "../../../time/clock.ts";
 import { label } from "./runDisplay.ts";
 
@@ -48,8 +48,22 @@ export type ContainerState = {
 
 export type RunState = { executionId: string; containers: ContainerState[] };
 
-/** The state of `plan`'s execution, every container run queued, and the hooks that keep it up to date, on `clock`. */
-export function trackRun(plan: PlannedExecution, testCase: TestCaseDeclaration, _clock: Clock): { state: RunState; hooks: RunHooks } {
+/** How a container run ended, from its record. */
+function ended({ execution, harnessResult }: ContainerRunRecord): ContainerRunState {
+  const { failedToStart, timedOut, exitCode, startedAt, finishedAt } = execution;
+  const ms = finishedAt - startedAt;
+  const resultFile = harnessResult !== null;
+  if (failedToStart !== undefined) return { status: "failedToStart", reason: failedToStart };
+  if (timedOut || exitCode === null) return { status: "timedOut", timeoutSeconds: execution.timeoutSeconds ?? 0, ms };
+  return exitCode === 0 ? { status: "done", resultFile, ms } : { status: "exited", exitCode, resultFile, ms };
+}
+
+/**
+ * The state of `plan`'s execution, every container run queued, and the hooks that keep it up to
+ * date, on `clock`: starting once its container is, running once its agent is, then how it ended,
+ * and its measures.
+ */
+export function trackRun(plan: PlannedExecution, testCase: TestCaseDeclaration, clock: Clock): { state: RunState; hooks: RunHooks } {
   const permutations = plan.permutations.length;
   const state: RunState = {
     executionId: plan.executionId,
@@ -62,5 +76,17 @@ export function trackRun(plan: PlannedExecution, testCase: TestCaseDeclaration, 
       })),
     ),
   };
-  return { state, hooks: {} };
+  /** Sets where the container run of `permutation`'s `iteration` is, from where it was. */
+  const update = ({ number }: { number: number }, iteration: { number: number }, next: (run: ContainerRunState) => ContainerRunState) => {
+    const container = state.containers.find(({ permutation: [p], iteration: [i] }) => p === number && i === iteration.number);
+    if (container !== undefined) container.run = next(container.run);
+  };
+  const hooks: RunHooks = {
+    onRunning: (permutation, iteration) => update(permutation, iteration, () => ({ status: "starting", since: clock.now() })),
+    onStarted: (permutation, iteration) => update(permutation, iteration, () => ({ status: "running", since: clock.now() })),
+    onRan: (permutation, iteration, record) => update(permutation, iteration, () => ended(record)),
+    onMeasured: (permutation, iteration, result) =>
+      update(permutation, iteration, (run) => ({ ...run, measures: Object.fromEntries(Object.entries(result).map(([name, { outcome }]) => [name, outcome])) })),
+  };
+  return { state, hooks };
 }
