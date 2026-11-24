@@ -62,3 +62,22 @@ test("on a terminal, each frame rewrites in place the lines from the first that 
     "\x1b[3F\x1b[Jx\n",
   ]);
 });
+
+test("on a terminal, redraws each second on the clock while a line counts, and stops once none does", async () => {
+  const clock = new FakeClock(0, { graceMs: 10 });
+  const out = new FakeOutput(true, 80);
+  let building = true;
+  // Counting, on a terminal, while building. Without the terminal, nothing counts.
+  const render = (terminal: boolean) => (building ? (terminal ? [`Building b ... ${clock.now() / 1000}s`] : []) : ["Building b ... done"]);
+  const view = frames(out, render, clock);
+
+  view.update();
+  await expect(clock.advance(1000)).resolves.toBeUndefined();
+  await expect(clock.advance(1000)).resolves.toBeUndefined();
+  building = false;
+  view.update();
+
+  expect(out.text()).toBe("Building b ... 0s\n\x1b[1F\x1b[JBuilding b ... 1s\n\x1b[1F\x1b[JBuilding b ... 2s\n\x1b[1F\x1b[JBuilding b ... done\n");
+  // Nothing is left waiting on the clock.
+  await expect(clock.advance(1000)).rejects.toThrow("nothing waited on the clock");
+});
