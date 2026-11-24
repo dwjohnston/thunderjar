@@ -33,6 +33,14 @@ export type Frames = {
  * only add lines at the end. `render(false)` is the frame without anything counting: while the
  * terminal's frame differs from it, it's redrawn each second on `clock`.
  */
-export function frames(_out: Output, _render: (terminal: boolean) => string[], _clock: Clock): Frames {
-  return { update: () => {}, stop: () => {} };
+export function frames(out: Output, render: (terminal: boolean) => string[], _clock: Clock): Frames {
+  // How many lines have been written.
+  let written = 0;
+  const update = () => {
+    const lines = render(out.isTTY);
+    const added = lines.slice(written);
+    if (added.length > 0) out.write(added.map((line) => `${line}\n`).join(""));
+    written = lines.length;
+  };
+  return { update, stop: update };
 }
