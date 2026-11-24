@@ -19,7 +19,7 @@
 // line counts up, it's redrawn once a second on the app's clock.
 
 import type { Output } from "../io/io.ts";
-import type { Clock } from "../time/clock.ts";
+import { type Clock, every } from "../time/clock.ts";
 
 export type Frames = {
   /** Draws what the render function returns now. */
@@ -33,9 +33,11 @@ export type Frames = {
  * only add lines at the end. `render(false)` is the frame without anything counting: while the
  * terminal's frame differs from it, it's redrawn each second on `clock`.
  */
-export function frames(out: Output, render: (terminal: boolean) => string[], _clock: Clock): Frames {
+export function frames(out: Output, render: (terminal: boolean) => string[], clock: Clock): Frames {
   // The last frame's lines.
   let last: string[] = [];
+  // Stops the redraw each second, while one is going.
+  let stopTicking: (() => void) | undefined;
   // How many rows a line takes on the terminal: a line wider than it wraps.
   const height = (line: string) => (out.columns ? Math.max(1, Math.ceil(Bun.stringWidth(line) / out.columns)) : 1);
 
@@ -51,6 +53,22 @@ export function frames(out: Output, render: (terminal: boolean) => string[], _cl
     const tail = lines.slice(first).map((line) => `${line}\n`).join("");
     if (up > 0 || tail !== "") out.write(`${up > 0 ? `\x1b[${up}F\x1b[J` : ""}${tail}`);
     last = lines;
+    // Something counts while the frame isn't the one without counting: redraw it each second.
+    const counting = out.isTTY && !sameLines(lines, render(false));
+    if (counting && stopTicking === undefined) stopTicking = every(clock, 1000, update);
+    if (!counting) stopTimer();
   };
-  return { update, stop: update };
+  const stopTimer = () => {
+    stopTicking?.();
+    stopTicking = undefined;
+  };
+  return {
+    update,
+    stop: () => {
+      update();
+      stopTimer();
+    },
+  };
 }
+
+const sameLines = (a: string[], b: string[]) => a.length === b.length && a.every((line, i) => line === b[i]);
