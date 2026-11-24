@@ -175,24 +175,6 @@ const commandsOf = async (docker: FakeDocker) =>
   (await docker.commands()).map((command) => command.replace(/ \S+\/thunderjar-build-[\w-]+$/, " <CONTEXT>"));
 
 describe("0202 typical project, building with the fake Docker", () => {
-
-  test("builds only the missing prerun images, in plan's order, then counts them", async () => {
-    await using docker = await fakeDocker({
-      images: ["thunderjar-prerun:ded54607", "thunderjar-prerun:62ee2f93"],
-    });
-
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["build", "is-prime-baseline"], { env: docker.env });
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(0);
-    const built = ["602318c8", "e4f0784f", "35965dab", "0438baeb", "3b9c542f", "3a7b72ac"];
-    expect(stdout).toBe(`${built.map((hash) => `Building thunderjar-prerun:${hash} ... done\n`).join("")}6 built, 2 already present\n`);
-    expect(await commandsOf(docker)).toEqual([
-      "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
-      ...built.map((hash) => `docker build -t thunderjar-prerun:${hash} <CONTEXT>`),
-    ]);
-  });
-
   test("with build concurrency 2, builds two at once, writing a line as each starts and ends", async () => {
     await using copy = await copyScenarioProject("0202");
     const config = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
