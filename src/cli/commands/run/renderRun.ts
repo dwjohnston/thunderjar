@@ -15,6 +15,7 @@
 import { agentEnd } from "../../../execution/runFacts.ts";
 import type { Execution } from "../../../store/runDataStore.ts";
 import { type Paint, plain } from "../../colour.ts";
+import { elapsed } from "../../waitingLine.ts";
 import { duration, ordinal, showOutcomes } from "./runDisplay.ts";
 import type { ContainerRunState, ContainerState, RunState } from "./runState.ts";
 
@@ -29,16 +30,19 @@ export type RenderOptions = {
 
 /**
  * The lines `state` draws: the execution, then a line for each container run that has ended, how
- * it ended, with its measures under it. The same lines `run` writes, one container at a time.
+ * it ended, with its measures under it. The same lines `run` writes, one container at a time. On a
+ * terminal, a container run still going has a line too, counting up to `now`: how long it has
+ * been starting, or its agent running. One queued has none.
  */
 export function renderRun(state: RunState, options: RenderOptions): string[] {
   const { paint = plain } = options;
-  return [`${paint.dim("Execution")} ${paint.bold(state.executionId)}`, ...state.containers.flatMap((container) => containerLines(container, paint))];
+  return [`${paint.dim("Execution")} ${paint.bold(state.executionId)}`, ...state.containers.flatMap((container) => containerLines(container, options))];
 }
 
-/** A container run's line, once it has ended, and its measures' under it, lined up with it. */
-function containerLines({ permutation: [number, permutations], iteration: [iteration, iterations], label, run }: ContainerState, paint: Paint): string[] {
-  const ended = endOf(run, paint);
+/** A container run's line, once it has ended or, on a terminal, while it's going, and its measures' under it, lined up with it. */
+function containerLines({ permutation: [number, permutations], iteration: [iteration, iterations], label, run }: ContainerState, options: RenderOptions): string[] {
+  const { paint = plain } = options;
+  const ended = endOf(run, paint) ?? (options.terminal ? going(run, options.now, paint) : undefined);
   if (ended === undefined) return [];
   const head = ` ${paint.bold(ordinal(number, permutations))}  iteration ${paint.bold(ordinal(iteration, iterations))}  ${paint.magenta(label)}  ${paint.dim("...")} `;
   const under = " ".repeat(ordinal(number, permutations).length + 3);
@@ -58,6 +62,18 @@ function endOf(run: ContainerRunState, paint: Paint): string | undefined {
       const end = agentEnd(executionOf(run), run.resultFile ? "" : null);
       return `${(clean ? paint.green : paint.red)(end)} ${paint.dim(`(${duration(run.ms)})`)}`;
     }
+    default:
+      return undefined;
+  }
+}
+
+/** How long a container run still going has been starting, or running, if it has begun. */
+function going(run: ContainerRunState, now: number, paint: Paint): string | undefined {
+  switch (run.status) {
+    case "starting":
+      return paint.dim(`starting ${elapsed(now - run.since)}`);
+    case "running":
+      return paint.dim(elapsed(now - run.since));
     default:
       return undefined;
   }
