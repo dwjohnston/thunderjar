@@ -22,7 +22,9 @@ export class FakeClock implements Clock {
     return { id: timer.id };
   }
 
-  clearTimeout(_handle: TimerHandle | undefined): void {}
+  clearTimeout(handle: TimerHandle | undefined): void {
+    if (handle !== undefined) this.timers = this.timers.filter((timer) => timer.id !== handle.id);
+  }
 
   sleep(_ms: number): Promise<void> {
     return new Promise(() => {});
