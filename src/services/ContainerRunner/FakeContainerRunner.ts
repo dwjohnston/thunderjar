@@ -15,6 +15,8 @@ export class FakeContainerRunner implements ContainerRunner {
   readonly killed: string[] = [];
   readonly removed: string[] = [];
   private readonly scripts: [string, ContainerScript][] = [];
+  /** Ends each running container, by name, as Docker's SIGKILL would. */
+  private readonly enders = new Map<string, () => void>();
 
   constructor(private readonly clock: Clock) {}
 
@@ -28,13 +30,19 @@ export class FakeContainerRunner implements ContainerRunner {
     const name = args[args.indexOf("--name") + 1] ?? "";
     const script = this.scripts.find(([suffix]) => name.endsWith(suffix))?.[1] ?? noScript;
     const started = Promise.withResolvers<void>();
-    const ran = script({ clock: this.clock, name, args, start: () => started.resolve() }).then((result) =>
-      typeof result === "number" ? { exitCode: result, stderr: "" } : result,
-    );
+    const ended = Promise.withResolvers<{ exitCode: number; stderr: string }>();
+    this.enders.set(name, () => ended.resolve({ exitCode: KILLED, stderr: "" }));
+    const ran = Promise.race([
+      script({ clock: this.clock, name, args, start: () => started.resolve() }).then((result) => (typeof result === "number" ? { exitCode: result, stderr: "" } : result)),
+      ended.promise,
+    ]);
     return { started: started.promise, exited: ran.then((result) => result.exitCode), stderr: ran.then((result) => result.stderr), kill: () => {} };
   }
 
-  async kill(_name: string): Promise<void> {}
+  async kill(name: string): Promise<void> {
+    this.killed.push(name);
+    this.enders.get(name)?.();
+  }
 
   async remove(_name: string): Promise<void> {}
 }
@@ -43,3 +51,6 @@ const noScript: ContainerScript = async ({ start }) => {
   start();
   return 0;
 };
+
+/** The exit code of a process ended by SIGKILL. */
+const KILLED = 137;
