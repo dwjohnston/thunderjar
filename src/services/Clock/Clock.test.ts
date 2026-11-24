@@ -14,4 +14,15 @@ describe("FakeClock", () => {
     expect(fired).toEqual([["early", 1100], ["late", 1300]]);
     expect(clock.now()).toBe(1400);
   });
+
+  test("a cleared timer never fires", async () => {
+    const clock = new FakeClock();
+    let fired = false;
+    const handle = clock.setTimeout(() => (fired = true), 100);
+    clock.clearTimeout(handle);
+
+    await clock.advance(200);
+
+    expect(fired).toBe(false);
+  });
 });
