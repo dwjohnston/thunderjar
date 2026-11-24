@@ -16,7 +16,11 @@
 // time unless a test says so with `onBuild`, e.g. `docker.onBuild(() => clock.sleep(10_000))`.
 
 import { DockerLoginError, DockerPushError } from "../docker/docker.ts";
-import type { BuildContext, DockerService } from "../docker/dockerService.ts";
+import type { BuildContext, DockerService, RunningContainer } from "../docker/dockerService.ts";
+import type { ShellSession } from "../docker/shellSession.ts";
+
+/** What a test can't ask of the fake yet: loud, never silently wrong. */
+const notYet = (what: string) => new Error(`fake docker: ${what} isn't faked yet`);
 
 export type FakeDockerOptions = {
   /** The images the daemon has to begin with, e.g. `thunderjar-prerun:ded54607`. */
@@ -81,6 +85,34 @@ export class FakeDockerService implements DockerService {
     if (!this.#loggedIn.has(host)) throw new DockerPushError("denied: permission_denied: The token provided does not match expected scopes.", reference);
     this.#images.add(reference);
     this.pushed.push(reference);
+  }
+
+  run(): RunningContainer {
+    throw notYet("run");
+  }
+
+  async kill(): Promise<void> {
+    throw notYet("kill");
+  }
+
+  async readFile(): Promise<string | undefined> {
+    throw notYet("readFile");
+  }
+
+  async commit(): Promise<void> {
+    throw notYet("commit");
+  }
+
+  async removeContainer(): Promise<void> {
+    throw notYet("removeContainer");
+  }
+
+  async removeContainersNamed(): Promise<string[]> {
+    throw notYet("removeContainersNamed");
+  }
+
+  async openShellSession(): Promise<ShellSession> {
+    throw notYet("openShellSession");
   }
 
   /** This one: a test has one daemon, wherever commands are sent. */

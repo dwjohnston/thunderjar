@@ -4090,6 +4090,7 @@
           "error",
           { "object": "performance", "property": "now", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
           { "object": "Bun", "property": "nanoseconds", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "object": "Bun", "property": "sleep", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
           { "object": "Bun", "property": "sleepSync", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
           { "object": "Math", "property": "random", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
           { "object": "crypto", "property": "getRandomValues", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
@@ -4120,6 +4121,7 @@
             "bans": [
               { "id": "new Date()", "kind": "date", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
               { "id": "Bun.nanoseconds", "kind": "property", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+              { "id": "Bun.sleep", "kind": "property", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
               { "id": "Bun.sleepSync", "kind": "property", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
               { "id": "Bun.randomUUIDv7", "kind": "property", "message": "Use the Ids service instead. See \"Ambient APIs\" in AGENTS.md." },
               { "id": "Bun.stdin", "kind": "property", "message": "Use the Io service instead. See \"Ambient APIs\" in AGENTS.md." },

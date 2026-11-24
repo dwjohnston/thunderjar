@@ -54,7 +54,7 @@ export const AMBIENT_ALLOWLIST: Allowlist = {
   "src/cli/waitingLine.ts": ["Date.now", "setInterval"],
   "src/config/projectConfig.ts": ["Bun.env"],
   "src/config/requiredEnv.ts": ["Bun.env"],
-  "src/docker/docker.ts": ["Date.now", "Bun.sleep", "setTimeout", "crypto.randomUUID", "Bun.env", "Bun.spawn", "Bun.$"],
+  "src/docker/docker.ts": ["Date.now", "setTimeout", "crypto.randomUUID", "Bun.env", "Bun.spawn", "Bun.$"],
   "src/docker/localImages.ts": ["Bun.$"],
   "src/docker/registry.ts": ["Bun.env", "Bun.$", "fetch"],
   "src/docker/shellSession.ts": ["Date.now", "setTimeout", "Bun.env", "Bun.spawn"],
