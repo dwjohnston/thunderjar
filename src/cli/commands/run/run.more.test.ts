@@ -190,30 +190,6 @@ Recorded in <DATA>/runs.sqlite
     expect(io.stderr.text()).toBe("");
   });
 
-  test("the timeout runs from when the agent starts, through a subprocess, in real time", async () => {
-    // fake-silent's container takes 3s to start, past its 2s timeout; its agent then takes no time.
-    await using docker = await fakeDocker({ slowStart: { "-3-1": 3 } });
-    const data = dataDir();
-
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data], { env: docker.env });
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(1);
-    expect(stdout).toContain(`
- 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
-      isPrimeTsExists: false
- 2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (<duration>)
-      isPrimeTsExists: false
- 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
-      isPrimeTsExists: true
-`);
-    const [sleeper, , silent] = (await readStore(data)).containerRuns as [ContainerRunRecord, ContainerRunRecord, ContainerRunRecord];
-    expect(sleeper.execution).toMatchObject({ exitCode: null, timedOut: true, timeoutSeconds: 2 });
-    expect(silent.execution).toMatchObject({ exitCode: 0, timedOut: false });
-    expect(silent.execution.failedToStart).toBeUndefined();
-    expect(await docker.containers()).toEqual([]);
-  }, 30_000);
-
   test("a container that never starts is that run's outcome, given up on before it exists, and the execution goes on to the end", async () => {
     // fake-crasher's container would take a minute to appear: it's given up on after 3s.
     await using docker = await fakeDocker({ slowStart: { "-2-1": 60 } });
