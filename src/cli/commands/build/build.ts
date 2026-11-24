@@ -18,6 +18,7 @@ import { jsonOption } from "../../json.ts";
 import { overridesOf, withOverrideOptions } from "../../overrides.ts";
 import { type Printer, printer } from "../../output.ts";
 import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
+import { type BuildState, setImage } from "./buildState.ts";
 
 /**
  * Each prerun image test case `name` needs, of the nearest `.thunderjar/` folder in `cwd` or above
@@ -66,6 +67,10 @@ async function build(run: CommandRun, out: Printer, { name, imagePrefix, json, l
   checkBuildSecrets(buildOptions, run.launch.env);
   const permutations = await hashPermutations(root, testCase);
   const concurrent = buildOptions.concurrency > 1;
+  const state: BuildState = { images: [] };
+  run.publish(state);
+  // When each image's build started, on the app's clock.
+  const started = new Map<string, number>();
   // The line that's waiting for how its build or push ends, counting up on the app's clock.
   let line: WaitingLine | undefined;
   const wait = (label: string) =>
@@ -78,11 +83,16 @@ async function build(run: CommandRun, out: Printer, { name, imagePrefix, json, l
     if (!local && config !== null) out.print(paint.dim(`Building with \`${config.command.join(" ")}\``));
     await checkImageStore(imageStore, docker);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
+      onPlanned: (images) => {
+        state.images = images.map(({ image, exists }) => (exists ? { image, status: "present" } : { image, status: "queued" }));
+      },
       onBuilding: (image) => {
+        started.set(image, run.clock.now());
         if (concurrent) return out.print(`Building ${paint.cyan(image)}`);
         line = wait(`Building ${paint.cyan(image)} ${ellipsis} `);
       },
       onBuilt: (image) => {
+        setImage(state, { image, status: "built", ms: run.clock.now() - (started.get(image) as number) });
         if (concurrent) return out.print(`Built ${paint.cyan(image)}`);
         line?.finish(done);
       },

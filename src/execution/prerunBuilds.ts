@@ -38,6 +38,8 @@ const buildContext = (root: string, permutation: HashedPermutation, image: strin
 };
 
 export type PrerunBuildHooks = {
+  /** Called once it's known which images exist, with each image, in plan order, before any build starts. */
+  onPlanned?: (images: { image: string; exists: boolean }[]) => void;
   /** Called as each image's build starts. */
   onBuilding?: (image: string) => void;
   /** Called as each image's build succeeds. */
@@ -115,6 +117,7 @@ export async function buildPrerunImages(
   docker: DockerService,
 ): Promise<PrerunBuildResult> {
   const images = await prerunImages(permutations, imagePrefix, docker);
+  hooks.onPlanned?.(images.map(({ image, exists }) => ({ image, exists })));
   const builds = images.filter(({ exists }) => !exists);
   await inParallel(
     builds.map((image) => () => buildPrerunImage(root, image, hooks, build, docker)),
