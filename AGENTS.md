@@ -19,7 +19,17 @@ Thunderjar is a TypeScript/Bun CLI for
 ## Folder structure 
 
 - `fixtures`: Fixtures - see below for details. 
-- `src/`: the implementation.
+- `src/`: the implementation. Its folders are layers, lowest first (see below).
+  - `log/`: the diagnostic logger (pino).
+  - `testing/`: the fixture harness that tests use to run the CLI in a scenario, plus fake Docker and registry.
+  - `api/`: the public API a project's `.thunderjar/` files use, e.g. the `declareX()` functions and their types.
+  - `instruments/`: the built-in measuring instruments, one folder each.
+  - `config/`: finds a project's `.thunderjar/` folder and loads its declarations.
+  - `docker/`: everything Thunderjar asks of Docker: building images, running and committing containers.
+  - `store/`: the run data store (SQLite or Postgres).
+  - `execution/`: runs an experiment's container runs, and aggregates their results.
+  - `measureTesting/`: `measure()`, shipped as `thunderjar/testing`, for a project's own tests of its measurements.
+  - `capture/`: the hooks that capture a coding-agent session as git records.
   - `cli/`: 
     - `index.ts`:" the entry point.
     - `program.ts`: builds it
@@ -27,9 +37,6 @@ Thunderjar is a TypeScript/Bun CLI for
       - `<command>/`
         - `<command>.ts`
         - `<command>.test.ts`  
-  - `log/`: the diagnostic logger (pino).
-  - `config/`: finds a project's `.thunderjar/` folder and loads its declarations.
-  - `testing/`: the fixture harness that tests use to run the CLI in a scenario.
   - `gauntlet/`: challenges that Thunderjar's own experiments set agents, one folder each. Not Thunderjar code: see below.
 - `docs/`: the VitePress docs site.
   - `.vitepress/`: site config.
