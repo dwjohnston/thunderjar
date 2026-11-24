@@ -15,7 +15,7 @@ import { storeRunnerImage } from "../../../execution/runnerImage.ts";
 import { planData, type Submission } from "../../../execution/runnerSpec.ts";
 import { type RunFacts, runRuntimeHook, RuntimeHookError } from "../../../execution/runtimeHooks.ts";
 import { timings } from "../../../execution/timings.ts";
-import { ulid } from "../../../execution/ulid.ts";
+import { systemIds } from "../../../execution/ids.ts";
 import { RunDataStoreError } from "../../../store/runDataStore.ts";
 import { systemClock } from "../../../time/clock.ts";
 import { type Paint, painter, plain } from "../../colour.ts";
@@ -101,7 +101,7 @@ export function executionPlanJson({ executionId, permutations }: PlannedExecutio
  */
 export async function planDryRun(cwd: string, name: string, imagePrefix?: string, overrides: Overrides = {}): Promise<PlannedExecution> {
   const root = await findThunderjarRoot(cwd);
-  const executionId = ulid();
+  const executionId = systemIds(systemClock).executionId();
   const testCase = await loadTestCase(root, name, overrides);
   await checkRequiredEnv(root, testCase);
   return planExecution(root, testCase, executionId, imagePrefix);
@@ -176,7 +176,7 @@ async function run(
     process.exitCode = 1;
     return;
   }
-  const plan = await planExecution(root, testCase, ulid(), imagePrefix);
+  const plan = await planExecution(root, testCase, systemIds(systemClock).executionId(), imagePrefix);
   // The variables the runner is sent: any that's unset is found out here, before anything is built.
   const runnerEnv = runner === undefined ? undefined : submissionEnv(plan, config.runDataStore, runner);
   // The runner opens the store, on the runtime: this needn't reach it.

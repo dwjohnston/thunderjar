@@ -10,8 +10,8 @@ test("encodes the time in the first 10 characters and the randomness in the last
 });
 
 test("is 26 lower-case Crockford base32 characters, and differs between calls", () => {
-  const a = ulid();
-  const b = ulid();
+  const a = ulid(Date.now());
+  const b = ulid(Date.now());
   expect(a).toMatch(/^[0-9a-hjkmnp-tv-z]{26}$/);
   expect(a).not.toBe(b);
 });

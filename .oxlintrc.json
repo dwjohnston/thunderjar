@@ -4879,6 +4879,7 @@
       "rules": {
         "no-restricted-properties": [
           "error",
+          { "object": "Date", "property": "now", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
           { "object": "performance", "property": "now", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
           { "object": "Bun", "property": "nanoseconds", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
           { "object": "Bun", "property": "sleep", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },

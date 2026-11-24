@@ -5,7 +5,7 @@
 const ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 /** A new ULID for the time `now` (ms since the epoch), with 80 bits from `random`. */
-export function ulid(now: number = Date.now(), random: Uint8Array = crypto.getRandomValues(new Uint8Array(10))): string {
+export function ulid(now: number, random: Uint8Array = crypto.getRandomValues(new Uint8Array(10))): string {
   if (!Number.isInteger(now) || now < 0 || now >= 2 ** 48) throw new RangeError(`ULID time out of range: ${now}`);
   if (random.length !== 10) throw new RangeError(`ULID randomness must be 10 bytes, got ${random.length}`);
 
