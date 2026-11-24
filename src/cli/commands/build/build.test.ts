@@ -4,10 +4,14 @@
 import { $ } from "bun";
 import { describe, expect, test } from "bun:test";
 import { writeModel, writePrompt, writeRunScript } from "../../../api/files.ts";
+import { FakeClock } from "../../../fakes/fakeClock.ts";
+import { FakeDockerService } from "../../../fakes/fakeDockerService.ts";
+import { FakeIo } from "../../../fakes/fakeIo.ts";
 import { copyScenarioProject, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
 import { type FakeDocker, fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
+import { createApp } from "../../app.ts";
 
 const SNERK = `RUN echo "Write small functions, and say what each one is for." > /workspace/FAKE_INSTRUCTIONS.md`;
 const GLURK = `RUN echo "Prefer one clear expression to a loop." > /workspace/FAKE_INSTRUCTIONS.md`;
@@ -104,6 +108,33 @@ describe("0202 typical project", () => {
     expect(stdout).toBe("");
     expect(stderr).toBe('Error: No test case named "missing": expected .thunderjar/test-cases/missing.ts.\n');
     expect(exitCode).toBe(1);
+  });
+});
+
+describe("0202 typical project, in-process", () => {
+  const PRESENT = ["thunderjar-prerun:ded54607", "thunderjar-prerun:62ee2f93"];
+  const MISSING = ["602318c8", "e4f0784f", "35965dab", "0438baeb", "3b9c542f", "3a7b72ac"].map((hash) => `thunderjar-prerun:${hash}`);
+
+  test("builds only the missing prerun images, in plan's order", async () => {
+    const clock = new FakeClock();
+    const docker = new FakeDockerService({ images: PRESENT });
+    const app = createApp({ clock, docker, io: new FakeIo(), launch: { cwd: scenario("0202"), env: {} } });
+
+    expect(await app.cli(["build", "is-prime-baseline"])).toBe(0);
+
+    expect(docker.built).toEqual(MISSING);
+    expect(app.state()).toEqual({
+      images: [
+        { image: "thunderjar-prerun:ded54607", status: "present" },
+        { image: "thunderjar-prerun:602318c8", status: "built", ms: 0 },
+        { image: "thunderjar-prerun:e4f0784f", status: "built", ms: 0 },
+        { image: "thunderjar-prerun:35965dab", status: "built", ms: 0 },
+        { image: "thunderjar-prerun:62ee2f93", status: "present" },
+        { image: "thunderjar-prerun:0438baeb", status: "built", ms: 0 },
+        { image: "thunderjar-prerun:3b9c542f", status: "built", ms: 0 },
+        { image: "thunderjar-prerun:3a7b72ac", status: "built", ms: 0 },
+      ],
+    });
   });
 });
 
