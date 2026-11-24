@@ -35,6 +35,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       - run: bun scripts/codeowners-comment.ts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

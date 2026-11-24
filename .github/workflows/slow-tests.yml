@@ -125,6 +125,8 @@ jobs:
           repository: ${{ needs.target.outputs.repo }}
           ref: ${{ needs.target.outputs.sha }}
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       - uses: superfly/flyctl-actions/setup-flyctl@master
       # The action installs `flyctl`. The Fly client calls it as `fly`.
@@ -207,6 +209,8 @@ jobs:
           repository: ${{ needs.target.outputs.repo }}
           ref: ${{ needs.target.outputs.sha }}
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       # As in CI: Ubuntu 24.04's AppArmor stops containers making user namespaces, which Claude
       # Code's sandbox needs.
@@ -241,6 +245,8 @@ jobs:
           repository: ${{ needs.target.outputs.repo }}
           ref: ${{ needs.target.outputs.sha }}
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       - name: Let containers make user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0

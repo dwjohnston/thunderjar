@@ -24,6 +24,8 @@ jobs:
         run: echo "CI_JOB_STARTED_AT=$(date +%s.%N)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
@@ -58,6 +60,8 @@ jobs:
         run: echo "CI_JOB_STARTED_AT=$(date +%s.%N)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       # Ubuntu 24.04's AppArmor stops unconfined processes making user namespaces, whatever
       # docker run is told. Scenario 0206's sandboxing agent needs them, as Claude Code's
@@ -95,6 +99,8 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       # The release's tag is only pushed on merge. Tag this commit with the version it
       # would release, so its docs are built too. On other PRs that tag already exists.
@@ -113,6 +119,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       - name: Let containers make user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -127,5 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       - run: bun run build
