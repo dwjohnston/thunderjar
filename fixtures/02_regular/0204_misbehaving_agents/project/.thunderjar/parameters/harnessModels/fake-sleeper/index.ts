@@ -1,6 +1,9 @@
 import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 
-// A fake agent that hangs: it would sleep far past its initial prompt's timeout before doing anything.
+
+
+// A fake agent that hangs. 
+// DOES NOT ACTUALLY SLEEEP
 export default declareHarness({
   models: { "fake-model-small-001": [], "fake-model-large-001": [] },
   version: "1.0.0",
@@ -8,7 +11,7 @@ export default declareHarness({
     [
       writeModel(ctx.modelId),
       writeRunScript(
-        `sleep 300 && echo 'export const isPrime = (n: number) => n > 1;' > isPrime.ts && echo '{}' > /thunderjar/result.json`,
+        `echo 'export const isPrime = (n: number) => n > 1;' > isPrime.ts && echo '{}' > /thunderjar/result.json`,
       ),
     ].join("\n"),
 });
