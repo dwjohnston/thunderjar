@@ -4,21 +4,21 @@ import type { Overrides } from "../../../config/overrides.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
 import { DockerBuildError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
-import { prerunImage } from "../../../execution/images.ts";
+import { prerunImage, storedPrerunImage } from "../../../execution/images.ts";
 import { checkImageStore, ImageStoreLoginError, pushPrerunImages } from "../../../execution/imageStore.ts";
 import { buildPrerunImages } from "../../../execution/prerunBuilds.ts";
 import { hashPermutations } from "../../../execution/hashPermutations.ts";
-import { every } from "../../../time/clock.ts";
 import type { CommandRun } from "../../app.ts";
 import { type Paint, plain } from "../../colour.ts";
 import { exitCodeOf } from "../../configErrors.ts";
+import { frames } from "../../frames.ts";
 import { pushFailure } from "../../format.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { overridesOf, withOverrideOptions } from "../../overrides.ts";
 import { type Printer, printer } from "../../output.ts";
-import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
-import { type BuildState, buildingSince, setImage } from "./buildState.ts";
+import { type BuildState, buildingSince, pushingSince, setImage, setPush } from "./buildState.ts";
+import { headerLines, imageLines, pushLines, renderBuild, summaryLines } from "./renderBuild.ts";
 
 /**
  * Each prerun image test case `name` needs, of the nearest `.thunderjar/` folder in `cwd` or above
@@ -57,78 +57,91 @@ type BuildArgs = { name: string; imagePrefix?: string; json: boolean; local: boo
  * image store's registry (before anything is built), or a build or push fails. With `json`, prints
  * the images built, those already present and the references pushed as JSON once it's done. Each
  * list `overrides` gives replaces the test case's own.
+ *
+ * What it's doing is its state, a BuildState, which it publishes, and draws with renderBuild.
  */
 async function build(run: CommandRun, out: Printer, { name, imagePrefix, json, local, overrides }: BuildArgs): Promise<number> {
   const root = await findThunderjarRoot(run.launch.cwd);
   const { imageStore, build: buildOptions, runtime: config } = await loadProjectConfig(root);
   // Where images are built, and pushed from: the runtime, which runs them, unless --local.
-  const docker = local || config === null ? run.docker : run.docker.on(config.command);
+  const onRuntime = !local && config !== null;
+  const docker = onRuntime ? run.docker.on(config.command) : run.docker;
   const testCase = await loadTestCase(root, name, overrides);
   checkBuildSecrets(buildOptions, run.launch.env);
   const permutations = await hashPermutations(root, testCase);
   const concurrent = buildOptions.concurrency > 1;
-  const state: BuildState = { images: [] };
+  const state: BuildState = {
+    ...(onRuntime && { runtime: config.command.join(" ") }),
+    images: [],
+    ...(imageStore !== null && {
+      pushes: [...new Set(permutations.map(({ imageHash }) => imageHash))].map((hash) => ({ reference: storedPrerunImage(imageStore.repository, hash), status: "queued" as const })),
+    }),
+  };
   run.publish(state);
-  // The line that's waiting for how its build or push ends, counting up on the app's clock.
-  let line: WaitingLine | undefined;
-  const wait = (label: string) =>
-    waitingLine(label, { out: out.text, now: () => run.clock.now(), ticker: (tick) => every(run.clock, 1000, tick), colour: out.paint.enabled });
-  // Colour for what's written while building, on a terminal.
   const { paint } = out;
-  const ellipsis = paint.dim("...");
-  const done = paint.green("done");
+  const view = frames(
+    out.text,
+    (terminal) => {
+      const options = { terminal, now: run.clock.now(), paint };
+      // Builds going at once end out of plan's order, so their lines are written as they happen, below.
+      if (concurrent) return [...headerLines(state, options), ...pushLines(state, options), ...summaryLines(state, options)];
+      // With --json, the count is in the JSON.
+      if (json) return [...headerLines(state, options), ...imageLines(state, options), ...pushLines(state, options)];
+      return renderBuild(state, options);
+    },
+    run.clock,
+  );
   try {
-    if (!local && config !== null) out.print(paint.dim(`Building with \`${config.command.join(" ")}\``));
+    view.update();
     await checkImageStore(imageStore, docker);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
       onPlanned: (images) => {
         state.images = images.map(({ image, exists }) => (exists ? { image, status: "present" } : { image, status: "queued" }));
+        view.update();
       },
       onBuilding: (image) => {
         setImage(state, { image, status: "building", since: run.clock.now() });
-        if (concurrent) return out.print(`Building ${paint.cyan(image)}`);
-        line = wait(`Building ${paint.cyan(image)} ${ellipsis} `);
+        if (concurrent) out.print(`Building ${paint.cyan(image)}`);
+        view.update();
       },
       onBuilt: (image) => {
         setImage(state, { image, status: "built", ms: run.clock.now() - (buildingSince(state, image) ?? run.clock.now()) });
-        if (concurrent) return out.print(`Built ${paint.cyan(image)}`);
-        line?.finish(done);
+        if (concurrent) out.print(`Built ${paint.cyan(image)}`);
+        view.update();
       },
     }, buildOptions, docker);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
       onPushing: (_image, reference) => {
-        line = wait(`Pushing ${paint.cyan(reference)} ${ellipsis} `);
+        setPush(state, { reference, status: "pushing", since: run.clock.now() });
+        view.update();
       },
-      onPushed: () => {
-        line?.finish(done);
+      onPushed: (_image, reference) => {
+        setPush(state, { reference, status: "pushed", ms: run.clock.now() - (pushingSince(state, reference) ?? run.clock.now()) });
+        view.update();
       },
     }, docker);
+    view.stop();
     if (json) out.printJson({ built, present, pushed });
-    else out.print(
-      [
-        paint.green(`${built.length} built`),
-        paint.dim(`${present.length} already present`),
-        ...(imageStore ? [paint.green(`${pushed.length} pushed`)] : []),
-      ].join(paint.dim(", ")),
-    );
     return 0;
   } catch (error) {
+    if (error instanceof DockerBuildError) {
+      setImage(state, { image: error.image, status: "failed", ms: run.clock.now() - (buildingSince(state, error.image) ?? run.clock.now()) });
+    } else if (error instanceof DockerPushError) {
+      setPush(state, { reference: error.reference, status: "failed", ms: run.clock.now() - (pushingSince(state, error.reference) ?? run.clock.now()) });
+    }
+    view.stop();
     if (error instanceof DockerUnavailableError) {
       out.printError(`Docker can't be reached, so no image can be built: ${error.message}`);
     } else if (error instanceof ImageStoreLoginError) {
       out.printError(error.message);
     } else if (error instanceof DockerBuildError) {
-      line?.fail();
       out.printError(`Building ${error.image} failed: ${error.message}`);
     } else if (error instanceof DockerPushError) {
-      line?.fail();
       out.printError(pushFailure(error.reference, error));
     } else {
       throw error;
     }
     return 1;
-  } finally {
-    line?.stop();
   }
 }
 

@@ -29,27 +29,67 @@ export type RenderOptions = {
   paint?: Paint;
 };
 
-/** The lines `state` draws: a line for each image built, then, once every one is there, a count. */
+/**
+ * The lines `state` draws: the runtime it builds on, a line for each image built, and each push,
+ * then, once every one is done, a count.
+ */
 export function renderBuild(state: BuildState, options: RenderOptions): string[] {
-  return [...imageLines(state, options), ...summaryLines(state, options)];
+  return [...headerLines(state, options), ...imageLines(state, options), ...pushLines(state, options), ...summaryLines(state, options)];
+}
+
+/** Which runtime it builds on, if not the local Docker daemon. */
+export function headerLines(state: BuildState, { paint = plain }: RenderOptions): string[] {
+  return state.runtime === undefined ? [] : [paint.dim(`Building with \`${state.runtime}\``)];
 }
 
 /**
- * `Building <image> ... done` for each image built, in plan's order, and, on a terminal, how long
- * the one building has been, in place of `done`.
+ * `<label> ... done`, or `failed`, for what's ended, and, on a terminal, how long what's going has
+ * been, in place of `done`.
  */
-export function imageLines(state: BuildState, { terminal, now = 0, paint = plain }: RenderOptions): string[] {
-  const label = (image: string) => `Building ${paint.cyan(image)} ${paint.dim("...")} `;
-  return state.images.flatMap((entry) => {
-    if (entry.status === "built") return [`${label(entry.image)}${paint.green("done")}`];
-    if (entry.status === "building" && terminal) return [`${label(entry.image)}${paint.dim(elapsed(now - entry.since))}`];
+function waitingLines(
+  entries: { label: string; status: string; since?: number }[],
+  going: string,
+  ended: string,
+  { terminal, now = 0, paint = plain }: RenderOptions,
+): string[] {
+  return entries.flatMap(({ label, status, since }) => {
+    const start = `${label} ${paint.dim("...")} `;
+    if (status === ended) return [`${start}${paint.green("done")}`];
+    if (status === "failed") return [`${start}${paint.red("failed")}`];
+    if (status === going && terminal) return [`${start}${paint.dim(elapsed(now - (since as number)))}`];
     return [];
   });
 }
 
-/** Once every image is present or built: how many of each. */
+/**
+ * `Building <image> ... done` for each image built, in plan's order, or `failed`, and, on a
+ * terminal, how long the one building has been, in place of `done`.
+ */
+export function imageLines(state: BuildState, options: RenderOptions): string[] {
+  const paint = options.paint ?? plain;
+  const entries = state.images.map((entry) => ({ label: `Building ${paint.cyan(entry.image)}`, status: entry.status, since: "since" in entry ? entry.since : undefined }));
+  return waitingLines(entries, "building", "built", options);
+}
+
+/** `Pushing <reference> ... done` for each push, in plan's order, as imageLines does for builds. */
+export function pushLines(state: BuildState, options: RenderOptions): string[] {
+  const paint = options.paint ?? plain;
+  const entries = (state.pushes ?? []).map((entry) => ({ label: `Pushing ${paint.cyan(entry.reference)}`, status: entry.status, since: "since" in entry ? entry.since : undefined }));
+  return waitingLines(entries, "pushing", "pushed", options);
+}
+
+/** Once every image is present or built, and every push pushed: how many of each. */
 export function summaryLines(state: BuildState, { paint = plain }: RenderOptions): string[] {
+  // No images: it isn't known yet which it needs.
+  if (state.images.length === 0) return [];
   if (!state.images.every(({ status }) => status === "present" || status === "built")) return [];
+  if (!(state.pushes ?? []).every(({ status }) => status === "pushed")) return [];
   const count = (status: string) => state.images.filter((entry) => entry.status === status).length;
-  return [[paint.green(`${count("built")} built`), paint.dim(`${count("present")} already present`)].join(paint.dim(", "))];
+  return [
+    [
+      paint.green(`${count("built")} built`),
+      paint.dim(`${count("present")} already present`),
+      ...(state.pushes === undefined ? [] : [paint.green(`${state.pushes.length} pushed`)]),
+    ].join(paint.dim(", ")),
+  ];
 }
