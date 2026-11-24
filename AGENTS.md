@@ -76,6 +76,8 @@ export const LAYERS: readonly string[] = ["project", "cli"];
 
 **Why:** later modules land in their final place, so nothing needs restructuring. Overrides replace a top-level rule rather than adding to it, so the generator copies the top-level `no-restricted-imports` patterns (the `node:` ban) into each one.
 
+`src/fakes` is the top layer, so no code may import it, but it's in `TEST_LAYERS`: any test, in any layer, may import its fakes.
+
 `src/gauntlet` is the exception: it's in `NOT_LAYERS`, not `LAYERS`. Each folder in it is a small project of its own, with its own instructions and tools, that the test cases in `.thunderjar/` set agents to work on. oxlint and `bun test` skip it (`.oxlintrc.json`'s `ignorePatterns`, and `bunfig.toml`).
 
 ## Use Bun

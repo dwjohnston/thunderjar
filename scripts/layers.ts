@@ -7,6 +7,12 @@
 export const LAYERS: readonly string[] = ["time", "io", "log", "testing", "api", "instruments", "config", "docker", "store", "execution", "measureTesting", "capture", "cli", "fakes"];
 
 /**
+ * Layers only tests use, e.g. `fakes`: test doubles for the services. Any test, in any layer, may
+ * import them; no other code may, since each is a layer after the rest.
+ */
+export const TEST_LAYERS: readonly string[] = ["fakes"];
+
+/**
  * Top-level folders of src/ that are not Thunderjar code, so not layers. oxlint ignores them, in
  * the `ignorePatterns` of .oxlintrc.json, and `bun test` does, in bunfig.toml.
  *

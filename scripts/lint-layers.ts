@@ -23,7 +23,7 @@ import {
   type Ban,
 } from "./ambient.ts";
 import { AMBIENT_ALLOWLIST } from "./ambientAllowlist.ts";
-import { LAYERS, NOT_LAYERS, SRC_RULES } from "./layers.ts";
+import { LAYERS, NOT_LAYERS, SRC_RULES, TEST_LAYERS } from "./layers.ts";
 
 const REPO_ROOT = Bun.fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const CONFIG_FILE = ".oxlintrc.json";
@@ -47,26 +47,32 @@ export function undeclaredFolders(srcFiles: string[], layers: readonly string[])
 }
 
 /**
- * One override per layer and folder depth, banning imports from the layers after it.
+ * One override per layer and folder depth, banning imports from the layers after it. Where one of
+ * those is in `testLayers`, a second override follows for the tests at that depth, which may
+ * import it.
  *
  * Overrides replace the top-level rule rather than adding to it, so each one repeats the
- * top-level no-restricted-imports options.
+ * top-level no-restricted-imports options. Of two that match a file, oxlint applies the later.
  */
-export function generateOverrides(layers: readonly string[], depth: number, base: RestrictedImportsOptions = {}, _testLayers: readonly string[] = []): Override[] {
+export function generateOverrides(layers: readonly string[], depth: number, base: RestrictedImportsOptions = {}, testLayers: readonly string[] = []): Override[] {
   const overrides: Override[] = [];
+  const rule = (patterns: { regex: string; message: string }[]) => ({
+    "no-restricted-imports": ["error", { ...base, patterns: [...(base.patterns ?? []), ...patterns] }],
+  });
   layers.forEach((layer, i) => {
     const later = layers.slice(i + 1);
     if (later.length === 0) return;
     for (let d = 1; d <= depth; d++) {
       const up = escapeRegex("../".repeat(d));
-      const patterns = later.map((other) => ({
+      const ban = (other: string) => ({
         regex: `^${up}${escapeRegex(other)}(/|$)`,
         message: `src/${layer} may not import from src/${other}: a layer may only import from the layers before it. See scripts/layers.ts.`,
-      }));
-      overrides.push({
-        files: [`src/${layer}/${"*/".repeat(d - 1)}*`],
-        rules: { "no-restricted-imports": ["error", { ...base, patterns: [...(base.patterns ?? []), ...patterns] }] },
       });
+      const folder = `src/${layer}/${"*/".repeat(d - 1)}`;
+      overrides.push({ files: [`${folder}*`], rules: rule(later.map(ban)) });
+      if (later.some((other) => testLayers.includes(other))) {
+        overrides.push({ files: [`${folder}*.test.ts`, `${folder}*.test.tsx`], rules: rule(later.filter((other) => !testLayers.includes(other)).map(ban)) });
+      }
     }
   });
   return overrides;
@@ -84,12 +90,13 @@ export function applyLayers(
   srcFiles: string[],
   srcRules: Readonly<Record<string, unknown>> = {},
   ambient?: Ambient,
+  testLayers: readonly string[] = [],
 ): OxlintConfig {
   const rule = config.rules?.["no-restricted-imports"];
   const base = Array.isArray(rule) ? ((rule[1] ?? {}) as RestrictedImportsOptions) : {};
   const src = Object.keys(srcRules).length > 0 ? [{ files: ["src/**"], rules: { ...srcRules } }] : [];
   const bans = ambient ? ambientOverrides(ambient.bans, ambient.exempt, ambient.allowlist) : [];
-  return { ...config, overrides: [...src, ...generateOverrides(layers, maxDepth(srcFiles), base), ...bans] };
+  return { ...config, overrides: [...src, ...generateOverrides(layers, maxDepth(srcFiles), base, testLayers), ...bans] };
 }
 
 /**
@@ -97,7 +104,7 @@ export function applyLayers(
  * implementations, in AMBIENT_IMPLEMENTATIONS, stay allowed, so they're never offenders.
  */
 async function findOffenders(config: OxlintConfig, layers: readonly string[], srcFiles: string[]): Promise<Allowlist> {
-  const unrelaxed = applyLayers(config, layers, srcFiles, SRC_RULES, { bans: AMBIENT_BANS, exempt: AMBIENT_EXEMPT, allowlist: AMBIENT_IMPLEMENTATIONS });
+  const unrelaxed = applyLayers(config, layers, srcFiles, SRC_RULES, { bans: AMBIENT_BANS, exempt: AMBIENT_EXEMPT, allowlist: AMBIENT_IMPLEMENTATIONS }, TEST_LAYERS);
   // Override globs are relative to the config file, so it goes beside .oxlintrc.json.
   const tmp = file(`${REPO_ROOT}/.oxlintrc.no-allowlist.tmp.json`);
   await write(tmp, renderConfig(unrelaxed));
@@ -141,7 +148,7 @@ if (import.meta.main) {
   const configFile = file(`${REPO_ROOT}/${CONFIG_FILE}`);
   const before = await configFile.text();
   const ambient = { bans: AMBIENT_BANS, exempt: AMBIENT_EXEMPT, allowlist: mergeAllowlists(AMBIENT_ALLOWLIST, AMBIENT_IMPLEMENTATIONS) };
-  const after = renderConfig(applyLayers(JSON.parse(before), LAYERS, srcFiles, SRC_RULES, ambient));
+  const after = renderConfig(applyLayers(JSON.parse(before), LAYERS, srcFiles, SRC_RULES, ambient, TEST_LAYERS));
   if (process.argv.includes("--seed-allowlist")) {
     await write(`${REPO_ROOT}/${ALLOWLIST_FILE}`, renderAllowlist(await findOffenders(JSON.parse(before), LAYERS, srcFiles)));
     console.log(`updated ${ALLOWLIST_FILE}. Run \`bun run lint:generate\`.`);
