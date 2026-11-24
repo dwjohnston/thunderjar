@@ -44,7 +44,10 @@ export class FakeContainerRunner implements ContainerRunner {
     this.enders.get(name)?.();
   }
 
-  async remove(_name: string): Promise<void> {}
+  async remove(name: string): Promise<void> {
+    this.removed.push(name);
+    this.enders.get(name)?.();
+  }
 }
 
 const noScript: ContainerScript = async ({ start }) => {
