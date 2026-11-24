@@ -4034,6 +4034,18 @@
     },
     {
       "files": [
+        "src/fakes/fakeClock.ts"
+      ],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "setInterval", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "name": "fetch", "message": "Use the ImageRegistry service instead. See \"Ambient APIs\" in AGENTS.md." }
+        ]
+      }
+    },
+    {
+      "files": [
         "src/io/io.ts"
       ],
       "rules": {

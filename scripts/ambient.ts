@@ -115,6 +115,8 @@ export type Allowlist = Readonly<Record<string, readonly string[]>>;
  * ❌ Don't add a file here to dodge the allowlist: anything else takes the service instead.
  */
 export const AMBIENT_IMPLEMENTATIONS: Allowlist = {
+  // Waits in real time for the code under test to reach the fake clock.
+  "src/fakes/fakeClock.ts": ["setTimeout"],
   "src/io/io.ts": ["process.stdout", "process.stderr"],
   "src/time/clock.ts": ["Date.now", "setTimeout"],
 };
