@@ -15,7 +15,10 @@ export async function readJson<T>(name: string, fallback: T): Promise<T> {
 }
 
 export async function writeJson(name: string, value: unknown): Promise<void> {
-  await Bun.write(`${fakeDir}/${name}`, JSON.stringify(value, null, 2));
+  // Write then rename, so a test reading the file mid-write never sees it half-written.
+  const temp = `${fakeDir}/.${name}.${process.pid}.tmp`;
+  await Bun.write(temp, JSON.stringify(value, null, 2));
+  await $`mv ${temp} ${`${fakeDir}/${name}`}`;
 }
 
 export async function logCall(command: string, args: string[]): Promise<void> {
