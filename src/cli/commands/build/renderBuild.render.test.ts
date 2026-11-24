@@ -33,3 +33,18 @@ test("a line per image built, then a count of built and already present", () => 
     "2 built, 1 already present",
   ]);
 });
+
+test("on a terminal, the image building counts up from when it started, and nothing waiting is shown", () => {
+  const state: BuildState = {
+    images: [
+      { image: "thunderjar-prerun:aaaaaaaa", status: "built", ms: 10_000 },
+      { image: "thunderjar-prerun:bbbbbbbb", status: "building", since: 10_000 },
+      { image: "thunderjar-prerun:cccccccc", status: "queued" },
+    ],
+  };
+
+  expect(renderBuild(state, { terminal: true, now: 15_000 })).toEqual([
+    "Building thunderjar-prerun:aaaaaaaa ... done",
+    "Building thunderjar-prerun:bbbbbbbb ... 5s",
+  ]);
+});
