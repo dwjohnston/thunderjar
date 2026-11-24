@@ -44,6 +44,7 @@ export const AMBIENT_ALLOWLIST: Allowlist = {
   "src/cli/commands/run/run.ts": ["Bun.sleep", "process.cwd", "process.on", "process.exit"],
   "src/cli/commands/runner/runner.ts": ["Bun.sleep", "process.cwd", "process.on", "process.exit"],
   "src/cli/commands/show/show.ts": ["process.cwd"],
+  "src/cli/commands/view/app/App.tsx": ["fetch"],
   "src/cli/commands/view/view.ts": ["process.cwd", "Bun.serve"],
   "src/cli/confirm.ts": ["Bun.stdin"],
   "src/cli/dataDir.ts": ["Bun.env"],

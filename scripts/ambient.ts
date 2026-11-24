@@ -91,14 +91,13 @@ export const AMBIENT_BANS: readonly Ban[] = [
  * `src/testing`: the fixture harness runs the CLI as a subprocess, with its own environment, and
  * waits on it. Tests, and `run`'s test support: they set up and observe the real world on purpose,
  * e.g. a temp folder, a Docker image, a timeout. What a test does can't leak into what Thunderjar
- * does. `view`'s app: it runs in the browser, and `fetch` is how it reads `view`'s server.
+ * does.
  */
 export const AMBIENT_EXEMPT: readonly string[] = [
   "src/testing/**",
   "src/**/*.test.ts",
   "src/**/*.test.tsx",
   "src/cli/commands/run/runTestSupport.ts",
-  "src/cli/commands/view/app/**",
 ];
 
 /** Which file may break which bans, e.g. `{ "src/cli/colour.ts": ["process.env"] }`. */

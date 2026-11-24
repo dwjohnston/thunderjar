@@ -923,8 +923,7 @@
         "src/testing/**",
         "src/**/*.test.ts",
         "src/**/*.test.tsx",
-        "src/cli/commands/run/runTestSupport.ts",
-        "src/cli/commands/view/app/**"
+        "src/cli/commands/run/runTestSupport.ts"
       ],
       "rules": { "no-restricted-globals": "off", "no-restricted-properties": "off", "thunderjar/no-ambient": "off" }
     },
@@ -2021,6 +2020,18 @@
           { "object": "Bun", "property": "serve", "message": "Use the ViewServer service instead. See \"Ambient APIs\" in AGENTS.md." },
           { "object": "Bun", "property": "which", "message": "Use the HarnessAdapters service instead. See \"Ambient APIs\" in AGENTS.md." },
           { "object": "Bun", "property": "SQL", "message": "Use the RunDataStore service instead. See \"Ambient APIs\" in AGENTS.md." }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/cli/commands/view/app/App.tsx"
+      ],
+      "rules": {
+        "no-restricted-globals": [
+          "error",
+          { "name": "setTimeout", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." },
+          { "name": "setInterval", "message": "Use the Clock service instead. See \"Ambient APIs\" in AGENTS.md." }
         ]
       }
     },
