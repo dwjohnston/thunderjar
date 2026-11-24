@@ -62,6 +62,33 @@ export type Printer = {
   printWarning(message: string): void;
 };
 
+/**
+ * The Printer the functions above write with, for commands not yet run through createApp: their
+ * text goes to stdout, or to stderr once `--json` has called textToStderr, coloured by the
+ * process's environment.
+ */
+export function processPrinter(): Printer {
+  const text: Output = {
+    get isTTY() {
+      return textOutput().isTTY === true;
+    },
+    get columns() {
+      return textOutput().columns;
+    },
+    write: (chunk) => void textOutput().write(chunk),
+  };
+  return {
+    text,
+    get paint() {
+      return painter();
+    },
+    print,
+    printJson,
+    printError,
+    printWarning,
+  };
+}
+
 /** A Printer over `io`, with the environment variables `env`, which may turn colour on or off. */
 export function printer(io: Io, { json = false, env }: { json?: boolean; env: Record<string, string | undefined> }): Printer {
   const text = json ? io.stderr : io.stdout;

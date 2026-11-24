@@ -14,12 +14,13 @@ import { ConfigError, findThunderjarRoot } from "../../../config/loader.ts";
 import { loadProjectConfig } from "../../../config/projectConfig.ts";
 import { DockerContainerError } from "../../../docker/docker.ts";
 import { stopOnRuntime } from "../../../execution/onRuntime.ts";
+import { systemClock } from "../../../time/clock.ts";
 import { painter } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { displayPath } from "../../dataDir.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
-import { print, printError as error, printJson } from "../../output.ts";
+import { print, printError as error, printJson, processPrinter } from "../../output.ts";
 import { detachedMessage, followToEnd, reportRunnerFailure } from "../run/followRunner.ts";
 import { type RunDisplay, runDisplay, showSecrets, showTimings, showUnclean, showUnsearched } from "../run/runDisplay.ts";
 
@@ -71,7 +72,8 @@ async function attach(cwd: string, executionId: string, imagePrefix: string, sto
           concurrent: submission.concurrency > 1,
           stored: true,
           remote: true,
-          paint,
+          out: processPrinter(),
+          clock: systemClock,
         });
         print(`${paint.dim("Execution")} ${paint.bold(executionId)}`);
         print(paint.dim(`Following test case ${submission.name}, on the runtime`));

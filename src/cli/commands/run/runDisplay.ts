@@ -20,13 +20,13 @@ import type { PlannedIteration, PlannedPermutation } from "../../../execution/pl
 import type { RunHooks } from "../../../execution/runExecution.ts";
 import type { ExecutionTimings } from "../../../execution/timings.ts";
 import { type FoundSecret, type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type Clock, every } from "../../../time/clock.ts";
 import { type Paint, plain } from "../../colour.ts";
 import { displayPath } from "../../dataDir.ts";
 import { agentEnd, dollars, secretFiles, endedCleanly, failureHint, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
 import { type LiveRow, liveRows } from "../../liveRows.ts";
-import { print, printError as error } from "../../output.ts";
-import { textOutput } from "../../textOutput.ts";
-import { type WaitingLine, waitingLine } from "../../waitingLine.ts";
+import type { Printer } from "../../output.ts";
+import { type Ticker, type WaitingLine, waitingLine } from "../../waitingLine.ts";
 
 /** `n/total`, `n` padded to the width of `total`, so the lines line up. */
 export const ordinal = (n: number, total: number) => `${String(n).padStart(String(total).length)}/${total}`;
@@ -178,7 +178,10 @@ export type RunDisplayOptions = {
   stored: boolean;
   /** Whether its containers run on a runtime, which pulls each prerun image. */
   remote: boolean;
-  paint: Paint;
+  /** Where it writes, and its colours. */
+  out: Printer;
+  /** What the counts on a terminal count on. */
+  clock: Clock;
 };
 
 export type RunDisplay = {
@@ -208,7 +211,12 @@ export type RunDisplay = {
 };
 
 /** The display of one execution: see the top of this file. */
-export function runDisplay({ testCase, permutations, concurrent, stored, remote, paint }: RunDisplayOptions): RunDisplay {
+export function runDisplay({ testCase, permutations, concurrent, stored, remote, out, clock }: RunDisplayOptions): RunDisplay {
+  const { paint } = out;
+  const print = (line: string) => out.print(line);
+  const error = (message: string) => out.printError(message);
+  // Where lines that wait, and live rows, are drawn, counting each second on the clock.
+  const drawn = { out: out.text, now: () => clock.now(), ticker: ((tick) => every(clock, 1000, tick)) satisfies Ticker, colour: paint.enabled };
   // Where a postrun image's push line goes: under its iteration, lined up with it, like its measures.
   const underIteration = " ".repeat(ordinal(permutations, permutations).length + 3);
   const ellipsis = paint.dim("...");
@@ -216,7 +224,7 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
   // With several at once: what starts each iteration's lines, and its postrun image's.
   const heads = new Map<string, string>();
   // With several at once, on a terminal: each iteration's line, and how its agent ended, by its postrun image.
-  const live = concurrent && textOutput().isTTY ? liveRows() : undefined;
+  const live = concurrent && out.text.isTTY ? liveRows(drawn) : undefined;
   const rows = new Map<string, LiveRow>();
   const outcomes = new Map<string, string>();
   /** Shows `step` after the iteration's outcome on its line, counting how long it takes if `counting`. */
@@ -237,7 +245,9 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
   let measuring = false;
   const open = (label: string, transient = false) => {
     measuring = transient;
-    line = waitingLine(label, { transient });
+    // A line left waiting stops counting: its ticker would otherwise run on.
+    line?.stop();
+    line = waitingLine(label, { ...drawn, transient });
   };
   const close = (text: string) => {
     line?.finish(text);

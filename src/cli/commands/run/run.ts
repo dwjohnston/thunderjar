@@ -25,7 +25,7 @@ import { imagePrefixOption } from "../../imagePrefix.ts";
 import { envEntry } from "../../format.ts";
 import { jsonOption } from "../../json.ts";
 import { overridesOf, withOverrideOptions } from "../../overrides.ts";
-import { print, printError as error, printJson, printWarning } from "../../output.ts";
+import { print, printError as error, printJson, printWarning, processPrinter } from "../../output.ts";
 import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.ts";
 import { runDisplay, showSecrets, showTimings, showUnclean, showUnsearched, storeFailure } from "./runDisplay.ts";
 
@@ -194,7 +194,7 @@ async function run(
   const paint = painter();
   const ellipsis = paint.dim("...");
   const done = paint.green("done");
-  const display = runDisplay({ testCase, permutations: plan.permutations.length, concurrent, stored: imageStore !== null, remote: runtime !== null, paint });
+  const display = runDisplay({ testCase, permutations: plan.permutations.length, concurrent, stored: imageStore !== null, remote: runtime !== null, out: processPrinter(), clock: systemClock });
   const { open, close, fail } = display;
 
   print(`${paint.dim("Execution")} ${paint.bold(plan.executionId)}`);
@@ -224,7 +224,10 @@ async function run(
       return false;
     }
   };
-  if (!(await runHook("beforeExecution"))) return;
+  if (!(await runHook("beforeExecution"))) {
+    display.stop();
+    return;
+  }
   // Ctrl-C, or a cancelled CI job: without this, its containers would keep running, their agents
   // still spending, and a runtime started by beforeExecution would never be released by afterExecution.
   let interrupted = false;
