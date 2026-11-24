@@ -40,3 +40,19 @@ test("advance first waits for the code under test to reach the clock, e.g. after
 
   expect(done).toBe(true);
 });
+
+test("an aborted sleep rejects with the signal's reason, and never fires", async () => {
+  const clock = new FakeClock();
+  const outcomes: string[] = [];
+  const controller = new AbortController();
+  clock.sleep(100, { signal: controller.signal }).then(
+    () => outcomes.push(`aborted sleep fired@${clock.now()}`),
+    (error: Error) => outcomes.push(`aborted sleep rejected: ${error.message}`),
+  );
+  void clock.sleep(200).then(() => outcomes.push(`other sleep fired@${clock.now()}`));
+
+  controller.abort(new Error("stopped"));
+  await clock.advance(200);
+
+  expect(outcomes).toEqual(["aborted sleep rejected: stopped", "other sleep fired@200"]);
+});
