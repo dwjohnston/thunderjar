@@ -26,20 +26,25 @@ export class FakeClock implements Clock {
     if (handle !== undefined) this.timers = this.timers.filter((timer) => timer.id !== handle.id);
   }
 
-  sleep(_ms: number): Promise<void> {
-    return new Promise(() => {});
+  sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => this.setTimeout(resolve, ms));
   }
 
   /** Moves time on `ms`, firing each timer that falls due, in time order. */
   async advance(ms: number): Promise<void> {
     const until = this.time + ms;
+    await settle();
     for (;;) {
       const due = this.timers.filter((timer) => timer.at <= until).sort((a, b) => a.at - b.at || a.id - b.id)[0];
       if (due === undefined) break;
       this.timers = this.timers.filter((timer) => timer !== due);
       this.time = due.at;
       due.callback();
+      await settle();
     }
     this.time = until;
   }
 }
+
+/** Lets every pending promise callback run: a macrotask runs only once the microtask queue is empty. */
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
