@@ -64,6 +64,25 @@ Struck through: solved in d278ebe5. The timeout's timing is tested on `runContai
 | 0211 remote runtime | "with concurrency 2, starts an iteration once its own prerun image is ready, while the next is still building" | `slow` 1s build | Open |
 | 0211 remote runtime | "interrupted, it removes its containers from the runtime, killing their agents, runs afterExecution, and exits 143" | `while (started().length < 2) await Bun.sleep(50)` | Open |
 
+## Seen timing out under `bun run test`, 2026-11-25
+
+Two full `bun run test` (`--parallel`) runs on a dev container with 10 cores and load around 2.5. Each test here hit bun's 5s default timeout, and every one passed when its file ran on its own. Which tests time out changes from run to run: the first run had 3, the second 6. So the cause looks like contention under `--parallel`, not a broken test. The serial times above don't show this.
+
+| File | Test | Timed out in | Notes |
+|---|---|---|---|
+| `src/cli/commands/run/run.runner.test.ts` | "has the runtime build and push the images, then the runner runs, measures, pushes and records the execution, and run only follows it" | both runs | |
+| `src/cli/commands/run/run.runner.test.ts` | "images already in the image store are neither built nor pushed" | both runs | |
+| `src/cli/commands/run/run.runner.test.ts` | "--json prints the execution and its container runs, as the runner recorded them, and --timings both sides' phases" | second run | |
+| `src/cli/commands/run/run.runner.test.ts` | "a test case's secretEnv reaches the runner without runner.env, and its env with the plan: the agent sees both, and only names are recorded" | second run | |
+| `src/cli/commands/build/build.test.ts` | "with build concurrency 2, builds two at once, writing a line as each starts and ends" | both runs | Already above: 1s `slow` builds. |
+| `src/cli/commands/run/run.more.test.ts` | "a clean run, and one whose secrets are too short to search for, record nothing, and run says nothing" (0206 leaked-secret) | second run | |
+
+### Failing, not a timeout
+
+| File | Test | Notes |
+|---|---|---|
+| `src/cli/logging.test.ts` | "without --log-file: a new file in .thunderjar/logs/, named for when and the command" | Fails on an assertion, "Received length: 2", in both full runs and when the file runs alone. Also fails at the commit before the services refactor (4938a2d5), so it wasn't caused by it. Not the verbose logging flake under Known flaky. |
+
 ## Excluded from `bun test`, slow by design
 
 Not timed here. They need Docker, a real model or Fly.io.
