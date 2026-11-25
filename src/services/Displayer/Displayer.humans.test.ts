@@ -53,7 +53,7 @@ describe(createDisplayerService, () => {
         await sampleExecution(state, clock);
         displayer.stop();
 
-        expect(io.stdout.text().split("\x1b[0J").at(-1)).toMatchInlineSnapshot(`
+        expect(io.stdout.lastFrame()).toMatchInlineSnapshot(`
           "Runs: 1 committed
           Images:
             base:1  ready

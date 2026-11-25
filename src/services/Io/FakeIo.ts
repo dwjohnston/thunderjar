@@ -29,6 +29,14 @@ export class FakeOutput implements Output {
   text(): string {
     return this.written;
   }
+
+  /**
+   * What's on screen after the last redraw: the text after the last "clear to end of screen"
+   * (`\x1b[0J`) a redrawing display writes before each new frame. All the text if there's none.
+   */
+  lastFrame(): string {
+    return this.written.split("\x1b[0J").at(-1) ?? "";
+  }
 }
 
 /** An input stream a test types into. */
