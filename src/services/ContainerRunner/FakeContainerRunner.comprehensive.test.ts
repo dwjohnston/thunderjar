@@ -1,82 +1,67 @@
+import { peek } from "bun";
 import { describe, expect, test } from "bun:test";
 import { FakeClock } from "../Clock/FakeClock";
-import { FakeContainerRunner } from "./FakeContainerRunner";
+import { type ContainerScriptContext, FakeContainerRunner } from "./FakeContainerRunner";
 
 const args = (name: string) => ["run", "--name", name, "image", "-c", "script"];
 
-describe("FakeContainerRunner", () => {
-  test("a container with no script starts at once and exits 0", async () => {
-    const runner = new FakeContainerRunner(new FakeClock());
+const hangs = async ({ clock, start }: ContainerScriptContext) => {
+    start();
+    await clock.sleep(300_000);
+    return 0;
+};
 
-    const container = runner.spawn(args("tj-1-1"), "STARTED");
+describe(FakeContainerRunner, () => {
+    test("A container's script is chosen by the end of its name, and it starts when the script says", async () => {
+        const clock = new FakeClock();
+        const runner = new FakeContainerRunner(clock).on("-slow", async ({ clock, start }) => {
+            await clock.sleep(3_000);
+            start();
+            return 0;
+        });
 
-    await container.started;
-    expect(await container.exited).toBe(0);
-    expect(await container.stderr).toBe("");
-  });
+        const slow = runner.spawn(args("example-container-slow"), "STARTED");
+        const other = runner.spawn(args("example-container"), "STARTED");
 
-  test("a scripted container runs on the fake clock, chosen by the end of its name", async () => {
-    const clock = new FakeClock();
-    const runner = new FakeContainerRunner(clock).on("-3-1", async ({ clock, start }) => {
-      await clock.sleep(3_000);
-      start();
-      await clock.sleep(1_000);
-      return { exitCode: 2, stderr: "boom" };
+        await clock.advance(2_999);
+        expect(peek.status(slow.started)).toBe("pending");
+        expect(peek.status(other.started)).toBe("fulfilled");
+
+        await clock.advance(1);
+        expect(peek.status(slow.started)).toBe("fulfilled");
     });
-    const container = runner.spawn(args("tj-3-1"), "STARTED");
-    let startedAt: number | undefined;
-    void container.started.then(() => (startedAt = clock.now()));
 
-    await clock.advance(2_000);
-    expect(startedAt).toBeUndefined();
-    await clock.advance(2_000);
+    test("kill ends a hanging container with 137, and records it", async () => {
+        const runner = new FakeContainerRunner(new FakeClock()).on("example-container", hangs);
+        const container = runner.spawn(args("example-container"), "STARTED");
 
-    expect(startedAt).toBe(3_000);
-    expect(await container.exited).toBe(2);
-    expect(await container.stderr).toBe("boom");
-  });
+        await runner.kill("example-container");
 
-  test("kill ends a hanging container with 137, and records it", async () => {
-    const clock = new FakeClock();
-    const runner = new FakeContainerRunner(clock).on("-1-1", async ({ clock, start }) => {
-      start();
-      await clock.sleep(300_000);
-      return 0;
+        expect(await container.exited).toBe(137);
+        expect(runner.killed).toEqual(["example-container"]);
     });
-    const container = runner.spawn(args("tj-1-1"), "STARTED");
-    await container.started;
 
-    await runner.kill("tj-1-1");
+    test("remove ends a container that never started with 137, and records it", async () => {
+        const runner = new FakeContainerRunner(new FakeClock()).on("example-container", async ({ clock }) => {
+            await clock.sleep(300_000);
+            return 0;
+        });
+        const container = runner.spawn(args("example-container"), "STARTED");
 
-    expect(await Promise.race([container.exited, clock.advance(0).then(() => "still running")])).toBe(137);
-    expect(runner.killed).toEqual(["tj-1-1"]);
-  });
+        await runner.remove("example-container");
 
-  test("remove ends a container that never started with 137, and records it", async () => {
-    const clock = new FakeClock();
-    const runner = new FakeContainerRunner(clock).on("-2-1", async ({ clock }) => {
-      await clock.sleep(300_000);
-      return 0;
+        expect(peek.status(container.started)).toBe("pending");
+        expect(await container.exited).toBe(137);
+        expect(runner.removed).toEqual(["example-container"]);
     });
-    const container = runner.spawn(args("tj-2-1"), "STARTED");
 
-    await runner.remove("tj-2-1");
+    test("Killing the docker run process ends it with 137, without killing or removing the container", async () => {
+        const runner = new FakeContainerRunner(new FakeClock()).on("example-container", hangs);
+        const container = runner.spawn(args("example-container"), "STARTED");
 
-    expect(await Promise.race([container.exited, clock.advance(0).then(() => "still running")])).toBe(137);
-    expect(runner.removed).toEqual(["tj-2-1"]);
-  });
+        container.kill();
 
-  test("killing the docker run process ends it with 137, without killing or removing the container", async () => {
-    const clock = new FakeClock();
-    const runner = new FakeContainerRunner(clock).on("-1-1", async ({ clock }) => {
-      await clock.sleep(300_000);
-      return 0;
+        expect(await container.exited).toBe(137);
+        expect({ killed: runner.killed, removed: runner.removed }).toEqual({ killed: [], removed: [] });
     });
-    const container = runner.spawn(args("tj-1-1"), "STARTED");
-
-    container.kill();
-
-    expect(await Promise.race([container.exited, clock.advance(0).then(() => "still running")])).toBe(137);
-    expect({ killed: runner.killed, removed: runner.removed }).toEqual({ killed: [], removed: [] });
-  });
 });

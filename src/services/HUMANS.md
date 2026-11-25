@@ -5,11 +5,22 @@ Injected services go here.
 
 Service names are always PascalCase. 
 
-````
+```
 src/services/
     <service name>/
         <service name>.ts
         <service name>.test.ts
         Fake<service name>.ts
+        Fake<service name>Test.ts
 
 ```
+
+Service.test.ts should be used to _test the service itself_
+
+_The Fake Service should not be tested here_. 
+
+
+FakeService.humans.test.ts is used to demonstrate how to use the FakeService. 
+
+This is the more useful test for maintainers. 
+
