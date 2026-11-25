@@ -10,6 +10,8 @@ export type Output = {
   isTTY: boolean;
   /** How wide the terminal is, to know where lines wrap. Undefined if it isn't one. */
   columns?: number;
+  /** How tall the terminal is, to know how much can be redrawn in place. Undefined if it isn't one, or doesn't say. */
+  rows?: number;
 };
 
 /** Where text is read from: stdin. */
@@ -66,13 +68,16 @@ export function lineReader(next: () => Promise<string | null>): Pick<Input, "rea
   };
 }
 
-const output = (stream: { write(text: string): unknown; isTTY?: boolean; columns?: number }): Output => ({
+const output = (stream: { write(text: string): unknown; isTTY?: boolean; columns?: number; rows?: number }): Output => ({
   write: (text) => void stream.write(text),
   get isTTY() {
     return stream.isTTY === true;
   },
   get columns() {
     return stream.isTTY ? stream.columns : undefined;
+  },
+  get rows() {
+    return stream.isTTY ? stream.rows : undefined;
   },
 });
 

@@ -12,6 +12,20 @@ describe(FakeIo, () => {
         expect(new FakeIo({ stderr: "terminal" }).stderr.columns).toBe(80);
     });
 
+    test("A terminal says how many rows it has only if the test gives it some", () => {
+        expect(new FakeIo({ stdout: "terminal" }).stdout.rows).toBeUndefined();
+        expect(new FakeIo({ stdout: "terminal", rows: 24 }).stdout.rows).toBe(24);
+        expect(new FakeIo({ rows: 24 }).stdout.rows).toBeUndefined();
+    });
+
+    test("It counts who is listening for a stop", () => {
+        const io = new FakeIo();
+        const stop = io.onStop(() => {});
+        expect(io.stopListeners).toBe(1);
+        stop();
+        expect(io.stopListeners).toBe(0);
+    });
+
     test("Each output keeps what's written to it, as written", () => {
         const io = new FakeIo();
 

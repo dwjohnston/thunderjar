@@ -12,10 +12,14 @@ export interface Displayer {
    * Interactive: polls the state each second and draws a frame, if stdout is a terminal. JSON: says
    * on stderr where the logs are. Each of the state's `warnings` goes to stderr once, as
    * `Warning: <text>`: with the next frame drawn, or in JSON mode at `stop`.
+   *
+   * A frame taller than the terminal is drawn only as far as fits, its last rows: the cursor
+   * can't move up past the top of the screen, so more would leave a copy behind each second.
    */
   start(): void;
   /**
-   * Interactive: stops polling and draws a final frame. JSON: writes the result, serialised as JSON,
+   * Interactive: stops polling and draws a final frame, whole, however tall. JSON: writes each of
+   * the state's `notes` to stderr, since no frame shows them, then the result, serialised as JSON,
    * to stdout, and nothing else. Either way the state's `failure`, if any, then goes to stderr as
    * `Error: <failure>`. Stopping again does nothing.
    */
@@ -84,12 +88,30 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
   let drawnRows = 0;
   let warningsShown = 0;
 
-  /** The rows `frame` takes on screen: a line wider than the terminal wraps onto more than one. */
-  const rowsOf = (frame: string) => {
-    const lines = frame.split("\n").slice(0, -1);
+  /** The rows `line` takes on screen: one wider than the terminal wraps onto more than one. */
+  const rowsOfLine = (line: string) => {
     const columns = stdout.columns;
-    if (columns === undefined || columns <= 0) return lines.length;
-    return lines.reduce((rows, line) => rows + Math.max(1, Math.ceil(line.length / columns)), 0);
+    return columns === undefined || columns <= 0 ? 1 : Math.max(1, Math.ceil(line.length / columns));
+  };
+
+  /** The rows `frame` takes on screen. */
+  const rowsOf = (frame: string) =>
+    frame
+      .split("\n")
+      .slice(0, -1)
+      .reduce((rows, line) => rows + rowsOfLine(line), 0);
+
+  /** As much of the end of `frame` as the terminal can redraw in place: all of it, if it fits or the terminal doesn't say how tall it is. */
+  const fitting = (frame: string) => {
+    const rows = stdout.rows;
+    if (rows === undefined || rows <= 0) return frame;
+    // The cursor rests on the row below the frame.
+    const room = Math.max(1, rows - 1);
+    const lines = frame.split("\n").slice(0, -1);
+    let taken = 0;
+    let first = lines.length;
+    while (first > 0 && taken + rowsOfLine(lines[first - 1] as string) <= room) taken += rowsOfLine(lines[--first] as string);
+    return first === 0 ? frame : lines.slice(first).map((line) => `${line}\n`).join("");
   };
 
   /** Writes the warnings not yet shown to stderr. True if there were any. */
@@ -100,7 +122,8 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
     return fresh.length > 0;
   };
 
-  const draw = () => {
+  /** Draws a frame over the last one: as much as fits, or with `whole`, all of it, for the last one. */
+  const draw = (whole = false) => {
     const run = state.get().run;
     if ((run.warnings ?? []).length > warningsShown) {
       // Clear the frame first, so a warning sharing the terminal lands above the next frame, not in it.
@@ -110,7 +133,8 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
     }
     const rendered = render(run, clock.now());
     // Nothing to show yet, e.g. the command failed before it had a manifest: no blank line.
-    const frame = rendered === "" || rendered.endsWith("\n") ? rendered : `${rendered}\n`;
+    const full = rendered === "" || rendered.endsWith("\n") ? rendered : `${rendered}\n`;
+    const frame = whole ? full : fitting(full);
     // On a terminal, move up over the last frame and clear to the end before drawing the next.
     stdout.write(drawnRows > 0 ? `\x1b[${drawnRows}A\x1b[0J${frame}` : frame);
     drawnRows = rowsOf(frame);
@@ -142,10 +166,11 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
       timer = undefined;
       if (mode === "json") {
         showWarnings();
+        for (const note of state.get().run.notes ?? []) stderr.write(`${note}\n`);
         // `?? "null"`: a result of undefined has no JSON, and stdout must still parse.
         stdout.write(`${JSON.stringify(toJson(state.get().run), null, 2) ?? "null"}\n`);
       } else {
-        draw();
+        draw(true);
       }
       const failure = state.get().run.failure;
       if (failure !== undefined) stderr.write(`Error: ${failure}\n`);

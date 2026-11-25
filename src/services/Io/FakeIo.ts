@@ -10,6 +10,8 @@ export type FakeIoOptions = {
   stdin?: StreamKind;
   /** How wide the terminal streams are. 80 by default. */
   columns?: number;
+  /** How tall the terminal streams are. Not said by default, as a terminal that doesn't report it. */
+  rows?: number;
 };
 
 /** An output stream that keeps what's written to it. */
@@ -19,6 +21,7 @@ export class FakeOutput implements Output {
   constructor(
     readonly isTTY: boolean,
     readonly columns: number | undefined,
+    readonly rows?: number,
   ) {}
 
   write(text: string): void {
@@ -88,8 +91,8 @@ export class FakeIo implements Io {
   readonly stdin: FakeInput;
   private readonly handlers = new Set<(signal: StopSignal) => void>();
 
-  constructor({ stdout = "pipe", stderr = "pipe", stdin = "pipe", columns = 80 }: FakeIoOptions = {}) {
-    const out = (kind: StreamKind) => new FakeOutput(kind === "terminal", kind === "terminal" ? columns : undefined);
+  constructor({ stdout = "pipe", stderr = "pipe", stdin = "pipe", columns = 80, rows }: FakeIoOptions = {}) {
+    const out = (kind: StreamKind) => new FakeOutput(kind === "terminal", kind === "terminal" ? columns : undefined, kind === "terminal" ? rows : undefined);
     this.stdout = out(stdout);
     this.stderr = out(stderr);
     this.stdin = new FakeInput(stdin === "terminal");
