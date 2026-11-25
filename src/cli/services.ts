@@ -14,11 +14,11 @@ export type Services = {
   clock: Clock;
   env: Env;
   io: Io;
-  /** Docker on the machine Thunderjar runs on: registry logins, its own images, `doctor`'s probe, and everything with `--local`. */
+  /** Docker on the machine Thunderjar runs on: registry logins, its own images, `doctor`'s probe. */
   hostDocker: DockerService;
   /**
    * Docker where containers run: the runtime the project's config gives. With none, or outside a
-   * project, it's `hostDocker` itself. A command given `--local` uses `hostDocker` instead. See src/cli/HUMANS.md.
+   * project, it's `hostDocker` itself. See src/cli/HUMANS.md.
    */
   runtimeDocker: DockerService;
   /**

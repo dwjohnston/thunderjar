@@ -3,11 +3,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { $ } from "bun";
 import type { ContainerRunRecord, ExecutionRecord } from "../../../store/runDataStore.ts";
-import { copyScenarioProject, thunderjar, TMP_DIR } from "../../../testing/cli.ts";
+import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { instruments } from "../../../instruments/instruments.ts";
 import { fakeCommand } from "../../../testing/fakeCommand.ts";
-import { FAKE_DOCKER, fakeDocker } from "../../../testing/fakeDocker.ts";
-import { REPO_ROOT, scenario } from "../../../testing/scenario.ts";
+import { fakeDocker } from "../../../testing/fakeDocker.ts";
+import { scenario } from "../../../testing/scenario.ts";
 import { KEY, TEST_CASE_SECRET, dataDir, permutation, readStore, removeDataDirs } from "./runTestSupport.ts";
 
 const KNOWN_INSTRUMENTS = Object.keys(instruments).join(", ");
@@ -65,7 +65,7 @@ export default declareTestCase({
 });
 
 describe("0204 misbehaving agents", () => {
-  test("an agent that exits non-zero or leaves no result file is marked, each measured all the same", async () => {
+  test("an agent that exits non-zero or leaves no result file is marked: the one that exits non-zero isn't measured, the silent one is", async () => {
     await using docker = await fakeDocker();
     const data = dataDir();
 
@@ -77,16 +77,22 @@ describe("0204 misbehaving agents", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(1);
-    expect(stdout).toEndWith(`
- 1/3  iteration 1/1  fake-sleeper | plain  ... done (<duration>)
-      isPrimeTsExists: true
- 2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (<duration>)
-      isPrimeTsExists: false
- 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
-      isPrimeTsExists: true
-2 of 3 agents didn't end cleanly:
-  1×  exited 1  fake-crasher: no space left on device  (2-1)
-  1×  done, no result file  (3-1)
+    expect(stdout).toBe(`Execution <ULID>  misbehaving
+  3 permutations, 3 runs, up to 1 at once
+
+Images
+  thunderjar-prerun:1d9d07c1  ready
+  thunderjar-prerun:8458d2af  ready
+  thunderjar-prerun:53b26258  ready
+
+Runs
+  1.1  fake-sleeper/fake-model-small-001  completed  0:00
+       isPrimeTsExists: true
+  2.1  fake-crasher/fake-model-small-001  crashed (exited 1)  0:00
+  3.1  fake-silent/fake-model-small-001   completed  0:00
+       isPrimeTsExists: true
+
+3 runs: 2 completed, 1 crashed
 Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
@@ -95,14 +101,19 @@ Recorded in <DATA>/runs.sqlite
     expect(sleeper.execution).toMatchObject({ exitCode: 0, timedOut: false });
     expect(crasher.execution).toMatchObject({ exitCode: 1, timedOut: false });
     expect(crasher.harnessResult).toBe('{"error":"crashed"}\n');
+    // The one that crashed is recorded and committed, but not measured.
+    expect(crasher.result).toEqual({});
+    expect(Object.keys(sleeper.result)).toEqual(["isPrimeTsExists"]);
+    expect(Object.keys(silent.result)).toEqual(["isPrimeTsExists"]);
     expect(silent.execution).toMatchObject({ exitCode: 0, timedOut: false });
     expect(silent.harnessResult).toBeNull();
     // The log says why each failed: what the agent wrote to stderr, and its result file.
-    expect(log).toContain(`WARN: execution: agent exited non-zero
+    expect(log).toContain(`WARN: runNext: agent didn't end cleanly
     executionId: "<ULID>"
+    runId: "<ULID>-ca2ae3ae-i1"
     permutation: 2
     iteration: 1
-    exitCode: 1
+    outcome: "crashed"
     output: [
       {
         "turn": 1,
@@ -115,7 +126,12 @@ Recorded in <DATA>/runs.sqlite
       "fake-crasher: no space left on device\n",
     );
     // Each was committed, and removed.
-    expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
+    const id = store.execution.executionId;
+    for (const n of [1, 2, 3]) expect(await docker.images()).toContain(`thunderjar-postrun:${id}-${n}-1`);
+    expect(await docker.containers()).toEqual([]);
+    // A measurement container was started from the sleeper's and the silent one's postrun images only.
+    const measured = (await docker.commands()).filter((command) => command.startsWith("docker run --rm --interactive"));
+    expect(measured.map((command) => /thunderjar-postrun:\S+/.exec(command)?.[0])).toEqual([`thunderjar-postrun:${id}-1-1`, `thunderjar-postrun:${id}-3-1`]);
   }, 30_000);
 
   test("a container that never starts is that run's outcome, given up on before it exists, and the execution goes on to the end", async () => {
@@ -132,15 +148,17 @@ Recorded in <DATA>/runs.sqlite
     // No execution-level error: the run's own line says it failed to start, and the rest ran.
     expect(stderr).toBe("");
     expect(exitCode).toBe(1);
-    expect(stdout).toEndWith(`
- 1/3  iteration 1/1  fake-sleeper | plain  ... done (<duration>)
-      isPrimeTsExists: true
- 2/3  iteration 1/1  fake-crasher | plain  ... failed to start
- 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
-      isPrimeTsExists: true
-2 of 3 agents didn't end cleanly:
-  1×  failed to start  it didn't start within <duration>  (2-1)
-  1×  done, no result file  (3-1)
+    // The crasher's duration is how long it was waited for: 3s, or a little over.
+    expect(stdout.replace(/\(didn't start\)  0:0\d/, "(didn't start)  0:0N")).toEndWith(`
+Runs
+  1.1  fake-sleeper/fake-model-small-001  completed  0:00
+       isPrimeTsExists: true
+  2.1  fake-crasher/fake-model-small-001  crashed (didn't start)  0:0N
+       Its container didn't start: it didn't start within <duration>
+  3.1  fake-silent/fake-model-small-001   completed  0:00
+       isPrimeTsExists: true
+
+3 runs: 2 completed, 1 crashed
 Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
@@ -155,7 +173,7 @@ Recorded in <DATA>/runs.sqlite
     expect(commands.filter((command) => command.includes(`thunderjar-run-${id}-2-1`) && command.startsWith("docker kill"))).toEqual([]);
     expect(commands).toContain(`docker rm --force thunderjar-run-${id}-2-1`);
     expect(commands.filter((command) => command.includes(`thunderjar-postrun:${id}-2-1`))).toEqual([]);
-    expect(log).toContain("WARN: execution: container didn't start");
+    expect(log).toContain("WARN: runNext: container didn't start");
     expect(await docker.containers()).toEqual([]);
   }, 30_000);
 });
@@ -279,8 +297,10 @@ Permutation 1: prerun image thunderjar-prerun:70748710
 
   test("env and secretEnv change no hash: the prerun image is the same without them", async () => {
     const withEnv = JSON.parse((await thunderjar(scenario("0206"), ["run", "test-case-env", "--dry-run", "--json"], { env: TEST_CASE_SECRET })).stdout);
-    expect(withEnv.permutations[0].testCaseEnv).toEqual({ FAKE_TEST_CASE_SETTING: "test", FAKE_TEST_CASE_AWKWARD: AWKWARD_VALUE });
-    expect(withEnv.permutations[0].secretEnv).toEqual(["FAKE_TEST_CASE_SECRET"]);
+    expect(withEnv).toMatchObject({ runs: {}, images: {}, uploadBacklog: 0, mode: "dry-run" });
+    expect(withEnv.manifest.permutations).toHaveLength(1);
+    expect(withEnv.manifest.permutations[0].testCaseEnv).toEqual({ FAKE_TEST_CASE_SETTING: "test", FAKE_TEST_CASE_AWKWARD: AWKWARD_VALUE });
+    expect(withEnv.manifest.permutations[0].secretEnv).toEqual(["FAKE_TEST_CASE_SECRET"]);
 
     await using copy = await copyScenarioProject("0206");
     const file = `${copy.dir}/.thunderjar/test-cases/test-case-env.ts`;
@@ -288,10 +308,11 @@ Permutation 1: prerun image thunderjar-prerun:70748710
     await Bun.write(file, text.slice(0, text.indexOf("  env: {")) + "});\n");
     const without = JSON.parse((await thunderjar(copy.dir, ["run", "test-case-env", "--dry-run", "--json"])).stdout);
 
-    expect(without.permutations[0].testCaseEnv).toEqual({});
-    expect(without.permutations[0].secretEnv).toEqual([]);
-    expect(without.permutations[0].hash).toBe(withEnv.permutations[0].hash);
-    expect(without.permutations[0].prerunImage).toBe(withEnv.permutations[0].prerunImage);
+    expect(without.manifest.permutations[0].testCaseEnv).toEqual({});
+    expect(without.manifest.permutations[0].secretEnv).toEqual([]);
+    expect(without.manifest.permutations[0].hash).toBe(withEnv.manifest.permutations[0].hash);
+    expect(without.manifest.permutations[0].prerunImage).toBe(withEnv.manifest.permutations[0].prerunImage);
+    expect(withEnv.manifest.permutations[0].prerunImage).toBe("thunderjar-prerun:70748710");
   });
 });
 
@@ -405,17 +426,21 @@ describe("0206 leaked-secret: a run's secret values, written into files, are fou
     });
   });
 
-  test("run warns, as it finishes, which secrets each postrun image holds, and that a pushed one's are exposed", async () => {
+  test("run warns, under each run, which secrets its postrun image holds, and that a pushed one's are exposed", async () => {
     await using docker = await fakeDocker();
 
     const { stdout, exitCode } = await thunderjar(scenario("0206"), ["run", "leaked-secret", "--data-dir", dataDir()], { env: { ...docker.env, ...secrets } });
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain(`
-1 of 1 postrun images hold a secret's value in their files:
-  1-1  FAKE_HARNESS_KEY       2 files: /workspace/.env, /workspace/agent.log
-  1-1  FAKE_TEST_CASE_SECRET  1 file: /workspace/.env
-The images were still committed, measured and pushed, if there's an image store. Treat a secret in one that was pushed as exposed, and rotate it.
+Runs
+  1.1  fake-leaker/fake-model-small-001  completed  0:00
+       sandboxed: false
+       Its postrun image holds the value of FAKE_HARNESS_KEY (2 files: /workspace/.env, /workspace/agent.log)
+       Its postrun image holds the value of FAKE_TEST_CASE_SECRET (1 file: /workspace/.env)
+
+1 run: 1 completed
+1 postrun image of 1 hold a secret's value in their files. Treat one that was pushed as exposed, and rotate it.
 Recorded in `);
   });
 
@@ -432,8 +457,12 @@ Recorded in `);
     expect(record).toMatchObject({ secretSearchFailed: "it took longer than 1s" });
     expect(record).not.toHaveProperty("secretsFound");
     expect(stdout).toContain(`
-Couldn't search 1 of 1 postrun images for secrets' values, so they may hold one:
-  1-1  it took longer than <duration>
+Runs
+  1.1  fake-leaker/fake-model-small-001  completed  0:00
+       sandboxed: false
+       Its postrun image couldn't be searched for secrets: it took longer than <duration>
+
+1 run: 1 completed
 Recorded in `);
   });
 
@@ -465,7 +494,12 @@ Recorded in `);
       env: { ...docker.env, FAKE_HARNESS_KEY: "short-key", FAKE_TEST_CASE_SECRET: "short" },
     });
 
-    for (const { stdout } of [clean, short]) expect(stdout).not.toContain("secret");
+    // The test case's name aside, neither frame mentions a secret.
+    for (const { stdout, exitCode } of [clean, short]) {
+      expect(exitCode).toBe(0);
+      expect(stdout.replace("leaked-secret", "<test case>")).not.toContain("secret");
+      expect(stdout).toContain("\n\n1 run: 1 completed\nRecorded in ");
+    }
     const runs = [...(await readStore(cleanData)).containerRuns, ...(await readStore(shortData)).containerRuns];
     expect(runs).toHaveLength(2);
     for (const run of runs) {
@@ -575,7 +609,7 @@ describe("0207 image store", () => {
     expect(await Bun.file(data).exists()).toBe(false);
   });
 
-  test("pushes the prerun image once built, and the postrun image before it's measured", async () => {
+  test("pushes the prerun image once built, and the postrun image once committed, and runs from the stored reference", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     const data = dataDir();
 
@@ -585,20 +619,43 @@ describe("0207 image store", () => {
     expect(exitCode).toBe(0);
     const { executionId } = (await readStore(data)).execution as ExecutionRecord;
     const postrun = `${REPOSITORY}:postrun-e${executionId}-h0af800ad-i00`;
-    expect(stdout.replace(executionId, "<ID>")).toBe(`Execution <ULID>
-Building thunderjar-prerun:4799f255 ... done
-Pushing ${PRERUN} ... done
- 1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
-      Pushing ${postrun.replace(executionId, "<ID>")} ... done
-      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1
+    expect(stdout).toBe(`Execution <ULID>  example
+  1 permutation, 1 run, up to 1 at once, images stored in ${REPOSITORY}
+
+Images
+  ${PRERUN}  ready
+
+Runs
+  1.1  fake-harness-alpha/fake-model-small-001  completed  0:00  uploaded
+       isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   tsIgnoreCount: 1
+
+1 run: 1 completed
 Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 `);
     expect(await docker.pushed()).toEqual([PRERUN, postrun]);
     expect(((await readStore(data)).containerRuns as ContainerRunRecord[]).map((run) => run.postrunImage)).toEqual([postrun]);
     const commands = await docker.commands();
     expect(commands[0]).toBe("docker login ghcr.io");
-    // Pushed before the first measurement container starts.
-    expect(commands.indexOf(`docker push --quiet ${postrun}`)).toBeLessThan(commands.findIndex((command) => command.includes("-measure-")));
+    // Built, then pushed under its stored reference, before the agent's container, which runs from that reference.
+    const build = commands.findIndex((command) => command.startsWith("docker build"));
+    const pushPrerun = commands.indexOf(`docker push --quiet ${PRERUN}`);
+    const run = commands.findIndex((command) => command.startsWith("docker run --name"));
+    expect(build).toBeGreaterThan(0);
+    expect(pushPrerun).toBeGreaterThan(build);
+    expect(run).toBeGreaterThan(pushPrerun);
+    expect(commands[run]).toContain(` --entrypoint sh ${PRERUN} -c `);
+    // The postrun image is committed under its local name, then tagged and pushed: before, during or after measuring.
+    const local = `thunderjar-postrun:${executionId}-1-1`;
+    const commit = commands.findIndex((command) => command.startsWith("docker commit") && command.endsWith(` ${local}`));
+    const tag = commands.indexOf(`docker tag ${local} ${postrun}`);
+    expect(commit).toBeGreaterThan(run);
+    expect(tag).toBeGreaterThan(commit);
+    expect(commands.indexOf(`docker push --quiet ${postrun}`)).toBeGreaterThan(tag);
+    // Measured once, in a container of the committed image.
+    const measuring = commands.filter((command) => command.includes("-measure-"));
+    expect(measuring).toHaveLength(1);
+    expect(measuring[0]).toContain(` --entrypoint sh ${local} -c `);
+    expect(commands.indexOf(measuring[0] as string)).toBeGreaterThan(commit);
   });
 
   test("a prerun push the registry refuses is an error, and nothing is run or written", async () => {
@@ -607,7 +664,12 @@ Recorded in <REPO>/fixtures/.tmp/data-<UUID>/runs.sqlite
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0207"), ["run", "example", "--data-dir", data], { env: docker.env });
 
-    expect(stdout).toBe(`Execution <ULID>\nPushing ${PRERUN} ... failed\n`);
+    expect(stdout).toBe(`Execution <ULID>  example
+  1 permutation, 1 run, up to 1 at once, images stored in ${REPOSITORY}
+
+Images
+  ${PRERUN}  failed
+`);
     expect(stderr).toBe(`Error: Pushing ${PRERUN} failed: denied: permission_denied: The token provided does not match expected scopes.
 Check that your Docker login for ghcr.io can push to ${REPOSITORY}: on ghcr.io, a token needs the write:packages scope.
 `);

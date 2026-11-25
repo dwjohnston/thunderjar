@@ -66,7 +66,7 @@ export async function runOnRunner(
   // With a runner, the whole execution runs on the runtime, and this only submits and follows it.
   const runner = runtime?.runner;
   if (runner !== undefined && dataDir !== undefined) {
-    throw new ConfigError("--data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore. Pass --local to run here.");
+    throw new ConfigError("--data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore.");
   }
   const concurrency = concurrencyOption ?? runtime?.concurrency ?? 1;
   const concurrent = runsConcurrently(concurrency, build);

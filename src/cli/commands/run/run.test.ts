@@ -11,9 +11,16 @@ import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
 import type { ExecutionSummary } from "../../../execution/executionSummary.ts";
+import type { Manifest } from "../../../runNext/types.ts";
+import type { RunState } from "../../../services/ApplicationState/ApplicationState.ts";
 import { ALPHA_JSON, ALPHA_MEASURES, AWKWARD, BETA_MEASURES, ISO, KEY, SHA, TEST_CASE_SECRET, alphaPermutation, containerCommands, dataDir, filesIn, measure, measured, permutation, postgresSchema, readStore, removeDataDirs, usePostgres } from "./runTestSupport.ts";
 
 afterEach(removeDataDirs);
+
+/** `run`'s frame with each run's duration, e.g. `0:00`, replaced: it varies. */
+const frame = (stdout: string) => stdout.replace(/  \d+:\d\d(?=  |\n)/g, "  <duration>");
+/** A run's measures line, under its run line. */
+const under = (measures: string) => ` ${measures}`;
 
 describe("0202 typical project", () => {
   test("example: the execution's ID, then its one permutation's prerun image, and its iteration's postrun image and harness command", async () => {
@@ -110,13 +117,20 @@ describe("run, against the fake Docker", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toBe(`Execution <ULID>
-Building thunderjar-prerun:ded54607 ... done
-Building thunderjar-prerun:e4f0784f ... done
- 1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
-${ALPHA_MEASURES}
- 2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
-${BETA_MEASURES}
+    expect(frame(stdout)).toBe(`Execution <ULID>  two-harnesses
+  2 permutations, 2 runs, up to 1 at once
+
+Images
+  thunderjar-prerun:ded54607  ready
+  thunderjar-prerun:e4f0784f  ready
+
+Runs
+  1.1  fake-harness-alpha/fake-model-small-001  completed  <duration>  $0.061
+${under(ALPHA_MEASURES)}
+  2.1  fake-harness-beta/fake-model-large-001   completed  <duration>
+${under(BETA_MEASURES)}
+
+2 runs: 2 completed
 Recorded in <DATA>/runs.sqlite
 `);
 
@@ -212,6 +226,7 @@ Recorded in <DATA>/runs.sqlite
     ]);
 
     // Each container ran from its prerun image, then was committed into its postrun image and removed.
+    const postrun = (n: number) => `thunderjar-postrun:${id}-${n}-1`;
     const container = (n: number) => `thunderjar-run-${id}-${n}-1`;
     const prerun = (n: number) => `thunderjar-prerun:${n === 1 ? "ded54607" : "e4f0784f"}`;
     const commands = await containerCommands(docker);
@@ -233,7 +248,7 @@ Recorded in <DATA>/runs.sqlite
     for (const n of [1, 2]) {
       const measuring = commands.filter((command) => command.includes(` ${container(n)}-measure-`));
       expect(measuring).toEqual([`docker run --rm --interactive --name ${container(n)}-measure-1 --pull never ${n === 1 ? "-e FAKE_HARNESS_KEY " : ""}--entrypoint sh thunderjar-postrun:${id}-${n}-1 -c <script>`]);
-      expect(commands.indexOf(measuring[0] as string)).toBeGreaterThan(commands.indexOf(`docker rm --force ${container(n)}`));
+      expect(commands.indexOf(measuring[0] as string)).toBeGreaterThan(commands.findIndex((command) => command.startsWith("docker commit") && command.endsWith(` ${container(n)} ${postrun(n)}`)));
     }
     expect(await docker.images()).toEqual([
       "thunderjar-prerun:ded54607",
@@ -281,11 +296,21 @@ Recorded in <DATA>/runs.sqlite
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toBe(`Execution <ULID>
- 1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
-${ALPHA_MEASURES}
+    expect(frame(stdout)).toBe(`Execution <ULID>  example
+  1 permutation, 1 run, up to 1 at once
+
+Images
+  thunderjar-prerun:ded54607  ready
+
+Runs
+  1.1  fake-harness-alpha/fake-model-small-001  completed  <duration>  $0.061
+${under(ALPHA_MEASURES)}
+
+1 run: 1 completed
 Recorded in .thunderjar/.data/runs.sqlite
 `);
+    // The prerun image was there already: nothing was built again.
+    expect((await docker.commands()).filter((command) => command.startsWith("docker build"))).toHaveLength(1);
     const store = await readStore(`${copy.dir}/.thunderjar/.data`);
     expect(store.execution.status).toBe("complete");
     expect(store.containerRuns).toHaveLength(1);
@@ -305,18 +330,20 @@ Recorded in .thunderjar/.data/runs.sqlite
     });
 
     expect(exitCode).toBe(0);
-    const lines = stdout.split("\n").filter((line) => line.includes("iteration"));
+    expect(stdout).toStartWith("Execution <ULID>  is-prime-baseline\n  8 permutations, 16 runs, up to 1 at once\n");
+    const lines = frame(stdout).split("\n").filter((line) => /^  \d\.\d  /.test(line));
     expect(lines).toHaveLength(16);
     expect(lines.slice(0, 3)).toEqual([
-      " 1/8  iteration 1/2  snerk | fake-harness-alpha | plain  ... done (<duration>, $0.061)",
-      " 1/8  iteration 2/2  snerk | fake-harness-alpha | plain  ... done (<duration>, $0.061)",
-      " 2/8  iteration 1/2  snerk | fake-harness-alpha | terse  ... done (<duration>, $0.061)",
+      "  1.1  snerk · fake-harness-alpha/fake-model-small-001 · plain  completed  <duration>  $0.061",
+      "  1.2  snerk · fake-harness-alpha/fake-model-small-001 · plain  completed  <duration>  $0.061",
+      "  2.1  snerk · fake-harness-alpha/fake-model-small-001 · terse  completed  <duration>  $0.061",
     ]);
-    expect(lines.at(-1)).toBe(" 8/8  iteration 2/2  glurk | fake-harness-beta | terse  ... done (<duration>)");
+    expect(lines.at(-1)).toBe("  8.2  glurk · fake-harness-beta/fake-model-large-001 · terse   completed  <duration>");
     // Permutations 1, 2, 5 and 6 are alpha's; 3, 4, 7 and 8 beta's.
-    const measures = stdout.split("\n").filter((line) => line.startsWith("      isPrime"));
-    const fourOf = (line: string) => Array<string>(4).fill(line);
+    const measures = stdout.split("\n").filter((line) => line.startsWith("       isPrime"));
+    const fourOf = (line: string) => Array<string>(4).fill(under(line));
     expect(measures).toEqual([...fourOf(ALPHA_MEASURES), ...fourOf(BETA_MEASURES), ...fourOf(ALPHA_MEASURES), ...fourOf(BETA_MEASURES)]);
+    expect(stdout).toContain("\n16 runs: 16 completed\n");
   }, 60_000);
 
   test("a harness in two of the test case's pairs is shown by its whole pair", async () => {
@@ -341,9 +368,9 @@ export default declareTestCase({
     const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "two-models"], { env: { ...docker.env, ...KEY } });
 
     expect(exitCode).toBe(0);
-    expect(stdout.split("\n").filter((line) => line.includes("iteration"))).toEqual([
-      " 1/2  iteration 1/1  fake-harness-beta/fake-model-small-001 | plain  ... done (<duration>)",
-      " 2/2  iteration 1/1  fake-harness-beta/fake-model-large-001 | plain  ... done (<duration>)",
+    expect(frame(stdout).split("\n").filter((line) => /^  \d\.\d  /.test(line))).toEqual([
+      "  1.1  fake-harness-beta/fake-model-small-001  completed  <duration>",
+      "  2.1  fake-harness-beta/fake-model-large-001  completed  <duration>",
     ]);
   });
 
@@ -372,11 +399,11 @@ export default declareTestCase({
 
     expect(stdout).toBe("");
     expect(stderr).toMatch(
-      /^Error: Can't use the run data store, Postgres at \$THUNDERJAR_DB_URL, so nothing was run: .+\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead\.\n$/,
+      /^Error: Can't use the run data store, Postgres at \$THUNDERJAR_DB_URL, so the execution stopped: .+\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead\.\n$/,
     );
     expect(stderr).not.toContain("secret");
     expect(exitCode).toBe(1);
-    expect((await docker.commands()).filter((command) => !command.startsWith("docker image ls"))).toEqual([]);
+    expect(await docker.commands()).toEqual([]);
   });
 
   // Only with THUNDERJAR_POSTGRES_URL set to a Postgres it may create a schema in.
@@ -421,29 +448,27 @@ export default declareHarness({ version: "1.0.0", models: { "fake-model-small-00
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(1);
-    expect(stdout).toEndWith(`
- 1/2  iteration 1/1  fake-harness-alpha | plain  ... exited 3, no result file (<duration>)
-      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":1,\\"comments\\":0,\\"exports\\":0}\\n", stdoutTruncated: false}   isPrimeTests: erroredWhileMeasuring (isPrime.test.ts didn't run against isPrime.ts: ReferenceError: partial is not defined)   isPrimeTsExists: true   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: 0
- 2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
-${BETA_MEASURES}
-1 of 2 agents didn't end cleanly:
-  1×  exited 3, no result file  Error: unknown model  (1-1)
+    // It isn't measured: what a crashed agent left says nothing of the task.
+    expect(frame(stdout)).toEndWith(`
+Runs
+  1.1  fake-harness-alpha/fake-model-small-001  crashed (exited 3, no result file)  <duration>
+  2.1  fake-harness-beta/fake-model-large-001   completed  <duration>
+${under(BETA_MEASURES)}
+
+2 runs: 1 completed, 1 crashed
 Recorded in <DATA>/runs.sqlite
 `);
     const store = await readStore(data);
     expect(store.execution.status).toBe("failed");
-    // What the agent left is measured all the same.
-    expect(store.containerRuns[0]?.result.isPrimeTests?.outcome).toEqual({
-      outcome: "erroredWhileMeasuring",
-      error: { message: "isPrime.test.ts didn't run against isPrime.ts: ReferenceError: partial is not defined" },
-    });
+    expect(store.containerRuns.map(({ result }) => Object.keys(result))).toEqual([[], ["isPrimeShape", "isPrimeTests", "isPrimeTsExists", "saysArr", "tsIgnoreCount"]]);
+    expect((await docker.commands()).filter((command) => command.includes("-measure-"))).toEqual([expect.stringContaining(`thunderjar-run-${store.execution.executionId}-2-1-measure-1 `)]);
     expect(store.containerRuns.map(({ execution, harnessResult }) => [execution.exitCode, harnessResult])).toEqual([
       [3, null],
       [0, '{"model":"fake-model-large-001","reply":"I wrote isPrime.ts, and tested it up to 100."}\n'],
     ]);
     // Why it exited non-zero is kept, and logged.
     expect(store.containerRuns.map(({ harnessStderr }) => harnessStderr)).toEqual(["Error: unknown model\n", ""]);
-    expect(log).toMatch(/WARN.*agent exited non-zero[\s\S]*"stderr": "Error: unknown model"/);
+    expect(log).toMatch(/WARN.*agent didn't end cleanly[\s\S]*Error: unknown model/);
     // A failed run is committed too, so what the agent left can be looked at.
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
     expect(await docker.containers()).toEqual([]);
@@ -468,10 +493,12 @@ export default declareHarness({ version: "1.0.0", models: { "fake-model-small-00
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toEndWith(` 1/1  iteration 1/1  fake-harness-alpha | plain  ... done, no result file (<duration>)
-      isPrimeShape: {exitCode: 1, stdout: "", stdoutTruncated: false}   isPrimeTests: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
-1 of 1 agents didn't end cleanly:
-  1×  done, no result file  (1-1)
+    expect(frame(stdout)).toEndWith(`
+Runs
+  1.1  fake-harness-alpha/fake-model-small-001  completed  <duration>
+       isPrimeShape: {exitCode: 1, stdout: "", stdoutTruncated: false}   isPrimeTests: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
+
+1 run: 1 completed
 Recorded in <DATA>/runs.sqlite
 `);
     const [record] = (await readStore(data)).containerRuns;
@@ -493,12 +520,12 @@ Recorded in <DATA>/runs.sqlite
     const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
     expect(exitCode).toBe(0);
-    expect(stdout).toMatch(/ 1\/1  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. done \(<duration>, \$0\.061\)\nRecorded in /);
+    expect(frame(stdout)).toMatch(/\nRuns\n  1\.1  fake-harness-alpha\/fake-model-small-001  completed  <duration>  \$0\.061\n\n1 run: 1 completed\nRecorded in /);
     expect((await readStore(data)).containerRuns[0]?.result).toEqual({});
     expect((await docker.commands()).filter((command) => command.includes("-measure-"))).toEqual([]);
   });
 
-  test("a container run that fails, not its agent, is an error, after recording the execution as failed", async () => {
+  test("a container run that fails, not its agent, is crashed with why under it, the rest still run, and the execution is recorded as failed", async () => {
     await using copy = await copyScenarioProject("0202");
     // Leaves the run script nowhere to write run.json.
     await Bun.write(
@@ -508,18 +535,34 @@ Recorded in <DATA>/runs.sqlite
 export default declareHarness({ version: "1.0.0", models: { "fake-model-small-001": [] }, applyParameter: () => writeRunScript("rm -rf /thunderjar") });
 `,
     );
-    await using docker = await fakeDocker({ images: ["thunderjar-prerun:e4f0784f"] });
+    await using docker = await fakeDocker();
     const data = dataDir();
 
-    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], { env: { ...docker.env, ...KEY } });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], {
+      env: { ...docker.env, ...KEY },
+      paths: { "<DATA>": data },
+    });
 
-    expect(stdout).toMatch(/^Execution <ULID>\nBuilding thunderjar-prerun:\w{8} \.\.\. done\n 1\/2  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. failed\n$/);
-    expect(stderr).toMatch(/^Error: Running a container failed: .*thunderjar\/run\.json: Directory nonexistent\n$/);
+    expect(stderr).toBe("");
     expect(exitCode).toBe(1);
+    expect(frame(stdout)).toMatch(
+      /\nRuns\n  1\.1  fake-harness-alpha\/fake-model-small-001  crashed  <duration>\n       .*thunderjar\/run\.json: Directory nonexistent\n  2\.1  fake-harness-beta\/fake-model-large-001   completed  <duration>\n/,
+    );
+    expect(stdout).toEndWith(`
+${under(BETA_MEASURES)}
+
+2 runs: 1 completed, 1 crashed
+Recorded in <DATA>/runs.sqlite
+`);
     const store = await readStore(data);
     expect(store.execution).toMatchObject({ status: "failed", finishedAt: ISO });
-    expect(store.containerRuns).toEqual([]);
-    expect((await docker.commands()).filter((command) => command.startsWith("docker commit"))).toEqual([]);
+    // Only the run that got as far as its record has one.
+    expect(store.containerRuns.map(({ permutation, iteration }) => [permutation, iteration])).toEqual([[2, 1]]);
+    const id = store.execution.executionId;
+    expect((await docker.commands()).filter((command) => command.startsWith("docker commit"))).toEqual([
+      expect.stringContaining(` thunderjar-run-${id}-2-1 thunderjar-postrun:${id}-2-1`),
+    ]);
+    expect((await docker.images()).filter((image) => image.includes("postrun"))).toEqual([`thunderjar-postrun:${id}-2-1`]);
     expect(await docker.containers()).toEqual([]);
   });
 
@@ -529,7 +572,8 @@ export default declareHarness({ version: "1.0.0", models: { "fake-model-small-00
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
-    expect(stdout).toBe("Execution <ULID>\n");
+    // The frame as it was when the command stopped: its one image never got past being looked for.
+    expect(stdout).toBe("Execution <ULID>  example\n  1 permutation, 1 run, up to 1 at once\n\nImages\n  thunderjar-prerun:ded54607  checking\n");
     expect(stderr).toBe(
       "Error: Docker can't be reached, so nothing can be run: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?\n",
     );
@@ -543,7 +587,7 @@ export default declareHarness({ version: "1.0.0", models: { "fake-model-small-00
 
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
-    expect(stdout).toBe("Execution <ULID>\nBuilding thunderjar-prerun:ded54607 ... failed\n");
+    expect(stdout).toBe("Execution <ULID>  example\n  1 permutation, 1 run, up to 1 at once\n\nImages\n  thunderjar-prerun:ded54607  failed\n");
     expect(stderr).toBe(
       'Error: Building thunderjar-prerun:ded54607 failed: ERROR: failed to build: process "/bin/sh -c exit 1" did not complete successfully: exit code: 1\n',
     );
@@ -551,10 +595,68 @@ export default declareHarness({ version: "1.0.0", models: { "fake-model-small-00
     expect((await docker.commands()).filter((command) => command.startsWith("docker run"))).toEqual([]);
     expect(await Bun.file(data).exists()).toBe(false);
   });
+
+  test("--build-only: builds the missing prerun images, and runs and records nothing", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--build-only", "--data-dir", data], {
+      env: { ...docker.env, ...KEY },
+    });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(`Execution <ULID>  two-harnesses
+  2 permutations, 2 runs, up to 1 at once
+
+Images
+  thunderjar-prerun:ded54607  ready
+  thunderjar-prerun:e4f0784f  ready
+
+2 prerun images ready
+`);
+    expect((await docker.commands()).map((command) => command.replace(/^(docker build -t \S+) .*$/, "$1 <context>"))).toEqual([
+      "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
+      "docker build -t thunderjar-prerun:ded54607 <context>",
+      "docker build -t thunderjar-prerun:e4f0784f <context>",
+    ]);
+    expect(await docker.images()).toEqual(["thunderjar-prerun:ded54607", "thunderjar-prerun:e4f0784f"]);
+    expect(await docker.containers()).toEqual([]);
+    expect(await Bun.file(`${data}/runs.sqlite`).exists()).toBe(false);
+  });
+
+  test("--build-only again: the prerun images are there, so nothing is built", async () => {
+    await using docker = await fakeDocker();
+    const data = dataDir();
+    const args = ["run", "two-harnesses", "--build-only", "--data-dir", data];
+    const first = await thunderjar(scenario("0202"), args, { env: { ...docker.env, ...KEY } });
+    const before = await docker.commands();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), args, { env: { ...docker.env, ...KEY } });
+
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe(first.stdout);
+    expect(stdout).toEndWith("\n2 prerun images ready\n");
+    // It only looked for them.
+    expect((await docker.commands()).slice(before.length)).toEqual(["docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun"]);
+    expect(await Bun.file(`${data}/runs.sqlite`).exists()).toBe(false);
+  });
+
+  test("--build-only with --dry-run is an error, and nothing is built", async () => {
+    await using docker = await fakeDocker();
+
+    const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "two-harnesses", "--dry-run", "--build-only"], { env: { ...docker.env, ...KEY } });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe("Error: --dry-run and --build-only can't be used together.\n");
+    expect(exitCode).toBe(1);
+    expect(await docker.commands()).toEqual([]);
+  });
 });
 
 describe("run --json", () => {
-  test("0202 two-harnesses: prints the execution, where it's recorded and its container runs as JSON, with its progress on stderr", async () => {
+  test("0202 two-harnesses: prints the final run state as JSON, and nothing else", async () => {
     await using docker = await fakeDocker();
     const data = dataDir();
 
@@ -564,16 +666,26 @@ describe("run --json", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stderr).toStartWith("Execution <ULID>\nBuilding thunderjar-prerun:ded54607 ... done\n");
-    expect(stderr).toEndWith("Recorded in <DATA>/runs.sqlite\n");
-    const result = JSON.parse(stdout);
-    expect(result.execution).toEqual(expect.objectContaining({ executionId: "<ULID>", testCase: "two-harnesses", status: "complete" }));
+    expect(stderr).toBe("");
+    const result = JSON.parse(stdout) as RunState<Manifest>;
+    expect(result.execution).toEqual(expect.objectContaining({ executionId: "<ULID>", testCase: "two-harnesses", status: "complete", finishedAt: ISO }));
     expect(result.recordedIn).toBe("<DATA>/runs.sqlite");
-    expect(result.containerRuns.map(({ permutation, iteration }: ContainerRunRecord) => [permutation, iteration])).toEqual([
-      [1, 1],
-      [2, 1],
-    ]);
-    expect(result.containerRuns).toHaveLength((await readStore(data)).containerRuns.length);
+    expect(result.mode).toBeUndefined();
+    expect(result.error).toBeUndefined();
+    expect(result.images).toEqual({ "thunderjar-prerun:ded54607": "ready", "thunderjar-prerun:e4f0784f": "ready" });
+    expect(result.uploadBacklog).toBe(0);
+    expect(result.manifest).toEqual(expect.objectContaining({ executionId: "<ULID>", testCaseName: "two-harnesses", task: "is-prime", concurrency: 1, imageStore: null, overrides: {} }));
+    // Each run by its ID: the execution's, the start of its permutation's hash, and its iteration.
+    expect(result.manifest?.runs.map(({ runId }) => runId)).toEqual(["<ULID>-bef6be59-i1", "<ULID>-6200c233-i1"]);
+    expect(Object.keys(result.runs)).toEqual(["<ULID>-bef6be59-i1", "<ULID>-6200c233-i1"]);
+    const stored = (await readStore(data)).containerRuns;
+    expect(stored).toHaveLength(2);
+    Object.values(result.runs).forEach((run, i) => {
+      // Without an image store there's nowhere to upload to, so a run ends committed.
+      expect(run).toEqual({ status: "committed", startedAt: expect.any(Number), finishedAt: expect.any(Number), measuring: "measured", record: expect.any(Object) });
+      // Its record is the store's, measures included. The harness replaced the execution's ID in what it printed.
+      expect(run.record).toEqual({ ...(stored[i] as ContainerRunRecord), executionId: "<ULID>", postrunImage: `thunderjar-postrun:<ULID>-${i + 1}-1` });
+    });
   });
 
   test("a failed execution is still printed, with exit code 1", async () => {
@@ -583,32 +695,65 @@ describe("run --json", () => {
     const { stdout, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data, "--json"], { env: { ...docker.env, ...KEY } });
 
     expect(exitCode).toBe(1);
-    expect(JSON.parse(stdout).execution.status).toBe("failed");
+    const result = JSON.parse(stdout) as RunState<Manifest>;
+    expect(result.execution?.status).toBe("failed");
+    expect(Object.values(result.runs).map(({ status }) => status)).toContain("crashed");
   });
 
-  test("--dry-run: each permutation, its parameters and images, and each iteration's command, as JSON", async () => {
+  test("--dry-run: the manifest, each permutation with its parameters and prerun image, and each run with its postrun image, as JSON", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(scenario("0202"), ["run", "example", "--dry-run", "--json"], { env: KEY });
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    const plan = JSON.parse(stdout);
-    expect(plan.executionId).toBe("<ULID>");
-    expect(plan.permutations).toEqual([
-      {
-        number: 1,
-        parameters: expect.objectContaining({ harnessModel: "fake-harness-alpha/fake-model-small-001" }),
-        modelId: "fake-model-small-001",
-        harnessVersion: expect.any(String),
-        hash: expect.stringMatching(/^[0-9a-f]{64}$/),
-        prerunImage: "thunderjar-prerun:ded54607",
-        env: ["FAKE_HARNESS_KEY"],
-        testCaseEnv: {},
-        secretEnv: [],
-        runOptions: [],
-        timeoutSeconds: expect.any(Number),
-        iterations: [{ number: 1, postrunImage: expect.stringContaining("thunderjar-postrun:"), command: "sh /thunderjar/thunderjar-run.sh" }],
+    const hash = "bef6be59e0075f3bc210d929098246bb6b2e437acfcc81fe71dd66e5581b7953";
+    expect(JSON.parse(stdout)).toEqual({
+      mode: "dry-run",
+      runs: {},
+      images: {},
+      uploadBacklog: 0,
+      manifest: {
+        executionId: "<ULID>",
+        testCaseName: "example",
+        task: "is-prime",
+        concurrency: 1,
+        buildConcurrency: 1,
+        imagePrefix: "thunderjar",
+        imageStore: null,
+        overrides: {},
+        permutations: [
+          {
+            number: 1,
+            hash,
+            imageHash: expect.stringMatching(/^ded54607[0-9a-f]{56}$/),
+            parameters: [
+              { layer: "baseImage", value: "node20", hash: SHA },
+              { layer: "codeState", value: "baseline", hash: SHA },
+              { layer: "promptSet", value: "snerk", hash: SHA },
+              { layer: "harnessModel", value: "fake-harness-alpha/fake-model-small-001", hash: SHA },
+              { layer: "initialPrompt", value: "plain", hash: SHA },
+            ],
+            modelId: "fake-model-small-001",
+            harnessVersion: "1.0.0",
+            prerunImage: "thunderjar-prerun:ded54607",
+            env: ["FAKE_HARNESS_KEY"],
+            testCaseEnv: {},
+            secretEnv: [],
+            runOptions: [],
+            timeoutSeconds: 600,
+          },
+        ],
+        runs: [
+          {
+            runId: "<ULID>-bef6be59-i1",
+            permutationHash: hash,
+            permutation: 1,
+            iteration: 1,
+            container: "thunderjar-run-<ULID>-1-1",
+            postrunImage: "thunderjar-postrun:<ULID>-1-1",
+          },
+        ],
       },
-    ]);
+    });
   });
 
   test("0206 test-case-env --dry-run: the test case's env with its values, and its secretEnv by name", async () => {
@@ -617,18 +762,17 @@ describe("run --json", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
     expect(stdout).not.toContain(TEST_CASE_SECRET.FAKE_TEST_CASE_SECRET);
-    const [permutation] = JSON.parse(stdout).permutations;
-    expect(permutation).toEqual(
+    const { manifest } = JSON.parse(stdout) as RunState<Manifest>;
+    expect(manifest?.permutations).toEqual([
       expect.objectContaining({
         env: [],
         testCaseEnv: { FAKE_TEST_CASE_SETTING: "test", FAKE_TEST_CASE_AWKWARD: 'kept: "quoted", $HOME, a \\ backslash and 100%' },
         secretEnv: ["FAKE_TEST_CASE_SECRET"],
       }),
-    );
+    ]);
   });
 
-
-  test("--dry-run with overrides: the overrides, and the permutations they make", async () => {
+  test("--dry-run with overrides: the overrides, and the permutations and runs they make", async () => {
     const { stdout, stderr, exitCode } = await thunderjar(
       scenario("0202"),
       ["run", "example", "--dry-run", "--json", "--prompt-set", "glurk", "--iterations", "2"],
@@ -637,11 +781,14 @@ describe("run --json", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    const plan = JSON.parse(stdout);
-    expect(plan.overrides).toEqual({ promptSet: ["glurk"], iterations: 2 });
-    expect(plan.permutations.map(({ parameters }: { parameters: { promptSet: string } }) => parameters.promptSet)).toEqual(["glurk"]);
+    const { manifest } = JSON.parse(stdout) as RunState<Manifest>;
+    expect(manifest?.overrides).toEqual({ promptSet: ["glurk"], iterations: 2 });
+    expect(manifest?.permutations.map(({ parameters }) => parameters.find(({ layer }) => layer === "promptSet")?.value)).toEqual(["glurk"]);
+    expect(manifest?.runs.map(({ permutation, iteration }) => [permutation, iteration])).toEqual([
+      [1, 1],
+      [1, 2],
+    ]);
   });
-
 
   test("with overrides, the execution records them", async () => {
     await using docker = await fakeDocker();
