@@ -87,6 +87,9 @@ Maintained by humans only, in [project-md/human-safe-space/](project-md/human-sa
 - [Measurements philosophy](project-md/human-safe-space/measurements-philosophy/index.md)
 - [Not supported: parameter behaviour](project-md/human-safe-space/not-supported/parameter-behaviour.md)
 - [Things that are a bit messy: skills](project-md/human-safe-space/things-that-are-a-bit-messy/skills.md)
+- [Canonical tests](project-md/human-safe-space/canonical-tests/canonical-tests.md)
+- [Package scripts: docs](project-md/human-safe-space/package-scripts/docs.md)
+- [Refactor work: `run` architecture plan](project-md/human-safe-space/refactor-work/architecture-plan.md)
 
 ## Idealised architecture 
 
