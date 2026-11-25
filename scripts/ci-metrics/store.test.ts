@@ -75,6 +75,22 @@ describe.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("recordRun", () => {
     ]);
   });
 
+  test("records each of the run's steps, in order", async () => {
+    await using db = await freshSchema();
+    await createTables(db.sql, db.schema);
+
+    await recordRun(db.sql, run, { totalSeconds: 0, tests: [] }, db.schema, [
+      { name: "Run bun run lint", conclusion: "success", seconds: 12 },
+      { name: "Run bun run typecheck", conclusion: "failure", seconds: 30.5 },
+    ]);
+
+    const steps = await db.sql`select recorded_at, position, name, conclusion, seconds from ${db.sql(db.schema)}.ci_step_metrics order by position`;
+    expect([...steps]).toEqual([
+      { recorded_at: run.startedAt, position: 1, name: "Run bun run lint", conclusion: "success", seconds: 12 },
+      { recorded_at: run.startedAt, position: 2, name: "Run bun run typecheck", conclusion: "failure", seconds: 30.5 },
+    ]);
+  });
+
   test("records a run as a role that may only insert, like CI's ci_metrics_writer", async () => {
     await using db = await freshSchema();
     await createTables(db.sql, db.schema);
