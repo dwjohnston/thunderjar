@@ -20,7 +20,7 @@
 // postrun image, which has exactly the files that would be pushed, given each secret variable by
 // name, `-e NAME`. Its shell compares the files against `$NAME` there, and writes only the names
 // and paths it finds: the values never leave Docker and Thunderjar's own environment.
-import { type DockerRuntime, readContainerFile, removeContainer, runContainer } from "../docker/docker.ts";
+import { type DockerRuntime, isRuntime, readContainerFile, removeContainer, runContainer } from "../docker/docker.ts";
 import type { DockerService } from "../services/Docker/Docker.ts";
 import { moduleLogger } from "../log/logger.ts";
 import type { FoundSecret } from "../store/runDataStore.ts";
@@ -123,7 +123,7 @@ export async function searchForSecrets(
   env: Record<string, string | undefined> = Bun.env,
 ): Promise<SecretSearch | undefined> {
   const docker: SecretSearchDocker =
-    "pull" in where
+    isRuntime(where)
       ? {
           run: (image, name, script, options) => runContainer(image, name, script, { ...options, runtime: where }),
           readFile: (name, path) => readContainerFile(name, path, where),

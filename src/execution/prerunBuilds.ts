@@ -13,7 +13,7 @@ import type { BuildOptions } from "../api/declarations.ts";
 import { FILES, PARAMETERS } from "../config/folders.ts";
 import { existsIn } from "../config/loader.ts";
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
-import { buildImage, type DockerRuntime, imagesIn, localRuntime } from "../docker/docker.ts";
+import { buildImage, type DockerRuntime, imagesIn, isRuntime, localRuntime } from "../docker/docker.ts";
 import { prerunImage, prerunRepository } from "./images.ts";
 import { type FolderRole, PARAMETER_DIRS } from "./prerunDockerfile.ts";
 
@@ -98,7 +98,7 @@ export async function buildPrerunImage(
   try {
     await copyParameters(root, permutation, contextDir);
     await Bun.write(`${contextDir}/Dockerfile`, permutation.dockerfile);
-    if ("pull" in where) await buildImage(contextDir, image, build, where);
+    if (isRuntime(where)) await buildImage(contextDir, image, build, where);
     else await where.build(contextDir, image, build);
   } finally {
     await $`rm -rf ${contextDir}`.quiet();
