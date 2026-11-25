@@ -15,6 +15,20 @@ Thunderjar is a TypeScript/Bun CLI for
   - Different configurations of a run can be compared by comparing the same measurements 
 
   
+
+## Terminology
+
+- Say "container run", not "agent", for one run of a permutation's container: what runs, is timed, crashes or leaves files.
+
+  ```ts
+  // ✅ Do
+  // Four container runs have finished.
+  // ❌ Don't
+  // Four agents have finished.
+  ```
+
+  The container runs a harness, but what Thunderjar starts, times and records is the container run.
+
 ## `src/gauntlet`
 
 `src/gauntlet` isn't Thunderjar code. Each folder in it is a small project of its own, with its own instructions and tools, that the test cases in `.thunderjar/` set agents to work on. oxlint and `bun test` skip it (`.oxlintrc.json`'s `ignorePatterns`, and `bunfig.toml`).

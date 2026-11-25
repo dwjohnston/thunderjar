@@ -88,10 +88,10 @@ describe(runTestCase, () => {
         expect(await deps.runStore.listExecutions()).toMatchObject([{ executionId: "01exec", status: "complete", matrix: { permutations: 2, iterations: 1 } }]);
     });
 
-  it("a run whose agent errors is crashed, but is still committed and recorded, and the other run carries on", async () => {
+  it("a container run that errors is crashed, but is still committed and recorded, and the other run carries on", async () => {
     const deps = fakes();
     deps.random.setUlids("01exec");
-    // The second permutation's agent exits with code 2, and leaves an error on stderr.
+    // The second permutation's container run exits with code 2, and leaves an error on stderr.
     deps.runtimeDocker.onRun("-2-1", () => ({
       files: {
         "/thunderjar/run.json": JSON.stringify({ startedAt: 1_000_001_000_000, finishedAt: 1_000_001_002_000, exitCode: 2 }),
