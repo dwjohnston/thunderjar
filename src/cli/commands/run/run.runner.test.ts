@@ -338,7 +338,7 @@ export default declareMeasurement({
     const { stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", "elsewhere"]);
 
     expect(stderr).toBe(
-      "Error: --data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore. Pass --local to run here.\n",
+      "Error: --data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore.\n",
     );
     expect(exitCode).toBe(1);
   });
@@ -360,10 +360,15 @@ Images
 1 prerun image ready
 `);
     // The runtime builds and pushes the prerun image the registry lacks. No runner image, no runner, no container.
-    expect((await docker.commands()).map((command) => command.replace(/( build -t \S+) .*$/, "$1 <context>"))).toEqual([
-      "docker login ghcr.io",
-      `${REMOTE} image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun`,
+    const commands = (await docker.commands()).map((command) => command.replace(/( build -t \S+) .*$/, "$1 <context>"));
+    // It looks in the runtime's two repositories at once, so in either order.
+    expect(commands.slice(0, 3).sort()).toEqual([
       `${REMOTE} image ls --format {{.Repository}}:{{.Tag}} ${REPOSITORY}`,
+      `${REMOTE} image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun`,
+      "docker login ghcr.io",
+    ]);
+    expect(commands[0]).toBe("docker login ghcr.io");
+    expect(commands.slice(3)).toEqual([
       `docker manifest inspect ${PRERUN}`,
       `${REMOTE} build -t thunderjar-prerun:4799f255 <context>`,
       `${REMOTE} tag thunderjar-prerun:4799f255 ${PRERUN}`,

@@ -86,6 +86,8 @@ export function createRunCommand(services: Services): Command {
           const failure = describeFailure(caught, cwd);
           if (failure === undefined) throw caught;
           printError(failure);
+          // Its afterExecution ran as it stopped: if that failed too, level 2 left why in the notes.
+          for (const note of services.state.get().run.notes ?? []) if (note.startsWith("The runtime's afterExecution failed")) printError(note);
           process.exitCode = 1;
         }
       }),

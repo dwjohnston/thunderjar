@@ -42,6 +42,16 @@ export async function runManifest(manifest: Manifest, config: TestCaseConfig, de
     shouldStop: stopped,
   });
 
+  /** Logs how much disk the runtime's Docker uses: only for a runtime that isn't this machine, whose disk nobody watches. */
+  const logDiskUsage = async (when: "before" | "after") => {
+    if (deps.hostDocker === runtimeDocker) return;
+    await runtimeDocker
+      .diskUsage()
+      .then((usage) => log.info({ executionId: manifest.executionId, when, usage }, "runtime disk usage"))
+      .catch((error: unknown) => log.debug({ err: error }, "couldn't read the runtime's disk usage"));
+  };
+  await logDiskUsage("before");
+
   const startedAt = new Date(clock.now()).toISOString();
   const executionRecord = (status: ExecutionStatus, finishedAt?: string): ExecutionRecord => ({
     executionId: manifest.executionId,
@@ -79,6 +89,7 @@ export async function runManifest(manifest: Manifest, config: TestCaseConfig, de
         .then((removed) => removed.length > 0 && log.warn({ removed }, "removed containers that started too late"))
         .catch((error: unknown) => log.warn({ err: error }, "couldn't look for containers that started too late"));
     }
+    await logDiskUsage("after");
     const clean =
       failure === undefined &&
       !stopped() &&
