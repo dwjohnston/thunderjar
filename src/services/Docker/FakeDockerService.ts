@@ -8,6 +8,7 @@
  * Humans: add your notes here
  */
 
+import { DockerContainerError, DockerLoginError, DockerPullError } from "../../docker/docker.ts";
 import type { Clock } from "../Clock/Clock.ts";
 import type { ContainerStop, DockerService, ImageBuildOptions, RunContainerOptions, ShellSession } from "./Docker.ts";
 
@@ -21,6 +22,9 @@ type Method = "build" | "imagesIn" | "checkLogin" | "inRegistry" | "push" | "pul
  * other fake given the same `registry` set. It records every call, as `<method> <arguments>`, so a
  * test can check which daemon each operation went to. A container with no script exits at once
  * and leaves no files.
+ *
+ * It refuses what a real daemon would: `checkLogin` for a host not in `logins`, a `pull` of a
+ * reference the registry lacks, and a `commit` of a container that doesn't exist.
  */
 export class FakeDockerService implements DockerService {
   readonly command: readonly string[];
@@ -32,6 +36,10 @@ export class FakeDockerService implements DockerService {
   readonly logins = new Set<string>();
   /** Every call, in order. */
   readonly calls: string[] = [];
+  /** Every container run, in order, with the options it was given. */
+  readonly runs: { image: string; name: string; script: string; options: RunContainerOptions }[] = [];
+  /** Every build, in order, with the options it was given. */
+  readonly builds: { contextDir: string; image: string; options: ImageBuildOptions }[] = [];
   /** The containers that exist: run and not yet removed. */
   readonly containers = new Map<string, Record<string, string>>();
   private readonly scripts: [string, FakeContainer | ((image: string, options: RunContainerOptions) => FakeContainer)][] = [];
@@ -57,6 +65,11 @@ export class FakeDockerService implements DockerService {
     return this;
   }
 
+  /** The arguments of each call of `method`, in order, e.g. `callsOf("build")` is the images built. */
+  callsOf(method: Method): string[] {
+    return this.calls.filter((call) => call === method || call.startsWith(`${method} `)).map((call) => call.slice(method.length + 1));
+  }
+
   private called(method: Method, ...args: string[]): void {
     const call = [method, ...args].join(" ");
     this.calls.push(call);
@@ -64,7 +77,8 @@ export class FakeDockerService implements DockerService {
     if (failure) throw failure.error;
   }
 
-  async build(_contextDir: string, image: string, _options?: ImageBuildOptions): Promise<void> {
+  async build(contextDir: string, image: string, options: ImageBuildOptions = {}): Promise<void> {
+    this.builds.push({ contextDir, image, options });
     this.called("build", image);
     this.images.add(image);
   }
@@ -76,6 +90,7 @@ export class FakeDockerService implements DockerService {
 
   async checkLogin(host: string): Promise<void> {
     this.called("checkLogin", host);
+    if (!this.logins.has(host)) throw new DockerLoginError(`not logged in to ${host}`);
   }
 
   async inRegistry(reference: string): Promise<boolean> {
@@ -91,10 +106,12 @@ export class FakeDockerService implements DockerService {
 
   async pull(reference: string): Promise<void> {
     this.called("pull", reference);
+    if (!this.registry.has(reference)) throw new DockerPullError(`manifest for ${reference} not found`, reference);
     this.images.add(reference);
   }
 
-  async run(image: string, name: string, _script: string, options: RunContainerOptions = {}): Promise<ContainerStop> {
+  async run(image: string, name: string, script: string, options: RunContainerOptions = {}): Promise<ContainerStop> {
+    this.runs.push({ image, name, script, options });
     this.called("run", image, name);
     const scripted = this.scripts.find(([suffix]) => name.endsWith(suffix))?.[1];
     const { stop = { outcome: "exited" }, files = {}, ms = 0 } = (typeof scripted === "function" ? scripted(image, options) : scripted) ?? {};
@@ -105,6 +122,7 @@ export class FakeDockerService implements DockerService {
 
   async commit(name: string, image: string, like: string): Promise<void> {
     this.called("commit", name, image, like);
+    if (!this.containers.has(name)) throw new DockerContainerError(`No such container: ${name}`);
     this.images.add(image);
   }
 
