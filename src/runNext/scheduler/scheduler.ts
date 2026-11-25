@@ -56,19 +56,20 @@ export function createScheduler(deps: { clock: Clock; isBackedUp: () => boolean;
           const index = next++;
           const run = manifest.runs[index] as PlannedRun;
           const lead = warmedUp.get(run.permutationHash);
-          const started = Promise.withResolvers<Promise<unknown>>();
+          // In an object: a promise resolved with a promise would wait for it.
+          const started = Promise.withResolvers<{ ended: Promise<unknown> }>();
           if (lead === undefined) {
             // The lead: the rest wait for it to start, then for its warm-up or its end.
             warmedUp.set(
               run.permutationHash,
-              started.promise.then((ended) => warmUp(ended)),
+              started.promise.then(({ ended }) => warmUp(ended)),
             );
           } else {
             await lead;
           }
           while (isBackedUp() && !shouldStop()) await clock.sleep(settings.backpressurePollMs);
           if (shouldStop()) {
-            started.resolve(Promise.resolve());
+            started.resolve({ ended: Promise.resolve() });
             break;
           }
           const startedAt = clock.now();
@@ -81,7 +82,7 @@ export function createScheduler(deps: { clock: Clock; isBackedUp: () => boolean;
               error: error instanceof Error ? error.message : String(error),
             }),
           );
-          started.resolve(running);
+          started.resolve({ ended: running });
           records[index] = await running;
         }
       };
