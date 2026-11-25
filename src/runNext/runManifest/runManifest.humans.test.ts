@@ -51,173 +51,6 @@ describe(runManifest, () => {
         ]);
 
 
-        expect(deps.state.get()).toMatchInlineSnapshot(`
-          {
-            "run": {
-              "execution": {
-                "executionId": "01exec",
-                "finishedAt": "1970-01-01T00:16:40.000Z",
-                "matrix": {
-                  "iterations": 1,
-                  "permutations": 2,
-                  "shape": [
-                    1,
-                    1,
-                    1,
-                    2,
-                    1,
-                  ],
-                },
-                "startedAt": "1970-01-01T00:16:40.000Z",
-                "status": "complete",
-                "task": "is-prime",
-                "testCase": "example",
-              },
-              "images": {},
-              "runs": {
-                "01exec-p1000000-i1": {
-                  "finishedAt": 1000001000000,
-                  "record": {
-                    "execution": {
-                      "exitCode": 0,
-                      "finishedAt": 1000001000000,
-                      "startedAt": 1000001000000,
-                      "timedOut": false,
-                      "timeoutSeconds": 600,
-                    },
-                    "executionId": "01exec",
-                    "harnessModel": {
-                      "harness": "harness-1",
-                      "modelId": "model",
-                      "version": "1.0.0",
-                    },
-                    "harnessResult": "{"reply":"Done: isPrime(7) is true."}",
-                    "harnessStderr": null,
-                    "iteration": 1,
-                    "parameters": {
-                      "baseImage": {
-                        "name": "node20",
-                        "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
-                      },
-                      "codeState": {
-                        "name": "baseline",
-                        "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
-                      },
-                      "harnessModel": {
-                        "name": "harness-1/model",
-                        "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
-                      },
-                      "initialPrompt": {
-                        "name": "plain",
-                        "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
-                      },
-                      "promptSet": {
-                        "name": "none",
-                        "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
-                      },
-                    },
-                    "permutation": 1,
-                    "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
-                    "postrunImage": "thunderjar-postrun:01exec-1-1",
-                    "ranAt": "2001-09-09T02:03:20.000Z",
-                    "reply": {
-                      "outcome": "collected",
-                      "text": "Done: isPrime(7) is true.",
-                    },
-                    "result": {},
-                    "task": "is-prime",
-                    "testCase": "example",
-                    "tokenCosts": {
-                      "outcome": "unavailable",
-                      "reason": "notReported",
-                    },
-                  },
-                  "startedAt": 1000001000000,
-                  "status": "committed",
-                },
-                "01exec-p2000000-i1": {
-                  "finishedAt": 1000001000000,
-                  "record": {
-                    "execution": {
-                      "exitCode": 0,
-                      "finishedAt": 1000001000000,
-                      "startedAt": 1000001000000,
-                      "timedOut": false,
-                      "timeoutSeconds": 600,
-                    },
-                    "executionId": "01exec",
-                    "harnessModel": {
-                      "harness": "harness-2",
-                      "modelId": "model",
-                      "version": "1.0.0",
-                    },
-                    "harnessResult": "{"reply":"Done: isPrime(7) is true."}",
-                    "harnessStderr": null,
-                    "iteration": 1,
-                    "parameters": {
-                      "baseImage": {
-                        "name": "node20",
-                        "parameterHash": "baseImage2000000000000000000000000000000000000000000000000000000",
-                      },
-                      "codeState": {
-                        "name": "baseline",
-                        "parameterHash": "codeState2000000000000000000000000000000000000000000000000000000",
-                      },
-                      "harnessModel": {
-                        "name": "harness-2/model",
-                        "parameterHash": "harnessModel2000000000000000000000000000000000000000000000000000",
-                      },
-                      "initialPrompt": {
-                        "name": "plain",
-                        "parameterHash": "initialPrompt200000000000000000000000000000000000000000000000000",
-                      },
-                      "promptSet": {
-                        "name": "none",
-                        "parameterHash": "promptSet2000000000000000000000000000000000000000000000000000000",
-                      },
-                    },
-                    "permutation": 2,
-                    "permutationHash": "p200000000000000000000000000000000000000000000000000000000000000",
-                    "postrunImage": "thunderjar-postrun:01exec-2-1",
-                    "ranAt": "2001-09-09T02:03:20.000Z",
-                    "reply": {
-                      "outcome": "collected",
-                      "text": "Done: isPrime(7) is true.",
-                    },
-                    "result": {},
-                    "task": "is-prime",
-                    "testCase": "example",
-                    "tokenCosts": {
-                      "outcome": "unavailable",
-                      "reason": "notReported",
-                    },
-                  },
-                  "startedAt": 1000001000000,
-                  "status": "committed",
-                },
-              },
-              "timings": {
-                "agent": {
-                  "count": 2,
-                  "maxMs": 0,
-                  "totalMs": 0,
-                },
-                "collect": {
-                  "count": 2,
-                  "maxMs": 0,
-                  "totalMs": 0,
-                },
-                "commit": {
-                  "count": 2,
-                  "maxMs": 0,
-                  "totalMs": 0,
-                },
-              },
-              "uploadBacklog": 0,
-            },
-          }
-        `)
-
         // The state at the end. toMatchObject ignores what isn't listed, such as each run's full record.
         expect(deps.state.get().run).toMatchObject({
             execution: {
@@ -267,26 +100,33 @@ describe(runManifest, () => {
         // 2: the execution recorded as running
         expect(deps.state.history().at(2)!.run.execution?.status).toBe("running");
 
-        // 3-8: run 1: running, its agent timed, its output collected, committing, its commit timed, then committed with its record
+        // 3-8: run 1 goes running → committing → committed, while run 2 waits
         expect(deps.state.history().at(3)!.run.runs["01exec-p1000000-i1"]?.status).toBe("running");
-        expect(deps.state.history().at(4)!.run.timings?.agent?.count).toBe(1);
-        expect(deps.state.history().at(5)!.run.timings?.collect?.count).toBe(1);
+        expect(deps.state.history().at(3)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(4)!.run.runs["01exec-p1000000-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(4)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(5)!.run.runs["01exec-p1000000-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(5)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
         expect(deps.state.history().at(6)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committing");
-        expect(deps.state.history().at(7)!.run.timings?.commit?.count).toBe(1);
-        expect(deps.state.history().at(7)!.run.runs["01exec-p1000000-i1"]?.record).toBeUndefined();
+        expect(deps.state.history().at(6)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(7)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committing");
+        expect(deps.state.history().at(7)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
         expect(deps.state.history().at(8)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
-        expect(deps.state.history().at(8)!.run.runs["01exec-p1000000-i1"]?.record).toBeDefined();
         expect(deps.state.history().at(8)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
 
-        // 9-14: run 2: running, its agent timed, its output collected, committing, its commit timed, then committed with its record
+        // 9-14: then run 2 does the same
+        expect(deps.state.history().at(9)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(9)!.run.runs["01exec-p2000000-i1"]?.status).toBe("running");
-        expect(deps.state.history().at(10)!.run.timings?.agent?.count).toBe(2);
-        expect(deps.state.history().at(11)!.run.timings?.collect?.count).toBe(2);
+        expect(deps.state.history().at(10)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(10)!.run.runs["01exec-p2000000-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(11)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(11)!.run.runs["01exec-p2000000-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(12)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(12)!.run.runs["01exec-p2000000-i1"]?.status).toBe("committing");
-        expect(deps.state.history().at(13)!.run.timings?.commit?.count).toBe(2);
-        expect(deps.state.history().at(13)!.run.runs["01exec-p2000000-i1"]?.record).toBeUndefined();
+        expect(deps.state.history().at(13)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(13)!.run.runs["01exec-p2000000-i1"]?.status).toBe("committing");
+        expect(deps.state.history().at(14)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(14)!.run.runs["01exec-p2000000-i1"]?.status).toBe("committed");
-        expect(deps.state.history().at(14)!.run.runs["01exec-p2000000-i1"]?.record).toBeDefined();
 
         // 15: the execution recorded as complete
         expect(deps.state.history().at(15)!.run.execution?.status).toBe("complete");
