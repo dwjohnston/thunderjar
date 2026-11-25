@@ -3,8 +3,26 @@
 // - `Docker`, the old path: the functions in src/docker/ as one service, so a test can pass a
 //   FakeDocker in their place. The types each method takes and returns live here, and src/docker/
 //   re-exports them under their old names.
-// - `DockerService`, the new path: empty, and a method is added as each caller moves onto it. There
+// - `DockerService`, the new path: what `runNext` uses. There
 //   are two, built in src/cli/index.ts: `hostDocker` and `runtimeDocker` (see src/cli/HUMANS.md).
+
+import {
+  buildImage,
+  checkLogin,
+  commitContainer,
+  diskUsage,
+  type DockerRuntime,
+  imagesIn,
+  inRegistry,
+  pullImage,
+  pushImage,
+  readContainerFile,
+  removeContainer,
+  removeContainersNamed,
+  runContainer,
+} from "../../docker/docker.ts";
+import { openShellSession } from "../../docker/shellSession.ts";
+
 
 /** A `docker run` process started by `Docker.spawnRun`. */
 export type ContainerProcess = {
@@ -133,10 +151,52 @@ export interface Docker {
 /** The part of Docker that `runContainer` runs on: what it spawns, kills and removes. */
 export type ContainerRuns = Pick<Docker, "spawnRun" | "killContainer" | "removeContainer">;
 
-/** Docker on the new path. Empty: a method is added as each caller moves onto it. */
-export interface DockerService {}
+/**
+ * Docker on the new path: what `runNext` asks of one daemon. There are two, built in
+ * src/cli/index.ts: `hostDocker` and `runtimeDocker` (see src/cli/HUMANS.md). `checkLogin` and
+ * `inRegistry` are asked of the host's; everything else of the runtime's.
+ */
+export interface DockerService
+  extends Pick<
+    Docker,
+    | "build"
+    | "imagesIn"
+    | "checkLogin"
+    | "push"
+    | "pull"
+    | "inRegistry"
+    | "run"
+    | "commit"
+    | "removeContainer"
+    | "removeContainersNamed"
+    | "readFile"
+    | "openShellSession"
+    | "diskUsage"
+  > {
+  /** The command it runs Docker with, e.g. `["docker"]`: for messages and logs only. */
+  readonly command: readonly string[];
+}
 
-/** Docker reached by running `command`, e.g. `["docker"]`, or a runtime's `["docker", "--context", "cloud"]`. */
-export function createDockerService(_command: string[]): DockerService {
-  return {};
+/**
+ * Docker reached by running `command`, e.g. `["docker"]`, or a runtime's `["docker", "--context", "cloud"]`.
+ * A `remote` one may pull an image its `run` is given; a local one never does.
+ */
+export function createDockerService(command: string[], { remote = false }: { remote?: boolean } = {}): DockerService {
+  const runtime: DockerRuntime = { command, pull: remote ? "missing" : "never" };
+  return {
+    command,
+    build: (contextDir, image, options) => buildImage(contextDir, image, options, runtime),
+    imagesIn: (repository) => imagesIn(repository, runtime),
+    checkLogin: (host) => checkLogin(host),
+    push: (image, reference) => pushImage(image, reference, runtime),
+    pull: (reference) => pullImage(reference, runtime),
+    inRegistry: (reference) => inRegistry(reference),
+    run: (image, name, script, options) => runContainer(image, name, script, { ...options, runtime }),
+    commit: (name, image, like, kept) => commitContainer(name, image, like, runtime, kept),
+    removeContainer: (name) => removeContainer(name, runtime),
+    removeContainersNamed: (prefix) => removeContainersNamed(prefix, runtime),
+    readFile: (name, path) => readContainerFile(name, path, runtime),
+    openShellSession: (image, name, env) => openShellSession(image, name, runtime, env),
+    diskUsage: () => diskUsage(runtime),
+  };
 }

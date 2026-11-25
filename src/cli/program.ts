@@ -12,7 +12,6 @@ import { createPurgeCommand } from "./commands/purge/purge.ts";
 import { createRemeasureCommand } from "./commands/remeasure/remeasure.ts";
 import { createRunCommand } from "./commands/run/run.ts";
 import type { Services } from "./services.ts";
-import { createRunNextCommand } from "./commands/runNext/runNext.ts";
 import { createRunnerCommand } from "./commands/runner/runner.ts";
 import { createShowCommand } from "./commands/show/show.ts";
 import { createViewCommand } from "./commands/view/view.ts";
@@ -94,8 +93,6 @@ export function createProgram(services: Services): Command {
     .addCommand(createAttachCommand())
     // What a runtime's runner runs, not a command for a user: left out of --help.
     .addCommand(createRunnerCommand(), { hidden: true })
-    // The reimplementation of `run`, hidden until it replaces it: see src/runNext/.
-    .addCommand(createRunNextCommand(services), { hidden: true })
     .addCommand(createDoctorCommand())
     .addCommand(createDbCommand())
     .addCommand(createExecutionsCommand())

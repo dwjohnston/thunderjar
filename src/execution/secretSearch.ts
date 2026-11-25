@@ -21,6 +21,7 @@
 // name, `-e NAME`. Its shell compares the files against `$NAME` there, and writes only the names
 // and paths it finds: the values never leave Docker and Thunderjar's own environment.
 import { type DockerRuntime, readContainerFile, removeContainer, runContainer } from "../docker/docker.ts";
+import type { DockerService } from "../services/Docker/Docker.ts";
 import { moduleLogger } from "../log/logger.ts";
 import type { FoundSecret } from "../store/runDataStore.ts";
 
@@ -49,6 +50,9 @@ export const secretSearchTimeoutSeconds = (): number => {
   const seconds = Number(Bun.env.THUNDERJAR_SECRET_SEARCH_TIMEOUT_SECONDS);
   return Number.isFinite(seconds) && seconds > 0 ? seconds : 120;
 };
+
+/** The part of Docker a search runs on: a `DockerService` has it. */
+export type SecretSearchDocker = Pick<DockerService, "run" | "readFile" | "removeContainer">;
 
 /** What a search came to: the secrets found, or why it couldn't be done. */
 export type SecretSearch = { found: FoundSecret[] } | { failed: string };
@@ -111,21 +115,34 @@ export function parseSecretSearch(text: string | undefined, names: string[]): Fo
  * is worth searching for: see searchableSecrets. Never throws: a search that fails, or takes
  * longer than secretSearchTimeoutSeconds(), is `failed`, with why, and the run goes on.
  */
-export async function searchForSecrets(image: string, container: string, names: string[], runtime: DockerRuntime): Promise<SecretSearch | undefined> {
-  const searched = searchableSecrets(names);
+export async function searchForSecrets(
+  image: string,
+  container: string,
+  names: string[],
+  where: DockerRuntime | SecretSearchDocker,
+  env: Record<string, string | undefined> = Bun.env,
+): Promise<SecretSearch | undefined> {
+  const docker: SecretSearchDocker =
+    "pull" in where
+      ? {
+          run: (image, name, script, options) => runContainer(image, name, script, { ...options, runtime: where }),
+          readFile: (name, path) => readContainerFile(name, path, where),
+          removeContainer: (name) => removeContainer(name, where),
+        }
+      : where;
+  const searched = searchableSecrets(names, env);
   if (searched.length === 0) return undefined;
   const timeoutSeconds = secretSearchTimeoutSeconds();
   const startedAt = Date.now();
   try {
     // As root, to read every file; with no network, as it needs none.
-    const stop = await runContainer(image, container, secretSearchScript(searched), {
+    const stop = await docker.run(image, container, secretSearchScript(searched), {
       env: searched,
       runOptions: ["--user", "0", "--network", "none"],
       timeoutSeconds,
-      runtime,
     });
     if (stop.outcome !== "exited") return { failed: `it took longer than ${timeoutSeconds}s` };
-    const found = parseSecretSearch(await readContainerFile(container, SECRET_SEARCH_PATH, runtime), searched);
+    const found = parseSecretSearch(await docker.readFile(container, SECRET_SEARCH_PATH), searched);
     if (typeof found === "string") return { failed: found };
     // Names and paths only: never a value.
     log.info({ image, searched, found, ms: Date.now() - startedAt }, "searched the postrun image for secrets");
@@ -133,6 +150,6 @@ export async function searchForSecrets(image: string, container: string, names: 
   } catch (error) {
     return { failed: error instanceof Error ? error.message : String(error) };
   } finally {
-    await removeContainer(container, runtime).catch(() => {});
+    await docker.removeContainer(container).catch(() => {});
   }
 }

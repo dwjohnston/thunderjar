@@ -55,7 +55,7 @@ const showOutcome = (outcome: RecordedOutcome, paint: Paint) =>
       : paint.red(`erroredWhileMeasuring (${outcome.error.message})`);
 
 /** A container run's measures, on one line: `<name>: <value>`, three spaces apart. */
-const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
+export const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
   Object.entries(result)
     .map(([name, { outcome }]) => `${paint.blue(`${name}:`)} ${showOutcome(outcome, paint)}`)
     .join("   ");

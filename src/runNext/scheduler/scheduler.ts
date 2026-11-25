@@ -21,13 +21,61 @@ export type SchedulerSettings = {
 };
 
 export interface Scheduler {
+  /** Each run's record, in the manifest's order. Those never started, once asked to stop, are left out. */
   run(manifest: Manifest, task: (run: PlannedRun) => Promise<RunRecord>): Promise<RunRecord[]>;
 }
 
-export function createScheduler(_deps: { clock: Clock; isBackedUp: () => boolean; settings: SchedulerSettings }): Scheduler {
+/**
+ * - Runs start in the manifest's order, so a permutation's iterations run close together.
+ * - A permutation's first run gets `cacheWarmupMs` on its own, or until it finishes if that's
+ *   sooner, before its others start. A worker whose next run is waiting on that waits too.
+ * - No run starts while `isBackedUp()`, or once `shouldStop()`.
+ * - `task` must never throw. If it does, its run is recorded as crashed, and the rest still run.
+ */
+export function createScheduler(deps: { clock: Clock; isBackedUp: () => boolean; settings: SchedulerSettings; shouldStop?: () => boolean }): Scheduler {
+  const { clock, isBackedUp, settings, shouldStop = () => false } = deps;
   return {
-    run: async () => {
-      throw new Error("Not implemented: scheduler.run");
+    async run(manifest, task) {
+      const records: (RunRecord | undefined)[] = manifest.runs.map(() => undefined);
+      // Resolves once each permutation's first run has had its warm-up.
+      const warmedUp = new Map<string, Promise<void>>();
+      let next = 0;
+      const worker = async () => {
+        while (next < manifest.runs.length && !shouldStop()) {
+          const index = next++;
+          const run = manifest.runs[index] as PlannedRun;
+          const lead = warmedUp.get(run.permutationHash);
+          const started = Promise.withResolvers<Promise<unknown>>();
+          if (lead === undefined) {
+            // The lead: the rest wait for it to start, then for its warm-up or its end.
+            warmedUp.set(
+              run.permutationHash,
+              started.promise.then((ended) => (settings.cacheWarmupMs > 0 ? Promise.race([ended, clock.sleep(settings.cacheWarmupMs)]).then(() => {}) : undefined)),
+            );
+          } else {
+            await lead;
+          }
+          while (isBackedUp() && !shouldStop()) await clock.sleep(settings.backpressurePollMs);
+          if (shouldStop()) {
+            started.resolve(Promise.resolve());
+            break;
+          }
+          const startedAt = clock.now();
+          const running = task(run).catch(
+            (error: unknown): RunRecord => ({
+              runId: run.runId,
+              outcome: "crashed",
+              startedAt,
+              finishedAt: clock.now(),
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+          started.resolve(running);
+          records[index] = await running;
+        }
+      };
+      await Promise.all(Array.from({ length: Math.max(1, Math.min(manifest.concurrency, manifest.runs.length)) }, worker));
+      return records.filter((record): record is RunRecord => record !== undefined);
     },
   };
 }

@@ -23,15 +23,17 @@ export type Services = {
   runtimeDocker: DockerService;
   /**
    * The run data store: SQLite in `--data-dir` if given, or else the config's `runDataStore`. Opened
-   * on first use, so a command that never uses it never fails on it. Not used yet: commands still
-   * open their own with `openStore`, in src/cli/dataDir.ts.
+   * on first use, so a command that never uses it never fails on it. `run` uses it; other commands
+   * still open their own with `openStore`, in src/cli/dataDir.ts.
    */
   runDataStore: RunDataStore;
+  /** Where `runDataStore` is: a file's path, or a description of a database. Opens it. */
+  runDataStoreLocation: () => Promise<string>;
   random: Random;
   fs: Fs;
-  /** The run state `run-next` writes to and `displayer` shows. */
+  /** The run state `run` writes to and `displayer` shows. */
   state: ApplicationStateService<Manifest>;
   displayer: Displayer;
-  /** Concurrency and upload backlog cap for `run-next`, read from the environment variables. */
+  /** Concurrency, upload and warm-up settings for `run`, read from the environment variables. */
   runSettings: RunSettings;
 };
