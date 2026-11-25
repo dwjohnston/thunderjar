@@ -14,7 +14,7 @@ import { givenOverrides, hasOverrides } from "../../config/overrides.ts";
 import { matrixShape } from "../../config/permutations.ts";
 import { executionContainerPrefix } from "../../execution/images.ts";
 import { moduleLogger } from "../../log/logger.ts";
-import { setUploadBacklog, updateRun } from "../../services/ApplicationState/ApplicationState.ts";
+import { type RunStatus, setUploadBacklog, updateRun } from "../../services/ApplicationState/ApplicationState.ts";
 import type { ExecutionRecord, ExecutionStatus } from "../../services/RunDataStore/RunDataStore.ts";
 import { runPermutation } from "../runPermutation/runPermutation.ts";
 import { createScheduler } from "../scheduler/scheduler.ts";
@@ -46,6 +46,11 @@ export async function runManifest(manifest: Manifest, deps: Dependencies): Promi
   for (const { runId } of manifest.runs) setRun(deps, runId, "queued");
   await deps.runStore.recordExecution(executionRecord("running"));
 
+  // A run that crashed or timed out keeps that status, whatever becomes of its image's upload.
+  const setUploadStatus = (runId: string, status: RunStatus) => {
+    const current = deps.state.get().run.runs[runId]?.status;
+    if (current !== "crashed" && current !== "timedOut") setRun(deps, runId, status);
+  };
   // Each push is timed from when it starts, not from when it's queued.
   const pushing = new Map<string, PromiseWithResolvers<void>>();
   const uploads = createUploadQueue(deps.runtimeDocker, {
@@ -57,12 +62,12 @@ export async function runManifest(manifest: Manifest, deps: Dependencies): Promi
         const pushed = Promise.withResolvers<void>();
         pushing.set(image.runId, pushed);
         void timed(deps, "pushPostrun", () => pushed.promise).catch(() => {});
-        setRun(deps, image.runId, "uploading");
+        setUploadStatus(image.runId, "uploading");
       } else {
         if (step === "uploaded") pushing.get(image.runId)?.resolve();
         else pushing.get(image.runId)?.reject(new Error("push failed"));
         // A run that failed to upload stays committed: its image is still in the runtime.
-        setRun(deps, image.runId, step === "uploaded" ? "uploaded" : "committed");
+        setUploadStatus(image.runId, step === "uploaded" ? "uploaded" : "committed");
       }
       logEvent(deps, { type: "run", runId: image.runId, reference: image.reference, step: step === "failed" ? "uploadFailed" : step });
     },
@@ -101,12 +106,13 @@ export async function runManifest(manifest: Manifest, deps: Dependencies): Promi
   log.info({ executionId, ...timings }, "execution timings");
   await deps.runStore.recordExecution(execution);
   log.info({ executionId, status: execution.status, ms: timings.wallMs }, "execution finished");
-  if (failure !== undefined) throw failure.error;
 
   const [recordedIn, containerRuns] = await Promise.all([deps.settings.runStoreLocation(), deps.runStore.containerRunsOf(executionId)]);
   changeRunDetails(deps, (details) => ({
     ...details,
     finished: { execution, recordedIn, containerRuns, timings },
   }));
+  // Thrown once the state has the summary, so the displayer still shows what ran.
+  if (failure !== undefined) throw failure.error;
   return records;
 }

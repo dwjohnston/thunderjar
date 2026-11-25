@@ -253,9 +253,7 @@ describe(runPermutation, () => {
       expect(deps.runtimeDocker.containers.size).toBe(0);
     });
 
-    // Fails today: a timed out run ends `committed`, like one that finished. Nothing ever sets the
-    // `timedOut` status, though `RunStatus` has it and the architecture plan's example checks for it.
-    test.todo("ends with the status timedOut", async () => {
+    test("ends with the status timedOut", async () => {
       const { deps, run, uploads } = setUp(measured);
       deps.runtimeDocker.on(CONTAINER, agentTimedOut());
 

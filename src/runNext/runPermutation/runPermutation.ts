@@ -178,9 +178,11 @@ export async function runPermutation(run: PlannedRun, deps: Deps, uploads: Uploa
       await docker.removeContainer(run.container).catch(() => {});
     }
 
-    record = containerRunRecord(manifest, run, left);
+    // Assigned only once it's stored, so a store that fails here is recorded again as a crash, with its `ran` event.
+    const ran = containerRunRecord(manifest, run, left);
     const { execution } = left;
-    await deps.runStore.recordContainerRun(record);
+    await deps.runStore.recordContainerRun(ran);
+    record = ran;
     log.info({ ...at, exitCode: execution.exitCode, timedOut: execution.timedOut, tokenCosts: record.tokenCosts }, "container run finished");
     // What the agent said, so the log says why it failed: its stderr is otherwise lost.
     const output = agentOutput([left.harnessResult], [left.stderr]);
@@ -192,7 +194,7 @@ export async function runPermutation(run: PlannedRun, deps: Deps, uploads: Uploa
     if (record.tokenCosts?.outcome === "unavailable" && record.tokenCosts.reason === "unparseable") {
       log.warn({ ...at, result: left.harnessResult && head(left.harnessResult, 500) }, "token costs unparseable from the result file");
     }
-    setRun(deps, runId, "committed");
+    setRun(deps, runId, execution.timedOut ? "timedOut" : "committed");
     logEvent(deps, { type: "run", runId, step: "ran", record });
 
     // The run's slot frees up without waiting for the push.
