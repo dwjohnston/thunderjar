@@ -55,7 +55,7 @@ const showOutcome = (outcome: RecordedOutcome, paint: Paint) =>
       : paint.red(`erroredWhileMeasuring (${outcome.error.message})`);
 
 /** A container run's measures, on one line: `<name>: <value>`, three spaces apart. */
-const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
+export const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
   Object.entries(result)
     .map(([name, { outcome }]) => `${paint.blue(`${name}:`)} ${showOutcome(outcome, paint)}`)
     .join("   ");
@@ -375,7 +375,7 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
     } else if (caught instanceof DockerPullError) {
       fail();
       error(
-        `The runtime couldn't pull ${caught.reference}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this; \`run --local\` runs on the local Docker daemon instead.`,
+        `The runtime couldn't pull ${caught.reference}: ${caught.message}\nMake sure it can reach the image store's registry and is logged in to it. \`thunderjar doctor\` checks this.`,
       );
     } else if (caught instanceof RunDataStoreError) {
       fail();

@@ -49,13 +49,20 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("run, against real Docker", ()
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toBe(`Execution <ULID>
-Building <PREFIX>-prerun:ded54607 ... done
-Building <PREFIX>-prerun:e4f0784f ... done
- 1/2  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>, $0.061)
-      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
- 2/2  iteration 1/1  fake-harness-beta | plain  ... done (<duration>)
-      isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":2,\\"comments\\":1,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 5, total: 5}   isPrimeTsExists: true   saysArr: false   tsIgnoreCount: 0
+    expect(stdout.replace(/\d+:\d\d/g, "<duration>")).toBe(`Execution <ULID>  two-harnesses
+  2 permutations, 2 runs, up to 1 at once
+
+Images
+  <PREFIX>-prerun:ded54607  ready
+  <PREFIX>-prerun:e4f0784f  ready
+
+Runs
+  1.1  fake-harness-alpha/fake-model-small-001  completed  <duration>  $0.061
+       isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":3,\\"comments\\":2,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 3, total: 5}   isPrimeTsExists: true   saysArr: true   tsIgnoreCount: 1
+  2.1  fake-harness-beta/fake-model-large-001   completed  <duration>
+       isPrimeShape: {exitCode: 0, stdout: "{\\"lines\\":2,\\"comments\\":1,\\"exports\\":1}\\n", stdoutTruncated: false}   isPrimeTests: {passed: 5, total: 5}   isPrimeTsExists: true   saysArr: false   tsIgnoreCount: 0
+
+2 runs: 2 completed
 Recorded in <DATA>/runs.sqlite
 `);
 
@@ -158,11 +165,11 @@ Recorded in <DATA>/runs.sqlite
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).toContain(`
- 1/2  iteration 1/1  node20 | fake-sandboxer | plain  ... done (<duration>)
-      sandboxed: false
- 2/2  iteration 1/1  node20-unconfined | fake-sandboxer | plain  ... done (<duration>)
-      sandboxed: true
+    expect(stdout.replace(/\d+:\d\d/g, "<duration>")).toContain(`
+  1.1  node20             completed  <duration>
+       sandboxed: false
+  2.1  node20-unconfined  completed  <duration>
+       sandboxed: true
 `);
   }, 600_000);
 
@@ -251,7 +258,7 @@ Recorded in <DATA>/runs.sqlite
       { name: "FAKE_TEST_CASE_SECRET", files: 1, paths: ["/workspace/.env"] },
     ]);
     expect(record.secretSearchFailed).toBeUndefined();
-    expect(stdout).toContain("1 of 1 postrun images hold a secret's value in their files:\n");
+    expect(stdout).toContain("1 postrun image of 1 hold a secret's value in their files.");
     for (const value of Object.values(secrets)) expect(stdout + JSON.stringify(record)).not.toContain(value);
     // It really is in the image, as found.
     expect(await inImage(record.postrunImage, "cat /workspace/.env")).toBe(`KEY=${secrets.FAKE_HARNESS_KEY}\nSECRET=${secrets.FAKE_TEST_CASE_SECRET}`);

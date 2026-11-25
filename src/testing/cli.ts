@@ -44,7 +44,8 @@ export async function thunderjar(cwd: string, args: string[], options: CliOption
   const logFile = `${TMP_DIR}/logs/${crypto.randomUUID()}.log`;
   const result = await $`bun ${CLI} ${args}`
     .cwd(cwd)
-    .env({ ...Bun.env, TMPDIR: TMP_DIR, THUNDERJAR_LOG_FILE: logFile, ...docker, ...options.env })
+    // No prompt-cache warm-up between a permutation's first run and its others: a fake agent has none to warm.
+    .env({ ...Bun.env, TMPDIR: TMP_DIR, THUNDERJAR_LOG_FILE: logFile, THUNDERJAR_CACHE_WARMUP_MS: "0", ...docker, ...options.env })
     .quiet()
     .nothrow();
   const log = Bun.file(logFile);

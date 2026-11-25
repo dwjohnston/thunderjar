@@ -338,20 +338,44 @@ export default declareMeasurement({
     const { stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", "elsewhere"]);
 
     expect(stderr).toBe(
-      "Error: --data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore. Pass --local to run here.\n",
+      "Error: --data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore.\n",
     );
     expect(exitCode).toBe(1);
   });
 
-  test("--local runs here, as without a runner", async () => {
+  test("--build-only starts no runner: the prerun images are made ready from here", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using copy = await copyWithRunner();
 
-    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example", "--local"], { env: docker.env });
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--build-only"], { env: docker.env });
 
+    expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout).not.toContain("runner");
-    expect((await docker.commands()).filter((command) => command.startsWith(REMOTE) || command.includes("runner-"))).toEqual([]);
+    expect(stdout).toBe(`Execution <ULID>  example
+  1 permutation, 1 run, up to 1 at once, images stored in ${REPOSITORY}
+
+Images
+  ${PRERUN}  ready
+
+1 prerun image ready
+`);
+    // The runtime builds and pushes the prerun image the registry lacks. No runner image, no runner, no container.
+    const commands = (await docker.commands()).map((command) => command.replace(/( build -t \S+) .*$/, "$1 <context>"));
+    // It looks in the runtime's two repositories at once, so in either order.
+    expect(commands.slice(0, 3).sort()).toEqual([
+      `${REMOTE} image ls --format {{.Repository}}:{{.Tag}} ${REPOSITORY}`,
+      `${REMOTE} image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun`,
+      "docker login ghcr.io",
+    ]);
+    expect(commands[0]).toBe("docker login ghcr.io");
+    expect(commands.slice(3)).toEqual([
+      `docker manifest inspect ${PRERUN}`,
+      `${REMOTE} build -t thunderjar-prerun:4799f255 <context>`,
+      `${REMOTE} tag thunderjar-prerun:4799f255 ${PRERUN}`,
+      `${REMOTE} push --quiet ${PRERUN}`,
+    ]);
+    // Nothing is recorded.
+    expect(await Bun.file(`${copy.dir}/.thunderjar/.data/runs.sqlite`).exists()).toBe(false);
   });
 
   test("if the connection drops while it follows, it follows again, and writes each line once", async () => {

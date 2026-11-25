@@ -15,6 +15,20 @@ Thunderjar is a TypeScript/Bun CLI for
   - Different configurations of a run can be compared by comparing the same measurements 
 
   
+
+## Terminology
+
+- Say "container run", not "agent", for one run of a permutation's container: what runs, is timed, crashes or leaves files.
+
+  ```ts
+  // ✅ Do
+  // Four container runs have finished.
+  // ❌ Don't
+  // Four agents have finished.
+  ```
+
+  The container runs a harness, but what Thunderjar starts, times and records is the container run.
+
 ## `src/gauntlet`
 
 `src/gauntlet` isn't Thunderjar code. Each folder in it is a small project of its own, with its own instructions and tools, that the test cases in `.thunderjar/` set agents to work on. oxlint and `bun test` skip it (`.oxlintrc.json`'s `ignorePatterns`, and `bunfig.toml`).
@@ -108,19 +122,24 @@ The docs site publishes the docs of every stable release, not of main.
 
 ## Running the tests
 
-The whole suite takes over a minute, so run as little of it as the change needs.
+Run only the tests that your change affects, with `--changed`. Bun picks the test files that import, directly or not, a file git says has changed, so a shared fixture's users run too.
 
-✅ **Do** run the tests of the code you're changing, by path, while you work.
+✅ **Do** run the tests affected by what you haven't committed yet, or by everything since a commit or branch.
 
 ```sh
-bun test src/cli/commands/plan
+bun test --changed          # what you haven't committed
+bun test --changed=main     # everything on this branch
 ```
 
-✅ **Do** run the whole suite with `bun run test`, once, before you commit.
+✅ **Do** run one file by path while you work on it.
 
-❌ **Don't** run bare `bun test` for the whole suite.
+```sh
+bun test src/runNext/plan/plan.test.ts
+```
 
-**Why:** `bun run test` adds `--parallel`, and finishes in about half the time of bare `bun test` (~70s vs ~130s). `bunfig.toml` can't set `parallel`, so the flag lives in the script. The slowest files, `src/cli/commands/run/*.test.ts` and `src/docker/docker.test.ts`, wait out real timeouts, so leave them out unless you've touched that code.
+❌ **Don't** run the whole suite, with `bun run test` or bare `bun test`.
+
+**Why:** the whole suite takes over a minute, and its slowest files, `src/cli/commands/run/*.test.ts` and `src/docker/docker.test.ts`, wait out real timeouts. CI runs the whole suite.
 
 ## Fixtures 
 

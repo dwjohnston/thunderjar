@@ -782,7 +782,7 @@ export type BuildOptions = {
  * Where `run` builds images and runs containers, instead of the local Docker daemon: any
  * command that takes the `docker` CLI's arguments. Thunderjar puts `command` in front of each
  * `docker` subcommand it would run, e.g. `["docker", "--context", "cloud"]`,
- * `["docker", "-H", "ssh://me@build-host"]` or `["podman", "--remote"]`. `--local` ignores it.
+ * `["docker", "-H", "ssh://me@build-host"]` or `["podman", "--remote"]`.
  *
  * Prerun images are built on it, and pushed from it to the image store. It pulls those the store
  * already had and it doesn't, so
@@ -794,7 +794,7 @@ export type RuntimeConfig = {
   /**
    * How many containers run on it at once: 1, one after another, by default. Each is an agent,
    * with its builds and tests, so set it to what the runtime's CPU and memory can take.
-   * `run --concurrency` overrides it, and `run --local` doesn't use it.
+   * `run --concurrency` overrides it.
    */
   concurrency?: number;
   /**
@@ -802,7 +802,7 @@ export type RuntimeConfig = {
    * it, or size it for the execution. It's given `THUNDERJAR_CONCURRENCY` (how many containers will
    * run at once), `THUNDERJAR_CONTAINERS` (how many runs the execution has: every iteration of
    * every permutation) and `THUNDERJAR_EXECUTION_ID`. If it exits non-zero, nothing is run.
-   * `run --local` and `run --dry-run` don't run it. Not with a `runner`.
+   * `run --dry-run` doesn't run it. Not with a `runner`.
    */
   beforeExecution?: string[];
   /**
@@ -897,7 +897,7 @@ export type ConfigDeclaration = {
    * `docker build --ssh default`.
    */
   build?: BuildOptions;
-  /** Where `run` runs containers. The local Docker daemon by default, or with `run --local`. */
+  /** Where `run` runs containers. The local Docker daemon by default. */
   runtime?: RuntimeConfig;
 };
 

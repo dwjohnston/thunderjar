@@ -16,7 +16,7 @@
 // level `-v`, `--log-level` or THUNDERJAR_LOG_LEVEL asks for, or info. Nothing of it reaches the
 // terminal. The test harness points THUNDERJAR_LOG_FILE at a file under fixtures/.tmp/.
 import { afterEach, describe, expect, test } from "bun:test";
-import { Glob } from "bun";
+import { $, Glob } from "bun";
 import { copyScenarioProject, thunderjar } from "../testing/cli.ts";
 import { fakeDocker } from "../testing/fakeDocker.ts";
 import { scenario } from "../testing/scenario.ts";
@@ -44,19 +44,21 @@ describe("the diagnostic log", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(0);
-    expect(stdout.replace(/\(\d[^)]*\)/g, "")).toBe(quiet.stdout.replace(/\(\d[^)]*\)/g, ""));
+    // The same output, but for how long its run took.
+    const untimed = (output: string) => output.replace(/  \d+:\d\d(?=  |\n)/g, "");
+    expect(untimed(stdout)).toBe(untimed(quiet.stdout));
+    expect(stdout).toContain("\n1 run: 1 completed\n");
     expect(messages(log as string)).toEqual([
-      "INFO: execution: execution starting",
       "INFO: docker: building image",
       "INFO: docker: built image",
-      "INFO: execution: container run starting",
+      "INFO: runNext: execution starting",
+      "INFO: runNext: container run starting",
       "INFO: docker: running container",
       "INFO: docker: container finished",
       "INFO: docker: committed container",
-      "INFO: execution: container run finished",
-      "INFO: execution: measured",
-      "INFO: execution: execution timings",
-      "INFO: execution: execution finished",
+      "INFO: runNext: container run finished",
+      "INFO: runNext: measured",
+      "INFO: runNext: execution finished",
     ]);
     expect(log).toContain('    status: "complete"');
     expect(log).not.toContain("\x1b[");
@@ -86,6 +88,8 @@ describe("the diagnostic log", () => {
 
   test("without --log-file: a new file in .thunderjar/logs/, named for when and the command", async () => {
     await using copy = await copyScenarioProject("0202");
+    // The scenario's own logs/ is git-ignored, so it may hold files from runs made in it by hand.
+    await $`rm -rf ${copy.dir}/.thunderjar/logs`.quiet();
 
     const { exitCode } = await thunderjar(copy.dir, ["run", "example", "--dry-run"], { env: { ...KEY, THUNDERJAR_LOG_FILE: "" } });
 

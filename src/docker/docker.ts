@@ -64,6 +64,9 @@ const dockerBinary = () => Bun.env.THUNDERJAR_DOCKER || "docker";
  */
 export type DockerRuntime = { command: string[]; pull: "never" | "missing" };
 
+/** Whether `where` is a DockerRuntime, not a DockerService, which has a `pull` too: a method. */
+export const isRuntime = (where: object): where is DockerRuntime => typeof (where as { pull?: unknown }).pull === "string";
+
 /** The local Docker daemon. */
 export const localRuntime = (): DockerRuntime => ({ command: [dockerBinary()], pull: "never" });
 

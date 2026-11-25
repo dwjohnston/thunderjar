@@ -1,0 +1,122 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Model: claude-opus-5-5
+ * Supervising engineer: David Johnston
+ *
+ * Humans: add your notes here
+ */
+
+import { describe, expect, it } from "bun:test";
+import { config, fakes } from "../testing/fixtures.ts";
+import { runTestCase } from "./runTestCase.ts";
+
+describe(runTestCase, () => {
+    it("--dry-run: plans the runs, and builds, runs and records nothing", async () => {
+        const deps = fakes();
+        deps.random.setUlids("01exec");
+
+        const records = await runTestCase(config({ permutationCount: 2 }), deps, "dry-run");
+
+        // Nothing ran, so there are no records.
+        expect(records).toBeUndefined();
+
+        // The plan is left in the state, for the displayer to show.
+        expect(deps.state.get().run).toMatchObject({
+            mode: "dry-run",
+            manifest: {
+                executionId: "01exec",
+                runs: [{ runId: "01exec-oooooooo-i1" }, { runId: "01exec-xxxxxxxx-i1" }],
+            },
+            images: {},
+            runs: {},
+        });
+
+        // Docker was never touched...
+        expect(deps.hostDocker.calls).toEqual([]);
+        expect(deps.runtimeDocker.calls).toEqual([]);
+
+        // ...and nothing was recorded.
+        expect(await deps.runStore.listExecutions()).toEqual([]);
+    });
+
+    it("a real run: builds each image, runs each permutation in its own container, and records it", async () => {
+        const deps = fakes();
+        deps.random.setUlids("01exec");
+
+        const records = await runTestCase(config({ permutationCount: 2 }), deps);
+
+        // One record per run, each completed.
+        expect(records).toMatchObject([
+            { runId: "01exec-oooooooo-i1", outcome: "completed", postrunImage: "thunderjar-postrun:01exec-1-1" },
+            { runId: "01exec-xxxxxxxx-i1", outcome: "completed", postrunImage: "thunderjar-postrun:01exec-2-1" },
+        ]);
+
+        // The state shows both images ready, and both runs committed.
+        const { run } = deps.state.get();
+        expect(run.images).toEqual({ "thunderjar-prerun:i1000000": "ready", "thunderjar-prerun:i2000000": "ready" });
+        expect(Object.values(run.runs).map((r) => r.status)).toEqual(["committed", "committed"]);
+
+        // What was asked of Docker, in order:
+        // build the prerun images, then for each run: run it, read what it left, commit it to a postrun image, remove the container.
+        expect(deps.hostDocker.calls).toEqual([]);
+        expect(deps.runtimeDocker.calls).toMatchInlineSnapshot(`
+      [
+        "imagesIn thunderjar-prerun",
+        "build thunderjar-prerun:i1000000",
+        "build thunderjar-prerun:i2000000",
+        "diskUsage",
+        "run thunderjar-prerun:i1000000 thunderjar-run-01exec-1-1",
+        "readFile thunderjar-run-01exec-1-1 /thunderjar/run.json",
+        "readFile thunderjar-run-01exec-1-1 /thunderjar/result.json",
+        "readFile thunderjar-run-01exec-1-1 /thunderjar/stderr.log",
+        "commit thunderjar-run-01exec-1-1 thunderjar-postrun:01exec-1-1",
+        "removeContainer thunderjar-run-01exec-1-1",
+        "run thunderjar-prerun:i2000000 thunderjar-run-01exec-2-1",
+        "readFile thunderjar-run-01exec-2-1 /thunderjar/run.json",
+        "readFile thunderjar-run-01exec-2-1 /thunderjar/result.json",
+        "readFile thunderjar-run-01exec-2-1 /thunderjar/stderr.log",
+        "commit thunderjar-run-01exec-2-1 thunderjar-postrun:01exec-2-1",
+        "removeContainer thunderjar-run-01exec-2-1",
+        "diskUsage",
+      ]
+    `);
+
+        // The execution was recorded as complete.
+        expect(await deps.runStore.listExecutions()).toMatchObject([{ executionId: "01exec", status: "complete", matrix: { permutations: 2, iterations: 1 } }]);
+    });
+
+  it("a container run that errors is crashed, but is still committed and recorded, and the other run carries on", async () => {
+    const deps = fakes();
+    deps.random.setUlids("01exec");
+    // The second permutation's container run exits with code 2, and leaves an error on stderr.
+    deps.runtimeDocker.onRun("-2-1", () => ({
+      files: {
+        "/thunderjar/run.json": JSON.stringify({ startedAt: 1_000_001_000_000, finishedAt: 1_000_001_002_000, exitCode: 2 }),
+        "/thunderjar/stderr.log": "boom\n",
+      },
+    }));
+
+    const records = await runTestCase(config({ permutationCount: 2 }), deps);
+
+    // The run doesn't throw: each run gets a record, and the second one is crashed.
+    expect(records).toMatchObject([
+      { runId: "01exec-oooooooo-i1", outcome: "completed" },
+      { runId: "01exec-xxxxxxxx-i1", outcome: "crashed", postrunImage: "thunderjar-postrun:01exec-2-1" },
+    ]);
+    expect(Object.values(deps.state.get().run.runs).map((r) => r.status)).toEqual(["committed", "crashed"]);
+
+    // The crashed container was still saved as a postrun image, so it can be looked at and measured.
+    expect(deps.runtimeDocker.calls).toContain("commit thunderjar-run-01exec-2-1 thunderjar-postrun:01exec-2-1");
+
+    // Both runs are in the run data store, the crashed one with its exit code and stderr.
+    expect(await deps.runStore.containerRunsOf("01exec")).toMatchObject([
+      { permutation: 1, execution: { exitCode: 0 } },
+      { permutation: 2, execution: { exitCode: 2 }, harnessStderr: "boom\n" },
+    ]);
+    // One crashed run is enough to mark the whole execution failed.
+    expect(await deps.runStore.listExecutions()).toMatchObject([{ executionId: "01exec", status: "failed" }]);
+  });
+});

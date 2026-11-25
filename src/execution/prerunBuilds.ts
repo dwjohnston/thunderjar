@@ -7,12 +7,13 @@
 //   Dockerfile
 //   parameters/<role>/     each folder parameter's files/ folder, at its ctx.dir: see PARAMETER_DIRS.
 //                          Its index.ts, and anything else beside files/, is never copied.
+import type { DockerService } from "../services/Docker/Docker.ts";
 import { $ } from "bun";
 import type { BuildOptions } from "../api/declarations.ts";
 import { FILES, PARAMETERS } from "../config/folders.ts";
 import { existsIn } from "../config/loader.ts";
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
-import { buildImage, type DockerRuntime, imagesIn, localRuntime } from "../docker/docker.ts";
+import { buildImage, type DockerRuntime, imagesIn, isRuntime, localRuntime } from "../docker/docker.ts";
 import { prerunImage, prerunRepository } from "./images.ts";
 import { type FolderRole, PARAMETER_DIRS } from "./prerunDockerfile.ts";
 
@@ -90,14 +91,15 @@ export async function buildPrerunImage(
   { permutation, image }: PrerunImage,
   hooks: PrerunBuildHooks = {},
   build: BuildOptions = {},
-  runtime: DockerRuntime = localRuntime(),
+  where: DockerRuntime | Pick<DockerService, "build"> = localRuntime(),
 ): Promise<void> {
   hooks.onBuilding?.(image);
   const contextDir = await temporaryFolder();
   try {
     await copyParameters(root, permutation, contextDir);
     await Bun.write(`${contextDir}/Dockerfile`, permutation.dockerfile);
-    await buildImage(contextDir, image, build, runtime);
+    if (isRuntime(where)) await buildImage(contextDir, image, build, where);
+    else await where.build(contextDir, image, build);
   } finally {
     await $`rm -rf ${contextDir}`.quiet();
   }

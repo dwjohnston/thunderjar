@@ -22,7 +22,7 @@ const TEST_CASES = [
   {
     testCase: "compare-models",
     key: "ANTHROPIC_API_KEY",
-    labels: ["claude-code-2.1.311/claude-haiku-4-5-20251001 | plain", "claude-code-2.1.311/claude-haiku-5-5 | plain"],
+    labels: ["claude-code-2.1.311/claude-haiku-4-5-20251001", "claude-code-2.1.311/claude-haiku-5-5"],
   },
 ].filter(({ key }) => Bun.env[key]);
 
@@ -47,8 +47,7 @@ describe.skipIf(!Bun.env.THUNDERJAR_AGENT_TESTS || TEST_CASES.length === 0)("run
     expect(run.stderr).toBe("");
     expect(run.exitCode).toBe(0);
     labels.forEach((label, index) => {
-      const ordinal = `${index + 1}/${labels.length}`;
-      expect(run.stdout).toMatch(new RegExp(` ${ordinal}  iteration 1/1  ${label}  \\.\\.\\. done \\(<duration>, (\\$[\\d.]+|[\\d,]+ tokens)\\)\\n`));
+      expect(run.stdout).toMatch(new RegExp(`  ${index + 1}\\.1  ${label} +completed  \\d+:\\d\\d  \\$[\\d.]+\\n`));
     });
 
     const store = sqliteStore(storeFileIn(data));
