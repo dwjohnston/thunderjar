@@ -19,9 +19,12 @@ Every service is created once, in [index.ts](index.ts).
 | `clock` | `createClockService()` | Time: `now`, `setTimeout`, `sleep` |
 | `env` | `createEnvService()` | Environment variables |
 | `io` | `createIoService()` | stdin, stdout, stderr and stop signals |
-| `docker` | `createDockerService(clock)` | The `docker` CLI, on the local daemon |
+| `hostDocker` | `createDockerService(clock)` | The `docker` CLI, on the machine Thunderjar runs on |
+| `runtimeDocker` | `runtimeDocker(runtime)`, a factory over `createDockerService(clock, runtime)` | The `docker` CLI, where containers run. Given `null` (no runtime, or `--local`), it returns `hostDocker` |
 
-## Planned: HostDocker and RuntimeDocker
+No command uses `hostDocker` or `runtimeDocker` yet: they still call `src/docker/docker.ts` directly.
+
+## HostDocker and RuntimeDocker
 
 Container runs will typically need to run on a 'runtime' - this might be a remote server, but it could be the host machine that that the thunderjar CLI runs on. 
 
@@ -33,7 +36,7 @@ eg.
 - Checking images exist on a cloud registry, deleting them
 
 
-The plan is to expose two services:
+So there are two Docker services:
 
 - **`hostDocker`**: the `docker` CLI on the machine Thunderjar runs on. It handles:
   - the registry login check, and the credentials the image store is asked with
