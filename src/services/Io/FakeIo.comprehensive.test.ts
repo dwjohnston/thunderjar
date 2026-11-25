@@ -1,6 +1,6 @@
 import { peek } from "bun";
 import { describe, expect, test } from "bun:test";
-import { FakeIo } from "./FakeIo";
+import { FakeIo, FakeOutput } from "./FakeIo";
 
 describe(FakeIo, () => {
     test("Its streams are pipes by default, and terminals of the given width when asked", () => {
@@ -70,5 +70,15 @@ describe(FakeIo, () => {
         io.terminate();
 
         expect(signals).toEqual(["first SIGINT", "second SIGINT", "second SIGTERM"]);
+    });
+});
+
+describe(FakeOutput.prototype.lastFrame, () => {
+    test("It is the text after the last clear to end of screen, or all of it with none", () => {
+        const out = new FakeOutput(true, 80);
+        out.write("one\n");
+        expect(out.lastFrame()).toBe("one\n");
+        out.write("\x1b[1A\x1b[0Jtwo\n\x1b[1A\x1b[0Jthree\n");
+        expect(out.lastFrame()).toBe("three\n");
     });
 });
