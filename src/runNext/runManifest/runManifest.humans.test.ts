@@ -31,26 +31,20 @@ describe(runManifest, () => {
       "01exec-p2000000-i1 completed",
     ]);
 
-    // How the execution's status changed in the state.
-    expect(changes(deps.state.history().map(({ run }) => run.execution?.status))).toMatchInlineSnapshot(`
+    // How the state changed, one line per change: the execution's status, then each run's.
+    const timeline = deps.state.history().map(({ run }) => `${run.execution?.status ?? "-"} | ${Object.values(run.runs).map((r) => r.status).join(", ")}`);
+    expect(changes(timeline)).toMatchInlineSnapshot(`
       [
-        undefined,
-        "running",
-        "complete",
-      ]
-    `);
-
-    // How each run's status changed in the state: all queued first, then one at a time.
-    expect(changes(deps.state.history().map(({ run }) => Object.values(run.runs).map((r) => r.status).join(", ")))).toMatchInlineSnapshot(`
-      [
-        "",
-        "queued, queued",
-        "running, queued",
-        "committing, queued",
-        "committed, queued",
-        "committed, running",
-        "committed, committing",
-        "committed, committed",
+        "- | ",
+        "- | queued, queued",
+        "running | queued, queued",
+        "running | running, queued",
+        "running | committing, queued",
+        "running | committed, queued",
+        "running | committed, running",
+        "running | committed, committing",
+        "running | committed, committed",
+        "complete | committed, committed",
       ]
     `);
 
