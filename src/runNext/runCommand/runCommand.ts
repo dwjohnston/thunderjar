@@ -96,7 +96,7 @@ export async function runCommand(testCaseName: string, options: RunOptions, deps
     if ("exitCode" in outcome) return { exitCode: outcome.exitCode };
     if (stopping.signal.aborted) return { exitCode: await interrupted.promise, records: outcome.records };
     const { execution, error } = state.get().run;
-    return { exitCode: execution?.status === "failed" || error !== undefined ? 1 : 0, records: outcome.records };
+    return { exitCode: execution?.status === "failed" || error !== undefined ? 1 : 0, records: outcome.records, ...(error !== undefined && { error }) };
   } catch (error) {
     if (stopping.signal.aborted) return { exitCode: await interrupted.promise };
     const why = error instanceof ConfigError ? error.problems.join("\n") : error instanceof Error ? error.message : String(error);

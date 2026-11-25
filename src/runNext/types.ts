@@ -194,4 +194,9 @@ export type CommittedImage = {
 };
 
 /** What level 1 returns: the process's exit code, and each run's record, if any ran. */
-export type RunResult = { exitCode: number; records?: RunRecord[] };
+export type RunResult = {
+  exitCode: number;
+  records?: RunRecord[];
+  /** Why it failed, if something did that no run's own line says, e.g. the runtime's `afterExecution`. */
+  error?: string;
+};

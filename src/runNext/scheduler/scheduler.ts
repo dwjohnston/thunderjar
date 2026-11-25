@@ -40,6 +40,17 @@ export function createScheduler(deps: { clock: Clock; isBackedUp: () => boolean;
       // Resolves once each permutation's first run has had its warm-up.
       const warmedUp = new Map<string, Promise<void>>();
       let next = 0;
+      /** Resolves after the warm-up, or once `ended` does if that's sooner: then its timer is cleared, so nothing waits on it. */
+      const warmUp = (ended: Promise<unknown>): Promise<void> => {
+        if (settings.cacheWarmupMs <= 0) return Promise.resolve();
+        const warm = Promise.withResolvers<void>();
+        const timer = clock.setTimeout(() => warm.resolve(), settings.cacheWarmupMs);
+        void ended.then(() => {
+          clock.clearTimeout(timer);
+          warm.resolve();
+        });
+        return warm.promise;
+      };
       const worker = async () => {
         while (next < manifest.runs.length && !shouldStop()) {
           const index = next++;
@@ -50,7 +61,7 @@ export function createScheduler(deps: { clock: Clock; isBackedUp: () => boolean;
             // The lead: the rest wait for it to start, then for its warm-up or its end.
             warmedUp.set(
               run.permutationHash,
-              started.promise.then((ended) => (settings.cacheWarmupMs > 0 ? Promise.race([ended, clock.sleep(settings.cacheWarmupMs)]).then(() => {}) : undefined)),
+              started.promise.then((ended) => warmUp(ended)),
             );
           } else {
             await lead;

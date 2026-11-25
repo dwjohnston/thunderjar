@@ -77,7 +77,8 @@ export function createRunCommand(services: Services): Command {
           timings: options.timings,
         };
         try {
-          const { exitCode } = await runCommand(name, given, dependencies(services));
+          const { exitCode, error } = await runCommand(name, given, dependencies(services));
+          if (error !== undefined) printError(error);
           // Interrupted: its containers are gone, and whatever was waiting on them is left behind.
           if (exitCode >= 128) process.exit(exitCode);
           if (exitCode !== 0) process.exitCode = exitCode;
