@@ -20,6 +20,7 @@
 // bytes>`, then its stdout, then its stderr. Each command runs with `sh`, in the image's working
 // directory. Its files are kept in /tmp, outside the working directory.
 import { moduleLogger } from "../log/logger.ts";
+import type { ShellSession } from "../services/Docker/Docker.ts";
 import { DockerContainerError, type DockerRuntime, type ExecResult, reasonOf, removeContainer } from "./docker.ts";
 
 const log = moduleLogger("docker");
@@ -43,15 +44,7 @@ export const SESSION_SCRIPT = [
 /** How long `close` waits for the container to end once its stdin is closed, before it removes it. */
 const CLOSE_TIMEOUT_MS = 30_000;
 
-/** A shell session in a running container. */
-export type ShellSession = {
-  /** The image's working directory, where each command runs. */
-  workdir: string;
-  /** Runs `command` with `sh`, with `stdin` as its input, after any command already sent. Throws a DockerContainerError if the session has ended. */
-  run(command: string, stdin?: string): Promise<ExecResult>;
-  /** Ends the session: its container is removed. */
-  close(): Promise<void>;
-};
+export type { ShellSession };
 
 /** Reads lines and runs of bytes from `stream`. Each returns null once the stream has ended. */
 export function framedReader(stream: ReadableStream<Uint8Array>) {

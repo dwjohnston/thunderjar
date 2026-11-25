@@ -15,12 +15,12 @@
 // Removing images from the local Docker daemon, one tag at a time, for `purge image`.
 import { $ } from "bun";
 import { moduleLogger } from "../log/logger.ts";
+import type { LocalRemoval } from "../services/Docker/Docker.ts";
 import { localRuntime, reasonOf } from "./docker.ts";
 
 const log = moduleLogger("docker");
 
-/** How removing one local image went: removed, already gone, or failed, with Docker's reason. */
-export type LocalRemoval = { outcome: "deleted" | "absent" } | { outcome: "failed"; reason: string };
+export type { LocalRemoval };
 
 /**
  * Removes the tag `image` from the local daemon, with `docker image rm`, not forced: an image a
