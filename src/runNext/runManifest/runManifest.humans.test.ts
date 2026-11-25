@@ -24,11 +24,11 @@ describe(runManifest, () => {
         // Hashes that are easy to tell apart: they give the run IDs 01exec-oooooooo-i1 and 01exec-xxxxxxxx-i1.
         testCase.permutations[0]!.permutation.hash = "o".repeat(64);
         testCase.permutations[1]!.permutation.hash = "x".repeat(64);
-        // Each harness reads the agent's reply from its result file.
+        // Each harness reads the reply from the container run's result file.
         for (const permutation of testCase.permutations) {
             permutation.harness = { ...permutation.harness, collectReply: (result) => JSON.parse(result).reply };
         }
-        // Each container exits 0, and leaves a result file with the agent's reply.
+        // Each container run exits 0, and leaves a result file with a reply.
         for (const container of ["-1-1", "-2-1"]) {
             deps.runtimeDocker.onRun(container, () => ({
                 files: {
@@ -47,7 +47,7 @@ describe(runManifest, () => {
             "01exec-xxxxxxxx-i1 completed",
         ]);
 
-        // Each run's record has the agent's reply, read from its result file.
+        // Each run's record has its reply, read from the container run's result file.
         expect(records.map(({ containerRun }) => containerRun?.reply)).toEqual([
             { outcome: "collected", text: "Done: isPrime(7) is true." },
             { outcome: "collected", text: "Done: isPrime(7) is true." },
@@ -84,10 +84,10 @@ describe(runManifest, () => {
         //   0      the empty state, before anything happens
         //   1      every run queued, in one update
         //   2      the execution recorded as running
-        //   3-8    run 1: running → agent timed → output collected → committing → commit timed → committed, with its record
+        //   3-8    run 1: running → container run timed → output collected → committing → commit timed → committed, with its record
         //   9-14   run 2: the same 6 steps
         //   15     the execution recorded as complete
-        // So each run is 6 updates: 3 status changes, and 3 timings (agent, collect, commit).
+        // So each run is 6 updates: 3 status changes, and 3 timings (container run, collect, commit).
         expect(deps.state.history()).toHaveLength(16);
 
 
@@ -122,7 +122,7 @@ describe(runManifest, () => {
         expect(deps.state.history().at(8)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(8)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
 
-        // By the time it's committed, run 1's agent, collect and commit steps have each been timed.
+        // By the time it's committed, run 1's container run, collect and commit steps have each been timed.
         expect(deps.state.history().at(8)!.run.timings).toMatchInlineSnapshot(`
           {
             "agent": {
@@ -248,6 +248,31 @@ describe(runManifest, () => {
 
         // Halfway, at update 24: permutation o's 3 runs are committed, x's first is committing, and the rest wait.
         const halfway = deps.state.history().at(24)!.run;
+
+
+        // 🙋‍♂️ Four container runs have finished
+        // Of those, four have had their output files extracted
+        // And three of the docker images have been saved as post run images
+        expect(halfway.timings).toMatchInlineSnapshot(`
+          {
+            "agent": {
+              "count": 4,
+              "maxMs": 0,
+              "totalMs": 0,
+            },
+            "collect": {
+              "count": 4,
+              "maxMs": 0,
+              "totalMs": 0,
+            },
+            "commit": {
+              "count": 3,
+              "maxMs": 0,
+              "totalMs": 0,
+            },
+          }
+        `)
+
         expect(Object.entries(halfway.runs).map(([runId, { status }]) => `${runId} ${status}`)).toMatchInlineSnapshot(`
           [
             "01exec-oooooooo-i1 committed",
