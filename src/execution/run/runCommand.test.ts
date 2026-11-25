@@ -13,6 +13,7 @@ import { describe, expect, it } from "bun:test";
 import { createDisplayerService } from "../../services/Displayer/Displayer.ts";
 import { scenario } from "../../testing/scenario.ts";
 import { renderRunState, runJson } from "./render.ts";
+import { STOP_SETTLE_MS } from "./runControl.ts";
 import { runCommand } from "./runCommand.ts";
 import { type FakeDependencies, fakeAgent, fakeDependencies } from "./testSupport.ts";
 import type { ExecutionResult, Manifest, RunOptions } from "./types.ts";
@@ -253,14 +254,152 @@ describe("runCommand: asked to stop", () => {
     expect(stateOf(fakes).failure).toContain("Interrupted (SIGTERM)");
   });
 
-  it("stops listening once it is over", async () => {
-    const fakes = fakesIn();
-    await run(fakes);
+  it("listens only while it runs: however it ends, nothing is left listening", async () => {
+    const clean = fakesIn();
+    const listening: number[] = [];
+    clean.runtimeDocker.on("-1-1", (context) => {
+      listening.push(clean.io.stopListeners);
+      return fakeAgent()(context);
+    });
+    await run(clean);
+    expect(listening).toEqual([1]);
+    expect(clean.io.stopListeners).toBe(0);
 
+    const failing = fakesIn();
+    await run(failing, {}, "no-such-case");
+    expect(failing.io.stopListeners).toBe(0);
+
+    const interrupted = fakesIn("0202", fakeAgent({ durationMs: 60_000 }));
+    const { command } = await startSlowly(interrupted);
+    interrupted.io.interrupt();
+    await finish(interrupted, command);
+    expect(interrupted.io.stopListeners).toBe(0);
+  });
+
+  const building = (fakes: FakeDependencies) => fakes.runtimeDocker.builds.length > 0;
+
+  /** Starts a run whose builds take ten minutes each, and waits until the first is under way. */
+  async function startBuilding(fakes: FakeDependencies, options: RunOptions = {}) {
+    fakes.runtimeDocker.takes("build", 600_000);
+    const command = runCommand(CASE, options, fakes.deps);
+    await finish(fakes, command, () => building(fakes));
+    expect(stateOf(fakes).phase).toBe("building");
+    return { command };
+  }
+
+  it("while its images are built: builds no other, waits for the one under way no longer than the settle time, and exits 130", async () => {
+    const fakes = fakesIn();
+    const { command } = await startBuilding(fakes);
+
+    const interruptedAt = fakes.clock.now();
+    fakes.io.interrupt();
+    await finish(fakes, command);
+
+    expect(await command).toBe(130);
+    expect(fakes.clock.now() - interruptedAt).toBeLessThanOrEqual(STOP_SETTLE_MS + 1_000);
+    expect(fakes.runtimeDocker.builds.length).toBe(1);
+    expect(fakes.runtimeDocker.called("run")).toEqual([]);
+    expect(stateOf(fakes).failure).toBe("Interrupted (SIGINT): stopped before any container ran.");
+  });
+
+  it("with --build-only, the same", async () => {
+    const fakes = fakesIn();
+    const { command } = await startBuilding(fakes, { buildOnly: true });
+
+    const interruptedAt = fakes.clock.now();
+    fakes.io.terminate();
+    await finish(fakes, command);
+
+    expect(await command).toBe(143);
+    expect(fakes.clock.now() - interruptedAt).toBeLessThanOrEqual(STOP_SETTLE_MS + 1_000);
+    expect(fakes.runtimeDocker.builds.length).toBe(1);
+  });
+
+  it("asked a second time, stops waiting at once", async () => {
+    const fakes = fakesIn();
+    const { command } = await startBuilding(fakes);
+
+    const interruptedAt = fakes.clock.now();
+    fakes.io.interrupt();
     fakes.io.interrupt();
 
-    expect(stateOf(fakes).failure).toBeUndefined();
-    expect(fakes.runtimeDocker.called("removeContainersNamed")).toEqual([]);
+    // No time passes on the clock.
+    expect(await command).toBe(130);
+    expect(fakes.clock.now()).toBe(interruptedAt);
+    expect(fakes.runtimeDocker.builds.length).toBe(1);
+  });
+
+  it("exits with the first signal's code, whatever the second was", async () => {
+    const fakes = fakesIn();
+    const { command } = await startBuilding(fakes);
+
+    fakes.io.terminate();
+    fakes.io.interrupt();
+
+    expect(await command).toBe(143);
+    expect(stateOf(fakes).failure).toContain("Interrupted (SIGTERM)");
+  });
+
+  it("while a run is measured, with every agent done: the execution is still recorded as failed", async () => {
+    const fakes = fakesIn();
+    const measure = fakes.measurer.measure.bind(fakes.measurer);
+    fakes.measurer.measure = (...given) => {
+      if (fakes.measurer.measured.length === 1) fakes.io.interrupt();
+      return measure(...given);
+    };
+
+    const exitCode = await run(fakes);
+
+    expect(exitCode).toBe(130);
+    expect(Object.values(stateOf(fakes).runs).map(({ status }) => status)).toEqual(["finished", "finished"]);
+    expect(fakes.store.executions[0]?.status).toBe("failed");
+  });
+});
+
+describe("runCommand: a run data store that stops working", () => {
+  it("exits 1 and says the execution stopped, and why", async () => {
+    const fakes = fakeDependencies({ env: { cwd: scenario("0202"), variables: KEY } });
+    fakes.runtimeDocker.on("", async (context) => {
+      const exitCode = await fakeAgent()(context);
+      fakes.store.failWith("disk full");
+      return exitCode;
+    });
+
+    const exitCode = await run(fakes);
+
+    expect(exitCode).toBe(1);
+    expect(stateOf(fakes).failure).toContain("so the execution stopped: disk full");
+    expect(fakes.runtimeDocker.called("run").length).toBe(1);
+    expect(fakes.store.executions.map(({ status }) => status)).toEqual(["running"]);
+  });
+});
+
+describe("runCommand: the variables a mode needs", () => {
+  const withoutKey = () => {
+    const fakes = fakeDependencies({ env: { cwd: scenario("0202"), variables: {} } });
+    fakes.runtimeDocker.on("", fakeAgent());
+    return fakes;
+  };
+
+  it("builds the images with --build-only without the harness's key: only a run uses it", async () => {
+    const fakes = withoutKey();
+
+    const exitCode = await run(fakes, { buildOnly: true });
+
+    expect(exitCode).toBe(0);
+    expect(fakes.runtimeDocker.builds.length).toBe(2);
+  });
+
+  it("still needs the key for a run, and for a dry run, which shows what a run would do", async () => {
+    for (const options of [{}, { dryRun: true }]) {
+      const fakes = withoutKey();
+
+      const exitCode = await run(fakes, options);
+
+      expect(exitCode).toBe(1);
+      expect(stateOf(fakes).failure).toContain("needs FAKE_HARNESS_KEY, which is not set");
+      expect(fakes.runtimeDocker.calls).toEqual([]);
+    }
   });
 });
 
@@ -301,6 +440,18 @@ describe("runCommand: what the real displayer makes of it", () => {
     expect(out).toContain(" 1/2  iteration 1/1  fake-harness-alpha | ");
     expect(out).toContain("Runs: 2 finished\n");
     expect(out).toContain("Recorded in memory\n");
+  });
+
+  it("with --json, says on stderr why runs crashed: stdout is the JSON alone", async () => {
+    const fakes = showing();
+    fakes.runtimeDocker.failOn("commit", new Error("no space left on device"));
+
+    const exitCode = await run(fakes, { json: true });
+
+    expect(exitCode).toBe(1);
+    expect((JSON.parse(fakes.io.stdout.text()) as ExecutionResult).execution.status).toBe("failed");
+    expect(fakes.io.stderr.text()).toContain("2 of 2 agents didn't end cleanly:\n");
+    expect(fakes.io.stderr.text()).toContain("crashed  no space left on device");
   });
 
   it("a config error is one Error line on stderr, and nothing on stdout", async () => {

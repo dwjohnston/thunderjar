@@ -17,7 +17,8 @@ import { moduleLogger } from "../../log/logger.ts";
 import { addWarning, type RunPhase, type RunState, setPhase, updateRun } from "../../services/ApplicationState/ApplicationState.ts";
 import { ensureImages } from "./ensureImages.ts";
 import { plan } from "./plan.ts";
-import { type RunControl, runManifest } from "./runManifest.ts";
+import { createRunControl, type RunControl, settled } from "./runControl.ts";
+import { openAndCheck, runManifest } from "./runManifest.ts";
 import type { Dependencies, ExecutionResult, Manifest, RunMode, TestCaseConfig } from "./types.ts";
 
 const log = moduleLogger("execution");
@@ -45,10 +46,21 @@ type RunTestCaseDeps = Pick<Dependencies, "hostDocker" | "runtimeDocker" | "fs" 
  *
  * At most `--concurrency` containers run at once, or THUNDERJAR_CONCURRENCY, or the runtime's, or one.
  *
+ * A full run opens and checks the run data store first, before the runtime is started or anything
+ * is built: a store that can't be used costs nothing.
+ *
+ * Once `control` is asked to stop, no other image is built and no run starts. A build under way
+ * is waited for only STOP_SETTLE_MS, or until forced, so `afterExecution` still gets to run.
+ *
  * Throws what `ensureImages` and `runManifest` do, and a RuntimeHookError if a hook fails. If
  * `beforeExecution` fails nothing else is done, `afterExecution` included.
  */
-export async function runTestCase(config: TestCaseConfig, deps: RunTestCaseDeps, mode: RunMode = "full", control: RunControl = {}): Promise<ExecutionResult | undefined> {
+export async function runTestCase(
+  config: TestCaseConfig,
+  deps: RunTestCaseDeps,
+  mode: RunMode = "full",
+  control: RunControl = createRunControl(),
+): Promise<ExecutionResult | undefined> {
   const update = (change: (run: RunState<Manifest>) => RunState<Manifest>) => deps.state.update(updateRun(change));
   const phase = (next: RunPhase) => update((run) => setPhase(run, next));
 
@@ -60,18 +72,20 @@ export async function runTestCase(config: TestCaseConfig, deps: RunTestCaseDeps,
   // Not `planned` while a hook runs: that is what a dry run shows in full.
   phase("building");
   if (mode === "build-only") {
-    await ensureImages(manifest, deps);
+    await settled(ensureImages(manifest, deps, control), control, deps.clock);
     phase("done");
     return undefined;
   }
 
+  // Before the hook and the builds: an unusable store is found while it has cost nothing.
+  const opened = await openAndCheck(manifest, deps);
   await runHook("beforeExecution", manifest, deps);
   let result: ExecutionResult | undefined;
   try {
-    if (control.shouldStop?.() !== true) await ensureImages(manifest, deps);
-    if (control.shouldStop?.() !== true) {
+    if (!control.shouldStop()) await settled(ensureImages(manifest, deps, control), control, deps.clock);
+    if (!control.shouldStop()) {
       phase("running");
-      result = await runManifest(manifest, deps, control);
+      result = await runManifest(manifest, deps, control, opened);
     }
     phase("done");
   } catch (error) {

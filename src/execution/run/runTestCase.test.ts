@@ -11,6 +11,8 @@
 
 import { describe, expect, it } from "bun:test";
 import { DockerBuildError } from "../../services/Docker/errors.ts";
+import { RunDataStoreError } from "../../store/runDataStore.ts";
+import { createRunControl, type RunControl, STOP_SETTLE_MS } from "./runControl.ts";
 import { RuntimeHookError, runTestCase } from "./runTestCase.ts";
 import { A_RUNTIME, aTestCaseConfig, EXECUTION_ID, type FakeDependencies, fakeAgent, fakeDependencies } from "./testSupport.ts";
 import type { ExecutionResult, RunMode, TestCaseConfig } from "./types.ts";
@@ -29,8 +31,8 @@ function fakesWith(env: Parameters<typeof fakeDependencies>[0] = {}): FakeDepend
 }
 
 /** Runs the test case, moving the clock on so its agents can finish. */
-async function runIt(fakes: FakeDependencies, config = aTestCaseConfig(), mode?: RunMode, shouldStop?: () => boolean): Promise<ExecutionResult | undefined> {
-  const running = runTestCase(config, fakes.deps, mode, shouldStop === undefined ? {} : { shouldStop });
+async function runIt(fakes: FakeDependencies, config = aTestCaseConfig(), mode?: RunMode, control?: RunControl): Promise<ExecutionResult | undefined> {
+  const running = runTestCase(config, fakes.deps, mode, control);
   running.catch(() => {});
   await fakes.clock.advance(120_000);
   return running;
@@ -107,13 +109,126 @@ describe("runTestCase: a full run", () => {
     expect((await running)?.containerRuns.length).toBe(4);
   });
 
-  it("stops before running anything, if asked to while its images were built", async () => {
+  it("opens the run data store once", async () => {
     const fakes = fakesWith();
 
-    const result = await runIt(fakes, withHooks(), "full", () => fakes.runtimeDocker.builds.length > 0);
+    await runIt(fakes, aTestCaseConfig({ dataDir: "elsewhere" }));
+
+    expect(fakes.stores.opened).toEqual(["elsewhere"]);
+  });
+});
+
+describe("runTestCase: a run data store that can't be used", () => {
+  it("is found before the runtime is started or anything is built", async () => {
+    const fakes = fakesWith();
+    fakes.store.failCheckWith("no such table");
+
+    const error = await runIt(fakes, withHooks()).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(RunDataStoreError);
+    expect(fakes.commands.calls).toEqual([]);
+    expect(fakes.hostDocker.calls).toEqual([]);
+    expect(fakes.runtimeDocker.calls).toEqual([]);
+  });
+
+  it("is found as soon if it can't be opened", async () => {
+    const fakes = fakesWith();
+    fakes.stores.open = async () => {
+      throw new Error("THUNDERJAR_DB_URL is not set");
+    };
+
+    await expect(runIt(fakes, withHooks())).rejects.toThrow("THUNDERJAR_DB_URL is not set");
+    expect(fakes.commands.calls).toEqual([]);
+    expect(fakes.runtimeDocker.calls).toEqual([]);
+  });
+
+  it("isn't opened for a build only", async () => {
+    const fakes = fakesWith();
+    fakes.store.failCheckWith("no such table");
+
+    await runIt(fakes, withHooks(), "build-only");
+
+    expect(fakes.stores.opened).toEqual([]);
+    expect(fakes.runtimeDocker.builds.length).toBe(2);
+  });
+});
+
+describe("runTestCase: asked to stop", () => {
+  /** Starts it with builds that take `buildMs`, asks it to stop a second in, and says how long after that it returned. */
+  async function stopWhileBuilding(fakes: FakeDependencies, mode: RunMode, buildMs: number, force = false) {
+    fakes.runtimeDocker.takes("build", buildMs);
+    const control = createRunControl();
+    let endedAt: number | undefined;
+    const running = runTestCase(withHooks(), fakes.deps, mode, control);
+    running.then(
+      () => (endedAt = fakes.clock.now()),
+      () => {},
+    );
+    await fakes.clock.advance(1_000);
+    const stoppedAt = fakes.clock.now();
+    control.stop();
+    if (force) control.force();
+    await fakes.clock.advance(1_800_000);
+    return { result: await running, took: (endedAt ?? Number.POSITIVE_INFINITY) - stoppedAt };
+  }
+
+  it("builds no other image and runs nothing, if asked while its images were built, and still runs afterExecution", async () => {
+    const fakes = fakesWith();
+
+    const { result, took } = await stopWhileBuilding(fakes, "full", 5_000);
 
     expect(result).toBeUndefined();
+    // The build under way was let finish.
+    expect(took).toBe(4_000);
+    expect(fakes.runtimeDocker.builds.map(({ image }) => image)).toEqual([PRERUN_A]);
     expect(fakes.runtimeDocker.called("run")).toEqual([]);
+    expect(fakes.store.writes).toEqual([]);
+    expect(fakes.commands.calls.map(({ command }) => command)).toEqual([HOOKS.beforeExecution, HOOKS.afterExecution]);
+  });
+
+  it("waits for a build under way no longer than the settle time, then runs afterExecution", async () => {
+    const fakes = fakesWith();
+
+    const { result, took } = await stopWhileBuilding(fakes, "full", 600_000);
+
+    expect(result).toBeUndefined();
+    expect(took).toBe(STOP_SETTLE_MS);
+    expect(fakes.runtimeDocker.builds.map(({ image }) => image)).toEqual([PRERUN_A]);
+    expect(fakes.commands.calls.map(({ command }) => command)).toEqual([HOOKS.beforeExecution, HOOKS.afterExecution]);
+  });
+
+  it("doesn't wait at all when forced", async () => {
+    const fakes = fakesWith();
+
+    const { took } = await stopWhileBuilding(fakes, "full", 600_000, true);
+
+    expect(took).toBe(0);
+    expect(fakes.commands.calls.map(({ command }) => command)).toEqual([HOOKS.beforeExecution, HOOKS.afterExecution]);
+  });
+
+  it("builds no other image for a build only either, and waits no longer", async () => {
+    const fakes = fakesWith();
+
+    const { took } = await stopWhileBuilding(fakes, "build-only", 600_000);
+
+    expect(took).toBe(STOP_SETTLE_MS);
+    expect(fakes.runtimeDocker.builds.map(({ image }) => image)).toEqual([PRERUN_A]);
+    expect(fakes.commands.calls).toEqual([]);
+  });
+
+  it("does nothing but the hooks if asked while beforeExecution ran", async () => {
+    const fakes = fakesWith();
+    const control = createRunControl();
+    const run = fakes.commands.run.bind(fakes.commands);
+    fakes.commands.run = (command, env) => {
+      control.stop();
+      return run(command, env);
+    };
+
+    const result = await runIt(fakes, withHooks(), "full", control);
+
+    expect(result).toBeUndefined();
+    expect(fakes.runtimeDocker.calls).toEqual([]);
     expect(fakes.store.writes).toEqual([]);
     expect(fakes.commands.calls.map(({ command }) => command)).toEqual([HOOKS.beforeExecution, HOOKS.afterExecution]);
   });
