@@ -4,6 +4,7 @@
 import { $ } from "bun";
 import { afterAll, describe, expect, test } from "bun:test";
 import type { Commit, MeasurementContext } from "../../api/declarations.ts";
+import { pullImage } from "../../testing/pullImage.ts";
 import { commits } from "./commits.ts";
 
 const NAME = `tj-test-${crypto.randomUUID().slice(0, 8)}-commits`;
@@ -15,6 +16,7 @@ describe.skipIf(!Bun.env.THUNDERJAR_DOCKER_TESTS)("commits, against real Docker"
   });
 
   test("measures a workspace with two commits, oldest first", async () => {
+    await pullImage("alpine/git");
     await $`docker run -d --name ${NAME} --entrypoint sleep alpine/git 600`.quiet();
     const exec = async (command: string) => {
       const r = await $`docker exec -w /workspace ${NAME} sh -c ${command}`.quiet().nothrow();
