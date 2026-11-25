@@ -12,7 +12,7 @@ import type { BuildOptions } from "../api/declarations.ts";
 import { FILES, PARAMETERS } from "../config/folders.ts";
 import { existsIn } from "../config/loader.ts";
 import { type HashedPermutation, parsePair } from "../config/permutations.ts";
-import { buildImage, type DockerRuntime, imagesIn, localRuntime } from "../docker/docker.ts";
+import type { DockerService } from "../services/Docker/Docker.ts";
 import { prerunImage, prerunRepository } from "./images.ts";
 import { inParallel } from "./inParallel.ts";
 import { type FolderRole, PARAMETER_DIRS } from "./prerunDockerfile.ts";
@@ -59,16 +59,16 @@ export type PrerunImage = { permutation: HashedPermutation; image: string };
 
 /**
  * The prerun image of each of `permutations`, once per image hash, in plan order, each with
- * whether it exists in `runtime`'s Docker daemon, the local one by default: where it's built.
+ * whether it exists in `docker`: where it's built.
  * Throws a DockerUnavailableError if Docker can't be asked.
  */
 export async function prerunImages(
   permutations: HashedPermutation[],
-  imagePrefix?: string,
-  runtime: DockerRuntime = localRuntime(),
+  imagePrefix: string | undefined,
+  docker: Pick<DockerService, "imagesIn">,
 ): Promise<(PrerunImage & { exists: boolean })[]> {
   const unique = [...new Map(permutations.map((permutation) => [permutation.imageHash, permutation])).values()];
-  const existing = await imagesIn(prerunRepository(imagePrefix), runtime);
+  const existing = await docker.imagesIn(prerunRepository(imagePrefix));
   return unique.map((permutation) => {
     const image = prerunImage(permutation.imageHash, imagePrefix);
     return { permutation, image, exists: existing.has(image) };
@@ -83,22 +83,22 @@ export function storedPrerunImages(permutations: HashedPermutation[], imagePrefi
 
 /**
  * Builds `image` from `permutation`'s Dockerfile, of a test case under `root` (the `.thunderjar/`
- * folder), on `runtime`'s daemon, the local one by default, given `build`'s secrets and SSH agent,
+ * folder), on `docker`, given `build`'s secrets and SSH agent,
  * calling `hooks`. Throws a ConfigError, or a DockerBuildError if the build fails.
  */
 export async function buildPrerunImage(
   root: string,
   { permutation, image }: PrerunImage,
   hooks: PrerunBuildHooks = {},
-  build: BuildOptions = {},
-  runtime: DockerRuntime = localRuntime(),
+  build: BuildOptions,
+  docker: Pick<DockerService, "build">,
 ): Promise<void> {
   hooks.onBuilding?.(image);
   const contextDir = await temporaryFolder();
   try {
     await copyParameters(root, permutation, contextDir);
     await Bun.write(`${contextDir}/Dockerfile`, permutation.dockerfile);
-    await buildImage(contextDir, image, build, runtime);
+    await docker.build(contextDir, image, build);
   } finally {
     await $`rm -rf ${contextDir}`.quiet();
   }
@@ -114,8 +114,7 @@ export type PrerunBuildResult = {
 
 /**
  * Builds the prerun image of each of `permutations`, of a test case under `root` (the
- * `.thunderjar/` folder), that doesn't exist yet in `runtime`'s daemon, the local one by default,
- * there, from its Dockerfile, up to `build.concurrency`
+ * `.thunderjar/` folder), that doesn't exist yet in `docker`, there, from its Dockerfile, up to `build.concurrency`
  * at once. Permutations with the same image hash share one image. Each build is given `build`'s
  * secrets and SSH agent.
  *
@@ -126,15 +125,15 @@ export type PrerunBuildResult = {
 export async function buildPrerunImages(
   root: string,
   permutations: HashedPermutation[],
-  imagePrefix?: string,
-  hooks: PrerunBuildHooks = {},
-  build: BuildOptions = {},
-  runtime: DockerRuntime = localRuntime(),
+  imagePrefix: string | undefined,
+  hooks: PrerunBuildHooks,
+  build: BuildOptions,
+  docker: Pick<DockerService, "imagesIn" | "build">,
 ): Promise<PrerunBuildResult> {
-  const images = await prerunImages(permutations, imagePrefix, runtime);
+  const images = await prerunImages(permutations, imagePrefix, docker);
   const builds = images.filter(({ exists }) => !exists);
   await inParallel(
-    builds.map((image) => () => buildPrerunImage(root, image, hooks, build, runtime)),
+    builds.map((image) => () => buildPrerunImage(root, image, hooks, build, docker)),
     build.concurrency ?? 1,
   );
   return {

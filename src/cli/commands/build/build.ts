@@ -1,9 +1,10 @@
+import type { Services } from "../../services.ts";
 import { Command } from "commander";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import type { Overrides } from "../../../config/overrides.ts";
 import { loadTestCase } from "../../../config/testCase.ts";
 import { checkBuildSecrets, loadProjectConfig } from "../../../config/projectConfig.ts";
-import { DockerBuildError, DockerPushError, DockerUnavailableError, localRuntime, remoteRuntime } from "../../../docker/docker.ts";
+import { DockerBuildError, DockerPushError, DockerUnavailableError } from "../../../docker/docker.ts";
 import { prerunImage } from "../../../execution/images.ts";
 import { checkImageStore, ImageStoreLoginError, pushPrerunImages } from "../../../execution/imageStore.ts";
 import { buildPrerunImages } from "../../../execution/prerunBuilds.ts";
@@ -53,11 +54,11 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string, pa
  * the images built, those already present and the references pushed as JSON once it's done. Each
  * list `overrides` gives replaces the test case's own.
  */
-async function build(cwd: string, name: string, imagePrefix?: string, json = false, local = false, overrides: Overrides = {}): Promise<void> {
+async function build({ hostDocker, runtimeDocker }: Services, cwd: string, name: string, imagePrefix?: string, json = false, local = false, overrides: Overrides = {}): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const { imageStore, build: buildOptions, runtime: config } = await loadProjectConfig(root);
   // Where images are built, and pushed from: the runtime, which runs them, unless --local.
-  const runtime = local || config === null ? localRuntime() : remoteRuntime(config.command);
+  const docker = local ? hostDocker : runtimeDocker;
   const testCase = await loadTestCase(root, name, overrides);
   checkBuildSecrets(buildOptions);
   const permutations = await hashPermutations(root, testCase);
@@ -80,7 +81,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
         if (concurrent) return print(`Built ${paint.cyan(image)}`);
         line?.finish(done);
       },
-    }, buildOptions, runtime);
+    }, buildOptions, docker);
     const pushed = await pushPrerunImages(permutations, imageStore, imagePrefix, {
       onPushing: (_image, reference) => {
         line = waitingLine(`Pushing ${paint.cyan(reference)} ${ellipsis} `);
@@ -88,7 +89,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
       onPushed: () => {
         line?.finish(done);
       },
-    }, runtime);
+    }, docker);
     if (json) printJson({ built, present, pushed });
     else print(
       [
@@ -117,7 +118,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
   }
 }
 
-export function createBuildCommand(): Command {
+export function createBuildCommand(services: Services): Command {
   return withOverrideOptions(new Command("build"))
     .description(
       "Build the prerun Docker image of each permutation of a test case, unless it already exists. Permutations with the same hash share one image. With a runtime in thunderjar.config.ts, they're built on its Docker daemon, unless --local is given. With an image store, each is then pushed there, after checking your docker login for its registry.",
@@ -132,7 +133,7 @@ export function createBuildCommand(): Command {
         const overrides = overridesOf(options);
         if (options.dryRun && options.json) printJson(await prerunDockerfiles(process.cwd(), name, options.imagePrefix, overrides));
         else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter(), overrides));
-        else await build(process.cwd(), name, options.imagePrefix, options.json, options.local, overrides);
+        else await build(services, process.cwd(), name, options.imagePrefix, options.json, options.local, overrides);
       }),
     );
 }

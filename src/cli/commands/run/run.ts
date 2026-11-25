@@ -138,7 +138,7 @@ const INTERRUPT_SETTLE_MS = 15_000;
  * nothing on stdout.
  */
 async function run(
-  _services: Services,
+  { hostDocker, runtimeDocker }: Services,
   cwd: string,
   name: string,
   imagePrefix: string,
@@ -154,6 +154,8 @@ async function run(
   for (const deprecation of config.deprecations) printWarning(deprecation);
   const { imageStore, build } = config;
   const runtime = local ? null : config.runtime;
+  // Where its images are built and its containers run: the runtime, unless --local.
+  const docker = local ? hostDocker : runtimeDocker;
   // With a runner, the whole execution runs on the runtime, and this only submits and follows it.
   const runner = runtime?.runner;
   if (runner !== undefined && dataDir !== undefined) {
@@ -245,7 +247,7 @@ async function run(
       }
       error(`Interrupted (${signal}): stopping execution ${plan.executionId}'s containers${runtime === null ? "" : " on the runtime"}.`);
       try {
-        await removeExecutionContainers(plan.executionId, imagePrefix, runtime);
+        await removeExecutionContainers(plan.executionId, imagePrefix, docker);
       } catch (caught) {
         error(`Couldn't remove its containers: ${caught instanceof Error ? caught.message : String(caught)}`);
       }
@@ -263,19 +265,19 @@ async function run(
   const hostTimer = timings();
   /** The execution, run here: each Docker command given to the local daemon, or the runtime. */
   const executeHere = async ({ store, where }: OpenStore): Promise<Executed> => {
-    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, concurrency }, store, display.hooks);
+    const execution = await runExecution({ root, name, testCase, overrides, plan, imagePrefix, imageStore, build, runtime, docker, concurrency }, store, display.hooks);
     return { execution, recordedIn: where, containerRuns: json ? await store.containerRunsOf(execution.executionId) : [] };
   };
   /** The execution, run by a runner on the runtime: its images stored, then submitted and followed. */
-  const executeOnRuntime = async (command: string[], options: NonNullable<typeof runner>, env: Record<string, string>): Promise<Executed> => {
+  const executeOnRuntime = async (options: NonNullable<typeof runner>, env: Record<string, string>): Promise<Executed> => {
     const store = imageStore as NonNullable<typeof imageStore>;
-    const runnerImage = await storeRunnerImage(root, store.repository, command, {
+    const runnerImage = await storeRunnerImage(root, store.repository, docker, {
       onBuilding: (image) => open(`Building the runner image ${paint.cyan(image)} ${ellipsis} `),
       onBuilt: () => close(done),
       onPushing: (_image, reference) => open(`Pushing ${paint.cyan(reference)} ${ellipsis} `),
       onPushed: () => close(done),
     });
-    await storePrerunImages(root, plan, imagePrefix, store, command, build, display.hooks, hostTimer.time);
+    await storePrerunImages(root, plan, imagePrefix, store, docker, build, display.hooks, hostTimer.time);
     const submission: Submission = {
       name,
       testCase,
@@ -288,12 +290,12 @@ async function run(
       ...(options.registryLogin !== undefined && { registryLogin: options.registryLogin }),
       env,
     };
-    await submitExecution(command, runnerImage, submission, options.runOptions);
+    await submitExecution(docker, runnerImage, submission, options.runOptions);
     submitted = true;
-    return followToEnd(command, plan.executionId, imagePrefix, root, () => ({ hooks: display.hooks, plan: submission.plan }), following.signal);
+    return followToEnd(docker, plan.executionId, imagePrefix, root, () => ({ hooks: display.hooks, plan: submission.plan }), following.signal);
   };
   try {
-    executing = opened !== undefined ? executeHere(opened) : executeOnRuntime((runtime as NonNullable<typeof runtime>).command, runner as NonNullable<typeof runner>, runnerEnv as Record<string, string>);
+    executing = opened !== undefined ? executeHere(opened) : executeOnRuntime(runner as NonNullable<typeof runner>, runnerEnv as Record<string, string>);
     const { execution: record, recordedIn: where, containerRuns } = await executing;
     display.stop();
     for (const line of showUnclean(display.unclean, facts.containers, paint)) print(line);

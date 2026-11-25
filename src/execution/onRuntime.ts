@@ -16,20 +16,8 @@
 import type { BuildOptions, ImageStore } from "../api/declarations.ts";
 import { ConfigError } from "../config/loader.ts";
 import type { ProjectConfig } from "../config/projectConfig.ts";
-import {
-  containerState,
-  DockerContainerError,
-  followLogs,
-  inRegistry,
-  readContainerFile,
-  remoteRuntime,
-  removeContainer,
-  removeContainersNamed,
-  startDetached,
-  stderrTail,
-  stopContainer,
-  writeContainerFile,
-} from "../docker/docker.ts";
+import { DockerContainerError, inRegistry } from "../docker/docker.ts";
+import type { DockerService } from "../services/Docker/Docker.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { DEFAULT_IMAGE_PREFIX, executionContainerPrefix, storedPrerunImage } from "./images.ts";
 import { type PushHooks, pushToStore } from "./imageStore.ts";
@@ -51,7 +39,7 @@ export const runnerContainer = (executionId: string, prefix: string = DEFAULT_IM
 /**
  * Makes sure `imageStore` has the prerun image of each of `plan`'s permutations, of a test case
  * under `root`, once per image hash, up to `build.concurrency` at once: one the store has is
- * left, one that's only in the runtime's Docker daemon, which `command` reaches, is pushed from
+ * left, one that's only in the runtime's Docker daemon, `docker`, is pushed from
  * there, and any other is built there, then pushed. Nothing is built here. Throws what building
  * and pushing throw; once one fails, no other starts.
  */
@@ -60,16 +48,15 @@ export async function storePrerunImages(
   plan: PlannedExecution,
   imagePrefix: string | undefined,
   imageStore: ImageStore,
-  command: string[],
+  docker: DockerService,
   build: BuildOptions = {},
   hooks: PrerunBuildHooks & PushHooks = {},
   time: Timer = untimed,
 ): Promise<void> {
-  const runtime = remoteRuntime(command);
   const images = await prerunImages(
     plan.permutations.map(({ permutation }) => permutation),
     imagePrefix,
-    runtime,
+    docker,
   );
   let failed = false;
   await inParallel(
@@ -82,8 +69,8 @@ export async function storePrerunImages(
           log.info({ image: image.image, reference }, "prerun image already in the image store: not built or pushed");
           return;
         }
-        if (!exists) await time("build", () => buildPrerunImage(root, image, hooks, build, runtime));
-        await time("pushPrerun", () => pushToStore(image.image, reference, hooks, runtime));
+        if (!exists) await time("build", () => buildPrerunImage(root, image, hooks, build, docker));
+        await time("pushPrerun", () => pushToStore(image.image, reference, hooks, docker));
       } catch (error) {
         failed = true;
         throw error;
@@ -127,22 +114,21 @@ export function submissionEnv(
 }
 
 /**
- * Starts the runner of `submission`'s execution on the runtime `command` reaches, in a container
+ * Starts the runner of `submission`'s execution on the runtime, `docker`, in a container
  * from `runnerImage`, and sends it the submission. Its variables' values go over the command's
  * input into a tmpfs in the container: never on a command line, in the image, or on the
  * runtime's disk. Throws a DockerPullError if the runtime can't pull the runner image, or a
  * DockerContainerError, after removing the container.
  */
-export async function submitExecution(command: string[], runnerImage: string, submission: Submission, runOptions: string[] = []): Promise<string> {
-  const runtime = remoteRuntime(command);
+export async function submitExecution(docker: DockerService, runnerImage: string, submission: Submission, runOptions: string[] = []): Promise<string> {
   const container = runnerContainer(submission.plan.executionId, submission.imagePrefix);
   const options = ["--init", "--tmpfs", `${SUBMISSION_DIR}:mode=0700`, "-v", "/var/run/docker.sock:/var/run/docker.sock", ...runOptions];
   log.info({ container, runnerImage, env: Object.keys(submission.env) }, "submitting the execution to a runner");
-  await startDetached(runnerImage, container, options, runtime);
+  await docker.startDetached(runnerImage, container, options);
   try {
-    await writeContainerFile(container, SUBMISSION_PATH, JSON.stringify(submission), runtime);
+    await docker.writeFile(container, SUBMISSION_PATH, JSON.stringify(submission));
   } catch (error) {
-    await removeContainer(container, runtime).catch(() => {});
+    await docker.removeContainer(container).catch(() => {});
     throw error;
   }
   return container;
@@ -159,7 +145,7 @@ const RECONNECT_MS = 3000;
 const RECONNECT_ATTEMPTS = 40;
 
 /**
- * Follows the runner of execution `executionId` on the runtime `command` reaches, calling
+ * Follows the runner of execution `executionId` on the runtime, `docker`, calling
  * `onEvent` with each event it has written, from its first, until its last, and returns
  * `ended`. If the connection drops, it follows again, and carries on after the last event it
  * gave. If `signal` aborts first, returns `detached`: the runner carries on. Throws a
@@ -167,14 +153,13 @@ const RECONNECT_ATTEMPTS = 40;
  * RunnerUnreachableError if the runtime can't be reached to tell.
  */
 export async function followRunner(
-  command: string[],
+  docker: DockerService,
   executionId: string,
   imagePrefix: string | undefined,
   onEvent: (event: RunnerEvent) => void,
   signal?: AbortSignal,
   reconnectMs = RECONNECT_MS,
 ): Promise<"ended" | "detached"> {
-  const runtime = remoteRuntime(command);
   const container = runnerContainer(executionId, imagePrefix);
   let seen = 0;
   let ended = false;
@@ -182,9 +167,8 @@ export async function followRunner(
   let stopped = false;
   for (;;) {
     let index = 0;
-    await followLogs(
+    await docker.followLogs(
       container,
-      runtime,
       (line) => {
         if (index++ < seen || ended) return;
         seen++;
@@ -202,10 +186,10 @@ export async function followRunner(
     );
     if (ended) return "ended";
     if (signal?.aborted) return "detached";
-    let state: Awaited<ReturnType<typeof containerState>> | undefined;
+    let state: Awaited<ReturnType<DockerService["containerState"]>> | undefined;
     for (let attempt = 1; ; attempt++) {
       try {
-        state = await containerState(container, runtime);
+        state = await docker.containerState(container);
         break;
       } catch (error) {
         if (!(error instanceof DockerContainerError) || attempt >= RECONNECT_ATTEMPTS) {
@@ -223,7 +207,7 @@ export async function followRunner(
       continue;
     }
     if (stopped) {
-      const tail = await stderrTail(container, runtime);
+      const tail = await docker.stderrTail(container);
       throw new RunnerLostError(`The runner of execution ${executionId} stopped (exit code ${state.exitCode}) without saying how the execution ended.${tail ? `\n${tail}` : ""}`);
     }
     stopped = true;
@@ -234,25 +218,24 @@ export async function followRunner(
 const STOP_GRACE_SECONDS = 30;
 
 /** The runner's diagnostic log, of execution `executionId`, or undefined if it can't be read. */
-export async function runnerLog(command: string[], executionId: string, imagePrefix?: string): Promise<string | undefined> {
-  return readContainerFile(runnerContainer(executionId, imagePrefix), RUNNER_LOG_PATH, remoteRuntime(command)).catch(() => undefined);
+export async function runnerLog(docker: DockerService, executionId: string, imagePrefix?: string): Promise<string | undefined> {
+  return docker.readFile(runnerContainer(executionId, imagePrefix), RUNNER_LOG_PATH).catch(() => undefined);
 }
 
 /**
- * Stops execution `executionId` on the runtime `command` reaches: its runner, then every
+ * Stops execution `executionId` on the runtime, `docker`: its runner, then every
  * container it left. Returns the names of the containers removed. Throws a DockerContainerError.
  */
-export async function stopOnRuntime(command: string[], executionId: string, imagePrefix?: string): Promise<string[]> {
-  const runtime = remoteRuntime(command);
+export async function stopOnRuntime(docker: DockerService, executionId: string, imagePrefix?: string): Promise<string[]> {
   // Stopped, not killed, so the runner removes the containers it's running and records the execution as failed.
-  await stopContainer(runnerContainer(executionId, imagePrefix), STOP_GRACE_SECONDS, runtime).catch(() => {});
-  const runner = await removeContainersNamed(runnerContainer(executionId, imagePrefix), runtime);
-  const rest = await removeContainersNamed(executionContainerPrefix(executionId, imagePrefix), runtime);
+  await docker.stop(runnerContainer(executionId, imagePrefix), STOP_GRACE_SECONDS).catch(() => {});
+  const runner = await docker.removeContainersNamed(runnerContainer(executionId, imagePrefix));
+  const rest = await docker.removeContainersNamed(executionContainerPrefix(executionId, imagePrefix));
   log.warn({ executionId, removed: [...runner, ...rest] }, "stopped the execution on the runtime");
   return [...runner, ...rest];
 }
 
 /** Removes the runner's container of execution `executionId`, once it has ended. Never throws. */
-export async function removeRunner(command: string[], executionId: string, imagePrefix?: string): Promise<void> {
-  await removeContainer(runnerContainer(executionId, imagePrefix), remoteRuntime(command)).catch((error: unknown) => log.warn({ executionId, err: error }, "couldn't remove the runner's container"));
+export async function removeRunner(docker: DockerService, executionId: string, imagePrefix?: string): Promise<void> {
+  await docker.removeContainer(runnerContainer(executionId, imagePrefix)).catch((error: unknown) => log.warn({ executionId, err: error }, "couldn't remove the runner's container"));
 }

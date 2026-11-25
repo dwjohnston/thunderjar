@@ -18,6 +18,7 @@
 import type { Reply } from "../api/declarations.ts";
 import type { Measurement } from "../config/measurements.ts";
 import { type DockerRuntime, localRuntime } from "../docker/docker.ts";
+import { openShellSession } from "../docker/shellSession.ts";
 import type { ContainerRunRecord, RecordedMeasure } from "../store/runDataStore.ts";
 import { containerName } from "./images.ts";
 import { measureContainerRun } from "./measure.ts";
@@ -53,7 +54,7 @@ export async function remeasureContainerRun(
   const secretEnv = [...new Set([...(record.harnessEnv ?? []), ...(record.secretEnv ?? [])])];
   let opened = 0;
   return measureContainerRun(measurements, async (usesContainer) =>
-    usesContainer ? openMeasurementContext(record.postrunImage, `${container}-remeasure-${++opened}`, recorded, runtime, secretEnv) : recordedContext(recorded),
+    usesContainer ? openMeasurementContext(record.postrunImage, `${container}-remeasure-${++opened}`, recorded, { openShellSession: (image, name, env) => openShellSession(image, name, runtime, env) }, secretEnv) : recordedContext(recorded),
   );
 }
 
