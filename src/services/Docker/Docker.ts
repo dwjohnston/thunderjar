@@ -1,9 +1,10 @@
-// What Thunderjar asks of Docker, as one injected service, so a test can pass a FakeDocker in its
-// place. The real one is `createDockerService(clock, runtime)` in src/docker/cliDocker.ts: it lives there, not here,
-// because it runs src/docker/'s functions, and `services` is a lower layer than `docker`.
+// What Thunderjar asks of Docker. Two interfaces, while code moves from one to the other:
 //
-// The types each method takes and returns live here, for the same reason, and src/docker/
-// re-exports them under their old names.
+// - `Docker`, the old path: the functions in src/docker/ as one service, so a test can pass a
+//   FakeDocker in their place. The types each method takes and returns live here, and src/docker/
+//   re-exports them under their old names.
+// - `DockerService`, the new path: empty, and a method is added as each caller moves onto it. There
+//   are two, built in src/cli/index.ts: `hostDocker` and `runtimeDocker` (see src/cli/HUMANS.md).
 
 /** A `docker run` process started by `Docker.spawnRun`. */
 export type ContainerProcess = {
@@ -131,3 +132,11 @@ export interface Docker {
 
 /** The part of Docker that `runContainer` runs on: what it spawns, kills and removes. */
 export type ContainerRuns = Pick<Docker, "spawnRun" | "killContainer" | "removeContainer">;
+
+/** Docker on the new path. Empty: a method is added as each caller moves onto it. */
+export interface DockerService {}
+
+/** Docker reached by running `command`, e.g. `["docker"]`, or a runtime's `["docker", "--context", "cloud"]`. */
+export function createDockerService(_command: string[]): DockerService {
+  return {};
+}

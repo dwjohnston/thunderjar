@@ -19,10 +19,10 @@ Every service is created once, in [index.ts](index.ts).
 | `clock` | `createClockService()` | Time: `now`, `setTimeout`, `sleep` |
 | `env` | `createEnvService()` | Environment variables |
 | `io` | `createIoService()` | stdin, stdout, stderr and stop signals |
-| `hostDocker` | `createDockerService(clock)` | The `docker` CLI, on the machine Thunderjar runs on |
-| `runtimeDocker` | `runtimeDocker(runtime)`, a factory over `createDockerService(clock, runtime)` | The `docker` CLI, where containers run. Given `null` (no runtime, or `--local`), it returns `hostDocker` |
+| `hostDocker` | `createDockerService(["docker"])` | Docker on the machine Thunderjar runs on. A command given `--local` uses it in place of `runtimeDocker` |
+| `runtimeDocker` | `createDockerService(runtime.command)`, from `thunderjar.config.ts` | Docker where containers run. With no runtime, or outside a project, it's `hostDocker` itself |
 
-No command uses `hostDocker` or `runtimeDocker` yet: they still call `src/docker/docker.ts` directly.
+`hostDocker` and `runtimeDocker` are the new path, a `DockerService`. It's empty: a method is added as each caller moves onto it. The old path is the functions in `src/docker/docker.ts`, which commands still call directly.
 
 ## HostDocker and RuntimeDocker
 
