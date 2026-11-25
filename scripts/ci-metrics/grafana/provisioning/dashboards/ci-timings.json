@@ -730,6 +730,64 @@
           "rawSql": "select r.started_at as time, r.job || ': ' || s.name as metric, s.seconds as value\nfrom metrics.ci_step_metrics s join metrics.ci_runs r on r.id = s.ci_run_id\nwhere $__timeFilter(r.started_at) and s.conclusion <> 'skipped' and r.job in ($job) and r.outcome in ($outcome)\norder by 1"
         }
       ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Top test failures",
+      "description": "The tests that failed most often in the selected range, with how often they failed when they ran. Skipped runs don't count.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 70,
+        "w": 24,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failure rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last failed"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawSql": "select case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end as \"Kind\", m.file as \"File\", m.name as \"Test\",\n  count(*) filter (where m.status = 'failed') as \"Failures\",\n  count(*) as \"Runs\",\n  (count(*) filter (where m.status = 'failed'))::float / count(*) as \"Failure rate\",\n  max(m.recorded_at) filter (where m.status = 'failed') as \"Last failed\"\nfrom metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\nwhere $__timeFilter(m.recorded_at) and m.status <> 'skipped' and case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end in ($kind) and r.job in ($job) and r.outcome in ($outcome)\n  and (m.file || ' ' || m.name) ~* '$test_filter'\ngroup by 1, m.file, m.name\nhaving count(*) filter (where m.status = 'failed') > 0\norder by \"Failures\" desc, \"Failure rate\" desc limit 25"
+        }
+      ]
     }
   ]
 }

@@ -62,6 +62,7 @@ bun run ci-metrics:grafana
 - **Job wall-clock time per run**, with a 10-run average to show the trend.
 - **Tests getting slower**: median of the last 7 days against the 30 days before.
 - **Slowest tests**, and the **duration of the 10 slowest per run**. The Test filter narrows these, e.g. `src/cli/commands/run`.
+- **Top test failures**: the tests that failed most often, with their failure rate and when they last failed. The Test kind and Test filters narrow it.
 - **Step times** and **step time per run**: lint, typecheck, install and every other step, per job.
 - **Test time per run, docker vs regular tests**: a `.docker.test.ts` file is a docker test, any other is regular. The Test kind filter narrows every per-test panel to one kind, and the Slowest tests table shows each test's kind.
 
