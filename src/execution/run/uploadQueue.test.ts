@@ -231,4 +231,60 @@ describe("createUploadQueue", () => {
       expect(queue.failures()).toEqual([]);
     });
   });
+
+  describe("cancel", () => {
+    it("drops what is waiting, as a failure each, and lets what is being pushed end", async () => {
+      const courier = aCourier();
+      const events: UploadEvent[] = [];
+      const queue = createUploadQueue({ docker: courier, onChange: (event) => events.push(event) });
+      for (const name of ["a", "b", "c", "d"]) queue.enqueue(parcel(name));
+
+      queue.cancel("the depot closed");
+
+      expect(queue.backlog()).toBe(2);
+      expect(queue.failures()).toEqual([
+        { image: parcel("c"), error: "the depot closed" },
+        { image: parcel("d"), error: "the depot closed" },
+      ]);
+      expect(events.slice(-2)).toEqual([
+        { image: parcel("c"), status: "failed", error: "the depot closed" },
+        { image: parcel("d"), status: "failed", error: "the depot closed" },
+      ]);
+
+      await courier.deliver("a");
+      await courier.deliver("b");
+      await queue.drain();
+
+      expect(courier.pushes.map(([image]) => image)).toEqual(["parcel:a", "parcel:b"]);
+    });
+
+    it("drains at once if nothing is being pushed", async () => {
+      const courier = aCourier();
+      const queue = createUploadQueue({ docker: courier, concurrency: 1 });
+      queue.enqueue(parcel("a"));
+      queue.enqueue(parcel("b"));
+      const draining = queue.drain();
+      await courier.deliver("a");
+      // b is now being pushed: cancelling doesn't touch it.
+      queue.cancel("the depot closed");
+      expect(peek.status(draining)).toBe("pending");
+
+      await courier.deliver("b");
+
+      expect(peek.status(draining)).toBe("fulfilled");
+      expect(queue.failures()).toEqual([]);
+    });
+
+    it("pushes nothing enqueued afterwards", () => {
+      const courier = aCourier();
+      const queue = createUploadQueue({ docker: courier });
+
+      queue.cancel("the depot closed");
+      queue.enqueue(parcel("a"));
+
+      expect(courier.pushes).toEqual([]);
+      expect(queue.backlog()).toBe(0);
+      expect(queue.failures()).toEqual([{ image: parcel("a"), error: "the depot closed" }]);
+    });
+  });
 });

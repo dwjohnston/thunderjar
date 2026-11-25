@@ -118,6 +118,21 @@ describe("FakeDocker, images", () => {
         expect(docker.images()).toEqual(["shop:cart", "shop:till"]);
     });
 
+    test("A run can take a while to create its container, as on a slow runtime: until then there is none to remove", async () => {
+        const clock = new FakeClock();
+        const docker = new FakeDocker(clock).addImage("shop:cart").takes("run", 3_000).on("", hangs);
+
+        const running = docker.run("shop:cart", "shop-1", "script");
+        await clock.advance(2_999);
+        expect(docker.containers()).toEqual([]);
+        expect(await docker.removeContainersNamed("shop-")).toEqual([]);
+
+        await clock.advance(1);
+        expect(docker.containers()).toEqual(["shop-1"]);
+        expect(await docker.removeContainersNamed("shop-")).toEqual(["shop-1"]);
+        await running.catch(() => {});
+    });
+
     test("Removing a local image says whether it was there", async () => {
         const docker = new FakeDocker(new FakeClock());
         docker.addImage("shop:cart");

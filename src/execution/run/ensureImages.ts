@@ -32,6 +32,7 @@ import { type ImageBuildStatus, setImageStatus, updateRun } from "../../services
 import { DockerLoginError } from "../../services/Docker/errors.ts";
 import { ImageStoreLoginError } from "../imageStore.ts";
 import { prerunRepository } from "../images.ts";
+import { createRunControl, type RunControl } from "./runControl.ts";
 import { timed } from "./timed.ts";
 import type { Dependencies, Manifest, PlannedImage } from "./types.ts";
 
@@ -47,12 +48,15 @@ type EnsureImagesDeps = Pick<Dependencies, "hostDocker" | "runtimeDocker" | "fs"
  * anything else is done; and whatever Docker throws: a DockerUnavailableError, DockerBuildError,
  * DockerPushError or DockerPullError. After the first failure no other image is started, those
  * under way finish, and that first error is rethrown.
+ *
+ * Once `control` is asked to stop, no other image is started either: those under way finish, and
+ * it returns with the rest not ready.
  */
-export async function ensureImages(manifest: Manifest, deps: EnsureImagesDeps): Promise<void> {
+export async function ensureImages(manifest: Manifest, deps: EnsureImagesDeps, control: RunControl = createRunControl()): Promise<void> {
   const { hostDocker, runtimeDocker, state } = deps;
   const repository = manifest.imageStore?.repository;
   if (repository !== undefined) await checkLogin(repository, hostDocker);
-  if (manifest.images.length === 0) return;
+  if (manifest.images.length === 0 || control.shouldStop()) return;
 
   // Each list is asked for once, not per image.
   const built = await runtimeDocker.imagesIn(prerunRepository(manifest.imagePrefix));
@@ -106,7 +110,7 @@ export async function ensureImages(manifest: Manifest, deps: EnsureImagesDeps): 
   let failure: { error: unknown } | undefined;
   let next = 0;
   const worker = async () => {
-    while (failure === undefined) {
+    while (failure === undefined && !control.shouldStop()) {
       const image = manifest.images[next++];
       if (image === undefined) return;
       try {

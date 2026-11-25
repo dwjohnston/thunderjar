@@ -33,8 +33,13 @@ export type UploadQueueOptions = {
 
 /** An UploadQueue that also keeps what it couldn't push. */
 export interface TrackedUploadQueue extends UploadQueue {
-  /** Every push that failed, in the order they failed. */
+  /** Every push that failed, and every image never pushed because of `cancel`, in the order they failed. */
   failures(): UploadFailure[];
+  /**
+   * Gives up on every image still waiting, and on any enqueued from now on: each is a failure,
+   * with `reason`. Those being pushed are left to end.
+   */
+  cancel(reason: string): void;
 }
 
 export function createUploadQueue({ docker, concurrency = 2, onChange }: UploadQueueOptions): TrackedUploadQueue {
@@ -42,6 +47,7 @@ export function createUploadQueue({ docker, concurrency = 2, onChange }: UploadQ
   const failures: UploadFailure[] = [];
   let drained: (() => void)[] = [];
   let uploading = 0;
+  let cancelled: string | undefined;
 
   const tell = (event: UploadEvent) => {
     try {
@@ -81,10 +87,22 @@ export function createUploadQueue({ docker, concurrency = 2, onChange }: UploadQ
     }
   };
 
+  const giveUpOn = (image: CommittedImage, error: string) => {
+    log.warn({ runId: image.runId, reference: image.reference, error }, "A postrun image was not pushed.");
+    failures.push({ image, error });
+    tell({ image, status: "failed", error });
+  };
+
   return {
     enqueue(image) {
+      if (cancelled !== undefined) return giveUpOn(image, cancelled);
       waiting.push(image);
       tell({ image, status: "queued" });
+      pump();
+    },
+    cancel(reason) {
+      cancelled ??= reason;
+      for (const image of waiting.splice(0)) giveUpOn(image, cancelled);
       pump();
     },
     backlog: () => waiting.length + uploading,

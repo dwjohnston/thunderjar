@@ -13,7 +13,9 @@ import { describe, expect, it } from "bun:test";
 import { RunDataStoreError } from "../../store/runDataStore.ts";
 import { SECRET_SEARCH_PATH } from "../secretSearch.ts";
 import { EXPOSED } from "./render.ts";
+import { createRunControl, type RunControl, STOP_SETTLE_MS } from "./runControl.ts";
 import { runManifest } from "./runManifest.ts";
+import { STOPPED } from "./runPermutation.ts";
 import { AN_IMAGE_STORE, aManifest, EXECUTION_ID, type FakeDependencies, fakeAgent, fakeDependencies, START_TIME } from "./testSupport.ts";
 import type { ExecutionResult, Manifest } from "./types.ts";
 
@@ -36,8 +38,8 @@ function fakesWith(agent = fakeAgent(), env: Parameters<typeof fakeDependencies>
 }
 
 /** Runs the manifest, moving the clock on `ms` so its agents, warm-ups and uploads can finish. */
-async function runIt(fakes: FakeDependencies, manifest: Manifest = aManifest(), { ms = 120_000, shouldStop }: { ms?: number; shouldStop?: () => boolean } = {}): Promise<ExecutionResult> {
-  const running = runManifest(manifest, fakes.deps, shouldStop === undefined ? {} : { shouldStop });
+async function runIt(fakes: FakeDependencies, manifest: Manifest = aManifest(), { ms = 120_000, control }: { ms?: number; control?: RunControl } = {}): Promise<ExecutionResult> {
+  const running = runManifest(manifest, fakes.deps, control);
   // Seen as handled, should it fail before the clock has moved.
   running.catch(() => {});
   await fakes.clock.advance(ms);
@@ -284,18 +286,228 @@ describe("runManifest: uploads", () => {
   });
 });
 
+describe("runManifest: a run data store that stops working", () => {
+  /** Fakes whose store takes the execution's start, then fails every write once the first run's agent has ended. */
+  function failingStore(): FakeDependencies {
+    const fakes = fakeDependencies();
+    fakes.runtimeDocker
+      .addImage(PRERUN_A)
+      .addImage(PRERUN_B)
+      .on("", async (context) => {
+        const exitCode = await fakeAgent()(context);
+        fakes.store.failWith("connection lost");
+        return exitCode;
+      });
+    return fakes;
+  }
+
+  it("starts no other run once one couldn't be recorded: the rest are cancelled", async () => {
+    const fakes = failingStore();
+
+    await runIt(fakes).catch(() => {});
+
+    expect(statusesOf(fakes)).toEqual({ [RUN.a1]: "crashed", [RUN.a2]: "cancelled", [RUN.b1]: "cancelled", [RUN.b2]: "cancelled" });
+    expect(fakes.runtimeDocker.called("run").length).toBe(1);
+    expect(fakes.store.containerRuns).toEqual([]);
+  });
+
+  it("throws the store's error once it can't record how the execution ended, having said where it was recording", async () => {
+    const fakes = failingStore();
+
+    const error = await runIt(fakes).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(RunDataStoreError);
+    expect((error as Error).message).toContain("connection lost");
+    expect(fakes.state.get().run.recordedIn).toBe("memory");
+    expect(fakes.state.get().run.notes?.[0]).toBe("1 of 4 agents didn't end cleanly:");
+    // The last thing the store took.
+    expect(fakes.store.executions.map(({ status }) => status)).toEqual(["running"]);
+  });
+
+  it("records the execution as failed if the store works again by the end", async () => {
+    const fakes = failingStore();
+    const measure = fakes.measurer.collect.bind(fakes.measurer);
+    let collects = 0;
+    // The one write that fails is the first run's.
+    fakes.measurer.collect = async (...given) => {
+      const collected = await measure(...given);
+      if (++collects > 1) fakes.store.failWith(undefined);
+      return collected;
+    };
+    const recordExecution = fakes.store.recordExecution.bind(fakes.store);
+    fakes.store.recordExecution = (record) => {
+      fakes.store.failWith(undefined);
+      return recordExecution(record);
+    };
+
+    const result = await runIt(fakes);
+
+    expect(result.execution.status).toBe("failed");
+    expect(result.runs.map(({ status }) => status)).toEqual(["crashed", "cancelled", "cancelled", "cancelled"]);
+  });
+});
+
 describe("runManifest: asked to stop", () => {
+  /** A control that is asked to stop as soon as the state shows `when`. */
+  function stoppingWhen(fakes: FakeDependencies, when: () => boolean) {
+    const control = createRunControl();
+    const update = fakes.state.update.bind(fakes.state);
+    fakes.state.update = (change) => {
+      update(change);
+      if (when()) control.stop();
+    };
+    return control;
+  }
+
+  /** Runs the manifest, asking it to stop `stopAt` ms in, and says how long after that it returned. */
+  async function stopIt(fakes: FakeDependencies, manifest: Manifest, stopAt: number) {
+    const control = createRunControl();
+    let endedAt: number | undefined;
+    const running = runManifest(manifest, fakes.deps, control);
+    running.then(
+      () => (endedAt = fakes.clock.now()),
+      () => {},
+    );
+    await fakes.clock.advance(stopAt);
+    const stoppedAt = fakes.clock.now();
+    control.stop();
+    await fakes.clock.advance(1_800_000);
+    return { result: await running, took: (endedAt ?? Number.POSITIVE_INFINITY) - stoppedAt };
+  }
+
   it("starts no new run, cancels the rest, records the execution as failed and removes its containers", async () => {
     const fakes = fakesWith();
     // Stops once the first run has finished.
-    const shouldStop = () => fakes.state.get().run.runs[RUN.a1]?.status === "finished";
+    const control = stoppingWhen(fakes, () => fakes.state.get().run.runs[RUN.a1]?.status === "finished");
 
-    const result = await runIt(fakes, aManifest(), { shouldStop });
+    const result = await runIt(fakes, aManifest(), { control });
 
     expect(result.runs.map(({ status }) => status)).toEqual(["finished", "cancelled", "cancelled", "cancelled"]);
     expect(statusesOf(fakes)).toEqual({ [RUN.a1]: "finished", [RUN.a2]: "cancelled", [RUN.b1]: "cancelled", [RUN.b2]: "cancelled" });
     expect(result.execution.status).toBe("failed");
     expect(fakes.runtimeDocker.called("run").length).toBe(1);
-    expect(fakes.runtimeDocker.called("removeContainersNamed")).toEqual([[CONTAINERS]]);
+    const sweeps = fakes.runtimeDocker.called("removeContainersNamed");
+    expect(sweeps.length).toBeGreaterThan(0);
+    expect(sweeps.every(([prefix]) => prefix === CONTAINERS)).toBe(true);
+  });
+
+  it("removes the containers of the runs under way at once, so their agents stop", async () => {
+    const fakes = fakesWith(fakeAgent({ durationMs: 600_000 }));
+
+    const { result, took } = await stopIt(fakes, aManifest({ concurrency: 2 }), 2_000);
+
+    expect(took).toBe(0);
+    expect(result.runs).toEqual([
+      { runId: RUN.a1, status: "crashed", error: STOPPED },
+      { runId: RUN.a2, status: "cancelled" },
+      { runId: RUN.b1, status: "crashed", error: STOPPED },
+      { runId: RUN.b2, status: "cancelled" },
+    ]);
+    expect(fakes.runtimeDocker.containers()).toEqual([]);
+    expect(fakes.runtimeDocker.called("commit")).toEqual([]);
+    expect(result.execution.status).toBe("failed");
+  });
+
+  it("catches a container that was only created after it was asked, by looking again each second", async () => {
+    const fakes = fakesWith(fakeAgent({ durationMs: 600_000 }));
+    // As on a slow runtime: `docker run` is under way, but there is no container to list yet.
+    fakes.runtimeDocker.takes("run", 3_000);
+
+    const { result, took } = await stopIt(fakes, aManifest(), 1_000);
+
+    expect(took).toBe(2_000);
+    expect(result.runs.map(({ status }) => status)).toEqual(["crashed", "cancelled", "cancelled", "cancelled"]);
+    expect(fakes.runtimeDocker.containers()).toEqual([]);
+  });
+
+  it("drops the postrun images still waiting to be pushed, and waits for those being pushed no longer than the settle time", async () => {
+    const fakes = fakesWith();
+    fakes.runtimeDocker.takes("push", 600_000);
+    const manifest = aManifest({ concurrency: 4 }, { imageStore: AN_IMAGE_STORE });
+
+    // By then all four have committed: two are being pushed, two wait.
+    const { result, took } = await stopIt(fakes, manifest, 2_500);
+
+    expect(took).toBe(STOP_SETTLE_MS);
+    expect(fakes.runtimeDocker.called("push").length).toBe(2);
+    expect(result.execution.status).toBe("failed");
+    expect(fakes.store.executions[0]?.status).toBe("failed");
+    const reason = "not pushed: the execution was stopped";
+    expect(fakes.state.get().run.notes).toEqual([
+      `Pushing ${manifest.runs[1]?.storedPostrunImage} failed: ${reason}`,
+      `Pushing ${manifest.runs[3]?.storedPostrunImage} failed: ${reason}`,
+    ]);
+  });
+
+  it("returns as soon as the pushes under way end, if that is sooner", async () => {
+    const fakes = fakesWith();
+    fakes.runtimeDocker.takes("push", 6_000);
+
+    const { took } = await stopIt(fakes, aManifest({ concurrency: 4 }, { imageStore: AN_IMAGE_STORE }), 2_500);
+
+    expect(took).toBeLessThan(6_000);
+    expect(fakes.runtimeDocker.called("push").length).toBe(2);
+  });
+
+  it("gives up on a run it can't stop once the settle time is up: crashed, and the execution failed", async () => {
+    const fakes = fakesWith(fakeAgent({ durationMs: 600_000 }));
+    fakes.runtimeDocker.failOn("removeContainersNamed", new Error("the runtime isn't answering"));
+
+    const { result, took } = await stopIt(fakes, aManifest(), 2_000);
+
+    expect(took).toBe(STOP_SETTLE_MS);
+    expect(result.runs).toEqual([
+      { runId: RUN.a1, status: "crashed", error: "It hadn't stopped when Thunderjar stopped waiting for it." },
+      { runId: RUN.a2, status: "cancelled" },
+      { runId: RUN.b1, status: "cancelled" },
+      { runId: RUN.b2, status: "cancelled" },
+    ]);
+    expect(statusesOf(fakes)).toEqual({ [RUN.a1]: "crashed", [RUN.a2]: "cancelled", [RUN.b1]: "cancelled", [RUN.b2]: "cancelled" });
+    expect(result.execution.status).toBe("failed");
+    // Said once, however many times it was tried.
+    expect(fakes.state.get().run.warnings).toEqual(["Couldn't remove the execution's containers: the runtime isn't answering"]);
+  });
+
+  it("stops waiting at once when forced", async () => {
+    const fakes = fakesWith(fakeAgent({ durationMs: 600_000 }));
+    fakes.runtimeDocker.failOn("removeContainersNamed", new Error("the runtime isn't answering"));
+    const control = createRunControl();
+
+    const running = runManifest(aManifest(), fakes.deps, control);
+    await fakes.clock.advance(2_000);
+    control.stop();
+    await fakes.clock.advance(1_000);
+    control.force();
+    const result = await running;
+
+    expect(fakes.clock.now() - START_TIME).toBe(3_000);
+    expect(result.execution.status).toBe("failed");
+  });
+
+  it("records the execution as failed even if every agent had exited 0, e.g. asked while the last was measured", async () => {
+    const fakes = fakesWith();
+    const control = createRunControl();
+    const measure = fakes.measurer.measure.bind(fakes.measurer);
+    fakes.measurer.measure = (...given) => {
+      if (fakes.measurer.measured.length === 3) control.stop();
+      return measure(...given);
+    };
+
+    const result = await runIt(fakes, aManifest(), { control });
+
+    expect(result.runs.map(({ status }) => status)).toEqual(["finished", "finished", "finished", "finished"]);
+    expect(result.execution.status).toBe("failed");
+    expect(fakes.store.executions[0]?.status).toBe("failed");
+  });
+
+  it("leaves nothing running on the clock once it has returned", async () => {
+    const fakes = fakesWith(fakeAgent({ durationMs: 600_000 }));
+    const { result } = await stopIt(fakes, aManifest(), 2_000);
+    const sweeps = fakes.runtimeDocker.called("removeContainersNamed").length;
+
+    await fakes.clock.advance(60_000);
+
+    expect(result.execution.status).toBe("failed");
+    expect(fakes.runtimeDocker.called("removeContainersNamed").length).toBe(sweeps);
   });
 });

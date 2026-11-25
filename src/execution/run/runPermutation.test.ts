@@ -15,6 +15,7 @@ import { DockerContainerError } from "../../services/Docker/errors.ts";
 import type { RecordedMeasure } from "../../store/runDataStore.ts";
 import { RESULT_PATH, RUN_PATH, START_MARKER, STDERR_PATH, timedRun } from "../runScript.ts";
 import { SECRET_SEARCH_PATH } from "../secretSearch.ts";
+import { createRunControl, type RunControl } from "./runControl.ts";
 import { runPermutation } from "./runPermutation.ts";
 import { AN_IMAGE_STORE, aManifest, EXECUTION_ID, type FakeDependencies, fakeAgent, fakeDependencies, hashOf, START_TIME } from "./testSupport.ts";
 import type { CommittedImage, Manifest, PlannedRun, UploadQueue } from "./types.ts";
@@ -48,8 +49,11 @@ function fakesWith(agent = fakeAgent(), env: Record<string, string> = {}): FakeD
 }
 
 /** Runs the manifest's first run, moving the clock on `ms` so its agent can finish. */
-async function runIt(fakes: FakeDependencies, { manifest = aManifest(), ms = 5_000, uploads = aQueue() }: { manifest?: Manifest; ms?: number; uploads?: ReturnType<typeof aQueue> } = {}) {
-  const running = runPermutation(manifest.runs[0] as PlannedRun, manifest, { ...fakes.deps, store: fakes.store }, uploads);
+async function runIt(
+  fakes: FakeDependencies,
+  { manifest = aManifest(), ms = 5_000, uploads = aQueue(), control }: { manifest?: Manifest; ms?: number; uploads?: ReturnType<typeof aQueue>; control?: RunControl } = {},
+) {
+  const running = runPermutation(manifest.runs[0] as PlannedRun, manifest, { ...fakes.deps, store: fakes.store }, uploads, control);
   await fakes.clock.advance(ms);
   return { record: await running, uploads, progress: fakes.state.get().run.runs[RUN_ID] };
 }
@@ -366,7 +370,25 @@ describe("runPermutation never throws", () => {
 
     expect(record.status).toBe("crashed");
     expect(record.error).toContain("the disk is full");
+    // Nothing was stored, so the record says nothing was.
+    expect(record.record).toBeUndefined();
     expect(fakes.runtimeDocker.removed).toEqual([CONTAINER]);
+  });
+
+  it("keeps the record as it was stored, if its measures can't be recorded", async () => {
+    const fakes = fakesWith();
+    fakes.measurer.measures({ polite: measured(true) });
+    const measure = fakes.measurer.measure.bind(fakes.measurer);
+    fakes.measurer.measure = (...given) => {
+      fakes.store.failWith("the disk is full");
+      return measure(...given);
+    };
+
+    const { record } = await runIt(fakes);
+
+    expect(record.status).toBe("crashed");
+    expect(record.record?.result).toEqual({});
+    expect(record.record).toEqual(fakes.store.containerRuns[0]);
   });
 
   it("is crashed if what the agent left can't be collected", async () => {
@@ -397,6 +419,68 @@ describe("runPermutation never throws", () => {
     const { record } = await runIt(fakes);
 
     expect(record.status).toBe("finished");
+  });
+});
+
+describe("runPermutation: asked to stop", () => {
+  it("is crashed, and commits and records nothing, if its container was removed while its agent ran", async () => {
+    const fakes = fakesWith(fakeAgent({ durationMs: 60_000 }));
+    const control = createRunControl();
+
+    const running = runPermutation(aManifest().runs[0] as PlannedRun, aManifest(), { ...fakes.deps, store: fakes.store }, aQueue(), control);
+    await fakes.clock.advance(2_000);
+    control.stop();
+    await fakes.runtimeDocker.removeContainersNamed(CONTAINER);
+    await fakes.clock.advance(1_000);
+    const record = await running;
+
+    expect(record).toEqual({ runId: RUN_ID, status: "crashed", error: "Stopped before it ended." });
+    expect(fakes.runtimeDocker.called("commit")).toEqual([]);
+    expect(fakes.store.containerRuns).toEqual([]);
+    expect(fakes.state.get().run.runs[RUN_ID]?.status).toBe("crashed");
+  });
+
+  it("goes no further once its agent ends, even if its container outlived the stop", async () => {
+    const fakes = fakesWith(fakeAgent({ durationMs: 3_000 }));
+    const control = createRunControl();
+
+    const running = runPermutation(aManifest().runs[0] as PlannedRun, aManifest(), { ...fakes.deps, store: fakes.store }, aQueue(), control);
+    await fakes.clock.advance(1_000);
+    control.stop();
+    await fakes.clock.advance(5_000);
+
+    expect((await running).status).toBe("crashed");
+    expect(fakes.runtimeDocker.called("commit")).toEqual([]);
+    expect(fakes.runtimeDocker.removed).toEqual([CONTAINER]);
+  });
+
+  it("starts no secret search and takes no measurements, if asked while it was committed", async () => {
+    const fakes = fakesWith(fakeAgent(), { ROBOT_KEY: A_SECRET });
+    const control = createRunControl();
+    const commit = fakes.runtimeDocker.commit.bind(fakes.runtimeDocker);
+    fakes.runtimeDocker.commit = (...given) => {
+      control.stop();
+      return commit(...given);
+    };
+
+    const { record } = await runIt(fakes, { control });
+
+    expect(record.status).toBe("crashed");
+    expect(fakes.runtimeDocker.called("run").length).toBe(1);
+    expect(fakes.measurer.measured).toEqual([]);
+    expect(fakes.store.containerRuns).toEqual([]);
+  });
+
+  it("takes no measurements if asked once it was recorded, and keeps what was recorded", async () => {
+    const fakes = fakesWith();
+    const control = createRunControl();
+    const uploads = aQueue(() => control.stop());
+
+    const { record } = await runIt(fakes, { manifest: aManifest({}, { imageStore: AN_IMAGE_STORE }), uploads, control });
+
+    expect(record.status).toBe("crashed");
+    expect(record.record).toEqual(fakes.store.containerRuns[0]);
+    expect(fakes.measurer.measured).toEqual([]);
   });
 });
 

@@ -91,7 +91,7 @@ export class FakeDocker implements Docker {
   private readonly failedPushes = new Map<string, string>();
   private readonly failures = new Map<keyof Docker, Error>();
   private readonly loggedOut = new Set<string>();
-  private readonly durations = new Map<"build" | "push" | "pull", number>();
+  private readonly durations = new Map<"build" | "push" | "pull" | "run", number>();
 
   constructor(
     private readonly clock: Clock,
@@ -138,8 +138,11 @@ export class FakeDocker implements Docker {
     return this;
   }
 
-  /** Makes each build, push or pull take `ms` on the clock, so several can be seen to overlap. */
-  takes(method: "build" | "push" | "pull", ms: number): this {
+  /**
+   * Makes each build, push or pull take `ms` on the clock, so several can be seen to overlap. For
+   * `run`, it is how long each takes to create its container, which isn't there to remove meanwhile.
+   */
+  takes(method: "build" | "push" | "pull" | "run", ms: number): this {
     this.durations.set(method, ms);
     return this;
   }
@@ -249,6 +252,7 @@ export class FakeDocker implements Docker {
     this.record("run", image, name, script, options);
     const spawnedAt = this.clock.now();
     const notStarted = (reason: string): ContainerStop => ({ outcome: "notStarted", reason, spawnedAt, gaveUpAt: this.clock.now() });
+    await this.spend("run");
     const files = this.stored.get(image);
     if (files === undefined) return notStarted(`No such image: ${image}`);
     if (this.running.has(name)) return notStarted(`The container name "${name}" is already in use`);
@@ -420,7 +424,7 @@ export class FakeDocker implements Docker {
     if (failure !== undefined) throw failure;
   }
 
-  private async spend(method: "build" | "push" | "pull"): Promise<void> {
+  private async spend(method: "build" | "push" | "pull" | "run"): Promise<void> {
     const ms = this.durations.get(method) ?? 0;
     if (ms > 0) await this.clock.sleep(ms);
   }

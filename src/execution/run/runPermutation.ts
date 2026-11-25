@@ -26,6 +26,7 @@ import { agentEnd, endedCleanly, failureHint, knownCost, totalTokens } from "../
 import { RESULT_PATH, RUN_PATH, START_MARKER, STDERR_PATH, timedRun } from "../runScript.ts";
 import { type SecretSearch, searchableSecrets, searchForSecrets } from "../secretSearch.ts";
 import { parseExecution } from "./parseExecution.ts";
+import { createRunControl, type RunControl } from "./runControl.ts";
 import { timed } from "./timed.ts";
 import type { Collected, Dependencies, Manifest, PlannedPermutation, PlannedRun, RunRecord, UploadQueue } from "./types.ts";
 
@@ -33,8 +34,11 @@ const log = moduleLogger("execution");
 
 type RunPermutationDeps = Pick<Dependencies, "runtimeDocker" | "env" | "clock" | "state" | "measurer"> & {
   /** The run data store, opened once for the execution. */
-  store: RunDataStore;
+  store: Pick<RunDataStore, "recordContainerRun">;
 };
+
+/** Why a run that was under way when the execution was asked to stop is `crashed`. */
+export const STOPPED = "Stopped before it ended.";
 
 /**
  * Runs `run`, one iteration of one of `manifest`'s permutations, writing where it has got to in
@@ -43,17 +47,30 @@ type RunPermutationDeps = Pick<Dependencies, "runtimeDocker" | "env" | "clock" |
  * - `finished`: the agent exited, with any exit code, and its run is committed, recorded and measured;
  * - `timedOut`: the same, but the agent was killed for running past its timeout;
  * - `crashed`: its container never started, or something failed on the way, with why in `error`.
- *   Its `record` is there if it had got as far as being recorded.
+ *   Its `record` is what the store holds of it: there only if it had got as far as being recorded.
  *
  * With an image store, its postrun image is handed to `uploads`, never pushed here, so its slot
- * frees up without waiting for the upload. Never throws.
+ * frees up without waiting for the upload.
+ *
+ * Once `control` is asked to stop, it goes no further than the step it is on: nothing more is
+ * committed, searched or measured, and it is `crashed`, with STOPPED as why. Its container is
+ * whoever asked's to remove, so that its agent stops. Never throws.
  */
-export async function runPermutation(run: PlannedRun, manifest: Manifest, deps: RunPermutationDeps, uploads: UploadQueue): Promise<RunRecord> {
+export async function runPermutation(run: PlannedRun, manifest: Manifest, deps: RunPermutationDeps, uploads: UploadQueue, control: RunControl = createRunControl()): Promise<RunRecord> {
   const { runtimeDocker: docker, clock, state, store, measurer } = deps;
   const { runId, container } = run;
   const show = (progress: Partial<RunProgress>) => state.update(updateRun((s) => patchRun(s, runId, progress)));
   const at = { executionId: manifest.executionId, permutation: run.permutation, iteration: run.iteration };
+  // Only ever what the store holds: set once a write has gone through.
   let record: ContainerRunRecord | undefined;
+  const keep = async (next: ContainerRunRecord) => {
+    await store.recordContainerRun(next);
+    record = next;
+    return next;
+  };
+  const unlessStopped = () => {
+    if (control.shouldStop()) throw new Error(STOPPED);
+  };
   try {
     const permutation = manifest.permutations.find(({ hash }) => hash === run.permutationHash);
     if (permutation === undefined) throw new Error(`Run ${runId} is of permutation ${run.permutationHash}, which its manifest doesn't have.`);
@@ -78,12 +95,13 @@ export async function runPermutation(run: PlannedRun, manifest: Manifest, deps: 
       // Recorded, with why, but there is nothing to commit, push or measure.
       const execution: Execution = { startedAt: stop.spawnedAt, finishedAt: stop.gaveUpAt, exitCode: null, timedOut: false, timeoutSeconds, failedToStart: stop.reason };
       const left = { harnessResult: null, harnessStderr: null };
-      record = containerRunRecord(manifest, permutation, run, execution, left, await measurer.collect(collectOf, null));
-      await store.recordContainerRun(record);
+      const recorded = await keep(containerRunRecord(manifest, permutation, run, execution, left, await measurer.collect(collectOf, null)));
       log.warn({ ...at, reason: stop.reason }, "container didn't start");
-      show({ status: "crashed", error: stop.reason, ...ending(record) });
-      return { runId, status: "crashed", record, error: stop.reason };
+      show({ status: "crashed", error: stop.reason, ...ending(recorded) });
+      return { runId, status: "crashed", record: recorded, error: stop.reason };
     }
+    // Its container may be gone, or its agent cut short: what it left isn't a result.
+    unlessStopped();
 
     const killedAt = stop.outcome === "timedOut" ? stop.killedAt : undefined;
     const [execution, harnessResult, stderr] = await timed(deps, "collect", async () => [
@@ -95,6 +113,7 @@ export async function runPermutation(run: PlannedRun, manifest: Manifest, deps: 
     show({ status: "committing" });
     await timed(deps, "commit", () => docker.commit(container, run.postrunImage, permutation.prerunImage, manifest.env));
     show({ status: "committed" });
+    unlessStopped();
 
     // Before the postrun image goes to the image store: in the files it would push, for the values
     // of the variables the agent was given by name. Not at all, and not timed, if there are none.
@@ -105,16 +124,17 @@ export async function runPermutation(run: PlannedRun, manifest: Manifest, deps: 
         : await timed(deps, "secretSearch", () => searchForSecrets(run.postrunImage, `${container}-secrets`, given, docker, deps.env.variables));
 
     const collected = await measurer.collect(collectOf, harnessResult);
-    record = containerRunRecord(manifest, permutation, run, execution, { harnessResult, harnessStderr: storedStderr(stderr) }, collected, secrets);
-    await store.recordContainerRun(record);
-    log.info({ ...at, exitCode: execution.exitCode, timedOut: execution.timedOut, tokenCosts: record.tokenCosts }, "container run finished");
+    unlessStopped();
+    const recorded = await keep(containerRunRecord(manifest, permutation, run, execution, { harnessResult, harnessStderr: storedStderr(stderr) }, collected, secrets));
+    log.info({ ...at, exitCode: execution.exitCode, timedOut: execution.timedOut, tokenCosts: recorded.tokenCosts }, "container run finished");
     // Names and paths only, never a value.
-    if (record.secretsFound !== undefined) log.warn({ ...at, secretsFound: record.secretsFound }, "secrets found in the postrun image's files");
-    if (record.secretSearchFailed !== undefined) log.warn({ ...at, reason: record.secretSearchFailed }, "couldn't search the postrun image for secrets");
+    if (recorded.secretsFound !== undefined) log.warn({ ...at, secretsFound: recorded.secretsFound }, "secrets found in the postrun image's files");
+    if (recorded.secretSearchFailed !== undefined) log.warn({ ...at, reason: recorded.secretSearchFailed }, "couldn't search the postrun image for secrets");
 
     // Pushed by the queue, while this run is measured and the next one starts: both only read the image.
     if (run.storedPostrunImage !== undefined) uploads.enqueue({ runId, image: run.postrunImage, reference: run.storedPostrunImage });
 
+    unlessStopped();
     show({ status: "measuring" });
     const result = await timed(deps, "measure", () =>
       measurer.measure(
@@ -123,20 +143,19 @@ export async function runPermutation(run: PlannedRun, manifest: Manifest, deps: 
         { harnessResult, reply: collected.reply },
       ),
     );
-    if (Object.keys(result).length > 0) {
-      record = { ...record, result };
-      await store.recordContainerRun(record);
-    }
+    const measured = Object.keys(result).length > 0 ? await keep({ ...recorded, result }) : recorded;
 
     const status = execution.timedOut ? "timedOut" : "finished";
     // Its upload may have ended while it was measured: what the queue's listener wrote is the later news.
     const shown = state.get().run.runs[runId]?.status;
     const uploading = status === "finished" && (shown === "uploading" || shown === "uploaded");
-    show({ ...(!uploading && { status }), ...ending(record) });
-    return { runId, status, record };
+    show({ ...(!uploading && { status }), ...ending(measured) });
+    return { runId, status, record: measured };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    log.error({ ...at, error: message }, "container run crashed");
+    const thrown = error instanceof Error ? error.message : String(error);
+    // Whatever fails once the execution is stopping fails because of that, e.g. its container was removed under it.
+    const message = control.shouldStop() ? STOPPED : thrown;
+    log.error({ ...at, error: thrown, stopping: control.shouldStop() }, "container run crashed");
     show({ status: "crashed", error: message, finishedAt: clock.now() });
     return { runId, status: "crashed", error: message, ...(record !== undefined && { record }) };
   } finally {

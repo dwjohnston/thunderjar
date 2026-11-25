@@ -10,9 +10,10 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { DockerBuildError, DockerUnavailableError } from "../../services/Docker/errors.ts";
+import { DockerBuildError, DockerPullError, DockerUnavailableError } from "../../services/Docker/errors.ts";
 import { ImageStoreLoginError } from "../imageStore.ts";
 import { ensureImages } from "./ensureImages.ts";
+import { createRunControl } from "./runControl.ts";
 import { A_RUNTIME, AN_IMAGE_STORE, aManifest, aPermutation, type FakeDependencies, fakeDependencies } from "./testSupport.ts";
 import type { Manifest } from "./types.ts";
 
@@ -299,6 +300,64 @@ describe("ensureImages: how many at once, and failing", () => {
 
     await expect(ensureImages(withStore(), fakes.deps)).rejects.toThrow("denied");
     expect(fakes.state.get().run.images).toEqual({ [IMAGE_A]: "failed" });
+  });
+});
+
+describe("ensureImages: asked to stop", () => {
+  it("starts no other image, and lets the one being built finish", async () => {
+    const fakes = fakeDependencies();
+    fakes.runtimeDocker.takes("build", 60_000);
+    const control = createRunControl();
+
+    const ensuring = ensureImages(aManifest(), fakes.deps, control);
+    await fakes.clock.advance(1_000);
+    control.stop();
+    await fakes.clock.advance(600_000);
+    await ensuring;
+
+    expect(fakes.runtimeDocker.builds.map((build) => build.image)).toEqual([IMAGE_A]);
+    expect(fakes.state.get().run.images).toEqual({ [IMAGE_A]: "ready" });
+  });
+
+  it("does nothing if asked before it began", async () => {
+    const fakes = fakeDependencies();
+    const control = createRunControl();
+    control.stop();
+
+    await ensureImages(aManifest(), fakes.deps, control);
+
+    expect(fakes.runtimeDocker.builds).toEqual([]);
+  });
+});
+
+describe("ensureImages: the rest of the table", () => {
+  it("fails, before any agent runs, if a remote runtime can't pull an image the store has", async () => {
+    const fakes = fakeDependencies();
+    fakes.registry.add(STORED_A).add(STORED_B);
+    const refused = new DockerPullError("unauthorized", STORED_A);
+    fakes.runtimeDocker.failOn("pull", refused);
+
+    const failure = await ensureImages(remote(), fakes.deps).catch((error: unknown) => error);
+
+    expect(failure).toBe(refused);
+    expect(statusesOf(fakes, STORED_A)).toEqual(["checking", "pulling", "failed"]);
+    expect(fakes.runtimeDocker.called("pull")).toEqual([[STORED_A]]);
+    expect(fakes.runtimeDocker.builds).toEqual([]);
+    expect(fakes.state.get().run.timings?.phases.pullPrerun?.count).toBe(1);
+  });
+
+  it("on a remote runtime, pushes an image the runtime has but the store lacks, without building it", async () => {
+    const fakes = fakeDependencies();
+    fakes.runtimeDocker.addImage(IMAGE_A).addImage(IMAGE_B);
+
+    await ensureImages(remote(), fakes.deps);
+
+    expect(fakes.runtimeDocker.builds).toEqual([]);
+    expect(fakes.runtimeDocker.called("push")).toEqual([
+      [IMAGE_A, STORED_A],
+      [IMAGE_B, STORED_B],
+    ]);
+    expect(fakes.runtimeDocker.called("pull")).toEqual([]);
   });
 });
 
