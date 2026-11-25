@@ -55,7 +55,8 @@ export class FakeDockerService implements DockerService {
 
   /**
    * Each container whose name ends in `suffix` does what `container` says. `""` is every
-   * container. If several match, the longest suffix wins.
+   * container. If several match, the longest suffix wins, and of
+   * two scripts for one suffix, the later.
    */
   on(suffix: string, container: FakeContainer | ((image: string, options: RunContainerOptions) => FakeContainer)): this {
     this.scripts.push([suffix, container]);
@@ -116,7 +117,7 @@ export class FakeDockerService implements DockerService {
   async run(image: string, name: string, script: string, options: RunContainerOptions = {}): Promise<ContainerStop> {
     this.runs.push({ image, name, script, options });
     this.called("run", image, name);
-    const scripted = this.scripts.filter(([suffix]) => name.endsWith(suffix)).sort(([a], [b]) => b.length - a.length)[0]?.[1];
+    const scripted = this.scripts.filter(([suffix]) => name.endsWith(suffix)).reverse().sort(([a], [b]) => b.length - a.length)[0]?.[1];
     const { stop = { outcome: "exited" }, files = {}, ms = 0 } = (typeof scripted === "function" ? scripted(image, options) : scripted) ?? {};
     if (ms > 0) await this.clock.sleep(ms);
     if (stop.outcome !== "notStarted") this.containers.set(name, files);

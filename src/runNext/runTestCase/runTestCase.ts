@@ -49,6 +49,16 @@ async function runHook(hook: HookName, manifest: Manifest, deps: Pick<Dependenci
   logEvent(deps, { type: "hook", hook, command, step: "done" });
 }
 
+/** Logs how much disk the runtime's Docker uses, `when` the execution starts or ends. Only for a remote runtime, whose disk nobody watches. Never throws. */
+async function logDiskUsage(when: "before" | "after", { executionId, config }: Manifest, deps: Pick<Dependencies, "runtimeDocker">): Promise<void> {
+  if (config.runtime === null) return;
+  try {
+    log.info({ executionId, when, usage: await deps.runtimeDocker.diskUsage() }, "runtime disk usage");
+  } catch (error) {
+    log.debug({ executionId, error: error instanceof Error ? error.message : String(error) }, "couldn't read the runtime's disk usage");
+  }
+}
+
 /**
  * Before anything is built: the image store's login, and, for a full run, the run data store, so
  * neither is found out after the agents have run. A full run is wrapped in the runtime's
@@ -70,11 +80,13 @@ export async function runTestCase(config: TestCaseConfig, deps: Dependencies, mo
   let failure: { error: unknown } | undefined;
   let records: RunRecord[] | undefined;
   try {
+    await logDiskUsage("before", manifest, deps);
     await ensureImages(manifest, deps);
     records = await runManifest(manifest, deps);
   } catch (error) {
     failure = { error };
   }
+  await logDiskUsage("after", manifest, deps);
   try {
     await runHook("afterExecution", manifest, deps);
   } catch (error) {

@@ -131,8 +131,8 @@ How many prerun images `build` and `run` build at once. It defaults to 1, one af
 build: { concurrency: 4 },
 ```
 
-- With more than 1 here, or a runtime `concurrency` above 1, `run` starts each iteration as soon as its own prerun image is built and pushed, while the rest are still building.
-- If a build fails after some iterations have started, those finish and are recorded, and the execution is recorded as failed.
+- `run` starts its first iteration once every prerun image is built and pushed.
+- If a build fails, nothing runs and nothing is recorded.
 
 ✅ **Do** size it to the machine that builds: the runtime, if there is one, or else the machine that runs `thunderjar`.
 

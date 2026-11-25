@@ -771,9 +771,8 @@ export type BuildOptions = {
   /**
    * How many prerun images `build` and `run` build at once: 1, one after another, by default.
    * Builds run on the runtime, if there's one, or else on the machine that runs Thunderjar, so set
-   * it to what that machine's CPU, memory and network can take. With more than 1, or a runtime
-   * concurrency above 1, `run` starts each iteration as soon as its own prerun image is ready,
-   * without waiting for the rest.
+   * it to what that machine's CPU, memory and network can take. `run` starts its first iteration
+   * once every prerun image is ready.
    */
   concurrency?: number;
 };

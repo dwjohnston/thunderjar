@@ -96,8 +96,6 @@
     - ‼️ 🍳 Show image build status in the table
         - https://github.com/dwjohnston/thunderjar/issues/157
 
-- Remove `--local` just use the solution of an env var with multiple configurations. 
-
 - Purging: 
     - prerun, postrun images from local, container store
     - capture refs from local, remote
