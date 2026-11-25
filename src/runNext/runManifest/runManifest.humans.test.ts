@@ -14,8 +14,6 @@ import { plan } from "../plan/plan.ts";
 import { config, fakes } from "../testing/fixtures.ts";
 import { runManifest } from "./runManifest.ts";
 
-/** Each distinct value, in the order it first appeared. */
-const changes = <T>(values: T[]): T[] => values.filter((value, i) => i === 0 || JSON.stringify(value) !== JSON.stringify(values[i - 1]));
 
 describe(runManifest, () => {
     it("happy path: records the execution as running, runs each run in turn, then records it complete", async () => {
