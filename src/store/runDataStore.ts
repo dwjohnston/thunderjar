@@ -1,2 +1,21 @@
-// Moved to src/services/RunDataStore/RunDataStore.ts. Re-exported here so existing importers keep working until they move onto the service.
-export * from "../services/RunDataStore/RunDataStore.ts";
+// Moved to src/services/RunDataStore/RunDataStore.ts. Re-exported here, as it was named, so existing importers keep working until they move onto the service.
+export {
+  type ContainerRunRecord,
+  type Execution,
+  type ExecutionRecord,
+  type ExecutionStatus,
+  type FoundSecret,
+  mergePurge,
+  type PostgresStoreOptions,
+  postgresStore,
+  type PostrunPurge,
+  type PurgedFrom,
+  type RecordedMeasure,
+  type RecordedOutcome,
+  type RunDataStore,
+  RunDataStoreError,
+  type RunKey,
+  setupPostgres,
+  sqliteStore,
+  storeFileIn,
+} from "../services/RunDataStore/RunDataStore.ts";
