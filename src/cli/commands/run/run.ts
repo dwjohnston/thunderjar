@@ -21,6 +21,10 @@ import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { withOverrideOptions } from "../../overrides.ts";
 
+/** What `runCommand` returns when it was stopped by Ctrl-C, or by SIGTERM. */
+const INTERRUPTED = 130;
+const TERMINATED = 143;
+
 export function createRunCommand(deps: Dependencies): Command {
   return withOverrideOptions(new Command("run"))
     .description(
@@ -39,8 +43,13 @@ export function createRunCommand(deps: Dependencies): Command {
     .option("--timings", "once the execution ends, print how long each of its phases took: builds, pushes, pulls, agents, commits and measuring")
     .addOption(imagePrefixOption())
     .addOption(dataDirOption())
-    .addOption(jsonOption())
+    // `run` shows nothing as it goes with --json: the displayer writes the result once, at the end.
+    .addOption(jsonOption("print the results on stdout as JSON when the command ends, for scripts. stderr says where the logs are"))
     .action(async (name: string, options: RunOptions) => {
-      process.exitCode = await runCommand(name, options, deps);
+      const exitCode = await runCommand(name, options, deps);
+      process.exitCode = exitCode;
+      // Asked to stop. `runCommand` may have given up waiting for a build, a push or a container
+      // that wouldn't end: left alone, its `docker` process would keep this one alive.
+      if (exitCode === INTERRUPTED || exitCode === TERMINATED) process.exit(exitCode);
     });
 }

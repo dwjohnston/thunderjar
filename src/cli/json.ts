@@ -17,8 +17,9 @@ import { Option } from "commander";
 /**
  * `--json`: print the command's results on stdout as JSON. Its progress and human-readable text go
  * to stderr instead (see textOutput.ts), so stdout can be piped to a script. Errors still go to
- * stderr, with a non-zero exit code.
+ * stderr, with a non-zero exit code. A command whose `--json` behaves otherwise, e.g. `run`, which
+ * shows no progress, gives its own `description`.
  */
-export function jsonOption(): Option {
-  return new Option("--json", "print the results on stdout as JSON, for scripts. Progress goes to stderr");
+export function jsonOption(description = "print the results on stdout as JSON, for scripts. Progress goes to stderr"): Option {
+  return new Option("--json", description);
 }

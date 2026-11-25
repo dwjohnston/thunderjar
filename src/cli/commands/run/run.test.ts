@@ -110,9 +110,10 @@ test("run builds, runs each container, measures it and records it, through the d
 test("run --help says what --json leaves on each stream: the result at the end, and where the logs are", async () => {
   const { stdout } = await thunderjar(scenario("0202"), ["run", "--help"]);
 
-  const json = stdout.split("\n").find((line) => line.trimStart().startsWith("--json"));
-  expect(json).toContain("when the command ends");
-  expect(json).not.toContain("Progress goes to stderr");
+  // The help wraps to the terminal's width.
+  const help = stdout.replace(/\s+/g, " ");
+  expect(help).toContain("--json print the results on stdout as JSON when the command ends, for scripts. stderr says where the logs are");
+  expect(help).not.toContain("Progress goes to stderr");
 });
 
 test("with a runtime in the config, only the registry checks stay on the host: everything else goes through the runtime's command", async () => {
