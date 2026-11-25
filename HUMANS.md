@@ -89,7 +89,7 @@ Maintained by humans only, in [project-md/human-safe-space/](project-md/human-sa
 - [Things that are a bit messy: skills](project-md/human-safe-space/things-that-are-a-bit-messy/skills.md)
 - [Canonical tests](project-md/human-safe-space/canonical-tests/canonical-tests.md)
 - [Package scripts: docs](project-md/human-safe-space/package-scripts/docs.md)
-- [Refactor work: `run` architecture plan](project-md/human-safe-space/refactor-work/architecture-plan.md)
+- [Idealised Architecture](project-md/human-safe-space/refactor-work/architecture-plan.md)
 
 ## Idealised architecture 
 
