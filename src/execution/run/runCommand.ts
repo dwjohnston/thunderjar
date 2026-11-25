@@ -16,9 +16,9 @@
 import { moduleLogger } from "../../log/logger.ts";
 import { addWarning, type RunState, setFailure, setPhase, updateRun } from "../../services/ApplicationState/ApplicationState.ts";
 import type { StopSignal } from "../../services/Io/Io.ts";
-import { executionContainerPrefix } from "../images.ts";
 import { describeFailure } from "./describeFailure.ts";
 import { resolveTestCase } from "./resolveTestCase.ts";
+import { createRunControl } from "./runControl.ts";
 import { RuntimeHookError, runTestCase } from "./runTestCase.ts";
 import { splitOptions } from "./splitOptions.ts";
 import type { Dependencies, ExecutionResult, Manifest, RunMode, RunOptions } from "./types.ts";
@@ -35,9 +35,11 @@ const SIGNAL_EXIT: Record<StopSignal, number> = { SIGINT: 130, SIGTERM: 143 };
  * - 1: the execution failed, or something stopped it, said in the state's `failure`;
  * - 130 or 143: it was interrupted (Ctrl-C) or asked to stop.
  *
- * Never throws. When asked to stop, no new run starts, the execution's containers are removed so
- * its agents stop spending, the execution is recorded as failed, and the runtime's
- * `afterExecution` still runs.
+ * Never throws. When asked to stop, no new image is built and no new run starts, the execution's
+ * containers are removed so its agents stop spending, the execution is recorded as failed, and
+ * the runtime's `afterExecution` still runs. What is under way then is waited for only a short
+ * while (STOP_SETTLE_MS), and not at all once asked a second time, so the command always gets to
+ * `afterExecution` and returns: whoever stops a command kills it outright if it lingers.
  *
  * The state's `result` is what `--json` prints: `{ manifest }` for a dry run, `{ manifest, images }`
  * for `--build-only`, else `{ execution, recordedIn, containerRuns }`.
@@ -48,17 +50,15 @@ export async function runCommand(testCaseName: string, options: RunOptions, deps
   const startedAt = clock.now();
   let exitCode = 0;
 
+  // The first signal asks everything to stop; a second stops the waiting too.
+  const control = createRunControl();
   let stopped: StopSignal | undefined;
   const unsubscribe = deps.io.onStop((signal) => {
-    if (stopped !== undefined) return;
-    stopped = signal;
-    const { manifest, phase } = state.get().run;
-    log.warn({ signal, executionId: manifest?.executionId }, "asked to stop");
-    // Before then there are none, and after it they are gone.
-    if (manifest === undefined || phase !== "running") return;
-    deps.runtimeDocker.removeContainersNamed(executionContainerPrefix(manifest.executionId, manifest.imagePrefix)).catch((error: unknown) => {
-      update((run) => addWarning(run, `Couldn't remove the execution's containers: ${error instanceof Error ? error.message : String(error)}`));
-    });
+    const again = stopped !== undefined;
+    stopped ??= signal;
+    log.warn({ signal, again, executionId: state.get().run.manifest?.executionId }, "asked to stop");
+    if (again) control.force();
+    else control.stop();
   });
 
   /** Whether any run has got further than waiting its turn. */
@@ -84,8 +84,9 @@ export async function runCommand(testCaseName: string, options: RunOptions, deps
     displayer.start();
     update((run) => setPhase(run, "resolving"));
     const { overrides, mode } = splitOptions(options);
-    const config = await resolveTestCase(testCaseName, overrides, deps);
-    if (stopped === undefined) finished(mode, await runTestCase(config, deps, mode, { shouldStop: () => stopped !== undefined }));
+    // A build runs no agent, so it needs none of the variables an agent does.
+    const config = await resolveTestCase(testCaseName, overrides, deps, { forRuns: mode !== "build-only" });
+    if (stopped === undefined) finished(mode, await runTestCase(config, deps, mode, control));
   } catch (error) {
     fail(error);
     // `afterExecution` failed, but only after the execution was recorded.

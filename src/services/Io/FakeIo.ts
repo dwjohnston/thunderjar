@@ -101,6 +101,11 @@ export class FakeIo implements Io {
     return () => this.handlers.delete(listener);
   }
 
+  /** How many onStop handlers are still listening. */
+  get stopListeners(): number {
+    return this.handlers.size;
+  }
+
   /** Ctrl-C: calls the onStop handlers with "SIGINT". */
   interrupt(): void {
     this.stop("SIGINT");

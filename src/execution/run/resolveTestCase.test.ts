@@ -139,6 +139,12 @@ describe(resolveTestCase, () => {
     expect(error.message).toContain("FAKE_HARNESS_KEY");
   });
 
+  test("not for runs: a variable only an agent needs may be unset, and its harness still names it", async () => {
+    const config = await resolveTestCase("two-harnesses", NONE, depsIn("0202", {}), { forRuns: false });
+
+    expect(config.permutations.map(({ harnessEnv }) => harnessEnv)).toEqual([["FAKE_HARNESS_KEY"], ["FAKE_HARNESS_KEY"]]);
+  });
+
   test("a test case that doesn't exist is a ConfigError", async () => {
     const error = await configError("no-such-case", NONE, depsIn("0202"));
     expect(error.message).toContain("no-such-case");

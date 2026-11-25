@@ -62,14 +62,22 @@ async function resolvePermutation(
  * Test case `name` of the project `deps.env.cwd` is in, with `overrides`, checked and loaded:
  * everything `plan` needs. Throws a ConfigError for anything wrong with the project, the test
  * case, or the variables it needs. Touches no Docker: the registry login is `ensureImages`'s.
+ *
+ * The variables its agents need, i.e. each harness's and the test case's `secretEnv`, are only
+ * checked if `forRuns`, as by default. A build needs the build secrets alone.
  */
-export async function resolveTestCase(name: string, overrides: RunOverrides, deps: Pick<Dependencies, "env" | "random">): Promise<TestCaseConfig> {
+export async function resolveTestCase(
+  name: string,
+  overrides: RunOverrides,
+  deps: Pick<Dependencies, "env" | "random">,
+  { forRuns = true }: { forRuns?: boolean } = {},
+): Promise<TestCaseConfig> {
   const { cwd, variables } = deps.env;
   const root = await findThunderjarRoot(cwd);
   const project = await loadProjectConfig(root);
   const testCase = await loadTestCase(root, name, overrides.testCase);
   // Before anything is hashed, so a missing key is said at once.
-  await checkRequiredEnv(root, testCase, variables);
+  if (forRuns) await checkRequiredEnv(root, testCase, variables);
   checkBuildSecrets(project.build, variables);
 
   const hashed = await hashPermutations(root, testCase);
