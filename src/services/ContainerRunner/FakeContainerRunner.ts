@@ -1,60 +1,23 @@
-import type { Clock } from "../Clock/Clock";
-import type { ContainerProcess, ContainerRunner } from "./ContainerRunner";
+import type { ContainerProcess } from "../Docker/Docker";
+import { FakeDocker } from "../Docker/FakeDocker";
+import type { ContainerRunner } from "./ContainerRunner";
 
-/** What a scripted container is given: the fake clock, and `start()`, to print its start marker. */
-export type ContainerScriptContext = { clock: Clock; name: string; args: string[]; start(): void };
-
-/** A scripted container's behaviour: resolves to its exit code, or that and its stderr. */
-export type ContainerScript = (context: ContainerScriptContext) => Promise<number | { exitCode: number; stderr: string }>;
+export type { ContainerScript, ContainerScriptContext } from "../Docker/FakeDocker";
 
 /**
- * A ContainerRunner whose containers run scripts on a fake clock, chosen by the end of their name.
- * One with no script starts at once and exits 0.
+ * @deprecated Use FakeDocker. A FakeDocker under ContainerRunner's names, kept only while
+ * FakeContainerRunner.humans.test.ts and runContainer.humans.test.ts use it.
  */
-export class FakeContainerRunner implements ContainerRunner {
-  readonly killed: string[] = [];
-  readonly removed: string[] = [];
-  private readonly scripts: [string, ContainerScript][] = [];
-  /** Ends each running container, by name, as Docker's SIGKILL would. */
-  private readonly enders = new Map<string, () => void>();
-
-  constructor(private readonly clock: Clock) {}
-
-  /** Runs `script` for each container whose name ends in `suffix`. */
-  on(suffix: string, script: ContainerScript): this {
-    this.scripts.push([suffix, script]);
-    return this;
+export class FakeContainerRunner extends FakeDocker implements ContainerRunner {
+  spawn(args: string[], startMarker?: string): ContainerProcess {
+    return this.spawnRun(args, startMarker);
   }
 
-  spawn(args: string[], _startMarker?: string): ContainerProcess {
-    const name = args[args.indexOf("--name") + 1] ?? "";
-    const script = this.scripts.find(([suffix]) => name.endsWith(suffix))?.[1] ?? noScript;
-    const started = Promise.withResolvers<void>();
-    const ended = Promise.withResolvers<{ exitCode: number; stderr: string }>();
-    const end = () => ended.resolve({ exitCode: KILLED, stderr: "" });
-    this.enders.set(name, end);
-    const ran = Promise.race([
-      script({ clock: this.clock, name, args, start: () => started.resolve() }).then((result) => (typeof result === "number" ? { exitCode: result, stderr: "" } : result)),
-      ended.promise,
-    ]);
-    return { started: started.promise, exited: ran.then((result) => result.exitCode), stderr: ran.then((result) => result.stderr), kill: end };
+  kill(name: string): Promise<void> {
+    return this.killContainer(name);
   }
 
-  async kill(name: string): Promise<void> {
-    this.killed.push(name);
-    this.enders.get(name)?.();
-  }
-
-  async remove(name: string): Promise<void> {
-    this.removed.push(name);
-    this.enders.get(name)?.();
+  remove(name: string): Promise<void> {
+    return this.removeContainer(name);
   }
 }
-
-const noScript: ContainerScript = async ({ start }) => {
-  start();
-  return 0;
-};
-
-/** The exit code of a process ended by SIGKILL. */
-const KILLED = 137;
