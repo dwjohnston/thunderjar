@@ -58,15 +58,37 @@ describe(runManifest, () => {
             uploadBacklog: 0,
         });
 
-        // history() is the state after every update. There are 16 here:
-        //   0      the empty state, before anything happens
-        //   1      every run queued, in one update
-        //   2      the execution recorded as running
-        //   3-8    run 1: running → agent timed → output collected → committing → commit timed → committed, with its record
-        //   9-14   run 2: the same 6 steps
-        //   15     the execution recorded as complete
-        // So each run is 6 updates: 3 status changes, and 3 timings (agent, collect, commit).
-        expect(deps.state.history()).toHaveLength(16);
+        // history() is the state after every update: 16 of them here.
+        // Each line is: the execution's status | each run's status (+record once it has one) | how many of each step have been timed.
+        const summary = deps.state.history().map(({ run }) => {
+            const runs = Object.values(run.runs).map((r) => `${r.status}${r.record ? "+record" : ""}`).join(", ");
+            const timed = Object.entries(run.timings ?? {}).map(([step, { count }]) => `${step} ${count}`).join(", ");
+            return `${run.execution?.status ?? "-"} | ${runs} | ${timed}`;
+        });
+        expect(summary).toEqual([
+            // Before anything happens
+            "- |  | ",
+            // Every run queued, in one update
+            "- | queued, queued | ",
+            // The execution recorded as running
+            "running | queued, queued | ",
+            // Run 1: running, then its agent, collect and commit are timed, then it's committed with its record
+            "running | running, queued | ",
+            "running | running, queued | agent 1",
+            "running | running, queued | agent 1, collect 1",
+            "running | committing, queued | agent 1, collect 1",
+            "running | committing, queued | agent 1, collect 1, commit 1",
+            "running | committed+record, queued | agent 1, collect 1, commit 1",
+            // Run 2: the same 6 steps
+            "running | committed+record, running | agent 1, collect 1, commit 1",
+            "running | committed+record, running | agent 2, collect 1, commit 1",
+            "running | committed+record, running | agent 2, collect 2, commit 1",
+            "running | committed+record, committing | agent 2, collect 2, commit 1",
+            "running | committed+record, committing | agent 2, collect 2, commit 2",
+            "running | committed+record, committed+record | agent 2, collect 2, commit 2",
+            // The execution recorded as complete
+            "complete | committed+record, committed+record | agent 2, collect 2, commit 2",
+        ]);
 
 
         // The run data store has the execution, complete, and a record of each run.
