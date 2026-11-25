@@ -255,9 +255,9 @@ describe("runCommand: asked to stop", () => {
   });
 
   it("listens only while it runs: however it ends, nothing is left listening", async () => {
-    const clean = fakesIn();
+    const clean = fakeDependencies({ env: { cwd: scenario("0202"), variables: KEY } });
     const listening: number[] = [];
-    clean.runtimeDocker.on("-1-1", (context) => {
+    clean.runtimeDocker.on("-1-1", fakeAgent()).on("-2-1", (context) => {
       listening.push(clean.io.stopListeners);
       return fakeAgent()(context);
     });
