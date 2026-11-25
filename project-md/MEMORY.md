@@ -1,0 +1,3 @@
+- [Code states: tags via resolve](codestate-tags-via-resolve.md) — tag in config, resolve to SHA, applyParameter deterministic
+- [Services are PascalCased](services-pascalcase.md) — src/services/Clock/Clock.ts, FakeClock.ts
+- [Logger not injected](logger-not-injected.md) — logger is the DI exception; import moduleLogger directly
