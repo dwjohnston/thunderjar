@@ -24,3 +24,8 @@ FakeService.humans.test.ts is used to demonstrate how to use the FakeService.
 
 This is the more useful test for maintainers. 
 
+## Rules
+
+DO NOT INSTANTIATE SERVICES in the Service.ts file. 
+
+Services, fake or real, should only be instantiated at application entry point (including tests). 

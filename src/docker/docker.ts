@@ -8,7 +8,7 @@
 import { $ } from "bun";
 import type { BuildOptions } from "../api/declarations.ts";
 import { moduleLogger } from "../log/logger.ts";
-import { type Clock, realClock, type TimerHandle } from "../services/Clock/Clock.ts";
+import { type Clock, SystemClock, type TimerHandle } from "../services/Clock/Clock.ts";
 import type { ContainerRunner } from "../services/ContainerRunner/ContainerRunner.ts";
 import type { ContainerProcess, ContainerRuns, ContainerState, ContainerStop, ExecResult } from "../services/Docker/Docker.ts";
 
@@ -340,7 +340,8 @@ export async function runContainer(
     timeoutSeconds,
     startMarker,
     runtime = localRuntime(),
-    clock = realClock,
+    // TODO: injected by every caller, once they have a Clock: services are built only at entry points.
+    clock = new SystemClock(),
     runner,
     docker = runner === undefined ? containerRuns(runtime) : fromRunner(runner),
   }: {
