@@ -23,3 +23,8 @@ export function loginProblem(error: unknown): string | undefined {
   }
   return undefined;
 }
+
+/** The environment for `docker compose`: Grafana runs on the machine's own platform. */
+export function composeEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  return { ...env };
+}
