@@ -32,7 +32,7 @@ import { runTestCase } from "../runTestCase/runTestCase.ts";
 import { changeRunDetails, logEvent } from "../state/state.ts";
 import type { Dependencies, OutputFormat, RunMode, RunOptions, RunRecord, TestCaseConfig } from "../types.ts";
 
-const log = moduleLogger("runNext");
+const log = moduleLogger("execution");
 
 /** What a run came to: its records, if it ran, and the code the process should exit with. */
 export type RunResult = { records?: RunRecord[]; exitCode: number };

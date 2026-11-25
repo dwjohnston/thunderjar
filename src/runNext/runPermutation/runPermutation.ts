@@ -27,7 +27,7 @@ import { logEvent, setRun, timed } from "../state/state.ts";
 import type { Dependencies, Manifest, PlannedRun, RunRecord } from "../types.ts";
 import type { UploadQueue } from "../uploadQueue/uploadQueue.ts";
 
-const log = moduleLogger("runNext");
+const log = moduleLogger("execution");
 
 type Deps = Pick<Dependencies, "runtimeDocker" | "runStore" | "env" | "clock" | "state">;
 
@@ -148,6 +148,7 @@ export async function runPermutation(run: PlannedRun, deps: Deps, uploads: Uploa
         }),
       );
       if (stop.outcome === "notStarted") {
+        log.warn({ ...at, reason: stop.reason }, "container didn't start");
         return await crashed(stop.reason, {
           startedAt: stop.spawnedAt,
           finishedAt: stop.gaveUpAt,

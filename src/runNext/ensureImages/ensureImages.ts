@@ -20,7 +20,7 @@ import { moduleLogger } from "../../log/logger.ts";
 import { logEvent, setImage, timed } from "../state/state.ts";
 import type { Dependencies, Manifest, PlannedPermutation } from "../types.ts";
 
-const log = moduleLogger("runNext");
+const log = moduleLogger("execution");
 
 type Deps = Pick<Dependencies, "hostDocker" | "runtimeDocker" | "state" | "fs" | "env" | "random" | "clock">;
 

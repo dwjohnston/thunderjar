@@ -22,7 +22,7 @@ import { changeRunDetails, detailsOf, logEvent, setRun, timed } from "../state/s
 import type { Dependencies, Manifest, RunRecord } from "../types.ts";
 import { createUploadQueue } from "../uploadQueue/uploadQueue.ts";
 
-const log = moduleLogger("runNext");
+const log = moduleLogger("execution");
 
 /**
  * Records the execution as running, runs its runs, waits for their post-run images to upload, then
