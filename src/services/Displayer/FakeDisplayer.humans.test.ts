@@ -9,6 +9,10 @@ function sampleCommand(displayer: Displayer, json: boolean): void {
     displayer.stop();
 }
 
+/** 
+ * 🙋‍♂️ I'm not sure if the FakeDisplayer will ever be helpful 
+ */
+
 describe(FakeDisplayer, () => {
     it("records the mode a command set", () => {
         const displayer = new FakeDisplayer();

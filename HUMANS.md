@@ -88,8 +88,72 @@ Maintained by humans only, in [project-md/human-safe-space/](project-md/human-sa
 - [Not supported: parameter behaviour](project-md/human-safe-space/not-supported/parameter-behaviour.md)
 - [Things that are a bit messy: skills](project-md/human-safe-space/things-that-are-a-bit-messy/skills.md)
 
+## Idealised architecture 
+
+### Dependency injection
+
+All non-deterministic functionality is injected, except the logger.
+
+- **No framework.** `main` is the composition root. It's the only place that reads `process.env` or builds real adapters, and it builds every service up front and passes them down.
+- **Take only what you use.** Functions declare the slice they need, e.g. `Pick<Dependencies, "runtimeDocker" | "clock">`, so tests build only those.
+- **Every service has a fake.** It lives next to the real one, e.g. `src/services/Clock/Clock.ts` and `FakeClock.ts`. Tests pass fakes and check state, not output.
+- **The exception is the logger.** Import `moduleLogger` from [src/log/logger.ts](src/log/logger.ts) directly. Logging is a side channel, never something a test checks, so it isn't worth threading through every signature.
+
+See [the run architecture plan](project-md/human-safe-space/refactor-work/architecture-plan.md).
+
 
 ## Working style 
 
 ### Writing tests 
 - Do not use snapshots, inline snapshots. Test snapshots are allowed online in `*.humans.*`
+- When writing tests for general purpose things, don't refer to domain specific concepts
+
+```typescript 
+
+// 👎 Bad - this adds cognitive friction by refering to a real thign 
+async function findTestCase(fs: Fs, root: string, name: string): Promise<string | undefined> {
+    const path = `${root}/.thunderjar/test-cases/${name}.ts`;
+    if (!(await fs.exists(path))) return undefined;
+    await fs.write(`${root}/.thunderjar/logs/found.txt`, name);
+    return fs.readText(path);
+}
+
+describe(findTestCase, () => {
+    it("reads the test case and writes a note, all in memory", async () => {
+        const fs = new FakeFs({ "/p/.thunderjar/test-cases/smoke.ts": "export default {}" });
+
+        expect(await findTestCase(fs, "/p", "smoke")).toBe("export default {}");
+        expect(fs.files()).toMatchInlineSnapshot(`
+          {
+            "/p/.thunderjar/logs/found.txt": "smoke",
+            "/p/.thunderjar/test-cases/smoke.ts": "export default {}",
+          }
+        `);
+    });
+});
+
+```
+
+```typescript 
+
+// 👍 Good - a plain, everyday example
+async function readTodo(fs: Fs, path: string): Promise<string> {
+    return fs.readText(path);
+}
+
+describe(readTodo, () => {
+    it("reads the todo list", async () => {
+        const fs = new FakeFs({ "/todo.txt": "buy milk" });
+
+        expect(await readTodo(fs, "/todo.txt")).toBe("buy milk");
+    });
+});
+
+```
+
+
+## Memory 
+
+Auto memory is disabled. 
+
+You're welcome to use memory. Your memory file is [project-md](./project-md/MEMORY.md)
