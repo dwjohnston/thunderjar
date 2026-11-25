@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { FakeClock } from "../Clock/FakeClock";
 import { FakeIo } from "../Io/FakeIo";
-import { createRunStateStore, emptyRunState, setRunStatus } from "../RunState/RunState";
+import { emptyRunState, setRunStatus, updateRun } from "../ApplicationState/ApplicationState";
+import { FakeApplicationState } from "../ApplicationState/FakeApplicationState";
 import { createDisplayerService, renderState } from "./Displayer";
 
 const setup = (kind: "terminal" | "pipe" = "terminal", logPath?: string) => {
     const io = new FakeIo({ stdout: kind });
     const clock = new FakeClock();
-    const state = createRunStateStore();
+    const state = new FakeApplicationState();
     const displayer = createDisplayerService({ state, clock, stdout: io.stdout, stderr: io.stderr, logPath });
     return { io, clock, state, displayer };
 };
@@ -48,7 +49,7 @@ describe(createDisplayerService, () => {
 
     test("On a terminal each frame after the first erases the one before", async () => {
         const { io, clock, state, displayer } = setup();
-        state.update((s) => ({ ...s, uploadBacklog: 1 }));
+        state.update(updateRun((s) => ({ ...s, uploadBacklog: 1 })));
         displayer.start();
         await clock.advance(2000);
         expect(io.stdout.text()).toBe("Runs: none\nUpload backlog: 1\n\x1b[2A\x1b[0JRuns: none\nUpload backlog: 1\n");

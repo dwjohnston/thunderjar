@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createRunStateStore, emptyRunState, setImageStatus, setRunStatus, setUploadBacklog } from "./RunState";
+import { createApplicationStateService, emptyApplicationState, emptyRunState, setImageStatus, setRunStatus, setUploadBacklog, updateRun } from "./ApplicationState";
 
 describe(setRunStatus, () => {
     test("It changes only the named run, sharing the others", () => {
@@ -25,14 +25,19 @@ describe(setUploadBacklog, () => {
     });
 });
 
-describe(createRunStateStore, () => {
+describe(createApplicationStateService, () => {
     test("It starts from the initial state given, with a manifest", () => {
-        const initial = { ...emptyRunState<{ executionId: string }>(), manifest: { executionId: "E1" } };
-        const state = createRunStateStore(initial);
+        const initial = { run: { ...emptyRunState<{ executionId: string }>(), manifest: { executionId: "E1" } } };
+        const state = createApplicationStateService(initial);
 
-        state.update((s) => setRunStatus(s, "E1-p-i1", "uploading"));
+        state.update(updateRun((r) => setRunStatus(r, "E1-p-i1", "uploading")));
 
-        expect(state.get().manifest).toEqual({ executionId: "E1" });
-        expect(initial.runs).toEqual({});
+        expect(state.get().run.manifest).toEqual({ executionId: "E1" });
+        expect(initial.run.runs).toEqual({});
+    });
+
+    test("updateRun leaves the state's other slices alone", () => {
+        const initial = { ...emptyApplicationState(), other: 1 };
+        expect(updateRun((r) => r)(initial)).toEqual(initial);
     });
 });

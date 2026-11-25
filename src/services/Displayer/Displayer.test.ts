@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { FakeClock } from "../Clock/FakeClock";
 import { FakeIo } from "../Io/FakeIo";
-import { createRunStateStore, setRunStatus } from "../RunState/RunState";
+import { setRunStatus, emptyRunState, updateRun } from "../ApplicationState/ApplicationState";
+import { FakeApplicationState } from "../ApplicationState/FakeApplicationState";
 import { createDisplayerService, renderState } from "./Displayer";
 
 describe(renderState, () => {
     test("Shows counts per run status, image statuses and the upload backlog", () => {
-        let state = createRunStateStore().get();
+        let state = emptyRunState();
         state = setRunStatus(setRunStatus(state, "a", "running"), "b", "running");
         state = { ...state, images: { "img:1": "ready" }, uploadBacklog: 2 };
 
@@ -20,13 +21,13 @@ describe(createDisplayerService, () => {
     test("Interactive on a terminal: a frame each second, then a final one on stop", async () => {
         const io = new FakeIo({ stdout: "terminal" });
         const clock = new FakeClock();
-        const state = createRunStateStore();
+        const state = new FakeApplicationState();
         const displayer = createDisplayerService({ state, clock, stdout: io.stdout, stderr: io.stderr, logPath: undefined });
 
         displayer.setMode("interactive");
         displayer.start();
         await clock.advance(1000);
-        state.update((s) => setRunStatus(s, "a", "running"));
+        state.update(updateRun((s) => setRunStatus(s, "a", "running")));
         await clock.advance(1000);
         displayer.stop();
         const writes = io.stdout.text();
@@ -39,7 +40,7 @@ describe(createDisplayerService, () => {
 
     test("JSON: says where the logs are on stderr, and the final state on stdout", () => {
         const io = new FakeIo();
-        const state = createRunStateStore<{ name: string }>({ manifest: { name: "t" }, runs: {}, images: {}, uploadBacklog: 0 });
+        const state = new FakeApplicationState<{ name: string }>({ run: { manifest: { name: "t" }, runs: {}, images: {}, uploadBacklog: 0 } });
         const displayer = createDisplayerService({ state, clock: new FakeClock(), stdout: io.stdout, stderr: io.stderr, logPath: "/l.log" });
 
         displayer.setMode("json");
@@ -47,6 +48,6 @@ describe(createDisplayerService, () => {
         displayer.stop();
 
         expect(io.stderr.text()).toBe("Logs: /l.log\n");
-        expect(JSON.parse(io.stdout.text())).toEqual(state.get());
+        expect(JSON.parse(io.stdout.text())).toEqual(state.get().run);
     });
 });

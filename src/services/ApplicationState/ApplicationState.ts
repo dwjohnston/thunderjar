@@ -10,8 +10,7 @@ export type ImageBuildStatus = "checking" | "pulling" | "building" | "ready" | "
 export type RunProgress = { readonly status: RunStatus };
 
 /**
- * What an execution is doing, for a displayer to show. `M` is the manifest's type, which lives in a
- * higher layer than this one.
+ * What an execution is doing. `M` is the manifest's type, which lives in a higher layer than this one.
  */
 export type RunState<M = unknown> = {
   readonly manifest?: M;
@@ -23,19 +22,31 @@ export type RunState<M = unknown> = {
   readonly uploadBacklog: number;
 };
 
+/**
+ * Everything the application is doing, for a displayer to show. One slice per concern; only the run
+ * state so far.
+ */
+export type ApplicationState<M = unknown> = {
+  readonly run: RunState<M>;
+};
+
 /** Lower levels write to it only through `update`; a displayer reads it with `get`. */
-export interface RunStateStore<M = unknown> {
-  get(): RunState<M>;
+export interface ApplicationStateService<M = unknown> {
+  get(): ApplicationState<M>;
   /** Replaces the state with what `fn` returns. `fn` must return a new object, never mutate. */
-  update(fn: (s: RunState<M>) => RunState<M>): void;
+  update(fn: (s: ApplicationState<M>) => ApplicationState<M>): void;
 }
 
 export function emptyRunState<M = unknown>(): RunState<M> {
   return { runs: {}, images: {}, uploadBacklog: 0 };
 }
 
-/** In memory. Deterministic, so tests use it as is, with no fake. */
-export function createRunStateStore<M = unknown>(initial: RunState<M> = emptyRunState<M>()): RunStateStore<M> {
+export function emptyApplicationState<M = unknown>(): ApplicationState<M> {
+  return { run: emptyRunState<M>() };
+}
+
+/** In memory. Built at an entry point; tests use FakeApplicationState. */
+export function createApplicationStateService<M = unknown>(initial: ApplicationState<M> = emptyApplicationState<M>()): ApplicationStateService<M> {
   let state = initial;
   return {
     get: () => state,
@@ -43,6 +54,11 @@ export function createRunStateStore<M = unknown>(initial: RunState<M> = emptyRun
       state = fn(state);
     },
   };
+}
+
+/** Lifts a change to the run state into a change to the application state. */
+export function updateRun<M>(fn: (run: RunState<M>) => RunState<M>): (s: ApplicationState<M>) => ApplicationState<M> {
+  return (s) => ({ ...s, run: fn(s.run) });
 }
 
 export function setRunStatus<M>(state: RunState<M>, runId: string, status: RunStatus): RunState<M> {

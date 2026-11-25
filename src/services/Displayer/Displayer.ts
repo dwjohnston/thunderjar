@@ -1,6 +1,6 @@
 import type { Clock, TimerHandle } from "../Clock/Clock";
 import type { Output } from "../Io/Io";
-import type { RunState, RunStateStore, RunStatus } from "../RunState/RunState";
+import type { ApplicationStateService, RunState, RunStatus } from "../ApplicationState/ApplicationState";
 
 /** How a command shows its run state: frames redrawn each second, or JSON once at the end. */
 export type OutputFormat = "interactive" | "json";
@@ -19,7 +19,7 @@ export interface Displayer {
 }
 
 export type DisplayerDeps<M> = {
-  state: RunStateStore<M>;
+  state: ApplicationStateService<M>;
   clock: Clock;
   stdout: Output;
   stderr: Output;
@@ -60,7 +60,7 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
   let drawnLines = 0;
 
   const draw = () => {
-    const frame = renderState(state.get(), clock.now(), describeManifest);
+    const frame = renderState(state.get().run, clock.now(), describeManifest);
     // On a terminal, move up over the last frame and clear to the end before drawing the next.
     stdout.write(drawnLines > 0 ? `\x1b[${drawnLines}A\x1b[0J${frame}` : frame);
     drawnLines = frame.split("\n").length - 1;
@@ -87,7 +87,7 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
     stop() {
       clock.clearTimeout(timer);
       timer = undefined;
-      if (mode === "json") stdout.write(`${JSON.stringify(state.get(), null, 2)}\n`);
+      if (mode === "json") stdout.write(`${JSON.stringify(state.get().run, null, 2)}\n`);
       else draw();
     },
   };
