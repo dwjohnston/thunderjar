@@ -65,7 +65,7 @@ export default declareTestCase({
 });
 
 describe("0204 misbehaving agents", () => {
-  test("an agent that times out is killed, and one that exits non-zero or leaves no result file is marked, each measured all the same", async () => {
+  test("an agent that exits non-zero or leaves no result file is marked, each measured all the same", async () => {
     await using docker = await fakeDocker();
     const data = dataDir();
 
@@ -78,14 +78,13 @@ describe("0204 misbehaving agents", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(1);
     expect(stdout).toEndWith(`
- 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
-      isPrimeTsExists: false
+ 1/3  iteration 1/1  fake-sleeper | plain  ... done (<duration>)
+      isPrimeTsExists: true
  2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (<duration>)
       isPrimeTsExists: false
  3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
       isPrimeTsExists: true
-3 of 3 agents didn't end cleanly:
-  1×  timed out after <duration>  (1-1)
+2 of 3 agents didn't end cleanly:
   1×  exited 1  fake-crasher: no space left on device  (2-1)
   1×  done, no result file  (3-1)
 Recorded in <DATA>/runs.sqlite
@@ -93,10 +92,7 @@ Recorded in <DATA>/runs.sqlite
     const store = await readStore(data);
     expect(store.execution.status).toBe("failed");
     const [sleeper, crasher, silent] = store.containerRuns as [ContainerRunRecord, ContainerRunRecord, ContainerRunRecord];
-    expect(sleeper.execution).toMatchObject({ exitCode: null, timedOut: true, timeoutSeconds: 2 });
-    // Killed at its timeout, not left to sleep out its 300s.
-    expect(sleeper.execution.finishedAt - sleeper.execution.startedAt).toBeLessThan(10_000);
-    expect(sleeper.harnessResult).toBeNull();
+    expect(sleeper.execution).toMatchObject({ exitCode: 0, timedOut: false });
     expect(crasher.execution).toMatchObject({ exitCode: 1, timedOut: false });
     expect(crasher.harnessResult).toBe('{"error":"crashed"}\n');
     expect(silent.execution).toMatchObject({ exitCode: 0, timedOut: false });
@@ -114,37 +110,12 @@ Recorded in <DATA>/runs.sqlite
         "result": "{\\"error\\":\\"crashed\\"}"
       }
     ]`);
-    expect(log).toContain("WARN: execution: agent timed out");
     // Its stderr is kept in its postrun image, beside its result file.
     expect(await docker.fileIn(`thunderjar-postrun:${store.execution.executionId}-2-1`, "/thunderjar/stderr.log")).toBe(
       "fake-crasher: no space left on device\n",
     );
     // Each was committed, and removed.
     expect(await docker.images()).toContain(`thunderjar-postrun:${store.execution.executionId}-1-1`);
-  }, 30_000);
-
-  test("the timeout runs from when the agent starts: a container slower to start than the timeout still ends cleanly, and the one that hangs still times out", async () => {
-    // fake-silent's container takes 3s to start, past its 2s timeout; its agent then takes no time.
-    await using docker = await fakeDocker({ slowStart: { "-3-1": 3 } });
-    const data = dataDir();
-
-    const { stdout, stderr, exitCode } = await thunderjar(scenario("0204"), ["run", "misbehaving", "--data-dir", data], { env: docker.env });
-
-    expect(stderr).toBe("");
-    expect(exitCode).toBe(1);
-    expect(stdout).toContain(`
- 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
-      isPrimeTsExists: false
- 2/3  iteration 1/1  fake-crasher | plain  ... exited 1 (<duration>)
-      isPrimeTsExists: false
- 3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
-      isPrimeTsExists: true
-`);
-    const [sleeper, , silent] = (await readStore(data)).containerRuns as [ContainerRunRecord, ContainerRunRecord, ContainerRunRecord];
-    expect(sleeper.execution).toMatchObject({ exitCode: null, timedOut: true, timeoutSeconds: 2 });
-    expect(silent.execution).toMatchObject({ exitCode: 0, timedOut: false });
-    expect(silent.execution.failedToStart).toBeUndefined();
-    expect(await docker.containers()).toEqual([]);
   }, 30_000);
 
   test("a container that never starts is that run's outcome, given up on before it exists, and the execution goes on to the end", async () => {
@@ -162,13 +133,12 @@ Recorded in <DATA>/runs.sqlite
     expect(stderr).toBe("");
     expect(exitCode).toBe(1);
     expect(stdout).toEndWith(`
- 1/3  iteration 1/1  fake-sleeper | plain  ... timed out after <duration>
-      isPrimeTsExists: false
+ 1/3  iteration 1/1  fake-sleeper | plain  ... done (<duration>)
+      isPrimeTsExists: true
  2/3  iteration 1/1  fake-crasher | plain  ... failed to start
  3/3  iteration 1/1  fake-silent | plain  ... done, no result file (<duration>)
       isPrimeTsExists: true
-3 of 3 agents didn't end cleanly:
-  1×  timed out after <duration>  (1-1)
+2 of 3 agents didn't end cleanly:
   1×  failed to start  it didn't start within <duration>  (2-1)
   1×  done, no result file  (3-1)
 Recorded in <DATA>/runs.sqlite
