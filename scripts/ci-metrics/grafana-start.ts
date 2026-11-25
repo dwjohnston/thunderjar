@@ -17,7 +17,7 @@
 // Grafana retrying on every panel.
 
 import { $, SQL } from "bun";
-import { loginProblem } from "./login";
+import { composeEnv, loginProblem } from "./login";
 
 const password = Bun.env.CI_METRICS_DB_PASSWORD;
 if (!password) {
@@ -42,5 +42,5 @@ try {
 }
 
 const compose = `${import.meta.dir}/grafana/docker-compose.yml`;
-const result = await $`docker compose -f ${compose} up`.nothrow();
+const result = await $`docker compose -f ${compose} up`.env(composeEnv(Bun.env)).nothrow();
 process.exit(result.exitCode);

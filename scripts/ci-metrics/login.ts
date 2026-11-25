@@ -26,5 +26,7 @@ export function loginProblem(error: unknown): string | undefined {
 
 /** The environment for `docker compose`: Grafana runs on the machine's own platform. */
 export function composeEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
-  return { ...env };
+  // Thunderjar's .env sets it to linux/amd64 for experiment images, and Bun loads .env.
+  const { DOCKER_DEFAULT_PLATFORM: _platform, ...rest } = env;
+  return rest;
 }
