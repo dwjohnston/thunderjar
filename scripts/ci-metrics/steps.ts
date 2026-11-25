@@ -22,6 +22,19 @@ export interface CiStep {
 }
 
 /** The completed steps of the job named `job`, in order. Unfinished steps, e.g. the upload itself, are left out. */
-export function stepsOfJob(_jobsResponse: unknown, _job: string): CiStep[] {
-  return [];
+export function stepsOfJob(jobsResponse: unknown, job: string): CiStep[] {
+  const { jobs } = jobsResponse as { jobs: GithubJob[] };
+  const steps = jobs.find((j) => j.name === job)?.steps ?? [];
+  return steps
+    .filter((s) => s.status === "completed" && s.started_at && s.completed_at)
+    .map((s) => ({
+      name: s.name,
+      conclusion: s.conclusion ?? "unknown",
+      seconds: (Date.parse(s.completed_at!) - Date.parse(s.started_at!)) / 1000,
+    }));
+}
+
+interface GithubJob {
+  name: string;
+  steps?: { name: string; status: string; conclusion: string | null; started_at: string | null; completed_at: string | null }[];
 }
