@@ -1,11 +1,12 @@
 import { $ } from "bun";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
-import { TMP_DIR } from "../testing/cli.ts";
+import { TMP_DIR } from "../../testing/cli.ts";
 import { SQL } from "bun";
 import {
   type ContainerRunRecord,
   type ExecutionRecord,
+  lazyRunDataStore,
   mergePurge,
   type PostrunPurge,
   postgresStore,
@@ -13,7 +14,7 @@ import {
   RunDataStoreError,
   sqliteStore,
   storeFileIn,
-} from "./runDataStore.ts";
+} from "./RunDataStore.ts";
 
 const dirs: string[] = [];
 const dataDir = () => {
@@ -363,4 +364,26 @@ test("a Postgres that can't be reached is a RunDataStoreError named by its label
   const store = postgresStore("postgres://user:secret@127.0.0.1:1/none", "Postgres at $THUNDERJAR_DB_URL");
 
   expect(await store.listExecutions().catch(errorOf)).toEqual({ path: "Postgres at $THUNDERJAR_DB_URL", message: expect.any(String) });
+});
+
+describe("lazyRunDataStore", () => {
+  test("opens its store on the first call, not when built, and only once", async () => {
+    let opens = 0;
+    const store = lazyRunDataStore(async () => {
+      opens++;
+      return sqliteStore(storeFileIn(dataDir()));
+    });
+    expect(opens).toBe(0);
+
+    await store.recordExecution(execution("01kfa1bgz0aaaaaaaaaaaaaaaa"));
+    expect(await store.listExecutions()).toEqual([execution("01kfa1bgz0aaaaaaaaaaaaaaaa")]);
+    expect(opens).toBe(1);
+  });
+
+  test("a store that can't be opened throws on use, not when built", async () => {
+    const store = lazyRunDataStore(async () => {
+      throw new RunDataStoreError("Postgres at $THUNDERJAR_DB_URL", "not set");
+    });
+    await expect(store.check()).rejects.toBeInstanceOf(RunDataStoreError);
+  });
 });

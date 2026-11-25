@@ -6,7 +6,7 @@ const [command, hook, ...rest] = process.argv.slice(2);
 if (command === "capture" && isHook(hook)) {
   await runHookCommand(hook, harnessArg(rest));
 } else {
-  const [{ createProgram }, { createClockService }, { createEnvService }, { createIoService }, { createDockerService }, { findThunderjarRoot, ConfigError }, { loadProjectConfig }] =
+  const [{ createProgram }, { createClockService }, { createEnvService }, { createIoService }, { createDockerService }, { findThunderjarRoot, ConfigError }, { loadProjectConfig }, { dataDirFromArgs, openStore }, { lazyRunDataStore }] =
     await Promise.all([
       import("./program.ts"),
       import("../services/Clock/Clock.ts"),
@@ -15,6 +15,8 @@ if (command === "capture" && isHook(hook)) {
       import("../services/Docker/Docker.ts"),
       import("../config/loader.ts"),
       import("../config/projectConfig.ts"),
+      import("./dataDir.ts"),
+      import("../services/RunDataStore/RunDataStore.ts"),
     ]);
   /**
    * The runtime's command, from the config of the project in `cwd`. Null with no runtime, or no
@@ -34,5 +36,8 @@ if (command === "capture" && isHook(hook)) {
   const hostDocker = createDockerService([env.variables.THUNDERJAR_DOCKER || "docker"]);
   const command = await dockerRuntimeCommand(env.cwd);
   const runtimeDocker = command === null ? hostDocker : createDockerService(command);
-  await createProgram({ clock: createClockService(), env, io: createIoService(), hostDocker, runtimeDocker }).parseAsync();
+  // The same store `openStore` gives each command; --data-dir is read here, ahead of Commander, until tests use a FakeRunDataStore.
+  const dataDir = dataDirFromArgs(process.argv.slice(2));
+  const runDataStore = lazyRunDataStore(async () => (await openStore(env.cwd, dataDir, undefined, env.variables)).store);
+  await createProgram({ clock: createClockService(), env, io: createIoService(), hostDocker, runtimeDocker, runDataStore }).parseAsync();
 }
