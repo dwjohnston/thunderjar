@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-// `run-next`: the reimplementation of `run`, hidden until it replaces `run`, `plan` and `build`.
+// `run-next`: the reimplementation of `run`, hidden until it replaces `run`.
 import { Command } from "commander";
 import { FOLDER } from "../../../config/loader.ts";
 import { runCommand } from "../../../runNext/runCommand/runCommand.ts";

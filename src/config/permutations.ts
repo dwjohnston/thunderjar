@@ -48,7 +48,7 @@ export function expandPermutations(testCase: TestCaseDeclaration): Permutation[]
   ) as Permutation[];
 }
 
-/** The abbreviation `plan` shows and image tags carry. */
+/** The abbreviation image tags carry. */
 export const abbreviateHash = (hash: string) => hash.slice(0, 8);
 
 /**

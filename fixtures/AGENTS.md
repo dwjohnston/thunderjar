@@ -32,7 +32,7 @@ import { thunderjar, copyScenarioProject } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
 // Read-only commands run on the scenario unchanged.
-const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"]);
+const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"]);
 
 // Commands that write files run on a copy.
 await using copy = await copyScenarioProject("0101");

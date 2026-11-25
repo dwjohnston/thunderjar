@@ -52,13 +52,11 @@ ${permutation(8, "3a7b72ac", 5)}
 `);
   });
 
-  test("each permutation runs from the prerun image build would build for it", async () => {
+  test("each permutation runs from its own prerun image", async () => {
     const run = await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"], { env: KEY });
-    const build = await thunderjar(scenario("0202"), ["build", "is-prime-baseline", "--dry-run"]);
 
     const images = run.stdout.match(/(?<=thunderjar-prerun:)[0-9a-f]{8}/g);
     expect(images).toEqual(["ded54607", "602318c8", "e4f0784f", "35965dab", "62ee2f93", "0438baeb", "3b9c542f", "3a7b72ac"]);
-    expect([...new Set(images)]).toEqual(build.stdout.match(/(?<=^# thunderjar-prerun:)[0-9a-f]{8}/gm) as string[]);
   });
 
   test("--image-prefix starts every image name with it", async () => {
@@ -275,9 +273,9 @@ Recorded in <DATA>/runs.sqlite
   test("by default, the store is .thunderjar/.data/, and existing prerun images are reused", async () => {
     await using copy = await copyScenarioProject("0202");
     await using docker = await fakeDocker();
-    // Built beforehand, so its run script is baked in.
-    expect((await thunderjar(copy.dir, ["build", "example"], { env: { ...docker.env, ...KEY } })).exitCode).toBe(0);
-    expect(await docker.images()).toEqual(["thunderjar-prerun:ded54607"]);
+    // Built beforehand, by a run recorded elsewhere, so its run script is baked in.
+    expect((await thunderjar(copy.dir, ["run", "example", "--data-dir", "elsewhere"], { env: { ...docker.env, ...KEY } })).exitCode).toBe(0);
+    expect((await docker.images()).filter((image) => image.includes("prerun"))).toEqual(["thunderjar-prerun:ded54607"]);
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "example"], { env: { ...docker.env, ...KEY } });
 

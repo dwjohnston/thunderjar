@@ -75,7 +75,7 @@ export type Resolved = string | number | boolean | null | Resolved[] | { [key: s
  * once loaded.
  *
  * `resolve` is for a floating parameter, such as a branch's latest commit. Thunderjar calls it on
- * the host, once per execution (`plan`, `run`, `build`), before anything is hashed, and passes its
+ * the host, once per execution (`run`), before anything is hashed, and passes its
  * result to `applyParameter` as `ctx.resolved`. It must only read: a `git
  * fetch` is fine, building or writing anything isn't. It isn't hashed itself: only the text it ends
  * up in is, so a value no fragment uses changes nothing. Each run records it beside the parameter.
@@ -97,7 +97,7 @@ type Applies<C, Ctx, R> = {
    * @type {(config: C, ctx: { exec(command: string): Promise<string> }) => Resolved | Promise<Resolved>}
    * @description
    * Looks up what a floating parameter currently means, such as a branch's latest commit. Runs on
-   * the host once per `plan`, `run` or `build`, and must only read. Its result is passed on as
+   * the host once per `run`, and must only read. Its result is passed on as
    * `ctx.resolved`, and recorded with each run.
    *
    * ```ts
@@ -291,7 +291,7 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    * that runs Thunderjar, and is never on a command line or in a log. Its postrun image doesn't
    * keep it: when the container is committed, every variable its prerun image doesn't set is
    * blanked. Its measurement containers, started from the postrun image, are given it the same
-   * way, by name. `plan` and `run` stop if one is unset. If the agent writes its value into a
+   * way, by name. `run` stops if one is unset. If the agent writes its value into a
    * file, the postrun image's files are searched for it before it's pushed, and `run` warns.
    */
   requiredEnv?: RequiredEnv[];
@@ -709,7 +709,7 @@ export type TestCaseDeclaration<T extends TaskNames = TaskNames> = {
    * them the same way, e.g. for a `shell` measurement that queries a database. The value is never
    * on a command line, in a log, in a run's record or in its postrun image's config: only the name
    * is recorded. If the agent writes a value into a file, the postrun image's files are searched
-   * for it before it's pushed, and `run` warns. `plan` and `run` stop if one is unset. A runner on
+   * for it before it's pushed, and `run` warns. `run` stops if one is unset. A runner on
    * a runtime is sent them without listing them in `runner.env`.
    */
   secretEnv?: string[];
@@ -763,13 +763,13 @@ export type BuildOptions = {
    * Each passed as `docker build --secret id=<id>,env=<env>`, for a fragment to mount for one
    * `RUN`, at `/run/secrets/<id>`: `RUN --mount=type=secret,id=github git clone
    * "https://x-access-token:$(cat /run/secrets/github)@github.com/acme/private.git" /workspace`.
-   * `plan`, `build` and `run` stop if `env` is unset.
+   * `run` stops if `env` is unset.
    */
   secrets?: { id: string; env: string }[];
   /** Passes the host's SSH agent as `docker build --ssh default`, for `RUN --mount=type=ssh git clone git@github.com:…`. */
   ssh?: boolean;
   /**
-   * How many prerun images `build` and `run` build at once: 1, one after another, by default.
+   * How many prerun images `run` builds at once: 1, one after another, by default.
    * Builds run on the runtime, if there's one, or else on the machine that runs Thunderjar, so set
    * it to what that machine's CPU, memory and network can take. With more than 1, or a runtime
    * concurrency above 1, `run` starts each iteration as soon as its own prerun image is ready,
@@ -779,7 +779,7 @@ export type BuildOptions = {
 };
 
 /**
- * Where `build` builds images and `run` runs containers, instead of the local Docker daemon: any
+ * Where `run` builds images and runs containers, instead of the local Docker daemon: any
  * command that takes the `docker` CLI's arguments. Thunderjar puts `command` in front of each
  * `docker` subcommand it would run, e.g. `["docker", "--context", "cloud"]`,
  * `["docker", "-H", "ssh://me@build-host"]` or `["podman", "--remote"]`. `--local` ignores it.
