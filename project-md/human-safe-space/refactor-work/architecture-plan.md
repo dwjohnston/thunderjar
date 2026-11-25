@@ -26,6 +26,7 @@ flowchart TD
   L3 --> sched["Scheduler"]
   sched -->|"PlannedRun, up to concurrency"| perm["runPermutation<br/>start → secrets → agent → wait → commit"]
   perm -->|"enqueue"| uq["UploadQueue"]
+  perm -->|"measurements"| runstore[("runStore<br/>Postgres")]
 
   ensure -. "find missing" .-> host[("hostDocker")]
   ensure -. "pull / build" .-> rt[("runtimeDocker")]
@@ -191,22 +192,37 @@ flowchart TD
   start["Start container<br/>from pre-run image"] --> secrets["Inject secrets<br/>(from Env)"]
   secrets --> agent["Run agent script"]
   agent --> wait["Wait for it to finish"]
-  wait --> commit["Commit image"]
-  commit --> upload["Upload<br/>(via UploadQueue)"]
-  wait -. "crash or timeout" .-> commit
+  wait --> commit["Commit as post-run image"]
+  commit --> copy["Copy measurement functions<br/>into a container from the post-run image"]
+  copy --> measure["Run the measurements"]
+  measure --> store[("Run data store<br/>(Postgres)")]
+  commit --> upload["Upload post-run image<br/>(via UploadQueue)"]
+  wait -. "crash or timeout:<br/>no measurement" .-> store
 ```
 
-**Suggested**: step 5 hands the image to `UploadQueue` rather than pushing inline, so the run slot frees up right away.
+**Decided**: once the container is committed as a post-run image, the measurement functions are copied in and run inside it, and their results go to the run data store, a Postgres database.
+
+**Decided**: measuring runs in a throwaway container started from the post-run image, so the uploaded image is exactly what the agent left behind. Upload and measurement start in parallel from the commit.
+
+**Decided**: the upload goes through `UploadQueue` rather than pushing inline, so the run slot frees up right away.
 
 ```ts
 function runPermutation(
   run: PlannedRun,
-  deps: Pick<Dependencies, "runtimeDocker" | "env" | "clock" | "logger" | "state">,
+  deps: Pick<Dependencies, "runtimeDocker" | "runStore" | "env" | "clock" | "logger" | "state">,
   uploads: UploadQueue,
 ): Promise<RunRecord>;
 ```
 
 From earlier sessions: a crash or timeout is a distinct run-level status, and cost, tokens and wall-clock time are recorded on every run.
+
+**Decided**: the runtime machine connects to the Postgres database.
+
+**Decided**: runs that crash or time out aren't measured, but they're still recorded in the run data store.
+
+**Open**:
+
+- If a measurement fails, is that a run status, or just a missing metric?
 
 ### Scheduler
 
@@ -307,3 +323,4 @@ Required services, all built once in `main` and passed in as `Dependencies`:
 - `state`: the run state store
 - `stdout`, `stderr`: output streams
 - `displayer`: shows the state, interactive or JSON
+- `runStore`: the run data store, a Postgres database holding run records and measurements, reached from the runtime machine
