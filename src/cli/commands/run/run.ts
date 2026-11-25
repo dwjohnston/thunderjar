@@ -83,7 +83,7 @@ export function createRunCommand(services: Services): Command {
           if (exitCode >= 128) process.exit(exitCode);
           if (exitCode !== 0) process.exitCode = exitCode;
         } catch (caught) {
-          const failure = describeFailure(caught, cwd);
+          const failure = describeFailure(caught, cwd, services.state.get().run.execution !== undefined);
           if (failure === undefined) throw caught;
           printError(failure);
           // Its afterExecution ran as it stopped: if that failed too, level 2 left why in the notes.

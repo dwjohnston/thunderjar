@@ -17,7 +17,7 @@ import type { Manifest, PlannedPermutation, PlannedRun } from "../../../runNext/
 import type { ImageBuildStatus, RunProgress, RunState } from "../../../services/ApplicationState/ApplicationState.ts";
 import { type Paint, padEnd, plain } from "../../colour.ts";
 import { displayPath } from "../../dataDir.ts";
-import { agentEnd, dollars, duration, envEntry, knownCost, plural, secretFiles } from "../../format.ts";
+import { agentEnd, dollars, duration, envEntry, failureHint, knownCost, plural, secretFiles } from "../../format.ts";
 import { showMeasures } from "./runDisplay.ts";
 
 export type RenderOptions = {
@@ -105,6 +105,8 @@ function showProgress(progress: RunProgress | undefined, now: number, paint: Pai
     parts.push(paint.green("completed"));
   }
   if (took !== undefined) parts.push(paint.dim(took));
+  // It exited 0, but left nothing to read its reply or costs from.
+  if (status !== "crashed" && status !== "timedOut" && status !== "committing" && record !== undefined && record.harnessResult === null) parts.push(paint.yellow("no result file"));
   const cost = knownCost(record?.tokenCosts);
   if (cost !== undefined) parts.push(dollars(cost));
   if (status === "uploading") parts.push(paint.yellow("uploading"));
@@ -178,6 +180,11 @@ export function renderRun(state: RunState<Manifest>, now: number, { paint = plai
       const measures = progress?.record?.result ?? {};
       if (Object.keys(measures).length > 0) lines.push(`${under}${showMeasures(measures, paint)}`);
       if (progress?.error !== undefined) lines.push(`${under}${paint.red(progress.error)}`);
+      // Why its agent didn't end cleanly, as far as what it left says: its reported error, or its stderr's last line.
+      else if (progress?.record !== undefined && (progress.status === "crashed" || progress.status === "timedOut")) {
+        const hint = failureHint(progress.record);
+        if (hint !== undefined) lines.push(`${under}${paint.dim(hint)}`);
+      }
       for (const secret of progress?.record?.secretsFound ?? []) {
         lines.push(`${under}${paint.red(`Its postrun image holds the value of ${secret.name}`)} ${paint.dim(`(${secretFiles(secret)})`)}`);
       }

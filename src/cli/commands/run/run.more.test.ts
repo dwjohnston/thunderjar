@@ -89,7 +89,8 @@ Runs
   1.1  fake-sleeper/fake-model-small-001  completed  0:00
        isPrimeTsExists: true
   2.1  fake-crasher/fake-model-small-001  crashed (exited 1)  0:00
-  3.1  fake-silent/fake-model-small-001   completed  0:00
+       fake-crasher: no space left on device
+  3.1  fake-silent/fake-model-small-001   completed  0:00  no result file
        isPrimeTsExists: true
 
 3 runs: 2 completed, 1 crashed
@@ -155,7 +156,7 @@ Runs
        isPrimeTsExists: true
   2.1  fake-crasher/fake-model-small-001  crashed (didn't start)  0:0N
        Its container didn't start: it didn't start within <duration>
-  3.1  fake-silent/fake-model-small-001   completed  0:00
+  3.1  fake-silent/fake-model-small-001   completed  0:00  no result file
        isPrimeTsExists: true
 
 3 runs: 2 completed, 1 crashed

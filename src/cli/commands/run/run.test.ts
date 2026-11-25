@@ -399,7 +399,7 @@ export default declareTestCase({
 
     expect(stdout).toBe("");
     expect(stderr).toMatch(
-      /^Error: Can't use the run data store, Postgres at \$THUNDERJAR_DB_URL, so the execution stopped: .+\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead\.\n$/,
+      /^Error: Can't use the run data store, Postgres at \$THUNDERJAR_DB_URL, so nothing was run: .+\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead\.\n$/,
     );
     expect(stderr).not.toContain("secret");
     expect(exitCode).toBe(1);
@@ -452,6 +452,7 @@ export default declareHarness({ version: "1.0.0", models: { "fake-model-small-00
     expect(frame(stdout)).toEndWith(`
 Runs
   1.1  fake-harness-alpha/fake-model-small-001  crashed (exited 3, no result file)  <duration>
+       Error: unknown model
   2.1  fake-harness-beta/fake-model-large-001   completed  <duration>
 ${under(BETA_MEASURES)}
 
@@ -495,7 +496,7 @@ export default declareHarness({ version: "1.0.0", models: { "fake-model-small-00
     expect(exitCode).toBe(0);
     expect(frame(stdout)).toEndWith(`
 Runs
-  1.1  fake-harness-alpha/fake-model-small-001  completed  <duration>
+  1.1  fake-harness-alpha/fake-model-small-001  completed  <duration>  no result file
        isPrimeShape: {exitCode: 1, stdout: "", stdoutTruncated: false}   isPrimeTests: skipped (no file matches **/isPrime.ts)   isPrimeTsExists: false   saysArr: skipped (no reply: the agent left no result file)   tsIgnoreCount: skipped (no file matches **/*.ts)
 
 1 run: 1 completed
