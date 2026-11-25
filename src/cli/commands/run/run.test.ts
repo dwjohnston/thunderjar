@@ -14,7 +14,8 @@
 // tested with fakes, in src/execution/run/.
 import { afterEach, describe, expect, test } from "bun:test";
 import { sqliteStore, storeFileIn } from "../../../store/runDataStore.ts";
-import { thunderjar } from "../../../testing/cli.ts";
+import { REPO_ROOT } from "../../../testing/scenario.ts";
+import { TMP_DIR, thunderjar } from "../../../testing/cli.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { dataDir, KEY, removeDataDirs } from "../../../testing/runData.ts";
 import { scenario } from "../../../testing/scenario.ts";
@@ -104,4 +105,50 @@ test("run builds, runs each container, measures it and records it, through the d
     { outcome: "measured", data: { passed: 3, total: 5 } },
     { outcome: "measured", data: { passed: 5, total: 5 } },
   ]);
+});
+
+test("run --help says what --json leaves on each stream: the result at the end, and where the logs are", async () => {
+  const { stdout } = await thunderjar(scenario("0202"), ["run", "--help"]);
+
+  const json = stdout.split("\n").find((line) => line.trimStart().startsWith("--json"));
+  expect(json).toContain("when the command ends");
+  expect(json).not.toContain("Progress goes to stderr");
+});
+
+test("with a runtime in the config, only the registry checks stay on the host: everything else goes through the runtime's command", async () => {
+  await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+
+  const { exitCode } = await thunderjar(scenario("0211"), ["run", "example", "--data-dir", dataDir()], { env: { ...docker.env, ...KEY } });
+
+  expect(exitCode).toBe(0);
+  const commands = await docker.commands();
+  const onRuntime = "docker --context cloud ";
+  const onHost = commands.filter((command) => !command.startsWith(onRuntime));
+  expect(onHost[0]).toBe("docker login ghcr.io");
+  expect(onHost.slice(1).every((command) => command.startsWith("docker manifest inspect ghcr.io/acme/thunderjar-images:prerun-h"))).toBe(true);
+  expect(onHost.length).toBeGreaterThan(1);
+  for (const verb of ["build", "push", "run", "commit"]) {
+    expect(commands.filter((command) => command.startsWith(`${onRuntime}${verb} `)).length).toBeGreaterThan(0);
+  }
+});
+
+test("run asked to stop while it builds: builds no other image, and exits 143", async () => {
+  // Each build takes a second.
+  const images = ["thunderjar-prerun:ded54607", "thunderjar-prerun:e4f0784f"];
+  await using docker = await fakeDocker({ slow: images });
+  const builds = async () => (await docker.commands()).filter((command) => command.startsWith("docker build "));
+  const running = Bun.spawn(["bun", `${REPO_ROOT}/src/cli/index.ts`, "run", "two-harnesses", "--data-dir", dataDir()], {
+    cwd: scenario("0202"),
+    env: { ...Bun.env, TMPDIR: TMP_DIR, THUNDERJAR_LOG_FILE: `${TMP_DIR}/logs/${crypto.randomUUID()}.log`, ...docker.env, ...KEY },
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+
+  while ((await builds()).length === 0) await Bun.sleep(20);
+  running.kill("SIGTERM");
+
+  expect(await running.exited).toBe(143);
+  expect(await new Response(running.stderr).text()).toContain("Error: Interrupted (SIGTERM): stopped before any container ran.");
+  expect((await builds()).length).toBe(1);
+  expect(await docker.images()).toEqual([images[0] as string]);
 });
