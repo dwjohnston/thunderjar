@@ -122,7 +122,7 @@ export async function recordRun(
   run: CiRun,
   report: JunitReport,
   schema = SCHEMA,
-  _steps: CiStep[] = [],
+  steps: CiStep[] = [],
 ): Promise<void> {
   const row = {
     id: crypto.randomUUID(),
@@ -156,6 +156,17 @@ export async function recordRun(
     // Postgres takes at most 65535 parameters a statement.
     for (let i = 0; i < tests.length; i += 1000) {
       await tx`insert into ${tx(schema)}.ci_test_metrics ${tx(tests.slice(i, i + 1000))}`;
+    }
+    if (steps.length > 0) {
+      const stepRows = steps.map((s, i) => ({
+        ci_run_id: row.id,
+        recorded_at: run.startedAt,
+        position: i + 1,
+        name: s.name,
+        conclusion: s.conclusion,
+        seconds: s.seconds,
+      }));
+      await tx`insert into ${tx(schema)}.ci_step_metrics ${tx(stepRows)}`;
     }
   });
 }
