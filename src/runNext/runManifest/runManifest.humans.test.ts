@@ -106,30 +106,46 @@ describe(runManifest, () => {
         // 3-8: run 1 goes running → committing → committed, while run 2 waits
         expect(deps.state.history().at(3)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("running");
         expect(deps.state.history().at(3)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+
         expect(deps.state.history().at(4)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("running");
         expect(deps.state.history().at(4)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+
         expect(deps.state.history().at(5)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("running");
         expect(deps.state.history().at(5)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+
         expect(deps.state.history().at(6)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committing");
         expect(deps.state.history().at(6)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+
         expect(deps.state.history().at(7)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committing");
         expect(deps.state.history().at(7)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+
         expect(deps.state.history().at(8)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(8)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+
+        // By the time it's committed, run 1's agent, collect and commit steps have each been timed.
+        expect(deps.state.history().at(8)!.run.timings).toMatchObject({ agent: { count: 1 }, collect: { count: 1 }, commit: { count: 1 } });
 
         // 9-14: then run 2 does the same
         expect(deps.state.history().at(9)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(9)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("running");
+
         expect(deps.state.history().at(10)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(10)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("running");
+
         expect(deps.state.history().at(11)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(11)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("running");
+
         expect(deps.state.history().at(12)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(12)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("committing");
+
         expect(deps.state.history().at(13)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(13)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("committing");
+
         expect(deps.state.history().at(14)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(14)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("committed");
+
+        // By the time it's committed, run 2's agent, collect and commit steps have each been timed.
+        expect(deps.state.history().at(14)!.run.timings).toMatchObject({ agent: { count: 2 }, collect: { count: 2 }, commit: { count: 2 } });
 
         // 15: the execution recorded as complete
         expect(deps.state.history().at(15)!.run.execution?.status).toBe("complete");
