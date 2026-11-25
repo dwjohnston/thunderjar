@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { FakeClock } from "../Clock/FakeClock";
 import { FakeIo } from "../Io/FakeIo";
-import { addWarning, emptyRunState, setFailure, setRunStatus, updateRun, type RunState } from "../ApplicationState/ApplicationState";
+import { addNote, addWarning, emptyRunState, setFailure, setRunStatus, updateRun, type RunState } from "../ApplicationState/ApplicationState";
 import { FakeApplicationState } from "../ApplicationState/FakeApplicationState";
 import { createDisplayerService, renderState } from "./Displayer";
 
-const setup = (kind: "terminal" | "pipe" = "terminal", logPath?: string, extra: { render?: (state: RunState, now: number) => string; toJson?: (state: RunState) => unknown; columns?: number } = {}) => {
-    const io = new FakeIo({ stdout: kind, columns: extra.columns });
+const setup = (kind: "terminal" | "pipe" = "terminal", logPath?: string, extra: { render?: (state: RunState, now: number) => string; toJson?: (state: RunState) => unknown; columns?: number; rows?: number } = {}) => {
+    const io = new FakeIo({ stdout: kind, columns: extra.columns, rows: extra.rows });
     const clock = new FakeClock();
     const state = new FakeApplicationState();
     const displayer = createDisplayerService({ state, clock, stdout: io.stdout, stderr: io.stderr, logPath, render: extra.render, toJson: extra.toJson });
@@ -279,5 +279,86 @@ describe("stopping twice", () => {
         displayer.start();
         await clock.advance(3000);
         expect(io.stdout.text()).toBe("Runs: none\n");
+    });
+});
+
+describe("notes", () => {
+    test("JSON: each is written to stderr at stop, after the warnings and before the failure, and stdout is only the JSON", () => {
+        const { io, state, displayer } = setup("pipe", undefined, { toJson: () => ({ status: "failed" }) });
+        displayer.setMode("json");
+        displayer.start();
+        state.update(updateRun((s) => setFailure(addWarning(addNote(addNote(s, "2 of 2 agents didn't end cleanly:"), "  2×  crashed  no space left"), "old config"), "stopped")));
+        displayer.stop();
+        expect(io.stderr.text()).toBe("Warning: old config\n2 of 2 agents didn't end cleanly:\n  2×  crashed  no space left\nError: stopped\n");
+        expect(JSON.parse(io.stdout.text())).toEqual({ status: "failed" });
+    });
+
+    test("Interactive: they are the frame's to show, so none goes to stderr", () => {
+        const { io, state, displayer } = setup("pipe");
+        state.update(updateRun((s) => addNote(s, "1 of 2 agents didn't end cleanly:")));
+        displayer.stop();
+        expect(io.stderr.text()).toBe("");
+    });
+});
+
+describe("a frame taller than the terminal", () => {
+    /** A frame of `count` lines, `line 1` to `line <count>`, at tick `now`. */
+    const lines = (count: number) => (_state: RunState, now: number) => Array.from({ length: count }, (_, i) => `line ${i + 1} at ${now}\n`).join("");
+    /** What each write to stdout moved up over, and how many lines it then drew. */
+    const draws = (text: string) =>
+        text
+            .split("\x1b[0J")
+            .map((drawn) => ({ lines: drawn.split("\n").length - 1, up: /\x1b\[(\d+)A$/.exec(drawn)?.[1] }));
+
+    test("While it polls, only the rows that fit are drawn, its last ones, so each redraw erases exactly the one before", async () => {
+        const { io, clock, displayer } = setup("terminal", undefined, { render: lines(30), rows: 10 });
+        displayer.start();
+        await clock.advance(3000);
+
+        const frames = io.stdout.text().split(/\x1b\[\d+A\x1b\[0J/);
+        expect(frames.length).toBe(3);
+        // One row is left for the cursor.
+        expect(frames[0]).toBe(Array.from({ length: 9 }, (_, i) => `line ${i + 22} at 1000\n`).join(""));
+        expect(io.stdout.text()).toContain("\x1b[9A\x1b[0Jline 22 at 2000\n");
+        expect(io.stdout.text()).not.toContain("line 21 ");
+        displayer.stop();
+    });
+
+    test("At stop, the rows drawn are erased and the whole frame is written, once", async () => {
+        const { io, clock, displayer } = setup("terminal", undefined, { render: lines(30), rows: 10 });
+        displayer.start();
+        await clock.advance(2000);
+        displayer.stop();
+
+        expect(io.stdout.lastFrame()).toBe(Array.from({ length: 30 }, (_, i) => `line ${i + 1} at 2000\n`).join(""));
+        expect(io.stdout.text().split("line 1 at").length - 1).toBe(1);
+        expect(draws(io.stdout.text()).map(({ up }) => up)).toEqual(["9", "9", undefined]);
+    });
+
+    test("A line that wraps counts as the rows it takes", async () => {
+        const wide = (_state: RunState, now: number) => `first at ${now}\n${"x".repeat(45)}\n${"y".repeat(45)}\nlast\n`;
+        const { io, clock, displayer } = setup("terminal", undefined, { render: wide, rows: 5, columns: 20 });
+        displayer.start();
+        await clock.advance(2000);
+
+        // Four rows fit: `last`, and the three the line above it wraps onto.
+        expect(io.stdout.text()).toBe(`${"y".repeat(45)}\nlast\n\x1b[4A\x1b[0J${"y".repeat(45)}\nlast\n`);
+        displayer.stop();
+    });
+
+    test("A frame that fits is drawn whole, as ever", async () => {
+        const { io, clock, displayer } = setup("terminal", undefined, { render: lines(9), rows: 10 });
+        displayer.start();
+        await clock.advance(1000);
+        expect(io.stdout.text().split("\n").length - 1).toBe(9);
+        displayer.stop();
+    });
+
+    test("With no row count, e.g. a terminal that doesn't say, the whole frame is drawn", async () => {
+        const { io, clock, displayer } = setup("terminal", undefined, { render: lines(30) });
+        displayer.start();
+        await clock.advance(1000);
+        expect(io.stdout.text().split("\n").length - 1).toBe(30);
+        displayer.stop();
     });
 });
