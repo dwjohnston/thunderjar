@@ -17,6 +17,7 @@
 
 import type { SQL } from "bun";
 import type { JunitReport } from "./junit";
+import type { CiStep } from "./steps";
 
 export interface CiRun {
   runId: number;
@@ -78,6 +79,21 @@ create table if not exists ${schema}.ci_test_metrics (
 );
 create index if not exists ci_test_metrics_test on ${schema}.ci_test_metrics (file, name, recorded_at);
 create index if not exists ci_test_metrics_run on ${schema}.ci_test_metrics (ci_run_id);
+
+-- One row per step per CI job run, e.g. lint or typecheck.
+create table if not exists ${schema}.ci_step_metrics (
+  id bigserial primary key,
+  ci_run_id uuid not null references ${schema}.ci_runs (id) on delete cascade,
+  -- The job's start, copied here so time series need no join.
+  recorded_at timestamptz not null,
+  -- The step's position in the job, from 1.
+  position int not null,
+  name text not null,
+  conclusion text not null,
+  seconds double precision not null
+);
+create index if not exists ci_step_metrics_step on ${schema}.ci_step_metrics (name, recorded_at);
+create index if not exists ci_step_metrics_run on ${schema}.ci_step_metrics (ci_run_id);
 `;
 }
 
@@ -97,11 +113,17 @@ export async function createTables(sql: SQL, schema = SCHEMA): Promise<void> {
 }
 
 /**
- * Records a job run and its tests. It only inserts, so CI's role needs INSERT and nothing else. A
+ * Records a job run, its tests and its steps. It only inserts, so CI's role needs INSERT and nothing else. A
  * second record of the same run attempt and job is refused, by ci_runs' unique key: one upload per
  * job, and a re-run is a new attempt.
  */
-export async function recordRun(sql: SQL, run: CiRun, report: JunitReport, schema = SCHEMA): Promise<void> {
+export async function recordRun(
+  sql: SQL,
+  run: CiRun,
+  report: JunitReport,
+  schema = SCHEMA,
+  steps: CiStep[] = [],
+): Promise<void> {
   const row = {
     id: crypto.randomUUID(),
     run_id: run.runId,
@@ -134,6 +156,17 @@ export async function recordRun(sql: SQL, run: CiRun, report: JunitReport, schem
     // Postgres takes at most 65535 parameters a statement.
     for (let i = 0; i < tests.length; i += 1000) {
       await tx`insert into ${tx(schema)}.ci_test_metrics ${tx(tests.slice(i, i + 1000))}`;
+    }
+    if (steps.length > 0) {
+      const stepRows = steps.map((s, i) => ({
+        ci_run_id: row.id,
+        recorded_at: run.startedAt,
+        position: i + 1,
+        name: s.name,
+        conclusion: s.conclusion,
+        seconds: s.seconds,
+      }));
+      await tx`insert into ${tx(schema)}.ci_step_metrics ${tx(stepRows)}`;
     }
   });
 }

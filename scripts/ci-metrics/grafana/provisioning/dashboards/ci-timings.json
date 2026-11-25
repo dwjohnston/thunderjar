@@ -37,6 +37,23 @@
         "refresh": 1
       },
       {
+        "name": "kind",
+        "label": "Test kind",
+        "type": "custom",
+        "query": "regular,docker",
+        "multi": true,
+        "includeAll": true,
+        "allValue": "'regular','docker'",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      },
+      {
         "name": "outcome",
         "label": "Outcome",
         "type": "custom",
@@ -360,7 +377,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "with t as (\n  select m.file, m.name, m.duration_ms, m.recorded_at > now() - interval '7 days' as recent\n  from metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\n  where m.recorded_at > now() - interval '37 days' and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\n), s as (\n  select file, name,\n    percentile_cont(0.5) within group (order by duration_ms) filter (where not recent) as \"Before (ms)\",\n    percentile_cont(0.5) within group (order by duration_ms) filter (where recent) as \"Last 7 days (ms)\",\n    count(*) filter (where not recent) as before_runs, count(*) filter (where recent) as recent_runs\n  from t group by file, name\n)\nselect file as \"File\", name as \"Test\", \"Before (ms)\", \"Last 7 days (ms)\",\n  \"Last 7 days (ms)\" - \"Before (ms)\" as \"Change (ms)\",\n  \"Last 7 days (ms)\" / nullif(\"Before (ms)\", 0) - 1 as \"Change\"\nfrom s where before_runs >= 3 and recent_runs >= 3\norder by \"Change (ms)\" desc limit 25"
+          "rawSql": "with t as (\n  select m.file, m.name, m.duration_ms, m.recorded_at > now() - interval '7 days' as recent\n  from metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\n  where m.recorded_at > now() - interval '37 days' and m.status = 'passed' and case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end in ($kind) and r.job in ($job) and r.outcome in ($outcome)\n), s as (\n  select file, name,\n    percentile_cont(0.5) within group (order by duration_ms) filter (where not recent) as \"Before (ms)\",\n    percentile_cont(0.5) within group (order by duration_ms) filter (where recent) as \"Last 7 days (ms)\",\n    count(*) filter (where not recent) as before_runs, count(*) filter (where recent) as recent_runs\n  from t group by file, name\n)\nselect file as \"File\", name as \"Test\", \"Before (ms)\", \"Last 7 days (ms)\",\n  \"Last 7 days (ms)\" - \"Before (ms)\" as \"Change (ms)\",\n  \"Last 7 days (ms)\" / nullif(\"Before (ms)\", 0) - 1 as \"Change\"\nfrom s where before_runs >= 3 and recent_runs >= 3\norder by \"Change (ms)\" desc limit 25"
         }
       ],
       "fieldConfig": {
@@ -458,7 +475,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "select m.file as \"File\", m.name as \"Test\",\n  percentile_cont(0.5) within group (order by m.duration_ms) as \"Median (ms)\",\n  percentile_cont(0.9) within group (order by m.duration_ms) as \"p90 (ms)\",\n  count(*) as \"Runs\"\nfrom metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\nwhere $__timeFilter(m.recorded_at) and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\ngroup by m.file, m.name order by 3 desc limit 25"
+          "rawSql": "select case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end as \"Kind\", m.file as \"File\", m.name as \"Test\",\n  percentile_cont(0.5) within group (order by m.duration_ms) as \"Median (ms)\",\n  percentile_cont(0.9) within group (order by m.duration_ms) as \"p90 (ms)\",\n  count(*) as \"Runs\"\nfrom metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\nwhere $__timeFilter(m.recorded_at) and m.status = 'passed' and case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end in ($kind) and r.job in ($job) and r.outcome in ($outcome)\ngroup by 1, m.file, m.name order by 4 desc limit 25"
         }
       ],
       "fieldConfig": {
@@ -556,7 +573,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "time_series",
-          "rawSql": "with m as (\n  select m.* from metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\n  where $__timeFilter(m.recorded_at) and m.status = 'passed' and r.job in ($job) and r.outcome in ($outcome)\n    and (m.file || ' ' || m.name) ~* '$test_filter'\n), top as (\n  select file, name from m group by file, name\n  order by percentile_cont(0.5) within group (order by duration_ms) desc limit 10\n)\nselect m.recorded_at as time, m.name as metric, m.duration_ms as value\nfrom m join top using (file, name) order by 1"
+          "rawSql": "with m as (\n  select m.* from metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\n  where $__timeFilter(m.recorded_at) and m.status = 'passed' and case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end in ($kind) and r.job in ($job) and r.outcome in ($outcome)\n    and (m.file || ' ' || m.name) ~* '$test_filter'\n), top as (\n  select file, name from m group by file, name\n  order by percentile_cont(0.5) within group (order by duration_ms) desc limit 10\n)\nselect m.recorded_at as time, m.name as metric, m.duration_ms as value\nfrom m join top using (file, name) order by 1"
         }
       ],
       "fieldConfig": {
@@ -587,6 +604,190 @@
           "sort": "desc"
         }
       }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Test time per run, docker vs regular tests",
+      "description": "Sum of passed tests' durations in each run, split by whether the file is a .docker.test.ts.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 24,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawSql": "select r.started_at as time, case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end || ' tests, ' || r.job || ' job' as metric, sum(m.duration_ms) / 1000.0 as value\nfrom metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\nwhere $__timeFilter(r.started_at) and m.status = 'passed' and case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end in ($kind) and r.job in ($job) and r.outcome in ($outcome)\ngroup by 1, 2 order by 1"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Step times",
+      "description": "Each step's median and p90 time in the selected range, e.g. lint and typecheck. Skipped steps are left out.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 24,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Median|p90"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawSql": "select r.job as \"Job\", s.name as \"Step\",\n  percentile_cont(0.5) within group (order by s.seconds) as \"Median\",\n  percentile_cont(0.9) within group (order by s.seconds) as \"p90\",\n  count(*) as \"Runs\"\nfrom metrics.ci_step_metrics s join metrics.ci_runs r on r.id = s.ci_run_id\nwhere $__timeFilter(r.started_at) and s.conclusion <> 'skipped' and r.job in ($job) and r.outcome in ($outcome)\ngroup by r.job, s.name order by min(s.position)"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Step time per run",
+      "description": "How long each step took, run by run. Hide steps by clicking the legend.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 24,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "median",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawSql": "select r.started_at as time, r.job || ': ' || s.name as metric, s.seconds as value\nfrom metrics.ci_step_metrics s join metrics.ci_runs r on r.id = s.ci_run_id\nwhere $__timeFilter(r.started_at) and s.conclusion <> 'skipped' and r.job in ($job) and r.outcome in ($outcome)\norder by 1"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Top test failures",
+      "description": "The tests that failed most often in the selected range, with how often they failed when they ran. Skipped runs don't count.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 70,
+        "w": 24,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Failure rate"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percentunit"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last failed"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawSql": "select case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end as \"Kind\", m.file as \"File\", m.name as \"Test\",\n  count(*) filter (where m.status = 'failed') as \"Failures\",\n  count(*) as \"Runs\",\n  (count(*) filter (where m.status = 'failed'))::float / count(*) as \"Failure rate\",\n  max(m.recorded_at) filter (where m.status = 'failed') as \"Last failed\"\nfrom metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\nwhere $__timeFilter(m.recorded_at) and m.status <> 'skipped' and case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end in ($kind) and r.job in ($job) and r.outcome in ($outcome)\n  and (m.file || ' ' || m.name) ~* '$test_filter'\ngroup by 1, m.file, m.name\nhaving count(*) filter (where m.status = 'failed') > 0\norder by \"Failures\" desc, \"Failure rate\" desc limit 25"
+        }
+      ]
     }
   ]
 }

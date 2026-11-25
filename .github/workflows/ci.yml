@@ -45,6 +45,8 @@ jobs:
         run: bun scripts/ci-metrics/upload.ts junit.xml --outcome ${{ job.status }}
         env:
           CI_METRICS_DB_URL: ${{ secrets.CI_METRICS_DB_URL }}
+          # To read the job's step timings.
+          GITHUB_TOKEN: ${{ github.token }}
 
   # Its own job, so it runs alongside check rather than after it.
   docker:
@@ -54,6 +56,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # For the CI metrics upload to read the job's step timings.
+      actions: read
     steps:
       # For the CI timing metrics: scripts/ci-metrics.
       - name: Note the job's start
@@ -86,6 +90,8 @@ jobs:
         run: bun scripts/ci-metrics/upload.ts junit-docker.xml --outcome ${{ job.status }}
         env:
           CI_METRICS_DB_URL: ${{ secrets.CI_METRICS_DB_URL }}
+          # To read the job's step timings.
+          GITHUB_TOKEN: ${{ github.token }}
 
   # Builds the versioned docs site, as the deploy after a release does, so a release
   # PR whose docs won't build can't be merged.
