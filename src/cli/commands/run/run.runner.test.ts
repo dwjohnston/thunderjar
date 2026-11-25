@@ -338,20 +338,9 @@ export default declareMeasurement({
     const { stderr, exitCode } = await thunderjar(copy.dir, ["run", "example", "--data-dir", "elsewhere"]);
 
     expect(stderr).toBe(
-      "Error: --data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore. Pass --local to run here.\n",
+      "Error: --data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore.\n",
     );
     expect(exitCode).toBe(1);
-  });
-
-  test("--local runs here, as without a runner", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
-    await using copy = await copyWithRunner();
-
-    const { stdout, exitCode } = await thunderjar(copy.dir, ["run", "example", "--local"], { env: docker.env });
-
-    expect(exitCode).toBe(0);
-    expect(stdout).not.toContain("runner");
-    expect((await docker.commands()).filter((command) => command.startsWith(REMOTE) || command.includes("runner-"))).toEqual([]);
   });
 
   test("if the connection drops while it follows, it follows again, and writes each line once", async () => {

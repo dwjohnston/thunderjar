@@ -458,21 +458,6 @@ Pushing ${PRERUN} ... done
     ]);
   });
 
-  test("--local builds on the local Docker daemon, and pushes from there", async () => {
-    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
-
-    const { stdout, exitCode } = await thunderjar(scenario("0211"), ["build", "example", "--local"], { env: docker.env });
-
-    expect(exitCode).toBe(0);
-    expect(stdout).not.toContain("Building with");
-    expect(await commandsOf(docker)).toEqual([
-      "docker login ghcr.io",
-      "docker image ls --format {{.Repository}}:{{.Tag}} thunderjar-prerun",
-      "docker build -t thunderjar-prerun:4799f255 <CONTEXT>",
-      `docker tag thunderjar-prerun:4799f255 ${PRERUN}`,
-      `docker push --quiet ${PRERUN}`,
-    ]);
-  });
 });
 
 describe("--json", () => {

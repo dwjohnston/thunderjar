@@ -43,7 +43,6 @@ export async function runManifest(manifest: Manifest, deps: Dependencies): Promi
     matrix: { shape: matrixShape(config), permutations: manifest.permutations.length, iterations: config.iterations },
     ...(hasOverrides(config.overrides) && { overrides: givenOverrides(config.overrides) }),
   });
-  log.info({ executionId, testCase: manifest.testCaseName, runs: manifest.runs.length, concurrency: manifest.concurrency }, "execution starting");
   for (const { runId } of manifest.runs) setRun(deps, runId, "queued");
   await deps.runStore.recordExecution(executionRecord("running"));
 
@@ -98,14 +97,16 @@ export async function runManifest(manifest: Manifest, deps: Dependencies): Promi
   const stopped = deps.state.get().run.details?.stopRequested !== undefined;
   const failed = failure !== undefined || stopped || records.length < manifest.runs.length || records.some((record) => record.exitCode !== 0);
   const execution = executionRecord(failed ? "failed" : "complete", new Date(deps.clock.now()).toISOString());
+  const timings = { wallMs: deps.clock.now() - detailsOf(deps.state.get().run).startedAt, phases: detailsOf(deps.state.get().run).phases };
+  log.info({ executionId, ...timings }, "execution timings");
   await deps.runStore.recordExecution(execution);
-  log.info({ executionId, status: execution.status }, "execution finished");
+  log.info({ executionId, status: execution.status, ms: timings.wallMs }, "execution finished");
   if (failure !== undefined) throw failure.error;
 
   const [recordedIn, containerRuns] = await Promise.all([deps.settings.runStoreLocation(), deps.runStore.containerRunsOf(executionId)]);
   changeRunDetails(deps, (details) => ({
     ...details,
-    finished: { execution, recordedIn, containerRuns, timings: { wallMs: deps.clock.now() - detailsOf(deps.state.get().run).startedAt, phases: details.phases } },
+    finished: { execution, recordedIn, containerRuns, timings },
   }));
   return records;
 }

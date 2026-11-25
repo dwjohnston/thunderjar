@@ -60,7 +60,7 @@ async function build(manifest: Manifest, permutation: PlannedPermutation, deps: 
  * runtime, unless the store has it. A remote runtime only pulls an image the store already has.
  *
  * Throws a DockerUnavailableError, a DockerBuildError, a DockerPushError or a DockerPullError.
- * Once one fails, no more start, and those going finish first.
+ * Once one fails, or the process is asked to stop, no more start, and those going finish first.
  */
 export async function ensureImages(manifest: Manifest, deps: Deps): Promise<void> {
   const { imagePrefix, imageStore, runtime } = manifest.config;
@@ -107,6 +107,7 @@ export async function ensureImages(manifest: Manifest, deps: Deps): Promise<void
     // machine or another, it isn't pushed again. Nor built, for a remote runtime: it needs it only there.
     const stored = await (inStore.get(reference) as Promise<boolean>);
     if (stored && remote) {
+      log.info({ image, reference }, "prerun image already in the image store: not built or pushed");
       if (onRuntime.has(reference)) {
         log.info({ reference }, "prerun image already in the runtime: not pulled");
       } else {
@@ -143,7 +144,8 @@ export async function ensureImages(manifest: Manifest, deps: Deps): Promise<void
   };
 
   await inParallel(
-    images.map((permutation) => () => ensure(permutation)),
+    // Once the process is asked to stop, no more start: nothing will run from them.
+    images.map((permutation) => () => (deps.state.get().run.details?.stopRequested === undefined ? ensure(permutation) : Promise.resolve())),
     manifest.config.build.concurrency,
   );
 }

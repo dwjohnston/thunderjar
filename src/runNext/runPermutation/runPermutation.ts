@@ -41,6 +41,10 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 async function searchForSecrets(run: PlannedRun, deps: Deps): Promise<SecretSearch | undefined> {
   const searched = searchableSecrets([...run.permutation.env, ...run.permutation.secretEnv], deps.env.variables);
   if (searched.length === 0) return undefined;
+  return timed(deps, "secretSearch", () => search(run, searched, deps));
+}
+
+async function search(run: PlannedRun, searched: string[], deps: Deps): Promise<SecretSearch> {
   const container = `${run.container}-secrets`;
   const timeoutSeconds = secretSearchTimeoutSeconds();
   try {
@@ -114,7 +118,7 @@ export async function runPermutation(run: PlannedRun, deps: Deps, uploads: Uploa
   const { runId, permutation } = run;
   const manifest = deps.state.get().run.manifest as Manifest;
   const docker = deps.runtimeDocker;
-  const at = { runId, permutation: permutation.number, iteration: run.iteration };
+  const at = { executionId: manifest.executionId, permutation: permutation.number, iteration: run.iteration };
   const startedAt = deps.clock.now();
   let record: ContainerRunRecord | undefined;
   const crashed = async (reason: string, execution?: Execution): Promise<RunRecord> => {
@@ -168,7 +172,7 @@ export async function runPermutation(run: PlannedRun, deps: Deps, uploads: Uploa
       await timed(deps, "commit", () => docker.commit(run.container, run.postrunImage, permutation.runImage, permutation.testCaseEnv));
       // Before the post-run image is pushed: in the files it would push, for the values of the
       // variables the agent was given by name.
-      const secrets = await timed(deps, "secretSearch", () => searchForSecrets(run, deps));
+      const secrets = await searchForSecrets(run, deps);
       left = { execution, harnessResult, stderr, ...(secrets !== undefined && { secrets }) };
     } finally {
       await docker.removeContainer(run.container).catch(() => {});

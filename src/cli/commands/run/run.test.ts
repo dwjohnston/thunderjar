@@ -500,7 +500,7 @@ Recorded in <DATA>/runs.sqlite
     expect((await docker.commands()).filter((command) => command.includes("-measure-"))).toEqual([]);
   });
 
-  test("a container run that fails, not its agent, is an error, after recording the execution as failed", async () => {
+  test("a container run that fails, not its agent, is that run's outcome: recorded as failed to start, the rest still run, and the execution is failed", async () => {
     await using copy = await copyScenarioProject("0202");
     // Leaves the run script nowhere to write run.json.
     await Bun.write(
@@ -515,13 +515,18 @@ export default declareHarness({ version: "1.0.0", models: { "fake-model-small-00
 
     const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["run", "two-harnesses", "--data-dir", data], { env: { ...docker.env, ...KEY } });
 
-    expect(stdout).toMatch(/^Execution <ULID>\nBuilding thunderjar-prerun:\w{8} \.\.\. done\n 1\/2  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. failed\n$/);
-    expect(stderr).toMatch(/^Error: Running a container failed: .*thunderjar\/run\.json: Directory nonexistent\n$/);
+    // No execution-level error: the run's own line says it failed to start, and the next ran.
+    expect(stderr).toBe("");
+    expect(stdout).toMatch(/^Execution <ULID>\nBuilding thunderjar-prerun:\w{8} \.\.\. done\n 1\/2  iteration 1\/1  fake-harness-alpha \| plain  \.\.\. failed to start\n 2\/2  iteration 1\/1  fake-harness-beta \| plain  \.\.\. /);
+    expect(stdout).toMatch(/\n {2}1×  failed to start  .*\(1-1\)\n/);
+    expect(stdout).toMatch(/\nRecorded in .*\n$/);
     expect(exitCode).toBe(1);
     const store = await readStore(data);
     expect(store.execution).toMatchObject({ status: "failed", finishedAt: ISO });
-    expect(store.containerRuns).toEqual([]);
-    expect((await docker.commands()).filter((command) => command.startsWith("docker commit"))).toEqual([]);
+    expect(store.containerRuns.map((run) => run.permutation)).toEqual([1, 2]);
+    expect((store.containerRuns[0] as ContainerRunRecord).execution).toMatchObject({ exitCode: null, timedOut: false });
+    expect((store.containerRuns[0] as ContainerRunRecord).execution.failedToStart).toMatch(/thunderjar\/run\.json: Directory nonexistent$/);
+    expect((await docker.commands()).filter((command) => command.startsWith("docker commit") && command.includes("-1-1 "))).toEqual([]);
     expect(await docker.containers()).toEqual([]);
   });
 

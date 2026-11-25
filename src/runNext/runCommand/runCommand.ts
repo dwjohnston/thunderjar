@@ -66,19 +66,20 @@ export async function runCommand(testCaseName: string, options: RunOptions, deps
   const { overrides, mode, output } = splitOptions(options);
   const { displayer } = deps;
   let stopped: StopSignal | undefined;
-  let containerPrefix: string | undefined;
+  // Awaited before the command returns, so the process doesn't end with its containers still there.
+  let removing: Promise<void> | undefined;
   const offStop = deps.onStop((signal) => {
     if (stopped !== undefined) return;
     stopped = signal;
     const manifest = deps.state.get().run.manifest;
-    deps.stderr.write(`Interrupted (${signal}): stopping${manifest === undefined ? "" : ` execution ${manifest.executionId}'s containers${manifest.config.runtime === null ? "" : " on the runtime"}`}.\n`);
+    deps.stderr.write(`Error: Interrupted (${signal}): stopping${manifest === undefined ? "" : ` execution ${manifest.executionId}'s containers${manifest.config.runtime === null ? "" : " on the runtime"}`}.\n`);
     logEvent(deps, { type: "stopping", signal });
     changeRunDetails(deps, (details) => ({ ...details, stopRequested: signal }));
     // Its container runs end as crashed, now their containers are gone, and the execution is recorded as failed.
-    if (containerPrefix !== undefined) {
-      void deps.runtimeDocker.removeContainersNamed(containerPrefix).then(
-        (removed) => log.warn({ removed }, "execution interrupted: removed its containers"),
-        (error: unknown) => deps.stderr.write(`Couldn't remove its containers: ${error instanceof Error ? error.message : String(error)}\n`),
+    if (manifest !== undefined) {
+      removing = deps.runtimeDocker.removeContainersNamed(executionContainerPrefix(manifest.executionId, manifest.config.imagePrefix)).then(
+        (removed) => log.warn({ executionId: manifest.executionId, removed }, "execution interrupted: removed its containers"),
+        (error: unknown) => deps.stderr.write(`Error: Couldn't remove its containers: ${error instanceof Error ? error.message : String(error)}\n`),
       );
     }
   });
@@ -90,23 +91,24 @@ export async function runCommand(testCaseName: string, options: RunOptions, deps
   try {
     const testCaseConfig = await resolveTestCase(testCaseName, { ...overrides, imagePrefix: options.imagePrefix }, deps);
     for (const deprecation of testCaseConfig.deprecations) deps.stderr.write(`Warning: ${deprecation}\n`);
-    // Named before anything runs, so an interrupt at any point can remove them.
-    const running = runTestCase(testCaseConfig, deps, mode);
-    const executionId = deps.state.get().run.manifest?.executionId;
-    if (executionId !== undefined) containerPrefix = executionContainerPrefix(executionId, testCaseConfig.imagePrefix);
-    records = await running;
+    records = await runTestCase(testCaseConfig, deps, mode);
   } catch (error) {
     failure = { error };
   } finally {
+    await removing;
     offStop();
     displayer.stop(); // interactive: final frame; json: write the result to stdout
   }
   const signalCode = stopped === undefined ? undefined : stopped === "SIGINT" ? 130 : 143;
   if (failure !== undefined) {
-    const said = failureMessage(failure.error, deps.env.cwd, deps.state.get().run.manifest !== undefined);
-    if (said === undefined) throw failure.error;
+    const ran = deps.state.get().run.manifest !== undefined;
+    // An execution and its afterExecution can both fail: each is said, in the order they failed.
+    const errors: unknown[] = failure.error instanceof AggregateError ? failure.error.errors : [failure.error];
+    const said = errors.map((error) => failureMessage(error, deps.env.cwd, ran));
+    const unknown = errors.find((_, i) => said[i] === undefined);
+    if (unknown !== undefined) throw unknown;
     log.error({ err: failure.error }, "execution failed");
-    deps.stderr.write(`Error: ${said}\n`);
+    for (const message of said) deps.stderr.write(`Error: ${message}\n`);
     return { exitCode: signalCode ?? 1 };
   }
   const failed = deps.state.get().run.details?.finished?.execution.status === "failed";
