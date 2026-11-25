@@ -122,9 +122,16 @@ The docs site publishes the docs of every stable release, not of main.
 
 ## Running the tests
 
-Run only the tests of the code you've changed, one file at a time, by path. That includes the tests of code that uses what you changed, such as a shared fixture.
+Run only the tests that your change affects, with `--changed`. Bun picks the test files that import, directly or not, a file git says has changed, so a shared fixture's users run too.
 
-✅ **Do** run each test file you've touched, and each one that depends on it, by path.
+✅ **Do** run the tests affected by what you haven't committed yet, or by everything since a commit or branch.
+
+```sh
+bun test --changed          # what you haven't committed
+bun test --changed=main     # everything on this branch
+```
+
+✅ **Do** run one file by path while you work on it.
 
 ```sh
 bun test src/runNext/plan/plan.test.ts
