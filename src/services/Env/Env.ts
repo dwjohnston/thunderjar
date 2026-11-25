@@ -14,6 +14,6 @@ export type Env = {
 };
 
 /** The real Env: this process's folder and variables. The only place that should read them. */
-export function processEnv(): Env {
+export function createEnvService(): Env {
   return { cwd: process.cwd(), variables: { ...Bun.env } };
 }

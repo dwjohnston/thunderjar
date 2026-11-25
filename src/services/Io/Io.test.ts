@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { lineReader, processIo } from "./Io";
+import { lineReader, createIoService } from "./Io";
 
-describe("processIo", () => {
+describe("createIoService", () => {
     test("onStop calls the handler for SIGINT and SIGTERM until it stops listening", () => {
-        const io = processIo();
+        const io = createIoService();
         const signals: string[] = [];
         const stopListening = io.onStop((signal) => signals.push(signal));
 
@@ -16,7 +16,7 @@ describe("processIo", () => {
     });
 
     test("Its outputs say whether they're terminals, and how wide only if they are", () => {
-        const { stdout, stderr } = processIo();
+        const { stdout, stderr } = createIoService();
 
         expect(stdout.isTTY).toBe(process.stdout.isTTY === true);
         expect(stderr.columns).toBe(process.stderr.isTTY ? process.stderr.columns : undefined);

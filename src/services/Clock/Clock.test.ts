@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { SystemClock } from "./Clock";
+import { createClockService } from "./Clock";
 
-describe("SystemClock", () => {
-    const clock = new SystemClock();
+describe(createClockService, () => {
+    const clock = createClockService();
     test("Its timers and sleeps run on real time", async () => {
         const before = clock.now();
         let fired = false;

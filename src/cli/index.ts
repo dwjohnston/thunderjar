@@ -6,7 +6,7 @@ const [command, hook, ...rest] = process.argv.slice(2);
 if (command === "capture" && isHook(hook)) {
   await runHookCommand(hook, harnessArg(rest));
 } else {
-  const [{ createProgram }, { SystemClock }, { processEnv }, { processIo }, { cliDocker }] = await Promise.all([
+  const [{ createProgram }, { createClockService }, { createEnvService }, { createIoService }, { createDockerService }] = await Promise.all([
     import("./program.ts"),
     import("../services/Clock/Clock.ts"),
     import("../services/Env/Env.ts"),
@@ -14,6 +14,6 @@ if (command === "capture" && isHook(hook)) {
     import("../docker/cliDocker.ts"),
   ]);
   // Every service is built here, and only here: see src/services/HUMANS.md.
-  const clock = new SystemClock();
-  await createProgram({ clock, env: processEnv(), io: processIo(), docker: cliDocker(clock) }).parseAsync();
+  const clock = createClockService();
+  await createProgram({ clock, env: createEnvService(), io: createIoService(), docker: createDockerService(clock) }).parseAsync();
 }

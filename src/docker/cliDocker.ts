@@ -30,7 +30,7 @@ import { removeLocalImage } from "./localImages.ts";
 import { openShellSession } from "./shellSession.ts";
 
 /** Docker over the `docker` CLI, on `runtime`, the local daemon by default, timing its containers by `clock`. */
-export function cliDocker(clock: Clock, runtime: DockerRuntime = localRuntime()): Docker {
+export function createDockerService(clock: Clock, runtime: DockerRuntime = localRuntime()): Docker {
   const { spawnRun, killContainer } = containerRuns(runtime);
   const docker: Docker = {
     build: (contextDir, image, options) => buildImage(contextDir, image, options, runtime),
