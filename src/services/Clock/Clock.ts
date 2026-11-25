@@ -10,27 +10,34 @@ export interface Clock {
   sleep(ms: number): Promise<void>;
 }
 
-const realTimers = new Map<number, ReturnType<typeof setTimeout>>();
-let nextId = 1;
+/** Real time. Built only at an entry point: `new SystemClock()`. */
+export class SystemClock implements Clock {
+  private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
+  private nextId = 1;
 
-/** Real time. */
-export const realClock: Clock = {
-  now: () => Date.now(),
-  setTimeout: (callback, ms) => {
-    const id = nextId++;
-    realTimers.set(
+  now(): number {
+    return Date.now();
+  }
+
+  setTimeout(callback: () => void, ms: number): TimerHandle {
+    const id = this.nextId++;
+    this.timers.set(
       id,
       setTimeout(() => {
-        realTimers.delete(id);
+        this.timers.delete(id);
         callback();
       }, ms),
     );
     return { id };
-  },
-  clearTimeout: (handle) => {
+  }
+
+  clearTimeout(handle: TimerHandle | undefined): void {
     if (handle === undefined) return;
-    clearTimeout(realTimers.get(handle.id));
-    realTimers.delete(handle.id);
-  },
-  sleep: (ms) => Bun.sleep(ms),
-};
+    clearTimeout(this.timers.get(handle.id));
+    this.timers.delete(handle.id);
+  }
+
+  sleep(ms: number): Promise<void> {
+    return Bun.sleep(ms);
+  }
+}

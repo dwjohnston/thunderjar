@@ -1,5 +1,6 @@
 // The real Docker service: each method one of this folder's functions, unchanged, on `runtime`.
 // It lives here, not in src/services/Docker/, because `services` is a lower layer than `docker`.
+import type { Clock } from "../services/Clock/Clock.ts";
 import type { Docker } from "../services/Docker/Docker.ts";
 import {
   buildImage,
@@ -28,8 +29,8 @@ import {
 import { removeLocalImage } from "./localImages.ts";
 import { openShellSession } from "./shellSession.ts";
 
-/** Docker over the `docker` CLI, on `runtime`, the local daemon by default. */
-export function cliDocker(runtime: DockerRuntime = localRuntime()): Docker {
+/** Docker over the `docker` CLI, on `runtime`, the local daemon by default, timing its containers by `clock`. */
+export function cliDocker(clock: Clock, runtime: DockerRuntime = localRuntime()): Docker {
   const { spawnRun, killContainer } = containerRuns(runtime);
   const docker: Docker = {
     build: (contextDir, image, options) => buildImage(contextDir, image, options, runtime),
@@ -40,7 +41,7 @@ export function cliDocker(runtime: DockerRuntime = localRuntime()): Docker {
     push: (image, reference) => pushImage(image, reference, runtime),
     pull: (reference) => pullImage(reference, runtime),
     inRegistry: (reference) => inRegistry(reference),
-    run: (image, name, script, options) => runContainer(image, name, script, { ...options, runtime, docker }),
+    run: (image, name, script, options) => runContainer(image, name, script, { ...options, runtime, clock, docker }),
     commit: (name, image, like, kept) => commitContainer(name, image, like, runtime, kept),
     removeContainer: (name) => removeContainer(name, runtime),
     removeContainersNamed: (prefix) => removeContainersNamed(prefix, runtime),
