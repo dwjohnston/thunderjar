@@ -326,14 +326,6 @@ describe("runManifest: a run data store that stops working", () => {
 
   it("records the execution as failed if the store works again by the end", async () => {
     const fakes = failingStore();
-    const measure = fakes.measurer.collect.bind(fakes.measurer);
-    let collects = 0;
-    // The one write that fails is the first run's.
-    fakes.measurer.collect = async (...given) => {
-      const collected = await measure(...given);
-      if (++collects > 1) fakes.store.failWith(undefined);
-      return collected;
-    };
     const recordExecution = fakes.store.recordExecution.bind(fakes.store);
     fakes.store.recordExecution = (record) => {
       fakes.store.failWith(undefined);
@@ -399,8 +391,9 @@ describe("runManifest: asked to stop", () => {
     expect(took).toBe(0);
     expect(result.runs).toEqual([
       { runId: RUN.a1, status: "crashed", error: STOPPED },
+      // Still waiting for the first to warm the prompt cache.
       { runId: RUN.a2, status: "cancelled" },
-      { runId: RUN.b1, status: "crashed", error: STOPPED },
+      { runId: RUN.b1, status: "cancelled" },
       { runId: RUN.b2, status: "cancelled" },
     ]);
     expect(fakes.runtimeDocker.containers()).toEqual([]);
