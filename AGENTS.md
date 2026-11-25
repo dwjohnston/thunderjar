@@ -122,19 +122,17 @@ The docs site publishes the docs of every stable release, not of main.
 
 ## Running the tests
 
-The whole suite takes over a minute, so run as little of it as the change needs.
+Run only the tests of the code you've changed, one file at a time, by path. That includes the tests of code that uses what you changed, such as a shared fixture.
 
-✅ **Do** run the tests of the code you're changing, by path, while you work.
+✅ **Do** run each test file you've touched, and each one that depends on it, by path.
 
 ```sh
-bun test src/cli/commands/plan
+bun test src/runNext/plan/plan.test.ts
 ```
 
-✅ **Do** run the whole suite with `bun run test`, once, before you commit.
+❌ **Don't** run the whole suite, with `bun run test` or bare `bun test`.
 
-❌ **Don't** run bare `bun test` for the whole suite.
-
-**Why:** `bun run test` adds `--parallel`, and finishes in about half the time of bare `bun test` (~70s vs ~130s). `bunfig.toml` can't set `parallel`, so the flag lives in the script. The slowest files, `src/cli/commands/run/*.test.ts` and `src/docker/docker.test.ts`, wait out real timeouts, so leave them out unless you've touched that code.
+**Why:** the whole suite takes over a minute, and its slowest files, `src/cli/commands/run/*.test.ts` and `src/docker/docker.test.ts`, wait out real timeouts. CI runs the whole suite.
 
 ## Fixtures 
 
