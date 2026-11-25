@@ -245,5 +245,18 @@ describe(runManifest, () => {
 
         // 40 updates: the empty state, all queued, running, 6 for each of the 6 runs, then complete.
         expect(deps.state.history()).toHaveLength(1 + 1 + 1 + 6 * 6 + 1);
+
+        // Halfway, at update 24: permutation o's 3 runs are committed, x's first is committing, and the rest wait.
+        const halfway = deps.state.history().at(24)!.run;
+        expect(Object.entries(halfway.runs).map(([runId, { status }]) => `${runId} ${status}`)).toMatchInlineSnapshot(`
+          [
+            "01exec-oooooooo-i1 committed",
+            "01exec-oooooooo-i2 committed",
+            "01exec-oooooooo-i3 committed",
+            "01exec-xxxxxxxx-i1 committing",
+            "01exec-xxxxxxxx-i2 queued",
+            "01exec-xxxxxxxx-i3 queued",
+          ]
+        `);
     });
 });
