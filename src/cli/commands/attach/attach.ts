@@ -9,6 +9,7 @@
  * Humans: add your notes here
  */
 
+import type { Services } from "../../services.ts";
 import { Command } from "commander";
 import { ConfigError, findThunderjarRoot } from "../../../config/loader.ts";
 import { loadProjectConfig } from "../../../config/projectConfig.ts";
@@ -30,14 +31,14 @@ import { type RunDisplay, runDisplay, showSecrets, showTimings, showUnclean, sho
  * leaves the execution running. With `stop`, stops the execution instead: its runner, and every
  * container it left.
  */
-async function attach(cwd: string, executionId: string, imagePrefix: string, stop = false, json = false, showsTimings = false): Promise<void> {
+async function attach({ runtimeDocker }: Services, cwd: string, executionId: string, imagePrefix: string, stop = false, json = false, showsTimings = false): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const { runtime } = await loadProjectConfig(root);
   if (runtime === null) throw new ConfigError("attach follows an execution on a runtime, and thunderjar.config.ts gives none.");
   const paint = painter();
   if (stop) {
     try {
-      const removed = await stopOnRuntime(runtime.command, executionId, imagePrefix);
+      const removed = await stopOnRuntime(runtimeDocker, executionId, imagePrefix);
       print(removed.length === 0 ? `Execution ${executionId} has nothing running on the runtime.` : `Stopped execution ${executionId}: removed ${removed.length} container${removed.length === 1 ? "" : "s"} from the runtime.`);
     } catch (caught) {
       if (!(caught instanceof DockerContainerError)) throw caught;
@@ -59,7 +60,7 @@ async function attach(cwd: string, executionId: string, imagePrefix: string, sto
   process.on("SIGTERM", () => detach("SIGTERM"));
   try {
     const { execution, recordedIn, containerRuns } = await followToEnd(
-      runtime.command,
+      runtimeDocker,
       executionId,
       imagePrefix,
       root,
@@ -97,7 +98,7 @@ async function attach(cwd: string, executionId: string, imagePrefix: string, sto
   }
 }
 
-export function createAttachCommand(): Command {
+export function createAttachCommand(services: Services): Command {
   return new Command("attach")
     .description(
       "Follow an execution that's running on the runtime, in a runner (thunderjar.config.ts's runtime.runner), after `run` was interrupted or lost its connection: writes what `run` would have, from the execution's start, and ends as `run` would. Interrupting it leaves the execution running. --stop stops the execution instead.",
@@ -109,7 +110,7 @@ export function createAttachCommand(): Command {
     .addOption(jsonOption())
     .action(
       reportingConfigErrors(async (executionId: string, options: { stop?: boolean; imagePrefix: string; json?: boolean; timings?: boolean }) =>
-        attach(process.cwd(), executionId, options.imagePrefix, options.stop, options.json, options.timings),
+        attach(services, process.cwd(), executionId, options.imagePrefix, options.stop, options.json, options.timings),
       ),
     );
 }

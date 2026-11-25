@@ -18,6 +18,7 @@ import type { Submission } from "../../../execution/runnerSpec.ts";
 import type { ExecutionRecord } from "../../../store/runDataStore.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { print } from "../../output.ts";
+import type { Services } from "../../services.ts";
 
 /** How long a runner being stopped waits for its execution to be recorded as failed. */
 const STOP_SETTLE_MS = 15_000;
@@ -28,7 +29,7 @@ const STOP_SETTLE_MS = 15_000;
  * Stopped with SIGTERM, as `docker stop` does, it removes the execution's containers first, so
  * the execution is recorded as failed. Exits 1 if the execution stopped on an error.
  */
-async function runner(cwd: string, submissionPath: string): Promise<void> {
+async function runner({ hostDocker }: Services, cwd: string, submissionPath: string): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   let submission: Submission;
   try {
@@ -45,7 +46,7 @@ async function runner(cwd: string, submissionPath: string): Promise<void> {
     if (stopping) return;
     stopping = true;
     void (async () => {
-      await removeExecutionContainers(submission.plan.executionId, submission.imagePrefix, null).catch(() => {});
+      await removeExecutionContainers(submission.plan.executionId, submission.imagePrefix, hostDocker).catch(() => {});
       await Promise.race([executing?.catch(() => {}), Bun.sleep(STOP_SETTLE_MS)]);
       process.exit(signal === "SIGINT" ? 130 : 143);
     })();
@@ -56,16 +57,18 @@ async function runner(cwd: string, submissionPath: string): Promise<void> {
     root,
     submission,
     (event) => print(JSON.stringify(event)),
+    // The runner runs on the runtime: its host is the runtime, and its Docker the runtime's own daemon.
+    hostDocker,
     (execution) => (executing = execution),
   );
   if (record === undefined) process.exitCode = 1;
 }
 
-export function createRunnerCommand(): Command {
+export function createRunnerCommand(services: Services): Command {
   return new Command("runner")
     .description(
       "Internal: what a runtime's runner runs. Waits for the execution `run` submits, a file at --submission, then runs it on the local Docker daemon, with the project in the current folder, and writes each thing it does as a line of JSON.",
     )
     .requiredOption("--submission <path>", "where the submitted execution is written")
-    .action(reportingConfigErrors(async (options: { submission: string }) => runner(process.cwd(), options.submission)));
+    .action(reportingConfigErrors(async (options: { submission: string }) => runner(services, process.cwd(), options.submission)));
 }

@@ -17,6 +17,7 @@ import { $ } from "bun";
 import { registryHost, type ProjectConfig } from "../config/projectConfig.ts";
 import { ConfigError } from "../config/loader.ts";
 import { localRuntime, login } from "../docker/docker.ts";
+import type { DockerService } from "../services/Docker/Docker.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { type ExecutionRecord, postgresStore, type RunDataStore, sqliteStore } from "../store/runDataStore.ts";
 import { runExecution } from "./runExecution.ts";
@@ -61,12 +62,13 @@ export function openRunnerStore(declared: ProjectConfig["runDataStore"], root: s
  * event, the last of them `finished` or `failed`. Its variables are put in this process's
  * environment first, so the containers it runs are given them. Returns the execution's record,
  * or undefined if it stopped on an error. `running` is given the execution as it starts, for a
- * caller that stops it.
+ * caller that stops it. Its containers run on `docker`: the runtime's own daemon, on its socket.
  */
 export async function runSubmission(
   root: string,
   submission: Submission,
   emit: (event: RunnerEvent) => void,
+  docker: DockerService,
   running?: (execution: Promise<ExecutionRecord>) => void,
 ): Promise<ExecutionRecord | undefined> {
   // Only the names: the values are never logged.
@@ -92,6 +94,7 @@ export async function runSubmission(
         imageStore,
         // The runtime's own Docker daemon, on its socket: what a host reaches with the runtime's command.
         runtime: { command: localRuntime().command },
+        docker,
         concurrency: submission.concurrency,
         prerunFromStore: true,
       },

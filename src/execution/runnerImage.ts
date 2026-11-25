@@ -21,7 +21,8 @@
 // version of Thunderjar and of the project's declarations, and found there after.
 import { $, CryptoHasher, Glob } from "bun";
 import { abbreviateHash } from "../config/permutations.ts";
-import { buildImage, inRegistry, remoteRuntime } from "../docker/docker.ts";
+import { inRegistry } from "../docker/docker.ts";
+import type { DockerService } from "../services/Docker/Docker.ts";
 import { moduleLogger } from "../log/logger.ts";
 import { type PushHooks, pushToStore } from "./imageStore.ts";
 import type { PrerunBuildHooks } from "./prerunBuilds.ts";
@@ -123,12 +124,11 @@ export async function runnerContext(root: string): Promise<RunnerContext> {
 
 /**
  * Makes sure the image store `repository` has the runner image for the project whose
- * `.thunderjar/` folder is `root`, building it on the runtime's daemon, which `command` reaches,
+ * `.thunderjar/` folder is `root`, building it on the runtime's daemon, `docker`,
  * and pushing it from there, if it isn't there, calling `hooks`, and returns its reference.
  * Throws a DockerBuildError or a DockerPushError.
  */
-export async function storeRunnerImage(root: string, repository: string, command: string[], hooks: PrerunBuildHooks & PushHooks = {}): Promise<string> {
-  const runtime = remoteRuntime(command);
+export async function storeRunnerImage(root: string, repository: string, docker: DockerService, hooks: PrerunBuildHooks & PushHooks = {}): Promise<string> {
   const context = await runnerContext(root);
   const reference = storedRunnerImage(repository, context.hash);
   if (await inRegistry(reference)) {
@@ -139,11 +139,11 @@ export async function storeRunnerImage(root: string, repository: string, command
   try {
     for (const { path, from, text } of context.files) await Bun.write(`${contextDir}/${path}`, text ?? Bun.file(from as string));
     hooks.onBuilding?.(reference);
-    await buildImage(contextDir, reference, {}, runtime);
+    await docker.build(contextDir, reference, {});
     hooks.onBuilt?.(reference);
   } finally {
     await $`rm -rf ${contextDir}`.quiet();
   }
-  await pushToStore(reference, reference, hooks, runtime);
+  await pushToStore(reference, reference, hooks, docker);
   return reference;
 }

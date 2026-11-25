@@ -3,8 +3,8 @@
 // - `Docker`, the old path: the functions in src/docker/ as one service, so a test can pass a
 //   FakeDocker in their place. The types each method takes and returns live here, and src/docker/
 //   re-exports them under their old names.
-// - `DockerService`, the new path: empty, and a method is added as each caller moves onto it. There
-//   are two, built in src/cli/index.ts: `hostDocker` and `runtimeDocker` (see src/cli/HUMANS.md).
+// - `DockerService`, the new path: a method is added as each caller moves onto it. There are two,
+//   built in src/cli/index.ts: `hostDocker` and `runtimeDocker` (see src/cli/HUMANS.md).
 
 /** A `docker run` process started by `Docker.spawnRun`. */
 export type ContainerProcess = {
@@ -133,10 +133,29 @@ export interface Docker {
 /** The part of Docker that `runContainer` runs on: what it spawns, kills and removes. */
 export type ContainerRuns = Pick<Docker, "spawnRun" | "killContainer" | "removeContainer">;
 
-/** Docker on the new path. Empty: a method is added as each caller moves onto it. */
-export interface DockerService {}
-
-/** Docker reached by running `command`, e.g. `["docker"]`, or a runtime's `["docker", "--context", "cloud"]`. */
-export function createDockerService(_command: string[]): DockerService {
-  return {};
-}
+/**
+ * Docker on the new path: what the run path asks of the Docker it runs containers on. Methods are
+ * added as each caller moves onto it. Until it has an implementation of its own, the real one is
+ * the temporary adapter over the old path, `createDockerServiceAdapter` in src/docker/dockerServiceAdapter.ts.
+ */
+export interface DockerService
+  extends Pick<
+    Docker,
+    | "build"
+    | "imagesIn"
+    | "push"
+    | "pull"
+    | "run"
+    | "commit"
+    | "removeContainer"
+    | "removeContainersNamed"
+    | "startDetached"
+    | "stop"
+    | "containerState"
+    | "readFile"
+    | "writeFile"
+    | "followLogs"
+    | "stderrTail"
+    | "openShellSession"
+    | "diskUsage"
+  > {}

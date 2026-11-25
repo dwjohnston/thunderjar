@@ -12,6 +12,7 @@
 // Following an execution that runs on the runtime, in a runner, for `run` and `attach`: its
 // events are turned into the hooks that write the execution's lines, and its last gives its
 // records, or the error it stopped on.
+import type { DockerService } from "../../../services/Docker/Docker.ts";
 import { errorOf, replayEvent, RunnerError, type RunnerEvent } from "../../../execution/runnerEvents.ts";
 import { followRunner, removeRunner, RunnerLostError, runnerLog, RunnerUnreachableError } from "../../../execution/onRuntime.ts";
 import type { RunHooks } from "../../../execution/runExecution.ts";
@@ -38,7 +39,7 @@ export const detachedMessage = (signal: string, executionId: string) =>
  * aborts, never returns: whoever aborted it ends the process.
  */
 export async function followToEnd(
-  command: string[],
+  docker: DockerService,
   executionId: string,
   imagePrefix: string | undefined,
   root: string,
@@ -49,12 +50,12 @@ export async function followToEnd(
   let last: Extract<RunnerEvent, { event: "finished" | "failed" }> | undefined;
   /** Keeps the runner's log, which goes with its container, beside this command's own, then removes the container. */
   const tidy = async () => {
-    const log = await runnerLog(command, executionId, imagePrefix);
+    const log = await runnerLog(docker, executionId, imagePrefix);
     if (log !== undefined) await Bun.write(`${root}/logs/${executionId}-runner.log`, log).catch(() => {});
-    await removeRunner(command, executionId, imagePrefix);
+    await removeRunner(docker, executionId, imagePrefix);
   };
   const outcome = await followRunner(
-    command,
+    docker,
     executionId,
     imagePrefix,
     (event) => {
