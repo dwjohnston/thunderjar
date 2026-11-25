@@ -15,51 +15,6 @@ Thunderjar is a TypeScript/Bun CLI for
   - Different configurations of a run can be compared by comparing the same measurements 
 
   
-
-## Folder structure 
-
-- `fixtures`: Fixtures - see below for details. 
-- `src/`: the implementation.
-  - `log/`: the diagnostic logger (pino).
-  - `testing/`: the fixture harness that tests use to run the CLI in a scenario, plus fake Docker and registry.
-  - `api/`: the public API a project's `.thunderjar/` files use, e.g. the `declareX()` functions and their types.
-  - `instruments/`: the built-in measuring instruments, one folder each.
-  - `config/`: finds a project's `.thunderjar/` folder and loads its declarations.
-  - `docker/`: everything Thunderjar asks of Docker: building images, running and committing containers.
-  - `store/`: the run data store (SQLite or Postgres).
-  - `execution/`: runs an experiment's container runs, and aggregates their results.
-  - `measureTesting/`: `measure()`, shipped as `thunderjar/testing`, for a project's own tests of its measurements.
-  - `capture/`: the hooks that capture a coding-agent session as git records.
-  - `cli/`: 
-    - `index.ts`:" the entry point.
-    - `program.ts`: builds it
-    - `commands/`: one folder per command
-      - `<command>/`
-        - `<command>.ts`
-        - `<command>.test.ts`  
-  - `gauntlet/`: challenges that Thunderjar's own experiments set agents, one folder each. Not Thunderjar code: see below.
-- `docs/`: the VitePress docs site.
-  - `.vitepress/`: site config.
-  - `cli/`: CLI reference pages, generated per command.
-  - `index.md`: landing page.
-- `project-md/`: markdown files live here
-  - `candidates`: tracking various commits points across varios projects that will make good thunderjar test cases
-  - `research`: preserved unstructured investigations
-  - `prd` - product requirements docs
-  - `delivery`: concreted planned work goes here 
-    - `ralph.ts`: runs the ready tasks one at a time with `claude -p`, each to a draft PR
-    - `tasks`
-      - `archive`: tasks from before the ralph loop
-      - `done`: completed tasks go here
-      - `draft`: draft tasks here 
-      - `<task-number>_<task-name>.md`: ready tasks here 
-- `scripts/`: release, versioned-docs and lint tooling.
-  - `ci-metrics/`: uploads CI test timings to Supabase, and a local Grafana dashboard for them. See its README.
-- `.changeset/`: pending changesets. 
-- `.release/`: release candidate state (`rc.json`).
-- `.github/`: CI workflows.
-- `.agents/`: agent skills.
-
 ## `src/gauntlet`
 
 `src/gauntlet` isn't Thunderjar code. Each folder in it is a small project of its own, with its own instructions and tools, that the test cases in `.thunderjar/` set agents to work on. oxlint and `bun test` skip it (`.oxlintrc.json`'s `ignorePatterns`, and `bunfig.toml`).
@@ -96,13 +51,6 @@ execSync("git status --short");
 
 Never use `console` in `src/`. The `no-console` lint rule bans it.
 
-- A command's output, what the user reads, goes through `src/cli/output.ts`: `print` for stdout, `printError` and `printWarning` for stderr. Tests assert on it.
-- A command that reports results takes `--json` (`jsonOption()` in `src/cli/json.ts`), and prints them with `printJson`. With `--json`, `print`, waiting lines and live rows go to stderr, so stdout is the JSON alone. Errors stay on stderr, with a non-zero exit code.
-- Diagnostics go through the pino logger in `src/log/logger.ts`. Take one per module with `moduleLogger("<module>")`.
-  - It writes readable lines to a file, never the terminal: a new file in `.thunderjar/logs/` (git-ignored) per command, or `--log-file`.
-  - It logs at `info`, unless `-v` (debug), `--log-level` or `THUNDERJAR_LOG_LEVEL` says otherwise.
-  - The test harness sends it to a file under `fixtures/.tmp/`. Pass `{ log: true }` to `thunderjar()` to read it.
-
 ```ts
 // ✅ Do
 const log = moduleLogger("docker");
@@ -112,8 +60,6 @@ print(`${built.length} built`);
 // ❌ Don't
 console.log(`docker failed: ${stderr}`);
 ```
-
-**Why:** stdout is the command's output, which users and tests read, and on a terminal parts of it are redrawn in place. Log lines written to the terminal in between would garble that, so the log goes to a file, where it can say far more, e.g. Docker's whole error, where the output shows only its last line.
 
 ## Versioning while in 0.x
 
@@ -159,68 +105,6 @@ The docs site publishes the docs of every stable release, not of main.
 - Build the whole site locally with `bun run docs:build:versions`.
   - Output goes to `.versioned-docs/dist`.
 
-
-## The CLI commands
-
-These are the planned CLI commands. See the [CLI reference](./project-md/prd/100-cli-reference.md) for full details.
-
-| Command      | Purpose                                                                            |
-| ------------ | ---------------------------------------------------------------------------------- |
-| `init`       | Scaffold the configuration folder.                                                 |
-| `doctor`     | Check that the environment is ready to run.                                        |
-| `generate`   | Emit the typed parameter names.                                                    |
-| `plan`       | Dry run: show what an experiment would do.                                         |
-| `build`      | Build the Docker images for a given experiment.                                    |
-| `run`        | Builds the required images if needed. Run an experiment: one experiment execution. |
-| `executions` | List past experiment executions.                                                   |
-| `show`       | Show recorded results for an execution or a container run.                         |
-| `compare`    | Compare two executions.                                                            |
-| `remeasure`  | Apply the current measurements to past runs.                                       |
-| `checkout`   | Bring a container run's end state back, as a branch or a shell, to inspect it.        |
-
-## Test types
-
-
-
-1. Real file creating tests
-   - For commands that need to create files
-      - eg. `init`, `generate`
-   - Create a copy of scenario in a temp directory and run there, and then assert on the files created. 
-2. Fixture + stdout tests
-   - For commands that only read the project
-     -`plan` or `show`, or commands with a `--dry-run`
-   - Run on the scenario unchanged, and assert on stdout. 
-3. Create docker image tests
-    - eg. `build`
-   - Uses real docker 
-   - Run the command, assert on the created docker image, then clean up docker image.
-   - Tests of this type should have the extension `.docker.test.ts`
-   - `bun test` skips them. Run them with `bun run test:docker` (one at a time). CI runs `bun run test:docker:parallel`.
-   - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
-4. Read from docker image tests
-   - For commands that read from an existing image, but do not need to act on it 
-    - e.g. `remeasure`, 
-   - The image is presumed to already exist 
-   - Tests of this type should have the extension `.docker.test.ts`
-   - `bun test` skips them. Run them with `bun run test:docker` (one at a time). CI runs `bun run test:docker:parallel`.
-   - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
-5. Run on docker container tests
-   - eg. `run`. Start
-   -  containers from an existing image, execute some behaviour, then assert on effects both inside the container and out.
-   - Tests of this type should have the extension `.docker.test.ts`
-   - `bun test` skips them. Run them with `bun run test:docker` (one at a time). CI runs `bun run test:docker:parallel`.
-   - Pass `{ docker: "real" }` to the `thunderjar()` test helper, and a throwaway `--image-prefix`, unique to the run.
-6. Regular unit tests
-   - For comprehensive business logic
-7. Real agent tests
-   - Run a real agent, against a real model, through `run`, e.g. scenario `0501` running Claude Code.
-   - Tests of this type should have the extension `.agent.test.ts`
-   - `bun test` skips them. Run them with `bun run test:agent`, with Docker and `ANTHROPIC_API_KEY` set. Each run costs a few cents.
-   - In CI, on demand: the "Real agent tests" workflow (`agent.yml`).
-   - Real models also run in `slow-tests.yml`, only on a `/slow-tests` PR comment, on the release candidate and release PRs, or by hand: the dogfood run, and step 4 of `src/cli/commands/capture/capture.docker.test.ts`, a real job in each harness. Claude Code uses `ANTHROPIC_API_KEY`; the other harnesses use OpenRouter, with the `OPENROUTER_TOKEN` secret.
-8. The installed package's smoke test
-   - `bun run test:package` packs Thunderjar, installs the tarball into an empty project in a temporary folder, and runs `init`, `generate`, `plan example` and `run example --dry-run` there with the installed `thunderjar`.
-   - Every other test runs Thunderjar from source. This one catches what only the package gets wrong, such as a file left out of `files`.
 
 ## Running the tests
 
@@ -287,71 +171,6 @@ Tests for the individual commands are then run against one or more scenarios.
 
 Tests should never modify the scenarios. 
 
-### Where tests live
-
-#### Tests of a command go beside the command
-
-✅ **Do** put a command's tests next to its code, and have them run against whichever scenarios they need.
-
-```
-// 👍 Good
-src/cli/commands/
-  plan/
-    plan.ts
-    plan.test.ts        runs against 0201, 0202, 0401
-fixtures/
-  02_regular/
-    0201_minimal_existing_setup/
-      project/
-```
-
-❌ **Don't** put a command's tests in the scenario folders.
-
-```
-// 👎 Bad
-fixtures/
-  02_regular/
-    0201_minimal_existing_setup/
-      plan.test.ts
-      project/
-    0202_typical_project/
-      plan.test.ts
-      project/
-```
-
-#### Refer to a scenario by its ID, through one helper
-
-✅ **Do** reach a scenario through a single helper, by its ID.
-
-```ts
-// 👍 Good
-const dir = scenario("0201");             // fixtures/02_regular/0201_…/project
-const folder = scenarioFolder("0201");    // fixtures/02_regular/0201_…
-```
-
-❌ **Don't** hard-code a scenario's path in a test, or keep a list in a scenario of the tests that use it.
-
-```ts
-// 👎 Bad
-const dir = "fixtures/02_regular/0201_minimal_existing_setup/project";
-```
-
-**Why:** the helper fails loudly for an unknown ID, so renaming a scenario folder breaks no tests. To find what uses a scenario, search for its ID. A "used by" list goes stale.
-
-
-#### Escape hatch: Specific scenario tests 
-
-There are some scenarios where a scenario specific test is warranted. 
-
-```
-0201_minimal_existing_setup/
-  tsconfig.json
-  config-typings.test.ts
-  project/
-    .thunderjar/
-```
-
-In this case it's tests that checking the behaviour of the typings. These tests _need_ to be located beside the tsconfig for that scenario. 
 
 ### Helper `fixture` script 
 
@@ -361,9 +180,4 @@ The `fixture` script lets a developer run any thunderjar command in a scenario's
 bun run fixture 0201 plan two-pairs
 ```
 
-
-### Dos and Don'ts 
-
-- You don't need to keep the `project-md/prd` up to date. Let it drift. 
-- _do not_ update the the docs in `./docs` let the user do that. 
 
