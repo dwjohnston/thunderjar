@@ -8,6 +8,11 @@
 import { $ } from "bun";
 import type { BuildOptions } from "../api/declarations.ts";
 import { moduleLogger } from "../log/logger.ts";
+import { type Clock, createClockService, type TimerHandle } from "../services/Clock/Clock.ts";
+import type { ContainerRunner } from "../services/ContainerRunner/ContainerRunner.ts";
+import type { ContainerProcess, ContainerRuns, ContainerState, ContainerStop, ExecResult } from "../services/Docker/Docker.ts";
+
+export type { ContainerState, ContainerStop, ExecResult };
 
 const log = moduleLogger("docker");
 
@@ -238,18 +243,40 @@ async function mustRun(args: string[], runtime: DockerRuntime = localRuntime()):
   return result.stdout.toString();
 }
 
-/** How a container run by `runContainer` stopped. */
-export type ContainerStop =
-  | { outcome: "exited" }
-  | { outcome: "timedOut"; /** Epoch ms, when it was killed. */ killedAt: number }
-  | {
-      /** It never started: `docker run` failed, or gave no sign of starting in time, before its script did. */
-      outcome: "notStarted";
-      reason: string;
-      /** Epoch ms, when `docker run` was started, and when it was given up on. */
-      spawnedAt: number;
-      gaveUpAt: number;
-    };
+/**
+ * The steps of `runContainer` on `runtime`: `docker run`, `docker kill` and `docker rm`. A
+ * process's stdout is read to its end, so `docker run` never waits on it, and its `stderr` resolves
+ * once both its stdout and stderr have ended.
+ */
+export function containerRuns(runtime: DockerRuntime): ContainerRuns {
+  return {
+    spawnRun(args, startMarker) {
+      // Docker copies each `-e NAME` variable's value from this environment.
+      const child = Bun.spawn([...runtime.command, ...args], {
+        env: { ...Bun.env },
+        stdin: "ignore",
+        stdout: startMarker === undefined ? "ignore" : "pipe",
+        stderr: "pipe",
+      });
+      const started = Promise.withResolvers<void>();
+      const watching =
+        startMarker === undefined ? (started.resolve(), Promise.resolve()) : watchFor(child.stdout as ReadableStream<Uint8Array>, startMarker, () => started.resolve()).catch(() => {});
+      const stderr = Promise.all([new Response(child.stderr).text(), watching]).then(([text]) => text);
+      return { started: started.promise, exited: child.exited, stderr, kill: () => child.kill("SIGKILL") };
+    },
+    killContainer: async (name) => {
+      await mustRun(["kill", name], runtime);
+    },
+    removeContainer: (name) => removeContainer(name, runtime),
+  };
+}
+
+/** A ContainerRunner as the steps of `runContainer`. Only until runContainer.humans.test.ts passes a FakeDocker. */
+const fromRunner = (runner: ContainerRunner): ContainerRuns => ({
+  spawnRun: (args, startMarker) => runner.spawn(args, startMarker),
+  killContainer: (name) => runner.kill(name),
+  removeContainer: (name) => runner.remove(name),
+});
 
 /**
  * How long a container given a `startMarker` may take to start, in seconds, before it's given up
@@ -313,6 +340,10 @@ export async function runContainer(
     timeoutSeconds,
     startMarker,
     runtime = localRuntime(),
+    // TODO: injected by every caller, once they have a Clock: services are built only at entry points.
+    clock = createClockService(),
+    runner,
+    docker = runner === undefined ? containerRuns(runtime) : fromRunner(runner),
   }: {
     env?: string[];
     runOptions?: string[];
@@ -321,6 +352,12 @@ export async function runContainer(
     timeoutSeconds?: number;
     startMarker?: string;
     runtime?: DockerRuntime;
+    /** Where its timeouts' time comes from. Tests pass a FakeClock. */
+    clock?: Clock;
+    /** What runs `docker run`, `docker kill` and `docker rm`. Tests pass a FakeDocker. */
+    docker?: ContainerRuns;
+    /** @deprecated The same, as a ContainerRunner: pass `docker`. Kept while runContainer.humans.test.ts passes one. */
+    runner?: ContainerRunner;
   } = {},
 ): Promise<ContainerStop> {
   const byName = (names: string[]) => names.flatMap((variable) => ["-e", variable]);
@@ -329,60 +366,50 @@ export async function runContainer(
   // Only the secret variables' names: their values are never logged. setEnv's aren't secret.
   log.info({ image, container: name, env, secretEnv, setEnv, runOptions, timeoutSeconds, runtime: runtime.command }, "running container");
   log.trace({ container: name, script }, "container script");
-  const startedAt = Date.now();
-  const child = Bun.spawn([...runtime.command, ...args], {
-    env: { ...Bun.env },
-    stdin: "ignore",
-    stdout: startMarker === undefined ? "ignore" : "pipe",
-    stderr: "pipe",
-  });
+  const startedAt = clock.now();
+  const child = docker.spawnRun(args, startMarker);
   let killing: Promise<number | undefined> | undefined;
   /** Why it was given up on before it started, once it has been. */
   let notStarted: string | undefined;
   let started = startMarker === undefined;
   const timeOut = () => {
     if (timeoutSeconds === undefined) return undefined;
-    return setTimeout(() => {
+    return clock.setTimeout(() => {
       log.warn({ container: name, timeoutSeconds }, "container timed out, killing it");
-      killing = killTimedOut(name, child, runtime);
+      killing = killTimedOut(name, child, docker, clock);
     }, timeoutSeconds * 1000);
   };
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let watching: Promise<void> = Promise.resolve();
+  let timer: TimerHandle | undefined;
   if (startMarker === undefined) {
     timer = timeOut();
   } else {
     const startSeconds = startTimeoutSeconds();
-    timer = setTimeout(() => {
+    timer = clock.setTimeout(() => {
       notStarted = `it didn't start within ${startSeconds}s`;
       log.warn({ container: name, startSeconds }, "container didn't start in time, giving up on it");
-      killing = giveUpStarting(name, child, runtime);
+      killing = giveUpStarting(name, child, docker, clock);
     }, startSeconds * 1000);
-    watching = watchFor(child.stdout as ReadableStream<Uint8Array>, startMarker, () => {
+    void child.started.then(() => {
       if (notStarted !== undefined) return;
       started = true;
-      clearTimeout(timer);
-      log.debug({ container: name, ms: Date.now() - startedAt }, "container started");
+      clock.clearTimeout(timer);
+      log.debug({ container: name, ms: clock.now() - startedAt }, "container started");
       timer = timeOut();
-    }).catch(() => {});
+    });
   }
-  const reading = new Response(child.stderr).text();
   const exitCode = await child.exited;
   // Once it has exited, its output is read for at most a few seconds more: when it was killed, a
   // process it started, such as the ssh that reaches a remote runtime, may still hold it open.
-  let waiting: ReturnType<typeof setTimeout> | undefined;
-  const [stderr] = await Promise.race([
-    Promise.all([reading, watching]),
-    new Promise<[string, void]>((resolve) => (waiting = setTimeout(() => resolve(["", undefined]), 5000))),
-  ]);
-  clearTimeout(waiting);
-  clearTimeout(timer);
+  let waiting: TimerHandle | undefined;
+  const stderr = await Promise.race([child.stderr, new Promise<string>((resolve) => (waiting = clock.setTimeout(() => resolve(""), 5000)))]);
+  clock.clearTimeout(waiting);
+  clock.clearTimeout(timer);
   const killedAt = await killing;
-  const ms = Date.now() - startedAt;
+  const ms = clock.now() - startedAt;
   if (notStarted !== undefined || (!started && exitCode !== 0)) {
     const reason = notStarted ?? (reasonOf(stderr) || `${named(runtime, "run")} exited ${exitCode}`);
     log.error({ container: name, exitCode, ms, stderr }, "container didn't start");
-    return { outcome: "notStarted", reason, spawnedAt: startedAt, gaveUpAt: Date.now() };
+    return { outcome: "notStarted", reason, spawnedAt: startedAt, gaveUpAt: clock.now() };
   }
   if (killedAt !== undefined) {
     log.info({ container: name, ms }, "container killed");
@@ -407,13 +434,13 @@ const KILL_RETRY_MS = 2000;
  * instead, so the run doesn't wait on it forever, and the container is left to be removed. So it is
  * at once if there's no such container, as when the runtime hasn't made it yet.
  */
-async function killTimedOut(name: string, child: { exited: Promise<number>; kill(signal?: number | NodeJS.Signals): void }, runtime: DockerRuntime): Promise<number | undefined> {
-  const killedAt = Date.now();
+async function killTimedOut(name: string, child: ContainerProcess, docker: ContainerRuns, clock: Clock): Promise<number | undefined> {
+  const killedAt = clock.now();
   let finished = false;
   void child.exited.then(() => (finished = true));
   for (let attempt = 1; attempt <= KILL_ATTEMPTS; attempt++) {
     try {
-      await mustRun(["kill", name], runtime);
+      await docker.killContainer(name);
       return killedAt;
     } catch (error) {
       // It finished just as the time ran out: there's nothing to kill.
@@ -423,11 +450,11 @@ async function killTimedOut(name: string, child: { exited: Promise<number>; kill
         break;
       }
       log.warn({ container: name, attempt, err: error }, "couldn't kill the timed-out container");
-      if (attempt < KILL_ATTEMPTS) await Bun.sleep(KILL_RETRY_MS);
+      if (attempt < KILL_ATTEMPTS) await clock.sleep(KILL_RETRY_MS);
       else log.error({ container: name }, "gave up killing the timed-out container: stopped waiting for it");
     }
   }
-  child.kill("SIGKILL");
+  child.kill();
   return killedAt;
 }
 
@@ -437,10 +464,10 @@ async function killTimedOut(name: string, child: { exited: Promise<number>; kill
  * `docker kill` won't do: a container that's created but not yet started "is not running". One
  * the runtime makes later still is removed once the execution ends. Returns when.
  */
-async function giveUpStarting(name: string, child: { kill(signal?: number | NodeJS.Signals): void }, runtime: DockerRuntime): Promise<number> {
-  const gaveUpAt = Date.now();
-  await removeContainer(name, runtime).catch((error: unknown) => log.warn({ container: name, err: error }, "couldn't remove the container that didn't start"));
-  child.kill("SIGKILL");
+async function giveUpStarting(name: string, child: ContainerProcess, docker: ContainerRuns, clock: Clock): Promise<number> {
+  const gaveUpAt = clock.now();
+  await docker.removeContainer(name).catch((error: unknown) => log.warn({ container: name, err: error }, "couldn't remove the container that didn't start"));
+  child.kill();
   return gaveUpAt;
 }
 
@@ -580,7 +607,6 @@ export async function diskUsage(runtime: DockerRuntime = localRuntime()): Promis
   return out.split("\n").filter(Boolean);
 }
 
-export type ExecResult = { stdout: string; stderr: string; exitCode: number };
 
 
 /**
@@ -619,9 +645,6 @@ export async function writeContainerFile(name: string, path: string, text: strin
 export async function stopContainer(name: string, graceSeconds: number, runtime: DockerRuntime): Promise<void> {
   await mustRun(["stop", "--time", String(graceSeconds), name], runtime);
 }
-
-/** Whether a container is running, and the code it exited with if not. */
-export type ContainerState = { running: boolean; exitCode: number };
 
 /**
  * The state of the container `name` in `runtime`, or undefined if there's no such container.

@@ -13,6 +13,7 @@ import { createPlanCommand } from "./commands/plan/plan.ts";
 import { createPurgeCommand } from "./commands/purge/purge.ts";
 import { createRemeasureCommand } from "./commands/remeasure/remeasure.ts";
 import { createRunCommand } from "./commands/run/run.ts";
+import type { Services } from "./services.ts";
 import { createRunnerCommand } from "./commands/runner/runner.ts";
 import { createShowCommand } from "./commands/show/show.ts";
 import { createViewCommand } from "./commands/view/view.ts";
@@ -69,7 +70,7 @@ async function logFile({ logFile }: LogOptions, command: string): Promise<string
   }
 }
 
-export function createProgram(): Command {
+export function createProgram(services: Services): Command {
   const program = new Command()
     .name("thunderjar")
     .description(pkg.description)
@@ -92,7 +93,7 @@ export function createProgram(): Command {
     .addCommand(createGenerateCommand())
     .addCommand(createPlanCommand())
     .addCommand(createBuildCommand())
-    .addCommand(createRunCommand())
+    .addCommand(createRunCommand(services))
     .addCommand(createAttachCommand())
     // What a runtime's runner runs, not a command for a user: left out of --help.
     .addCommand(createRunnerCommand(), { hidden: true })
