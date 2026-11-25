@@ -58,6 +58,7 @@ bun run ci-metrics:grafana
 
 - Runs Grafana in Docker, at http://localhost:3000.
 - Logs in as `metrics_dashboard`, with its password from `CI_METRICS_DB_PASSWORD`.
+- Checks that login first, and stops before starting Docker if it fails, e.g. `metrics_dashboard's password was rejected`.
 
 - **Job wall-clock time per run**, with a 10-run average to show the trend.
 - **Tests getting slower**: median of the last 7 days against the 30 days before.
@@ -78,3 +79,5 @@ The dashboard is provisioned from `grafana/provisioning/dashboards/ci-timings.js
   - Creates the tables. Run by hand.
 - `upload.ts`
   - The CI step.
+- `grafana-start.ts` and `login.ts`
+  - Check the dashboard login, then start Grafana.

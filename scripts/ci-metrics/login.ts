@@ -16,6 +16,10 @@
 // clear message instead of a dashboard with no data.
 
 /** What to tell the user when the login fails with this error, or undefined if it's unknown. */
-export function loginProblem(_error: unknown): string | undefined {
+export function loginProblem(error: unknown): string | undefined {
+  const message = String(error);
+  if (message.includes("password authentication failed")) {
+    return "metrics_dashboard's password was rejected. Check CI_METRICS_DB_PASSWORD.";
+  }
   return undefined;
 }
