@@ -22,6 +22,7 @@ import { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { sqliteStore } from "../../../store/runDataStore.ts";
 import { copyScenarioProject, type ProjectCopy, TMP_DIR, thunderjar } from "../../../testing/cli.ts";
+import { pullImage } from "../../../testing/pullImage.ts";
 
 const RUN = crypto.randomUUID().slice(0, 8);
 const PREFIX = `tj-test-${RUN}`;
@@ -46,6 +47,7 @@ async function startRegistry(deletes: boolean): Promise<Registry> {
   // Pushed before it's started, so it's removed even if starting it fails part way.
   registries.push({ name, host: "", dockerConfig: `${TMP_DIR}/docker-config-${PREFIX}-${id}` });
   const registry = registries.at(-1)!;
+  await pullImage("registry:2");
   await $`docker run --detach --name ${name} -p 127.0.0.1::5000 -e REGISTRY_STORAGE_DELETE_ENABLED=${String(deletes)} registry:2`.quiet();
   registry.host = `localhost:${(await $`docker port ${name} 5000/tcp`.text()).trim().split(":").at(-1)}`;
   for (let i = 0; i < 50 && (await fetch(`http://${registry.host}/v2/`).catch(() => undefined))?.status !== 200; i++) await Bun.sleep(100);
