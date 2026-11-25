@@ -58,6 +58,7 @@ bun run ci-metrics:grafana
 - **Job wall-clock time per run**, with a 10-run average to show the trend.
 - **Tests getting slower**: median of the last 7 days against the 30 days before.
 - **Slowest tests**, and the **duration of the 10 slowest per run**. The Test filter narrows these, e.g. `src/cli/commands/run`.
+- **Test time per run, docker vs regular tests**: a `.docker.test.ts` file is a docker test, any other is regular. The Test kind filter narrows every per-test panel to one kind, and the Slowest tests table shows each test's kind.
 
 The dashboard is provisioned from `grafana/provisioning/dashboards/ci-timings.json`. Edits made in Grafana's UI are lost on restart: export the JSON into that file to keep them.
 
