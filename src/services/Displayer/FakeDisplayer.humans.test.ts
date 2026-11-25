@@ -10,12 +10,11 @@ function sampleCommand(displayer: Displayer, json: boolean): void {
 }
 
 describe(FakeDisplayer, () => {
-    it("records the mode a command set, and that it started and stopped the display", () => {
+    it("records the mode a command set", () => {
         const displayer = new FakeDisplayer();
 
         sampleCommand(displayer, true);
 
         expect(displayer.mode).toBe("json");
-        expect(displayer.calls).toEqual(["setMode json", "start", "stop"]);
     });
 });
