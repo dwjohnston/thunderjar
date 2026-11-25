@@ -19,8 +19,6 @@ describe(runPermutation, () => {
     it("happy path: runs the container, reads what it left, commits it, records it, and removes the container", async () => {
         const deps = fakes();
         const testCase = config();
-        // A hash that's easy to read: it gives the run ID 01exec-oooooooo-i1.
-        testCase.permutations[0]!.permutation.hash = "o".repeat(64);
         // The harness reads the reply from the container run's result file.
         testCase.permutations[0]!.harness = { ...testCase.permutations[0]!.harness, collectReply: (result) => JSON.parse(result).reply };
         // The container run exits 0 after 31 seconds, and leaves its run.json, a result file and an empty stderr.

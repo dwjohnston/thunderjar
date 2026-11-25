@@ -101,8 +101,6 @@ describe(createDisplayerService, () => {
     it("given a running execution, shows what the run command draws", async () => {
         // 2 permutations × 3 iterations, planned as the run command would.
         const testCase = config({ permutationCount: 2, iterations: 3 });
-        testCase.permutations[0]!.permutation.hash = "o".repeat(64);
-        testCase.permutations[1]!.permutation.hash = "x".repeat(64);
         const manifest = plan(testCase, { concurrency: 1, executionId: "01exec" });
 
         // Partway through: both images ready, permutation o's first 2 runs done, its third running for 45 seconds, x's waiting.

@@ -19,9 +19,6 @@ describe(runManifest, () => {
     it("happy path: records the execution as running, runs each run in turn, then records it complete", async () => {
         const deps = fakes();
         const testCase = config({ permutationCount: 2 });
-        // Hashes that are easy to tell apart: they give the run IDs 01exec-oooooooo-i1 and 01exec-xxxxxxxx-i1.
-        testCase.permutations[0]!.permutation.hash = "o".repeat(64);
-        testCase.permutations[1]!.permutation.hash = "x".repeat(64);
         // Each harness reads the reply from the container run's result file.
         for (const permutation of testCase.permutations) {
             permutation.harness = { ...permutation.harness, collectReply: (result) => JSON.parse(result).reply };
@@ -189,8 +186,6 @@ describe(runManifest, () => {
     it("2 permutations × 3 iterations: runs all 6, each permutation's iterations in turn", async () => {
         const deps = fakes();
         const testCase = config({ permutationCount: 2, iterations: 3 });
-        testCase.permutations[0]!.permutation.hash = "o".repeat(64);
-        testCase.permutations[1]!.permutation.hash = "x".repeat(64);
         for (const permutation of testCase.permutations) {
             permutation.harness = { ...permutation.harness, collectReply: (result) => JSON.parse(result).reply };
         }

@@ -28,7 +28,7 @@ describe(runTestCase, () => {
             mode: "dry-run",
             manifest: {
                 executionId: "01exec",
-                runs: [{ runId: "01exec-p1000000-i1" }, { runId: "01exec-p2000000-i1" }],
+                runs: [{ runId: "01exec-oooooooo-i1" }, { runId: "01exec-xxxxxxxx-i1" }],
             },
             images: {},
             runs: {},
@@ -50,8 +50,8 @@ describe(runTestCase, () => {
 
         // One record per run, each completed.
         expect(records).toMatchObject([
-            { runId: "01exec-p1000000-i1", outcome: "completed", postrunImage: "thunderjar-postrun:01exec-1-1" },
-            { runId: "01exec-p2000000-i1", outcome: "completed", postrunImage: "thunderjar-postrun:01exec-2-1" },
+            { runId: "01exec-oooooooo-i1", outcome: "completed", postrunImage: "thunderjar-postrun:01exec-1-1" },
+            { runId: "01exec-xxxxxxxx-i1", outcome: "completed", postrunImage: "thunderjar-postrun:01exec-2-1" },
         ]);
 
         // The state shows both images ready, and both runs committed.
@@ -103,8 +103,8 @@ describe(runTestCase, () => {
 
     // The run doesn't throw: each run gets a record, and the second one is crashed.
     expect(records).toMatchObject([
-      { runId: "01exec-p1000000-i1", outcome: "completed" },
-      { runId: "01exec-p2000000-i1", outcome: "crashed", postrunImage: "thunderjar-postrun:01exec-2-1" },
+      { runId: "01exec-oooooooo-i1", outcome: "completed" },
+      { runId: "01exec-xxxxxxxx-i1", outcome: "crashed", postrunImage: "thunderjar-postrun:01exec-2-1" },
     ]);
     expect(Object.values(deps.state.get().run.runs).map((r) => r.status)).toEqual(["committed", "crashed"]);
 

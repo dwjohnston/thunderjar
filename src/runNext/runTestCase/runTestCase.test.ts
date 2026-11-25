@@ -21,7 +21,7 @@ describe(runTestCase, () => {
     expect(await runTestCase(config({ permutationCount: 2 }), deps, "dry-run")).toBeUndefined();
 
     const { run } = deps.state.get();
-    expect(run).toMatchObject({ mode: "dry-run", runs: {}, images: {}, manifest: { executionId: "01exec", runs: [{ runId: "01exec-p1000000-i1" }, { runId: "01exec-p2000000-i1" }] } });
+    expect(run).toMatchObject({ mode: "dry-run", runs: {}, images: {}, manifest: { executionId: "01exec", runs: [{ runId: "01exec-oooooooo-i1" }, { runId: "01exec-xxxxxxxx-i1" }] } });
     expect([...deps.hostDocker.calls, ...deps.runtimeDocker.calls]).toEqual([]);
     expect(await deps.runStore.listExecutions()).toEqual([]);
   });

@@ -49,7 +49,7 @@ describe(createScheduler, () => {
     for (const which of ["1.1", "3.1"]) finish(which);
     await clock.advance(0);
     finish("4.1");
-    expect((await running).map(({ runId }) => runId)).toEqual(["01exec-p1000000-i1", "01exec-p2000000-i1", "01exec-p3000000-i1", "01exec-p4000000-i1"]);
+    expect((await running).map(({ runId }) => runId)).toEqual(["01exec-oooooooo-i1", "01exec-xxxxxxxx-i1", "01exec-wwwwwwww-i1", "01exec-zzzzzzzz-i1"]);
   });
 
   test("a permutation's first run gets the warm-up on its own before its others start", async () => {
@@ -100,7 +100,7 @@ describe(createScheduler, () => {
     stop = true;
     finish("1.1");
 
-    expect((await running).map(({ runId }) => runId)).toEqual(["01exec-p1000000-i1"]);
+    expect((await running).map(({ runId }) => runId)).toEqual(["01exec-oooooooo-i1"]);
     expect(started).toEqual(["1.1"]);
   });
 

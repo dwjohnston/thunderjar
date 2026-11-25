@@ -21,10 +21,10 @@ describe(plan, () => {
 
     expect(manifest).toMatchObject({ executionId: "01exec", testCaseName: "example", task: "is-prime", concurrency: 3, buildConcurrency: 1, imageStore: null, overrides: {} });
     expect(manifest.runs).toEqual([
-      { runId: "01exec-p1000000-i1", permutationHash: hash("p1"), permutation: 1, iteration: 1, container: "thunderjar-run-01exec-1-1", postrunImage: "thunderjar-postrun:01exec-1-1" },
-      { runId: "01exec-p1000000-i2", permutationHash: hash("p1"), permutation: 1, iteration: 2, container: "thunderjar-run-01exec-1-2", postrunImage: "thunderjar-postrun:01exec-1-2" },
-      { runId: "01exec-p2000000-i1", permutationHash: hash("p2"), permutation: 2, iteration: 1, container: "thunderjar-run-01exec-2-1", postrunImage: "thunderjar-postrun:01exec-2-1" },
-      { runId: "01exec-p2000000-i2", permutationHash: hash("p2"), permutation: 2, iteration: 2, container: "thunderjar-run-01exec-2-2", postrunImage: "thunderjar-postrun:01exec-2-2" },
+      { runId: "01exec-oooooooo-i1", permutationHash: "o".repeat(64), permutation: 1, iteration: 1, container: "thunderjar-run-01exec-1-1", postrunImage: "thunderjar-postrun:01exec-1-1" },
+      { runId: "01exec-oooooooo-i2", permutationHash: "o".repeat(64), permutation: 1, iteration: 2, container: "thunderjar-run-01exec-1-2", postrunImage: "thunderjar-postrun:01exec-1-2" },
+      { runId: "01exec-xxxxxxxx-i1", permutationHash: "x".repeat(64), permutation: 2, iteration: 1, container: "thunderjar-run-01exec-2-1", postrunImage: "thunderjar-postrun:01exec-2-1" },
+      { runId: "01exec-xxxxxxxx-i2", permutationHash: "x".repeat(64), permutation: 2, iteration: 2, container: "thunderjar-run-01exec-2-2", postrunImage: "thunderjar-postrun:01exec-2-2" },
     ]);
   });
 
@@ -52,7 +52,7 @@ describe(plan, () => {
 
     expect(manifest.imageStore).toBe("ghcr.io/acme/images");
     expect(runsFrom(manifest.permutations[0]!)).toBe("ghcr.io/acme/images:prerun-hi1000000");
-    expect(manifest.runs[0]?.storedPostrunImage).toBe("ghcr.io/acme/images:postrun-e01exec-hp1000000-i00");
+    expect(manifest.runs[0]?.storedPostrunImage).toBe("ghcr.io/acme/images:postrun-e01exec-hoooooooo-i00");
   });
 
   test("is pure: the same config and settings give the same manifest", () => {

@@ -26,12 +26,15 @@ import type { Dependencies, Manifest, ResolvedPermutation, RunSettings, TestCase
 /** A SHA-256-shaped hash that starts with `seed`, so its abbreviation is readable in a test. */
 export const hash = (seed: string) => seed.padEnd(64, "0");
 
-/** Permutation `number` of a config: harness model `harness-<number>/model`, its hashes from `p<number>` and `i<number>`. */
+/** Each permutation's hash is one letter repeated, so its run IDs are easy to tell apart: permutation 1's are 01exec-oooooooo-i1 and so on. */
+const PERMUTATION_LETTERS = "oxwzmvkq";
+
+/** Permutation `number` of a config: harness model `harness-<number>/model`, its hash from the `number`th of PERMUTATION_LETTERS, its image hash from `i<number>`. */
 export function permutation(number: number, overrides: Partial<ResolvedPermutation> = {}): ResolvedPermutation {
   const names = { baseImage: "node20", codeState: "baseline", promptSet: "none", harnessModel: `harness-${number}/model`, initialPrompt: "plain" };
   const hashed: HashedPermutation = {
     ...names,
-    hash: hash(`p${number}`),
+    hash: PERMUTATION_LETTERS[number - 1]!.repeat(64),
     imageHash: hash(`i${number}`),
     modelId: "model",
     dockerfile: "FROM scratch\n",

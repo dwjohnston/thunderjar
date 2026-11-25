@@ -30,10 +30,10 @@ describe(runManifest, () => {
     const records = await runManifest(manifest, resolved, deps);
 
     expect(records.map(({ runId, outcome }) => `${runId} ${outcome}`)).toEqual([
-      "01exec-p1000000-i1 completed",
-      "01exec-p1000000-i2 completed",
-      "01exec-p2000000-i1 completed",
-      "01exec-p2000000-i2 completed",
+      "01exec-oooooooo-i1 completed",
+      "01exec-oooooooo-i2 completed",
+      "01exec-xxxxxxxx-i1 completed",
+      "01exec-xxxxxxxx-i2 completed",
     ]);
     expect(deps.state.history().map((state) => state.run.execution?.status)).toContain("running");
     expect(await deps.runStore.listExecutions()).toMatchObject([
@@ -49,7 +49,7 @@ describe(runManifest, () => {
     await runManifest(manifest, resolved, deps);
 
     const queued = deps.state.history().find((state) => Object.keys(state.run.runs).length > 0);
-    expect(queued?.run.runs).toEqual({ "01exec-p1000000-i1": { status: "queued" }, "01exec-p2000000-i1": { status: "queued" } });
+    expect(queued?.run.runs).toEqual({ "01exec-oooooooo-i1": { status: "queued" }, "01exec-xxxxxxxx-i1": { status: "queued" } });
   });
 
   test("a run that crashes doesn't stop the rest, and the execution is failed", async () => {
@@ -70,8 +70,8 @@ describe(runManifest, () => {
     await runManifest(manifest, resolved, deps);
 
     expect(deps.runtimeDocker.calls.filter((call) => call.startsWith("push"))).toEqual([
-      "push thunderjar-postrun:01exec-1-1 ghcr.io/acme/images:postrun-e01exec-hp1000000-i00",
-      "push thunderjar-postrun:01exec-2-1 ghcr.io/acme/images:postrun-e01exec-hp2000000-i00",
+      "push thunderjar-postrun:01exec-1-1 ghcr.io/acme/images:postrun-e01exec-hoooooooo-i00",
+      "push thunderjar-postrun:01exec-2-1 ghcr.io/acme/images:postrun-e01exec-hxxxxxxxx-i00",
     ]);
     expect(Object.values(deps.state.get().run.runs).map(({ status }) => status)).toEqual(["uploaded", "uploaded"]);
     expect(deps.state.get().run.uploadBacklog).toBe(0);

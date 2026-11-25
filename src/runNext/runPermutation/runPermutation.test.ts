@@ -16,7 +16,7 @@ import type { CommittedImage, TestCaseConfig } from "../types.ts";
 import type { UploadQueue } from "../uploadQueue/uploadQueue.ts";
 import { runPermutation } from "./runPermutation.ts";
 
-const RUN_ID = "01exec-p1000000-i1";
+const RUN_ID = "01exec-oooooooo-i1";
 const CONTAINER = "thunderjar-run-01exec-1-1";
 const POSTRUN = "thunderjar-postrun:01exec-1-1";
 const STARTED = 1_700_000_000_000;
@@ -67,7 +67,7 @@ describe(runPermutation, () => {
 
   test("with an image store, its post-run image is enqueued to upload, and recorded by where it's pushed", async () => {
     const { deps, uploads, context, run } = setup({ imageStore: { repository: "ghcr.io/acme/images" } });
-    const stored = "ghcr.io/acme/images:postrun-e01exec-hp1000000-i00";
+    const stored = "ghcr.io/acme/images:postrun-e01exec-hoooooooo-i00";
 
     const record = await runPermutation(run, context, deps, uploads);
 
