@@ -61,4 +61,36 @@ describe(createDisplayerService, () => {
           "
         `);
     });
+
+    it("given this state, shows this frame", () => {
+        // An execution partway through: one image ready and one still building, runs at each stage, and 2 images waiting to upload.
+        const state = new FakeApplicationState({
+            run: {
+                images: { "thunderjar-prerun:i1000000": "ready", "thunderjar-prerun:i2000000": "building" },
+                runs: {
+                    "01exec-oooooooo-i1": { status: "committed" },
+                    "01exec-oooooooo-i2": { status: "committing" },
+                    "01exec-oooooooo-i3": { status: "running" },
+                    "01exec-xxxxxxxx-i1": { status: "queued" },
+                    "01exec-xxxxxxxx-i2": { status: "queued" },
+                },
+                uploadBacklog: 2,
+            },
+        });
+        const io = new FakeIo({ stdout: "terminal" });
+        const displayer = createDisplayerService({ state, clock: new FakeClock(), stdout: io.stdout, stderr: io.stderr, logPath: undefined });
+
+        displayer.setMode("interactive");
+        displayer.start();
+        displayer.stop();
+
+        expect(io.stdout.lastFrame()).toMatchInlineSnapshot(`
+          "Runs: 2 queued, 1 running, 1 committing, 1 committed
+          Images:
+            thunderjar-prerun:i1000000  ready
+            thunderjar-prerun:i2000000  building
+          Upload backlog: 2
+          "
+        `);
+    });
 });
