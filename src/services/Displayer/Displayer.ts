@@ -18,14 +18,24 @@ export interface Displayer {
   stop(): void;
 }
 
-export type DisplayerDeps<M> = {
-  state: ApplicationStateService<M>;
+/** A frame in two parts: `settled` only ever grows (text already written is never rewritten); `live` is redrawn. */
+export type Frame = { settled: string; live: string };
+
+export type DisplayerDeps<M, D = unknown> = {
+  state: ApplicationStateService<M, D>;
   clock: Clock;
   stdout: Output;
   stderr: Output;
   logPath: string | undefined;
   /** One line for the manifest. Its indented JSON by default. */
   describeManifest?: (manifest: M) => string;
+  /**
+   * Replaces the default frame. Its progress goes to stdout, or, in JSON mode, to stderr, so stdout
+   * is the JSON alone. On a terminal `live` is redrawn each second; piped, only `settled` is written.
+   */
+  render?: (state: RunState<M, D>, now: number) => Frame;
+  /** What `--json` prints, instead of the run state. Undefined prints nothing. */
+  toJson?: (state: RunState<M, D>) => unknown;
 };
 
 const POLL_MS = 1000;
@@ -53,11 +63,22 @@ export function renderState<M>(state: RunState<M>, _now: number, describeManifes
   return `${lines.join("\n")}\n`;
 }
 
-export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
-  const { state, clock, stdout, stderr, logPath, describeManifest } = deps;
+/** How many terminal rows `text` takes: a line wider than the terminal wraps onto more than one. */
+function rowsOf(text: string, columns: number | undefined): number {
+  if (text === "") return 0;
+  const lines = text.endsWith("\n") ? text.slice(0, -1).split("\n") : text.split("\n");
+  return lines.reduce((sum, line) => sum + (columns ? Math.max(1, Math.ceil(Bun.stringWidth(line) / columns)) : 1), 0);
+}
+
+export function createDisplayerService<M, D = unknown>(deps: DisplayerDeps<M, D>): Displayer {
+  const { state, clock, stdout, stderr, logPath, describeManifest, render, toJson } = deps;
   let mode: OutputFormat = "interactive";
   let timer: TimerHandle | undefined;
+  let stopped = false;
   let drawnLines = 0;
+  // With `render`: how much of `settled` is written, and how many rows the live block under it takes.
+  let writtenLength = 0;
+  let liveRows = 0;
 
   const draw = () => {
     const frame = renderState(state.get().run, clock.now(), describeManifest);
@@ -66,9 +87,32 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
     drawnLines = frame.split("\n").length - 1;
   };
 
+  /** Writes what's new of `render`'s frame: `final` leaves no live block. */
+  const drawFrame = (render: NonNullable<typeof deps.render>, final: boolean) => {
+    const out = mode === "json" ? stderr : stdout;
+    const { settled, live } = render(state.get().run, clock.now());
+    const fresh = settled.slice(writtenLength);
+    writtenLength = Math.max(writtenLength, settled.length);
+    if (!out.isTTY) {
+      if (fresh !== "") out.write(fresh);
+      return;
+    }
+    // A live block always ends its last line, so what's written next starts on a line of its own.
+    const block = final || live === "" || live.endsWith("\n") ? (final ? "" : live) : `${live}\n`;
+    const erase = liveRows > 0 ? `\x1b[${liveRows}A\x1b[0J` : "";
+    liveRows = rowsOf(block, out.columns);
+    const text = `${erase}${fresh}${block}`;
+    if (text !== "") out.write(text);
+  };
+
+  const show = (final: boolean) => {
+    if (render !== undefined) drawFrame(render, final);
+    else if (mode !== "json") draw();
+  };
+
   const poll = () => {
     timer = clock.setTimeout(() => {
-      draw();
+      show(false);
       poll();
     }, POLL_MS);
   };
@@ -78,17 +122,21 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
       mode = next;
     },
     start() {
-      if (mode === "json") {
-        if (logPath !== undefined) stderr.write(`Logs: ${logPath}\n`);
-      } else if (stdout.isTTY) {
-        poll();
-      }
+      stopped = false;
+      if (mode === "json" && logPath !== undefined) stderr.write(`Logs: ${logPath}\n`);
+      // Without `render`, there's nothing to redraw in JSON mode, or on anything but a terminal.
+      if (render !== undefined || (mode !== "json" && stdout.isTTY)) poll();
     },
     stop() {
+      if (stopped) return;
+      stopped = true;
       clock.clearTimeout(timer);
       timer = undefined;
-      if (mode === "json") stdout.write(`${JSON.stringify(state.get().run, null, 2)}\n`);
-      else draw();
+      show(true);
+      if (mode !== "json") return;
+      const run = state.get().run;
+      const value = toJson ? toJson(run) : run;
+      if (value !== undefined) stdout.write(`${JSON.stringify(value, null, 2)}\n`);
     },
   };
 }

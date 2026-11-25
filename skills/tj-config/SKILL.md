@@ -148,7 +148,7 @@ runtime: { command: ["docker", "--context", "cloud"] },
 ```
 
 - Prerun images are built on the runtime and pushed from there to the image store. The runtime pulls only those the store already had and it doesn't, then runs, measures and pushes postrun images there.
-- `thunderjar build --local` and `thunderjar run --local` ignore `runtime` for one command.
+- To choose between the local daemon and the runtime per command, have the config read an environment variable, e.g. `runtime` only when `THUNDERJAR_REMOTE=1`.
 
 ✅ **Do** set `imageStore` too. A `runtime` without one is a config error.
 
@@ -166,7 +166,7 @@ How many containers run on the runtime at once. It defaults to 1, one after anot
 runtime: { command: ["docker", "--context", "cloud"], concurrency: 4 },
 ```
 
-- `thunderjar run --concurrency <n>` overrides it for one run, and is the only way to run several at once with `--local`.
+- `thunderjar run --concurrency <n>` overrides it for one run, and is the only way to run several at once without a runtime.
 - With more than one at once, `run` writes each line whole, starting with its iteration, as containers finish in any order.
 
 ✅ **Do** ask the user how much CPU and memory the runtime has, and size `concurrency` to it.

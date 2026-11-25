@@ -19,7 +19,7 @@ import { DockerBuildError, DockerContainerError, DockerPullError, DockerPushErro
 import type { PlannedIteration, PlannedPermutation } from "../../../execution/planExecution.ts";
 import type { RunHooks } from "../../../execution/runExecution.ts";
 import type { ExecutionTimings } from "../../../execution/timings.ts";
-import { type FoundSecret, type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
+import { type ContainerRunRecord, type FoundSecret, type RecordedMeasure, type RecordedOutcome, RunDataStoreError } from "../../../store/runDataStore.ts";
 import { type Paint, plain } from "../../colour.ts";
 import { displayPath } from "../../dataDir.ts";
 import { agentEnd, dollars, secretFiles, endedCleanly, failureHint, knownCost, pushFailure, thousands, totalTokens } from "../../format.ts";
@@ -55,7 +55,7 @@ const showOutcome = (outcome: RecordedOutcome, paint: Paint) =>
       : paint.red(`erroredWhileMeasuring (${outcome.error.message})`);
 
 /** A container run's measures, on one line: `<name>: <value>`, three spaces apart. */
-const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
+export const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
   Object.entries(result)
     .map(([name, { outcome }]) => `${paint.blue(`${name}:`)} ${showOutcome(outcome, paint)}`)
     .join("   ");
@@ -64,11 +64,21 @@ const showMeasures = (result: Record<string, RecordedMeasure>, paint: Paint) =>
  * What tells `permutation` apart from the rest of `testCase`'s: each other axis that varies, then
  * its harness, by name alone unless two of the test case's pairs share one, and its initial prompt.
  */
-function label(testCase: TestCaseDeclaration, { permutation }: PlannedPermutation): string {
+export function label(testCase: Pick<TestCaseDeclaration, (typeof AXES)[number]>, { permutation }: Pick<PlannedPermutation, "permutation">): string {
   const varying = AXES.filter((axis) => axis !== "harnessModel" && axis !== "initialPrompt" && testCase[axis].length > 1);
   const harnesses = new Set(testCase.harnessModel.map((pair) => parsePair(pair).harness));
   const harness = harnesses.size === testCase.harnessModel.length ? parsePair(permutation.harnessModel).harness : permutation.harnessModel;
   return [...varying.map((axis) => permutation[axis]), harness, permutation.initialPrompt].join(" | ");
+}
+
+/** How a container run's agent ended, as `run` prints it: `done (12.3s, $0.061)`, with how long it took and what it spent. */
+export function showRan({ execution, harnessResult, tokenCosts }: Pick<ContainerRunRecord, "execution" | "harnessResult" | "tokenCosts">, paint: Paint): string {
+  const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
+  // Its cost if it can be trusted, else its tokens, if it has either.
+  const cost = knownCost(tokenCosts);
+  const tokens = totalTokens(tokenCosts);
+  const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
+  return execution.timedOut || execution.failedToStart !== undefined ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`;
 }
 
 /** A container run whose agent didn't end cleanly: its name, how it ended, and a hint of why. */
@@ -315,19 +325,14 @@ export function runDisplay({ testCase, permutations, concurrent, stored, remote,
       open(`${headOf(permutation, iteration)}  ${ellipsis} `);
     },
     onRan: (permutation, iteration, record) => {
-      const { execution, harnessResult, tokenCosts } = record;
+      const { execution, harnessResult } = record;
       if (!endedCleanly(execution, harnessResult)) {
         const why = failureHint(record);
         unclean.push({ run: `${permutation.number}-${iteration.number}`, end: agentEnd(execution, harnessResult), ...(why !== undefined && { why }) });
       }
       for (const secret of record.secretsFound ?? []) secrets.push({ run: `${permutation.number}-${iteration.number}`, ...secret });
       if (record.secretSearchFailed !== undefined) unsearched.push({ run: `${permutation.number}-${iteration.number}`, reason: record.secretSearchFailed });
-      const ended = (endedCleanly(execution, harnessResult) ? paint.green : paint.red)(agentEnd(execution, harnessResult));
-      // Its cost if it can be trusted, else its tokens, if it has either.
-      const cost = knownCost(tokenCosts);
-      const tokens = totalTokens(tokenCosts);
-      const spent = cost !== undefined ? `, ${dollars(cost)}` : tokens !== undefined ? `, ${thousands(tokens)} tokens` : "";
-      const outcome = execution.timedOut || execution.failedToStart !== undefined ? ended : `${ended} ${paint.dim(`(${duration(execution.finishedAt - execution.startedAt)}${spent})`)}`;
+      const outcome = showRan(record, paint);
       if (live !== undefined) {
         outcomes.set(iteration.postrunImage, outcome);
         return showStep(iteration.postrunImage, "");

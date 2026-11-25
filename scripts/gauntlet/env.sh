@@ -23,7 +23,7 @@ export THUNDERJAR_REMOTE=1
 # re-signs TLS, and build steps (npm, git) don't trust its CA. It also leaves the prerun images
 # where the containers run. Docker's client still uses this machine's `docker login`.
 # THUNDERJAR_DOCKER is every `docker` Thunderjar runs locally, not only builds: with it set,
-# `run --local` runs its containers on the Fly machine too. Unset it to use the local daemon.
+# a run without THUNDERJAR_REMOTE runs its containers on the Fly machine too. Unset it to use the local daemon.
 [ -z "${THUNDERJAR_DOCKER:-}" ] && export THUNDERJAR_DOCKER="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.thunderjar/fly-client/docker"
 # Without ANTHROPIC_API_KEY, gauntlet test cases run only their OpenRouter pairs (Copilot, OpenCode).
 [ -z "${THUNDERJAR_GAUNTLET_PAIRS:-}" ] && [ -z "${ANTHROPIC_API_KEY:-}" ] && export THUNDERJAR_GAUNTLET_PAIRS=openrouter

@@ -58,7 +58,7 @@ export type PlannedExecution = {
 export const NOT_REPORTED: TokenCostCollector = () => ({ outcome: "unavailable", reason: "notReported" });
 
 /** What a permutation's harness, harness model pair and initial prompt are, loaded. */
-type Loaded = {
+export type Loaded = {
   baseImage: BaseImageDeclaration;
   harness: HarnessDeclaration;
   collectTokenCosts: TokenCostCollector;
@@ -68,7 +68,7 @@ type Loaded = {
 };
 
 /** `permutation`'s harness and initial prompt, or undefined after adding to `problems` (`loadTestCase` already checked the files). */
-async function loadHarness(root: string, task: string, permutation: HashedPermutation, problems: Problem[]): Promise<Loaded | undefined> {
+export async function loadHarness(root: string, task: string, permutation: HashedPermutation, problems: Problem[]): Promise<Loaded | undefined> {
   const { harness: name } = parsePair(permutation.harnessModel);
   const [baseImage, harness, initialPrompt] = (await Promise.all([
     loadDeclaration(root, `${PARAMETERS}/baseImages/${permutation.baseImage}/index.ts`, "declareBaseImage", problems),

@@ -43,7 +43,7 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string, pa
 
 /**
  * Builds each prerun image test case `name`, of the nearest `.thunderjar/` folder in `cwd` or above
- * it, needs that doesn't exist yet, on the config's runtime's daemon, unless `local` or there's
+ * it, needs that doesn't exist yet, on the config's runtime's daemon, or the local one if there's
  * none, writing `Building <image> ... done` for each, or, with a build
  * concurrency above 1, building that many at once and writing `Building <image>` and `Built <image>`
  * as each starts and ends. Then, with an
@@ -53,11 +53,11 @@ export async function dryRun(cwd: string, name: string, imagePrefix?: string, pa
  * the images built, those already present and the references pushed as JSON once it's done. Each
  * list `overrides` gives replaces the test case's own.
  */
-async function build(cwd: string, name: string, imagePrefix?: string, json = false, local = false, overrides: Overrides = {}): Promise<void> {
+async function build(cwd: string, name: string, imagePrefix?: string, json = false, overrides: Overrides = {}): Promise<void> {
   const root = await findThunderjarRoot(cwd);
   const { imageStore, build: buildOptions, runtime: config } = await loadProjectConfig(root);
-  // Where images are built, and pushed from: the runtime, which runs them, unless --local.
-  const runtime = local || config === null ? localRuntime() : remoteRuntime(config.command);
+  // Where images are built, and pushed from: the runtime, which runs them.
+  const runtime = config === null ? localRuntime() : remoteRuntime(config.command);
   const testCase = await loadTestCase(root, name, overrides);
   checkBuildSecrets(buildOptions);
   const permutations = await hashPermutations(root, testCase);
@@ -69,7 +69,7 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
   const ellipsis = paint.dim("...");
   const done = paint.green("done");
   try {
-    if (!local && config !== null) print(paint.dim(`Building with \`${config.command.join(" ")}\``));
+    if (config !== null) print(paint.dim(`Building with \`${config.command.join(" ")}\``));
     await checkImageStore(imageStore);
     const { built, present } = await buildPrerunImages(root, permutations, imagePrefix, {
       onBuilding: (image) => {
@@ -120,19 +120,18 @@ async function build(cwd: string, name: string, imagePrefix?: string, json = fal
 export function createBuildCommand(): Command {
   return withOverrideOptions(new Command("build"))
     .description(
-      "Build the prerun Docker image of each permutation of a test case, unless it already exists. Permutations with the same hash share one image. With a runtime in thunderjar.config.ts, they're built on its Docker daemon, unless --local is given. With an image store, each is then pushed there, after checking your docker login for its registry.",
+      "Build the prerun Docker image of each permutation of a test case, unless it already exists. Permutations with the same hash share one image. With a runtime in thunderjar.config.ts, they're built on its Docker daemon. With an image store, each is then pushed there, after checking your docker login for its registry.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option("--dry-run", "print each prerun image's name and Dockerfile, without building anything")
-    .option("--local", "build on the local Docker daemon, even if thunderjar.config.ts gives a runtime")
     .addOption(imagePrefixOption())
     .addOption(jsonOption())
     .action(
-      reportingConfigErrors(async (name: string, options: Overrides & { dryRun?: boolean; imagePrefix: string; json?: boolean; local?: boolean }) => {
+      reportingConfigErrors(async (name: string, options: Overrides & { dryRun?: boolean; imagePrefix: string; json?: boolean }) => {
         const overrides = overridesOf(options);
         if (options.dryRun && options.json) printJson(await prerunDockerfiles(process.cwd(), name, options.imagePrefix, overrides));
         else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, painter(), overrides));
-        else await build(process.cwd(), name, options.imagePrefix, options.json, options.local, overrides);
+        else await build(process.cwd(), name, options.imagePrefix, options.json, overrides);
       }),
     );
 }

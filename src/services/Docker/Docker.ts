@@ -1,3 +1,6 @@
+import * as docker from "../../docker/docker.ts";
+import { openShellSession } from "../../docker/shellSession.ts";
+
 // What Thunderjar asks of Docker. Two interfaces, while code moves from one to the other:
 //
 // - `Docker`, the old path: the functions in src/docker/ as one service, so a test can pass a
@@ -133,10 +136,73 @@ export interface Docker {
 /** The part of Docker that `runContainer` runs on: what it spawns, kills and removes. */
 export type ContainerRuns = Pick<Docker, "spawnRun" | "killContainer" | "removeContainer">;
 
-/** Docker on the new path. Empty: a method is added as each caller moves onto it. */
-export interface DockerService {}
+/**
+ * Docker on the new path: one daemon, reached by the command the service was built with. A method
+ * is added as each caller moves onto it. Each is one of src/docker/'s functions: see those for
+ * what each does and throws. There are two, `hostDocker` and `runtimeDocker`: see src/cli/HUMANS.md.
+ */
+export interface DockerService {
+  /** The command it runs, e.g. `["docker"]`: for saying where containers run. */
+  readonly command: readonly string[];
+
+  // Images
+
+  /** Builds the Dockerfile in `contextDir`, tagged `image`. Throws a DockerBuildError. */
+  build(contextDir: string, image: string, options?: ImageBuildOptions): Promise<void>;
+  /** The tagged images in `repository` in this daemon, as `<repository>:<tag>`. */
+  imagesIn(repository: string): Promise<Set<string>>;
+
+  // Registry
+
+  /** Checks this machine's `docker` CLI holds a login for `host`. Throws a DockerLoginError. Host only. */
+  checkLogin(host: string): Promise<void>;
+  /** Whether the registry has `reference`, asked from this machine. Host only. */
+  inRegistry(reference: string): Promise<boolean>;
+  /** Tags `image` as `reference`, and pushes it from this daemon. Throws a DockerPushError. */
+  push(image: string, reference: string): Promise<void>;
+  /** Pulls `reference` into this daemon. Throws a DockerPullError. */
+  pull(reference: string): Promise<void>;
+
+  // Containers
+
+  /** Runs `script` in a new container `name` from `image`, until it stops or times out. */
+  run(image: string, name: string, script: string, options?: RunContainerOptions): Promise<ContainerStop>;
+  /** Commits the container `name` into `image`, with the config of the image `like`, keeping the variables `kept`. */
+  commit(name: string, image: string, like: string, kept?: Record<string, string>): Promise<void>;
+  /** `docker rm --force`s the container `name`. */
+  removeContainer(name: string): Promise<void>;
+  /** Removes every container whose name starts with `prefix`, and returns their names. */
+  removeContainersNamed(prefix: string): Promise<string[]>;
+  /** The text of the file at `path` in the container `name`, or undefined if there's none. */
+  readFile(name: string, path: string): Promise<string | undefined>;
+  /** A shell session in a new container `name` from `image`, given the variables `env` by name. */
+  openShellSession(image: string, name: string, env?: string[]): Promise<ShellSession>;
+
+  // Daemon
+
+  diskUsage(): Promise<string[]>;
+}
+
+/** Whether a Docker service's daemon is this machine's, which never pulls, or a remote runtime's, which pulls images it lacks. */
+export type DockerServiceOptions = { remote?: boolean };
 
 /** Docker reached by running `command`, e.g. `["docker"]`, or a runtime's `["docker", "--context", "cloud"]`. */
-export function createDockerService(_command: string[]): DockerService {
-  return {};
+export function createDockerService(command: string[], { remote = false }: DockerServiceOptions = {}): DockerService {
+  const runtime: docker.DockerRuntime = { command, pull: remote ? "missing" : "never" };
+  return {
+    command,
+    build: (contextDir, image, options) => docker.buildImage(contextDir, image, options, runtime),
+    imagesIn: (repository) => docker.imagesIn(repository, runtime),
+    checkLogin: (host) => docker.checkLogin(host),
+    inRegistry: (reference) => docker.inRegistry(reference),
+    push: (image, reference) => docker.pushImage(image, reference, runtime),
+    pull: (reference) => docker.pullImage(reference, runtime),
+    run: (image, name, script, options) => docker.runContainer(image, name, script, { ...options, runtime }),
+    commit: (name, image, like, kept) => docker.commitContainer(name, image, like, runtime, kept),
+    removeContainer: (name) => docker.removeContainer(name, runtime),
+    removeContainersNamed: (prefix) => docker.removeContainersNamed(prefix, runtime),
+    readFile: (name, path) => docker.readContainerFile(name, path, runtime),
+    openShellSession: (image, name, env) => openShellSession(image, name, runtime, env),
+    diskUsage: () => docker.diskUsage(runtime),
+  };
 }

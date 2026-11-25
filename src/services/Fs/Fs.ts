@@ -23,6 +23,10 @@ export interface Fs {
   mkdir(path: string): Promise<void>;
   /** Deletes the file, if there is one. */
   remove(path: string): Promise<void>;
+  /** Copies everything in the folder `from` into the folder `to`, following symlinks, making `to` if it's missing. */
+  copyDirectory(from: string, to: string): Promise<void>;
+  /** Deletes the folder and everything in it, if there is one. */
+  removeDirectory(path: string): Promise<void>;
   /** The paths under `cwd` matching `pattern`, sorted, relative to `cwd`. None if `cwd` is missing. */
   glob(pattern: string, options: GlobOptions): string[];
 }
@@ -40,6 +44,11 @@ export function createFsService(): Fs {
       const file = Bun.file(path);
       if (await file.exists()) await file.delete();
     },
+    copyDirectory: async (from, to) => {
+      await $`mkdir -p ${to}`.quiet();
+      await $`cp -RL ${from}/. ${to}`.quiet();
+    },
+    removeDirectory: async (path) => void (await $`rm -rf ${path}`.quiet()),
     glob(pattern, { cwd, onlyFiles = true, dot = false }) {
       try {
         return [...new Glob(pattern).scanSync({ cwd, onlyFiles, dot })].sort();

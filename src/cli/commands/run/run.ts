@@ -28,6 +28,8 @@ import { print, printError as error, printJson, printWarning } from "../../outpu
 import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.ts";
 import { runDisplay, showSecrets, showTimings, showUnclean, showUnsearched, storeFailure } from "./runDisplay.ts";
 import type { Services } from "../../services.ts";
+import { runCommand } from "../../../runNext/runCommand/runCommand.ts";
+import type { Dependencies } from "../../../runNext/types.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
 const FIELD_INDENT = "    ";
@@ -143,7 +145,6 @@ async function run(
   name: string,
   imagePrefix: string,
   dataDir?: string,
-  local = false,
   concurrencyOption?: number,
   overrides: Overrides = {},
   json = false,
@@ -153,11 +154,11 @@ async function run(
   const config = await loadProjectConfig(root);
   for (const deprecation of config.deprecations) printWarning(deprecation);
   const { imageStore, build } = config;
-  const runtime = local ? null : config.runtime;
+  const { runtime } = config;
   // With a runner, the whole execution runs on the runtime, and this only submits and follows it.
   const runner = runtime?.runner;
   if (runner !== undefined && dataDir !== undefined) {
-    throw new ConfigError("--data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore. Pass --local to run here.");
+    throw new ConfigError("--data-dir can't be used with a runtime's runner: the runner records the execution, in the config's runDataStore.");
   }
   const concurrency = concurrencyOption ?? runtime?.concurrency ?? 1;
   const concurrent = runsConcurrently(concurrency, build);
@@ -320,17 +321,37 @@ async function run(
   }
 }
 
+/** The services `runNext` uses, picked from those src/cli/index.ts built, with `--concurrency` in place of the settings' own. */
+function dependencies(services: Services, concurrency?: number): Dependencies {
+  const { io, runSettings, runDataStore, ...rest } = services;
+  return {
+    ...rest,
+    settings: { ...runSettings, ...(concurrency !== undefined && { concurrency }) },
+    runStore: runDataStore,
+    stdout: io.stdout,
+    stderr: io.stderr,
+    onStop: (handler) => io.onStop(handler),
+  };
+}
+
+/** Whether the config of the project in `cwd` has executions run by a runner on its runtime. */
+async function hasRunner(cwd: string): Promise<boolean> {
+  return (await loadProjectConfig(await findThunderjarRoot(cwd))).runtime?.runner !== undefined;
+}
+
+type Options = Overrides & { dryRun?: boolean; buildOnly?: boolean; concurrency?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean };
+
 export function createRunCommand(services: Services): Command {
   return withOverrideOptions(new Command("run"))
     .description(
-      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, builds the prerun images on it and runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency. Builds up to the config's build concurrency of prerun images at once. With more than one of either, each iteration starts as soon as its own prerun image is ready. --iterations overrides the test case's iterations.",
+      "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, builds the prerun images on it and runs the containers there, from the image store, up to its concurrency at once, or --concurrency. Builds up to the config's build concurrency of prerun images at once. Every prerun image is ready before the first container starts. --iterations overrides the test case's iterations.",
     )
     .argument("<test case>", `the name of a test case, declared in ${FOLDER}/test-cases/<test case>.ts`)
     .option(
       "--dry-run",
       "print the images, environment variables and commands the execution would use, without running anything",
     )
-    .option("--local", "build images and run containers on the local Docker daemon, even if thunderjar.config.ts gives a runtime")
+    .option("--build-only", "build the missing prerun images, and push them to the image store if there's one, without running anything")
     .addOption(
       new Option("--concurrency <n>", "run up to <n> containers at once, instead of the runtime's concurrency, or one at a time").argParser((value: string) => {
         const n = Number(value);
@@ -343,16 +364,16 @@ export function createRunCommand(services: Services): Command {
     .addOption(dataDirOption())
     .addOption(jsonOption())
     .action(
-      reportingConfigErrors(
-        async (
-          name: string,
-          options: Overrides & { dryRun?: boolean; local?: boolean; concurrency?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean },
-        ) => {
-          const overrides = overridesOf(options);
-          if (options.dryRun && options.json) printJson(executionPlanJson(await planDryRun(process.cwd(), name, options.imagePrefix, overrides), overrides));
-          else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, overrides, painter()));
-          else await run(services, process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, overrides, options.json, options.timings);
-        },
-      ),
+      reportingConfigErrors(async (name: string, options: Options) => {
+        const overrides = overridesOf(options);
+        const { cwd } = services.env;
+        // A runtime's runner runs the whole execution there: still the old path, which only submits and follows it.
+        if (!options.dryRun && !options.buildOnly && (await hasRunner(cwd))) {
+          return run(services, cwd, name, options.imagePrefix, options.dataDir, options.concurrency, overrides, options.json, options.timings);
+        }
+        const { dryRun, buildOnly, json, imagePrefix } = options;
+        const { exitCode } = await runCommand(name, { ...givenOverrides(overrides), dryRun, buildOnly, json, imagePrefix }, dependencies(services, options.concurrency));
+        if (exitCode !== 0) process.exitCode = exitCode;
+      }),
     );
 }

@@ -3,7 +3,7 @@
 // asks of the context runs in the container, so nothing it writes reaches the postrun image.
 import type { MeasurementContext } from "../api/declarations.ts";
 import { type DockerRuntime, localRuntime } from "../docker/docker.ts";
-import { openShellSession } from "../docker/shellSession.ts";
+import { openShellSession, type ShellSession } from "../docker/shellSession.ts";
 
 /**
  * Where paths, globs and commands resolve for an instrument that has no container: the default
@@ -57,13 +57,17 @@ const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
 export async function openMeasurementContext(
   postrunImage: string,
   container: string,
-  { harnessResult, reply, replies }: Recorded,
+  recorded: Recorded,
   runtime: DockerRuntime = localRuntime(),
   secretEnv: string[] = [],
 ): Promise<OpenedMeasurementContext> {
   // Safe to give secrets to: a measurement container is removed once its measurements are taken,
   // and never committed, so nothing it's given can reach an image.
-  const session = await openShellSession(postrunImage, container, runtime, secretEnv);
+  return measurementContextOver(await openShellSession(postrunImage, container, runtime, secretEnv), recorded);
+}
+
+/** A context over `session`, a shell session in a measurement container, and what was `recorded` of the container run. */
+export function measurementContextOver(session: ShellSession, { harnessResult, reply, replies }: Recorded): OpenedMeasurementContext {
   // Where the agent worked: the postrun image's working directory, as its prerun image's last WORKDIR set it.
   const workdir = session.workdir.startsWith("/") ? session.workdir : WORKDIR;
   const mustRun = async (what: string, command: string, stdin?: string) => {

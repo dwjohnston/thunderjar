@@ -54,6 +54,21 @@ export class FakeFs implements Fs {
     this.contents.delete(normalise(path));
   }
 
+  async copyDirectory(from: string, to: string): Promise<void> {
+    const source = normalise(from);
+    const dest = normalise(to);
+    await this.mkdir(dest);
+    for (const [file, bytes] of [...this.contents]) {
+      if (file.startsWith(`${source}/`)) this.contents.set(`${dest}${file.slice(source.length)}`, bytes.slice());
+    }
+  }
+
+  async removeDirectory(path: string): Promise<void> {
+    const dir = normalise(path);
+    for (const file of [...this.contents.keys()]) if (file.startsWith(`${dir}/`)) this.contents.delete(file);
+    for (const folder of [...this.folders]) if (folder === dir || folder.startsWith(`${dir}/`)) this.folders.delete(folder);
+  }
+
   glob(pattern: string, { cwd, onlyFiles = true, dot = false }: GlobOptions): string[] {
     const base = normalise(cwd);
     const prefix = base === "/" ? "/" : `${base}/`;
