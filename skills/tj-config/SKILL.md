@@ -37,7 +37,7 @@ imageStore: { repository: "ghcr.io/acme/thunderjar-images" },
 
 Then the user runs `docker login ghcr.io`. A repository with no host, e.g. `acme/images`, is on `docker.io`.
 
-**Why:** `build` and `run` check the login before building anything, so a missing login fails in seconds instead of after the agents have run.
+**Why:** `run` checks the login before building anything, so a missing login fails in seconds instead of after the agents have run.
 
 ## `runDataStore`
 
@@ -117,7 +117,7 @@ RUN --mount=type=secret,id=github git clone \
   "https://x-access-token:$(cat /run/secrets/github)@github.com/acme/private.git" /workspace
 ```
 
-✅ **Do** have the user export the variable in the shell that runs `thunderjar`. `plan`, `build` and `run` stop if it's unset or empty.
+✅ **Do** have the user export the variable in the shell that runs `thunderjar`. `run` stops if it's unset or empty, even with `--dry-run`.
 
 ❌ **Don't** write the secret's value into the config, a fragment, or a build arg.
 
@@ -125,14 +125,14 @@ RUN --mount=type=secret,id=github git clone \
 
 ### `concurrency`
 
-How many prerun images `build` and `run` build at once. It defaults to 1, one after another.
+How many prerun images `run` builds at once. It defaults to 1, one after another.
 
 ```ts
 build: { concurrency: 4 },
 ```
 
-- With more than 1 here, or a runtime `concurrency` above 1, `run` starts each iteration as soon as its own prerun image is built and pushed, while the rest are still building.
-- If a build fails after some iterations have started, those finish and are recorded, and the execution is recorded as failed.
+- Every prerun image is built, and pushed if there's an image store, before the first container starts.
+- If a build fails, no further build starts, those under way finish, and nothing is run.
 
 ✅ **Do** size it to the machine that builds: the runtime, if there is one, or else the machine that runs `thunderjar`.
 
@@ -140,7 +140,7 @@ build: { concurrency: 4 },
 
 ## `runtime`
 
-For building images and running containers somewhere other than the local Docker daemon, e.g. a cloud VM. `command` is any command that takes the `docker` CLI's arguments. Thunderjar puts it in front of each Docker command `build` and `run` send.
+For building images and running containers somewhere other than the local Docker daemon, e.g. a cloud VM. `command` is any command that takes the `docker` CLI's arguments. Thunderjar puts it in front of each Docker command `run` sends.
 
 ```ts
 runtime: { command: ["docker", "--context", "cloud"] },
@@ -148,7 +148,6 @@ runtime: { command: ["docker", "--context", "cloud"] },
 ```
 
 - Prerun images are built on the runtime and pushed from there to the image store. The runtime pulls only those the store already had and it doesn't, then runs, measures and pushes postrun images there.
-- `thunderjar build --local` and `thunderjar run --local` ignore `runtime` for one command.
 
 ✅ **Do** set `imageStore` too. A `runtime` without one is a config error.
 
@@ -166,8 +165,7 @@ How many containers run on the runtime at once. It defaults to 1, one after anot
 runtime: { command: ["docker", "--context", "cloud"], concurrency: 4 },
 ```
 
-- `thunderjar run --concurrency <n>` overrides it for one run, and is the only way to run several at once with `--local`.
-- With more than one at once, `run` writes each line whole, starting with its iteration, as containers finish in any order.
+- `thunderjar run --concurrency <n>` overrides it for one run, and is the only way to run several at once without a runtime.
 
 ✅ **Do** ask the user how much CPU and memory the runtime has, and size `concurrency` to it.
 
@@ -175,42 +173,31 @@ runtime: { command: ["docker", "--context", "cloud"], concurrency: 4 },
 
 **Why:** Each container is an agent that also runs builds and tests. Too many at once starve each other, so timings and timeouts stop being comparable between runs.
 
-### `runner`
+### `beforeExecution` and `afterExecution`
 
-Runs each whole execution on the runtime, instead of one Docker command at a time from this machine.
+Commands `run` runs once per execution: one before anything runs on the runtime, e.g. to start it, and one once the execution ends, however it ended, e.g. to stop it.
 
 ```ts
 runtime: {
   command: ["docker", "--context", "cloud"],
-  runner: { registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" } },
+  beforeExecution: ["./scripts/start-runtime.sh"],
+  afterExecution: ["./scripts/stop-runtime.sh"],
 },
 ```
 
-- `run` builds a runner image, holding Thunderjar and the `.thunderjar/` folder, pushes it to the image store, and starts it on the runtime with the runtime's Docker socket.
-- The runner runs the containers, measures them, pushes postrun images and writes the run data store. `run` only follows it.
-- Ctrl-C leaves the execution running. `thunderjar attach <execution ID>` follows it again, and `attach <execution ID> --stop` stops it.
-- `{}` is enough to turn it on.
-  - `registryLogin`: the variables holding a user and token for the image store's registry. The runner logs in with them.
-  - `env`: more variables to give the runner, by name.
-  - `runOptions`: more `docker run` options for the runner's container, e.g. another path for the Docker socket.
+- Each is given `THUNDERJAR_EXECUTION_ID`, `THUNDERJAR_CONCURRENCY` and `THUNDERJAR_CONTAINERS`, the number of runs in the execution.
+- If `beforeExecution` exits non-zero, nothing is run, and `afterExecution` isn't either.
+- `run --dry-run` and `run --build-only` run neither.
 
-✅ **Do** use it when the runtime is far away, or `run` should survive this machine disconnecting.
-
-❌ **Don't** give `beforeExecution` or `afterExecution` with it. Start the runtime before `run`, and stop it yourself when done.
-
-**Why:** the execution carries on after `run` is interrupted, so `run` can't tell when the runtime is free to stop.
-
-✅ **Do** use a `postgresStore` with it. With a `sqliteStore`, the runner's records are copied to the local file only once `run` or `attach` has followed the execution to its end.
-
-**Why:** Each Docker command sent to a distant runtime is a round trip. On the runtime, they're local. The variables' values are sent as the runner starts, and kept in its memory only.
+❌ **Don't** add `runner`. It's deprecated and does nothing: there is no runner container, and `run` sends each Docker command to the runtime itself.
 
 ## Check the change
 
 ```sh
-thunderjar plan <test case>
+thunderjar run <test case> --dry-run
 ```
 
-`plan` loads the config and reports each wrong field by name.
+`run --dry-run` loads the config and reports each wrong field by name.
 
 With an `imageStore` or `runtime`, also run:
 

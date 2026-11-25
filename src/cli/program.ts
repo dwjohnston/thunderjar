@@ -1,7 +1,5 @@
 import { Command, Option } from "commander";
 import pkg from "../../package.json" with { type: "json" };
-import { createAttachCommand } from "./commands/attach/attach.ts";
-import { createBuildCommand } from "./commands/build/build.ts";
 import { createCaptureCommand } from "./commands/capture/capture.ts";
 import { createCheckoutCommand } from "./commands/checkout/checkout.ts";
 import { createDbCommand } from "./commands/db/db.ts";
@@ -9,12 +7,10 @@ import { createDoctorCommand } from "./commands/doctor/doctor.ts";
 import { createExecutionsCommand } from "./commands/executions/executions.ts";
 import { createGenerateCommand } from "./commands/generate/generate.ts";
 import { createInitCommand } from "./commands/init/init.ts";
-import { createPlanCommand } from "./commands/plan/plan.ts";
 import { createPurgeCommand } from "./commands/purge/purge.ts";
 import { createRemeasureCommand } from "./commands/remeasure/remeasure.ts";
 import { createRunCommand } from "./commands/run/run.ts";
 import type { Services } from "./services.ts";
-import { createRunnerCommand } from "./commands/runner/runner.ts";
 import { createShowCommand } from "./commands/show/show.ts";
 import { createViewCommand } from "./commands/view/view.ts";
 import { ConfigError, findThunderjarRoot } from "../config/loader.ts";
@@ -91,12 +87,7 @@ export function createProgram(services: Services): Command {
     })
     .addCommand(createInitCommand())
     .addCommand(createGenerateCommand())
-    .addCommand(createPlanCommand())
-    .addCommand(createBuildCommand(services))
     .addCommand(createRunCommand(services))
-    .addCommand(createAttachCommand(services))
-    // What a runtime's runner runs, not a command for a user: left out of --help.
-    .addCommand(createRunnerCommand(services), { hidden: true })
     .addCommand(createDoctorCommand())
     .addCommand(createDbCommand())
     .addCommand(createExecutionsCommand())

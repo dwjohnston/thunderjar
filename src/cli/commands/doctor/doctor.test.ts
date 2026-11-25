@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
 import { fakeDocker } from "../../../testing/fakeDocker.ts";
 import { scenario } from "../../../testing/scenario.ts";
-import { usePostgres } from "../run/runTestSupport.ts";
+import { usePostgres } from "../../../testing/runData.ts";
 
 const REPOSITORY = "ghcr.io/acme/thunderjar-images";
 const PROBE = `${REPOSITORY}:thunderjar-doctor`;

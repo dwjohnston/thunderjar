@@ -20,7 +20,7 @@ import { Glob } from "bun";
 import { copyScenarioProject, thunderjar } from "../testing/cli.ts";
 import { fakeDocker } from "../testing/fakeDocker.ts";
 import { scenario } from "../testing/scenario.ts";
-import { dataDir, KEY, removeDataDirs } from "./commands/run/runTestSupport.ts";
+import { dataDir, KEY, removeDataDirs } from "../testing/runData.ts";
 
 afterEach(removeDataDirs);
 
@@ -46,16 +46,16 @@ describe("the diagnostic log", () => {
     expect(exitCode).toBe(0);
     expect(stdout.replace(/\(\d[^)]*\)/g, "")).toBe(quiet.stdout.replace(/\(\d[^)]*\)/g, ""));
     expect(messages(log as string)).toEqual([
-      "INFO: execution: execution starting",
       "INFO: docker: building image",
       "INFO: docker: built image",
+      "INFO: images: prerun image ready",
+      "INFO: execution: execution started",
       "INFO: execution: container run starting",
       "INFO: docker: running container",
       "INFO: docker: container finished",
       "INFO: docker: committed container",
       "INFO: execution: container run finished",
-      "INFO: execution: measured",
-      "INFO: execution: execution timings",
+      "INFO: measure: measured",
       "INFO: execution: execution finished",
     ]);
     expect(log).toContain('    status: "complete"');
@@ -87,16 +87,16 @@ describe("the diagnostic log", () => {
   test("without --log-file: a new file in .thunderjar/logs/, named for when and the command", async () => {
     await using copy = await copyScenarioProject("0202");
 
-    const { exitCode } = await thunderjar(copy.dir, ["plan", "example"], { env: { ...KEY, THUNDERJAR_LOG_FILE: "" } });
+    const { exitCode } = await thunderjar(copy.dir, ["run", "example", "--dry-run"], { env: { ...KEY, THUNDERJAR_LOG_FILE: "" } });
 
     expect(exitCode).toBe(0);
     const files = [...new Glob("*").scanSync(`${copy.dir}/.thunderjar/logs`)];
     expect(files).toHaveLength(1);
-    expect(files[0]).toMatch(/^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-plan\.log$/);
+    expect(files[0]).toMatch(/^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-run\.log$/);
   });
 
   test("--log-level rejects a level pino doesn't have", async () => {
-    const { stderr, exitCode } = await thunderjar(scenario("0202"), ["--log-level", "loud", "plan", "example"]);
+    const { stderr, exitCode } = await thunderjar(scenario("0202"), ["--log-level", "loud", "run", "example", "--dry-run"]);
 
     expect(stderr).toContain("argument 'loud' is invalid");
     expect(exitCode).toBe(1);

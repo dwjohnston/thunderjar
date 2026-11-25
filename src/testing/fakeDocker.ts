@@ -62,14 +62,9 @@
 // `commit` saves the container's environment with each `--change ENV …` applied, read as Docker
 // reads one: quotes, `\` escapes, and `$NAME` expanded. `tag` copies an image's.
 //
-// A runner (src/execution/runner.ts) really runs too. `run --detach --name <name> --pull missing
-// [<option>]… <image>`, with no `--entrypoint`, starts the CLI's `runner` command on the host, in
-// the `project/` of the build context `<image>` was built from, left running, with this fake as
-// its Docker and only PATH and HOME beside: what it needs must come in its submission. `exec
-// --interactive <name> sh -c <script>` on it runs the script with /run/thunderjar mapped into
-// the container, `logs --follow <name>` writes its stdout until it stops, `logs --tail <n> <name>`
-// the end of its stderr, `inspect --format <format> <name>` whether it's running and its exit
-// code, and `stop --time <seconds> <name>` sends it SIGTERM and waits for it. `login <host>
+// `logs --follow <name>` writes a container's stdout until it stops, `logs --tail <n> <name>` the
+// end of its stderr, `inspect --format <format> <name>` whether it's running and its exit code,
+// and `stop --time <seconds> <name>` sends it SIGTERM and waits for it. `login <host>
 // --username <name> --password-stdin` adds `<host>` to logins.
 //
 // Without FAKE_DOCKER_DIR the daemon is reachable, no image exists, nothing is recorded, and no
@@ -203,7 +198,7 @@ export async function fakeDocker({
   const commandsFile = () => Bun.file(`${dir}/commands`);
   const listOf = async (file: string) => (await Bun.file(file).text()).split("\n").filter(Boolean);
   const remove = async () => {
-    // A container still running, e.g. an agent whose runner was killed, would write into its
+    // A container still running, e.g. an agent whose `run` was killed, would write into its
     // folder while it's removed: it's killed first, with everything it started.
     const pidFiles = await Array.fromAsync(new Glob("containers/*/pid").scan({ cwd: dir })).catch(() => []);
     for (const pidFile of pidFiles) {
@@ -310,7 +305,7 @@ if (import.meta.main) {
   };
 
   const [command, subcommand, ...rest] = args;
-  /** Whether the runner in `container` is still running: it writes its exit code as it stops. */
+  /** Whether `container` is still running: one that writes its exit code as it stops. */
   const runnerRunning = async (container: string) => !(await Bun.file(`${container}/exitcode`).exists());
   if (command === "image" && subcommand === "ls" && rest[0] === "--format" && rest.length === 3) {
     // docker image ls --format {{.Repository}}:{{.Tag}} <repository>
@@ -442,45 +437,6 @@ if (import.meta.main) {
       // Killed, it exits as Docker reports a killed container: 128 + SIGKILL.
       process.exit(child.signalCode ? 137 : exitCode);
     }
-  } else if (command === "run" && subcommand === "--detach" && rest[0] === "--name" && rest[2] === "--pull" && !rest.includes("--entrypoint")) {
-    // docker run --detach --name <name> --pull missing [<option>]… <image>: a runner
-    const [name, image] = [rest[1] as string, rest.at(-1) as string];
-    if (!dir) fail("fake docker: running a container needs FAKE_DOCKER_DIR");
-    if (!(await list("images")).includes(image) && !(await list("pushed")).includes(image)) fail(`docker: Error response from daemon: pull access denied for ${image}, repository does not exist or may require 'docker login'`);
-    const container = `${dir}/containers/${name}`;
-    if (await state(`containers/${name}/image`).exists()) fail(`docker: Error response from daemon: Conflict. The container name "/${name}" is already in use.`);
-    await Bun.write(`${container}/image`, `${image}\n`);
-    await Bun.write(`${container}/runner`, "");
-    await $`mkdir -p ${container}/run ${container}/root/workspace ${container}/root/var/log`.quiet();
-    const cli = `${FIXTURES_DIR}/../src/cli/index.ts`;
-    const script = `bun "$CLI" --log-file "$C/root/var/log/thunderjar-runner.log" runner --submission "$C/run/submission.json" > "$C/stdout" 2> "$C/stderr" & echo $! > "$C/pid"; wait $!; echo $? > "$C/exitcode"`;
-    const child = Bun.spawn(["sh", "-c", script], {
-      cwd: `${dir}/contexts/${image}/project`,
-      env: {
-        PATH: Bun.env.PATH ?? "/usr/bin:/bin",
-        HOME: `${container}/root`,
-        TMPDIR: Bun.env.TMPDIR ?? "/tmp",
-        THUNDERJAR_DOCKER: FAKE_DOCKER,
-        FAKE_DOCKER_DIR: dir as string,
-        ...(Bun.env.THUNDERJAR_LOG_LEVEL && { THUNDERJAR_LOG_LEVEL: Bun.env.THUNDERJAR_LOG_LEVEL }),
-        ...(Bun.env.FAKE_RUNNER_ENV && (JSON.parse(Bun.env.FAKE_RUNNER_ENV) as Record<string, string>)),
-        C: container,
-        CLI: cli,
-      },
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    child.unref();
-    console.log(crypto.randomUUID().replaceAll("-", ""));
-  } else if (command === "exec" && subcommand === "--interactive" && dir && (await state(`containers/${rest[0]}/runner`).exists())) {
-    // docker exec --interactive <runner> sh -c <script>, its /run/thunderjar mapped into the container
-    const container = `${dir}/containers/${rest[0]}`;
-    if (!(await runnerRunning(container))) fail(`Error response from daemon: container ${rest[0]} is not running`);
-    const program = rest.slice(1).map((arg) => arg.replaceAll("/run/thunderjar", `${container}/run`));
-    const result = await $`${program} < ${new Response(await Bun.stdin.text())}`.quiet().nothrow();
-    process.stderr.write(result.stderr);
-    process.exit(result.exitCode);
   } else if (command === "logs" && (subcommand === "--follow" || subcommand === "--tail")) {
     // docker logs --follow <name>, or docker logs --tail <n> <name>
     const name = args.at(-1) as string;

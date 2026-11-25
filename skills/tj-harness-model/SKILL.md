@@ -106,5 +106,5 @@ Copy the folder, rename it to the new version, and change `version`.
 
 ```sh
 thunderjar doctor
-thunderjar plan <test case>
+thunderjar run <test case> --dry-run
 ```

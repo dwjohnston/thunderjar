@@ -17,6 +17,7 @@
 //
 //   Execution <id>
 //   the test case's parameters, a line an axis, then the matrix: its shape and each permutation
+//   where it runs: the runtime, how many at once, the image store and the runtime's hooks
 //   a dry run only: each permutation's containers, then each prerun image's Dockerfile
 //   Images: each prerun image and where it has got to, until they're all ready
 //   a line for each run, and its measures under it
@@ -120,6 +121,23 @@ function resolvedLines(manifest: Manifest): string[] {
   return ["Resolved", ...[...rows.values()].map(([axis, name, value]) => `  ${axis.padEnd(widths[0] as number)}  ${name.padEnd(widths[1] as number)}  ${value}`)];
 }
 
+/**
+ * Where the execution runs, when it isn't one container at a time on the local Docker daemon with
+ * nothing pushed: the runtime, how many containers and builds at once, the image store, and the
+ * runtime's hooks. Nothing otherwise.
+ */
+function whereLines(manifest: Manifest): string[] {
+  const { remote, concurrency, buildConcurrency, imageStore, hooks } = manifest;
+  const atOnce = concurrency > 1 ? `, up to ${concurrency} at once` : "";
+  return [
+    ...(remote ? [`Containers run on the runtime${atOnce}`] : concurrency > 1 ? [`Up to ${concurrency} containers at once`] : []),
+    ...(buildConcurrency > 1 ? [`Building up to ${buildConcurrency} prerun images at once`] : []),
+    ...(imageStore !== null ? [`Images are pushed to ${imageStore.repository}`] : []),
+    ...(hooks.beforeExecution !== undefined ? [`Before the execution: ${hooks.beforeExecution.join(" ")}`] : []),
+    ...(hooks.afterExecution !== undefined ? [`After the execution:  ${hooks.afterExecution.join(" ")}`] : []),
+  ];
+}
+
 // ---------------------------------------------------------------------------------------------
 // A dry run: what would be run, and built
 // ---------------------------------------------------------------------------------------------
@@ -128,7 +146,8 @@ function resolvedLines(manifest: Manifest): string[] {
 const field = (label: string, value: string) => `    ${`${label}:`.padEnd(10)}${value}`;
 
 /**
- * Each permutation's prerun image, with each iteration's postrun image, the variables its
+ * Each permutation's prerun image, with each iteration's postrun image, where the image store
+ * keeps it, if there is one, the variables its
  * container is given (by name, or `NAME=value` for the test case's `env`), any more `docker run`
  * options, and the command it runs: its prerun image's run script.
  */
@@ -141,6 +160,7 @@ function containerBlocks(manifest: Manifest): string[] {
         .filter((run) => run.permutationHash === permutation.hash)
         .flatMap((run) => [
           `  Iteration ${run.iteration}: postrun image ${run.postrunImage}`,
+          ...(run.storedPostrunImage !== undefined ? [field("stored", run.storedPostrunImage)] : []),
           ...(env.length > 0 ? [field("env", env.join(", "))] : []),
           ...(permutation.runOptions.length > 0 ? [field("docker", permutation.runOptions.join(" "))] : []),
           field("command", `sh ${RUN_SCRIPT_PATH}`),
@@ -149,8 +169,9 @@ function containerBlocks(manifest: Manifest): string[] {
   });
 }
 
-/** Each prerun image, as `# <image>`, then its Dockerfile. */
-const dockerfileBlocks = (manifest: Manifest): string[] => manifest.images.map(({ image, dockerfile }) => `# ${image}\n${dockerfile.trimEnd()}`);
+/** Each prerun image, as `# <image>`, then where the image store keeps it, if there is one, then its Dockerfile. */
+const dockerfileBlocks = (manifest: Manifest): string[] =>
+  manifest.images.map(({ image, stored, dockerfile }) => `# ${image}\n${stored === undefined ? "" : `# stored as ${stored}\n`}${dockerfile.trimEnd()}`);
 
 // ---------------------------------------------------------------------------------------------
 // Runs
@@ -377,7 +398,7 @@ export function showTimings({ wallMs, phases }: RunTimings): string[] {
 export function renderRunState(state: RunState<Manifest>, now: number): string {
   const { manifest } = state;
   if (manifest === undefined) return "";
-  const sections: string[][] = [[`Execution ${manifest.executionId}`], summaryLines(manifest), matrixLines(manifest), resolvedLines(manifest)];
+  const sections: string[][] = [[`Execution ${manifest.executionId}`], summaryLines(manifest), matrixLines(manifest), resolvedLines(manifest), whereLines(manifest)];
 
   // A dry run stops at the plan, so it shows all of it.
   if (state.phase === "planned") sections.push(...containerBlocks(manifest).map((block) => [block]), ...dockerfileBlocks(manifest).map((block) => [block]));

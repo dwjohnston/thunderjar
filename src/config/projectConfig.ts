@@ -1,6 +1,6 @@
 // Loads `.thunderjar/thunderjar.config.ts`: where images are pushed, if anywhere, and what prerun
 // builds are given beside their build context.
-import type { BuildOptions, ConfigDeclaration, ImageStore, RunnerConfig, RuntimeConfig } from "../api/declarations.ts";
+import type { BuildOptions, ConfigDeclaration, ImageStore, RuntimeConfig } from "../api/declarations.ts";
 import { ConfigError, loadDeclaration, type Problem, problemsError } from "./loader.ts";
 import { ENV_NAME } from "./envName.ts";
 
@@ -90,6 +90,10 @@ const hookDeprecations = (runtime: RuntimeConfig): string[] =>
     ([oldName, name]) => `${CONFIG_FILE}: runtime.${oldName} is deprecated, rename it ${name}. It runs once per execution, not once per run.`,
   );
 
+/** A warning if `runtime` gives a `runner`: executions no longer run in one. */
+const runnerDeprecation = (runtime: RuntimeConfig): string[] =>
+  runtime.runner === undefined ? [] : [`${CONFIG_FILE}: runtime.runner is no longer used: containers run on the runtime through runtime.command. Remove it.`];
+
 /** `runtime`'s hooks, by their names, whether it gives them by those or by their old ones. */
 function hooksOf(runtime: RuntimeConfig): Pick<RuntimeConfig, "beforeExecution" | "afterExecution"> {
   const before = runtime.beforeExecution ?? runtime.beforeRun;
@@ -97,7 +101,7 @@ function hooksOf(runtime: RuntimeConfig): Pick<RuntimeConfig, "beforeExecution" 
   return { ...(before !== undefined && { beforeExecution: [...before] }), ...(after !== undefined && { afterExecution: [...after] }) };
 }
 
-/** Why `runner`, a runtime's, isn't a RunnerConfig, or undefined if it is. */
+/** Why `runner`, a runtime's deprecated field, isn't a RunnerConfig, or undefined if it is. */
 function runnerProblem(runner: unknown): string | undefined {
   if (runner === undefined) return undefined;
   if (typeof runner !== "object" || runner === null || Array.isArray(runner)) return `runner must be an object, e.g. {}, got ${show(runner)}`;
@@ -134,10 +138,7 @@ export function runtimeProblem(runtime: unknown, imageStore: unknown): string | 
   }
   if (concurrency !== undefined && !isConcurrency(concurrency)) return `concurrency must be a whole number, 1 or more, got ${show(concurrency)}`;
   if (imageStore === null) return "needs an imageStore: the runtime pulls the images it runs from it";
-  if (fields.runner !== undefined) {
-    const hook = HOOK_RENAMES.flat().find((field) => fields[field] !== undefined);
-    if (hook !== undefined) return `${hook} can't be given with a runner: its execution carries on after \`run\` ends, so start and stop the runtime yourself`;
-  }
+  // Deprecated and unused, but still checked: a config that loaded before still loads, and no other does.
   return runnerProblem(fields.runner);
 }
 
@@ -164,13 +165,7 @@ export function runDataStoreProblem(runDataStore: unknown): string | undefined {
 export type ProjectConfig = {
   imageStore: ImageStore | null;
   /** Where `run` runs containers, and how many at once, or `null` for the local Docker daemon. */
-  runtime:
-    | (Required<Pick<RuntimeConfig, "command" | "concurrency">> &
-        Pick<RuntimeConfig, "beforeExecution" | "afterExecution"> & {
-          /** How its runner is started, if executions run in one on the runtime: see `RuntimeConfig.runner`. */
-          runner?: Required<Pick<RunnerConfig, "env" | "runOptions">> & Pick<RunnerConfig, "registryLogin">;
-        })
-    | null;
+  runtime: (Required<Pick<RuntimeConfig, "command" | "concurrency">> & Pick<RuntimeConfig, "beforeExecution" | "afterExecution">) | null;
   /**
    * The run data store, as the config gives it: a SQLite file, relative to the project folder
    * (the one holding `.thunderjar/`) unless absolute, or the variable holding a Postgres URL.
@@ -230,17 +225,8 @@ export async function loadProjectConfig(root: string): Promise<ProjectConfig> {
             command: [...runtime.command],
             concurrency: runtime.concurrency ?? 1,
             ...hooksOf(runtime),
-            ...(runtime.runner !== undefined && {
-              runner: {
-                env: [...(runtime.runner.env ?? [])],
-                runOptions: [...(runtime.runner.runOptions ?? [])],
-                ...(runtime.runner.registryLogin !== undefined && {
-                  registryLogin: { usernameEnv: runtime.runner.registryLogin.usernameEnv, passwordEnv: runtime.runner.registryLogin.passwordEnv },
-                }),
-              },
-            }),
           },
     build: { secrets: (build?.secrets ?? []).map(({ id, env }) => ({ id, env })), ssh: build?.ssh ?? false, concurrency: build?.concurrency ?? 1 },
-    deprecations: runtime === undefined ? [] : hookDeprecations(runtime),
+    deprecations: runtime === undefined ? [] : [...hookDeprecations(runtime), ...runnerDeprecation(runtime)],
   };
 }

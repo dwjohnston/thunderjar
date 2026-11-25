@@ -40,6 +40,10 @@ const prettify = prettyFactory({
 
 // Where lines go: nowhere until `configureLog` opens a file.
 let file: { write(text: string): unknown } | undefined;
+let path: string | undefined;
+
+/** The file `configureLog` opened, if it has opened one. */
+export const logPath = (): string | undefined => path;
 
 /** The root logger. Each line is written synchronously, so none is lost when the process exits. */
 export const logger = pino({ level: "silent" }, { write: (line: string) => void file?.write(prettify(line)) });
@@ -58,8 +62,11 @@ export function moduleLogger(module: string): pino.Logger {
  * Sets the level of every module logger too: a pino child takes its parent's level when it's
  * made, and doesn't follow it after. At `silent`, no file is created.
  */
-export function configureLog({ path, level }: { path: string; level: LogLevel }): void {
-  if (level !== "silent") file = pino.destination({ dest: path, mkdir: true, sync: true });
+export function configureLog({ path: dest, level }: { path: string; level: LogLevel }): void {
+  if (level !== "silent") {
+    file = pino.destination({ dest, mkdir: true, sync: true });
+    path = dest;
+  }
   logger.level = level;
   for (const child of children) child.level = level;
 }

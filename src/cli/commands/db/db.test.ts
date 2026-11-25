@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { SQL } from "bun";
 import { copyScenarioProject, thunderjar } from "../../../testing/cli.ts";
-import { usePostgres } from "../run/runTestSupport.ts";
+import { usePostgres } from "../../../testing/runData.ts";
 
 const POSTGRES_URL = Bun.env.THUNDERJAR_POSTGRES_URL;
 const schemas: string[] = [];

@@ -2,7 +2,7 @@
 // Runs the CLI in a scenario's project/, as its tests do:
 //
 //   bun run fixture <scenario ID> <thunderjar args…>
-//   bun run fixture 0201 plan two-pairs
+//   bun run fixture 0201 run two-pairs --dry-run
 import { REPO_ROOT, listScenarios, findScenario } from "../src/testing/scenario.ts";
 
 const [id, ...args] = Bun.argv.slice(2);

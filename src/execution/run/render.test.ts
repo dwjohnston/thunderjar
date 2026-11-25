@@ -12,7 +12,7 @@
 import { describe, expect, test } from "bun:test";
 import { emptyRunState, type RunProgress, type RunState } from "../../services/ApplicationState/ApplicationState.ts";
 import { displayPath, duration, EXPOSED, notesOf, ordinal, renderRunState, runJson, showSecrets, showTimings, showUnclean, showUnsearched } from "./render.ts";
-import { aManifest, aPermutation, EXECUTION_ID, START_TIME } from "./testSupport.ts";
+import { aManifest, AN_IMAGE_STORE, aPermutation, EXECUTION_ID, START_TIME } from "./testSupport.ts";
 import type { Manifest, RunRecord } from "./types.ts";
 
 // aManifest(): permutations `a` (says hello) and `b` (says hi), two iterations each.
@@ -99,6 +99,33 @@ describe("renderRunState: the test case", () => {
   });
 });
 
+describe("renderRunState: where it runs", () => {
+  const RUNTIME = { command: ["docker", "--context", "cloud"], concurrency: 4, beforeExecution: ["./up.sh", "big"], afterExecution: ["./down.sh"] };
+
+  test("says nothing for one container at a time on the local Docker daemon", () => {
+    const frame = renderRunState(stateOf(aManifest()), START_TIME);
+
+    expect(frame).not.toContain("at once");
+    expect(frame).not.toContain("runtime");
+  });
+
+  test("says how many containers run at once, and how many images build at once, when it's more than one", () => {
+    const lines = linesOf(stateOf(aManifest({ concurrency: 3, buildConcurrency: 2 })));
+
+    expect(lines).toContain("Up to 3 containers at once");
+    expect(lines).toContain("Building up to 2 prerun images at once");
+  });
+
+  test("says containers run on the runtime, with its hooks, and where images are stored", () => {
+    const lines = linesOf(stateOf(aManifest({ concurrency: 4 }, { imageStore: AN_IMAGE_STORE, runtime: RUNTIME })));
+
+    expect(lines).toContain("Containers run on the runtime, up to 4 at once");
+    expect(lines).toContain(`Images are pushed to ${AN_IMAGE_STORE.repository}`);
+    expect(lines).toContain("Before the execution: ./up.sh big");
+    expect(lines).toContain("After the execution:  ./down.sh");
+  });
+});
+
 describe("renderRunState: a dry run", () => {
   const dryRun = (manifest = aManifest()) => stateOf(manifest, { phase: "planned" });
 
@@ -125,6 +152,14 @@ describe("renderRunState: a dry run", () => {
     expect(frame).not.toContain("    env:");
     expect(frame).not.toContain("    docker:");
     expect(frame).toContain("    command:  sh /thunderjar/thunderjar-run.sh");
+  });
+
+  test("with an image store, shows where each postrun image and each prerun image is stored", () => {
+    const stored = aManifest({}, { imageStore: AN_IMAGE_STORE });
+    const frame = renderRunState(dryRun(stored), START_TIME);
+
+    expect(frame).toContain(`  Iteration 1: postrun image thunderjar-postrun:${EXECUTION_ID}-1-1\n    stored:   ${stored.runs[0]?.storedPostrunImage}\n`);
+    expect(frame).toContain(`# thunderjar-prerun:AAAAAAAA\n# stored as ${stored.images[0]?.stored}\nFROM node\n`);
   });
 
   test("shows each prerun image's Dockerfile under its name", () => {

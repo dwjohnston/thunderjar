@@ -72,7 +72,7 @@ Tag the commit, push the tag, and resolve it to a SHA, as in the example at the 
 
 ### 2. A floating parameter
 
-e.g. the latest commit of a branch, looked up on each `plan`, `run` or `build`.
+e.g. the latest commit of a branch, looked up on each `run`, a `--dry-run` or `--build-only` one included.
 
 ```ts
 config: { repo: "https://github.com/acme/cli.git", branch: "main" },

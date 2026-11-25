@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // The installed package's smoke test: builds and packs Thunderjar, installs the tarball into an
 // empty JavaScript project in a temporary folder, the way a user would, and runs `init`,
-// `generate`, a `measure()` test with `bun test`, `plan` of both its test cases, `build` and `run --dry-run` of one, and `capture install`
+// `generate`, a `measure()` test with `bun test`, `run --dry-run` of both its test cases, and `capture install`
 // and `capture list`, there with its own `thunderjar`. Then it
 // starts `view`, and fetches its page and the page's script. Every
 // other test runs Thunderjar from source; this one runs only what's published.
@@ -40,18 +40,25 @@ const STEPS: { args: string[]; expect: string[] }[] = [
     ],
   },
   { args: ["generate"], expect: ["parameterNames.d.ts"] },
-  { args: ["plan", "compare-models"], expect: ["claude-code-2.1.311/claude-haiku-4-5-20251001", "claude-code-2.1.311/claude-haiku-5-5"] },
+  // The plan, each container, and each prerun image's Dockerfile. bun, which the bunTestFile
+  // measurement runs its tests with, is in the base image. The harness writes the run script, and
+  // the initial prompt the prompt, into the image.
   {
-    args: ["plan", "compare-harnesses"],
+    args: ["run", "compare-models", "--dry-run"],
+    expect: [
+      "claude-code-2.1.311/claude-haiku-4-5-20251001",
+      "claude-code-2.1.311/claude-haiku-5-5",
+      "sh /thunderjar/thunderjar-run.sh",
+      "npm install --global bun@1.3.14",
+      "@anthropic-ai/claude-code@2.1.311",
+      "claude -p",
+      "/thunderjar/prompt.txt",
+    ],
+  },
+  {
+    args: ["run", "compare-harnesses", "--dry-run"],
     expect: ["claude-code-2.1.311/claude-haiku-5-5", "copilot-1.0.105/claude-haiku-5.5", "opencode-1.19.5/opencode/claude-haiku-5-5"],
   },
-  // bun, which the bunTestFile measurement runs its tests with, is in the base image. The
-  // harness writes the run script, and the initial prompt the prompt, into the image.
-  {
-    args: ["build", "compare-models", "--dry-run"],
-    expect: ["npm install --global bun@1.3.14", "@anthropic-ai/claude-code@2.1.311", "/thunderjar/thunderjar-run.sh", "claude -p", "/thunderjar/prompt.txt"],
-  },
-  { args: ["run", "compare-models", "--dry-run"], expect: ["sh /thunderjar/thunderjar-run.sh"] },
   // Capture keeps its records in the project's git repository, made by `git init` before the steps.
   { args: ["capture", "install", "--harness", "claude-code"], expect: [".claude/settings.local.json"] },
   { args: ["capture", "list"], expect: ["No captures."] },
@@ -133,7 +140,7 @@ try {
   const width = Math.max(...STEPS.map(({ args }) => `thunderjar ${args.join(" ")}`.length));
   for (const { args, expect } of STEPS) {
     const step = `thunderjar ${args.join(" ")}`.padEnd(width);
-    // init's harnesses need their keys to plan or run; nothing here reaches any of them.
+    // init's harnesses need their keys to run, even dry; nothing here reaches any of them.
     const { output } = await mustRun(step, $`npx --no-install thunderjar ${args}`.cwd(PROJECT).env({ ...Bun.env, ...KEYS }));
     const missing = expect.find((text) => !output.includes(text));
     if (missing !== undefined) fail(step, `Expected the output to include ${JSON.stringify(missing)}:\n${output}`);

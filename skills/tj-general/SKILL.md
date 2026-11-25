@@ -56,4 +56,4 @@ applyParameter: (config, ctx) => `RUN … checkout --detach ${ctx.resolved}`,
 applyParameter: (config) => `RUN git clone --branch ${config.tag} …`,
 ```
 
-**Why:** images are cached by the hash of the text `applyParameter` returns. If the tag moves, the text stays the same, so a stale image is reused, and runs can't say which commit they started from. `resolve` runs once per `plan`, `run` or `build`, and each run records what it returned.
+**Why:** images are cached by the hash of the text `applyParameter` returns. If the tag moves, the text stays the same, so a stale image is reused, and runs can't say which commit they started from. `resolve` runs once per `run`, a `--dry-run` or `--build-only` one included, and each run records what it returned.

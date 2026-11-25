@@ -29,7 +29,7 @@ const count = (value: string): number => {
   return Number(value);
 };
 
-/** One flag per field of the test case an override can replace: `run`, `plan` and `build` take them all. */
+/** One flag per field of the test case an override can replace: `run` takes them all. */
 export function overrideOptions(): Option[] {
   return OVERRIDABLE.map((field) => {
     const { flag, what } = OVERRIDES[field];

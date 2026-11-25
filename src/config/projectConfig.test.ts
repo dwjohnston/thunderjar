@@ -197,6 +197,17 @@ export default declareConfig({
     ]);
   });
 
+  test("a runtime's runner still loads, with a deprecation, and is left out of the config: nothing uses it", async () => {
+    await using copy = await copyScenarioProject("0211");
+    const path = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
+    const config = await Bun.file(path).text();
+    await Bun.write(path, config.replace('"cloud"]', '"cloud"], runner: { env: ["EXTRA"] }'));
+
+    const { runtime, deprecations } = await loadProjectConfig(`${copy.dir}/.thunderjar`);
+    expect(runtime).not.toContainKey("runner");
+    expect(deprecations).toEqual(["thunderjar.config.ts: runtime.runner is no longer used: containers run on the runtime through runtime.command. Remove it."]);
+  });
+
   test("a runtime without an image store is a config error, so run stops before Docker is asked anything", async () => {
     await using copy = await copyScenarioProject("0207");
     await Bun.write(
@@ -240,10 +251,8 @@ describe("runtimeProblem", () => {
     expect(runtimeProblem({ command: ["docker"], runner: { runOptions: [""] } }, STORE)).toBe('runner.runOptions must be a list of non-empty strings, got [""]');
   });
 
-  test.each([["beforeExecution"], ["afterExecution"], ["beforeRun"], ["afterRun"]])("%s can't be given with a runner", (hook) => {
-    expect(runtimeProblem({ command: ["docker"], runner: {}, [hook]: ["./up.sh"] }, STORE)).toBe(
-      `${hook} can't be given with a runner: its execution carries on after \`run\` ends, so start and stop the runtime yourself`,
-    );
+  test.each([["beforeExecution"], ["afterExecution"]])("%s can be given with a runner, which is no longer used", (hook) => {
+    expect(runtimeProblem({ command: ["docker"], runner: {}, [hook]: ["./up.sh"] }, STORE)).toBeUndefined();
   });
 
   test.each([[0], [-1], [1.5], ["4"], [null]])("concurrency %p is not a number of containers", (concurrency) => {

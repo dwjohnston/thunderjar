@@ -32,7 +32,7 @@ import { thunderjar, copyScenarioProject } from "../../../testing/cli.ts";
 import { scenario } from "../../../testing/scenario.ts";
 
 // Read-only commands run on the scenario unchanged.
-const { stdout, exitCode } = await thunderjar(scenario("0202"), ["plan", "is-prime-baseline"]);
+const { stdout, exitCode } = await thunderjar(scenario("0202"), ["run", "is-prime-baseline", "--dry-run"]);
 
 // Commands that write files run on a copy.
 await using copy = await copyScenarioProject("0101");
@@ -52,8 +52,25 @@ await thunderjar(copy.dir, ["init"]);
 Run a command by hand in a scenario with its ID:
 
 ```sh
-bun run fixture 0202 plan is-prime-baseline
+bun run fixture 0202 run is-prime-baseline --dry-run
 ```
+
+That writes a log into the scenario's `.thunderjar/logs/`. It is git-ignored, but `copyScenarioProject` copies it, so delete it afterwards.
+
+## What scenarios are for, since `run` was rebuilt
+
+A scenario is for code that reads a real `.thunderjar/` folder: loading and checking the config, resolving a test case, `--dry-run`, and the commands that read recorded runs.
+
+✅ **Do** test what `run` does once it has a manifest with the in-memory fakes, in `src/execution/run/`.
+
+❌ **Don't** add a scenario to make an agent, a build or Docker misbehave for a test of `run`.
+
+**Why:** a `FakeDocker` script does that in one line, on a fake clock. See [src/execution/run/AGENTS.md](../src/execution/run/AGENTS.md).
+
+- The old tests of `plan`, `build` and `run` were deleted, not ported.
+- `0204`, `0208` and `0404` are now used by no test. `0206` is used only to load its declarations, and no test runs `0501`'s agents.
+  - They still work by hand, with `bun run fixture`.
+  - What they showed about `run` is now tested with fakes: an agent that times out, crashes or leaves no result, run options, env and secrets.
 
 ## Type-checked scenarios
 
@@ -96,7 +113,7 @@ bun run fixture 0202 plan is-prime-baseline
     - Prompt sets `snerk` and `glurk`, each writing its own `FAKE_INSTRUCTIONS.md`.
     - A second fake agent, `fake-harness-beta`, version `1.0.0`, on model IDs `fake-model-small-001` and `fake-model-large-001`. It writes a correct `isPrime.ts`, where alpha's is buggy.
     - Alpha's result file is shaped like Claude Code's `--output-format json`, read by the library's `claudeCodeReply` and `claudeCodeTokenCosts`: its reply is `Arr, isPrime.ts be written.`, and it spent 12,480 tokens and $0.061 (`costBasis: "list"`). Beta's is plain JSON with a `reply`, `I wrote isPrime.ts, and tested it up to 100.`, which its own `collectReply` reads, and its `collectTokenCosts` reports none (`notReported`).
-    - `fake-harness-alpha` needs `FAKE_HARNESS_KEY` (`requiredEnv`), so `plan` and `run` of its test cases stop without it: `FAKE_HARNESS_KEY=x bun run fixture 0202 plan example`. Both fake agents write `set` to `/thunderjar/fake-harness-key` if they see it, or an empty line if not, never its value.
+    - `fake-harness-alpha` needs `FAKE_HARNESS_KEY` (`requiredEnv`), so `run` of its test cases stops without it, even with `--dry-run`: `FAKE_HARNESS_KEY=x bun run fixture 0202 run example --dry-run`. Both fake agents write `set` to `/thunderjar/fake-harness-key` if they see it, or an empty line if not, never its value.
     - A third fake agent, `fake-echo`, version `1.0.0`, on `fake-model-small-001`, which only copies the prompt file it's given into its result file.
     - Base image `node20` installs `bun`, which the `bunTestFile` instrument runs its tests with.
     - Task `is-prime` has two more initial prompts, `terse`, and `awkward`, two lines full of shell syntax: quotes, `$HOME`, backticks, a backslash and `%`. Its measurements: `isPrimeTests`, a `bunTestFile` of `isPrime.test.ts`, which falls back to `isPrime.reference.ts` when run on the host, with metrics `passRate` (the default score) and `passed` (a score of its own) (5 tests; alpha's `isPrime.ts` passes 3 of 5, beta's all 5), `isPrimeShape`, a `shell` command printing the lines, comments and exports of `isPrime.ts` as JSON, read by metrics `lines`, `comments` and `singleExport` (alpha's has 3 lines and 2 comments, beta's 2 and 1; both 1 export; no `isPrime.ts` and every metric doesn't apply), `tsIgnoreCount`, a `grep` for `@ts-ignore` (alpha's has 1, beta's none), and `saysArr`, a `replyMatches` of `\bArr\b` (true of alpha's reply, false of beta's).
@@ -124,21 +141,21 @@ bun run fixture 0202 plan is-prime-baseline
     - Test case `scrubbed-env`: `fake-keyed` on `node20-env`, so a test can check its postrun image holds none of the values it was run with.
     - Base image `alpine`, `FROM alpine:3`, which real-Docker tests can often build without pulling.
     - `fake-env-reader` replies with `FAKE_TEST_CASE_SETTING`'s value, and whether it saw `FAKE_TEST_CASE_AWKWARD` and `FAKE_TEST_CASE_SECRET`, never their values: `setting test, awkward set, secret set`.
-    - Test case `test-case-env`: `fake-env-reader` on `alpine`, with the test case's own `env`, `FAKE_TEST_CASE_SETTING=test` and `FAKE_TEST_CASE_AWKWARD`, a value awkward to quote, and `secretEnv` `FAKE_TEST_CASE_SECRET`, so `plan` and `run` stop without it: `FAKE_TEST_CASE_SECRET=x bun run fixture 0206 plan test-case-env`.
+    - Test case `test-case-env`: `fake-env-reader` on `alpine`, with the test case's own `env`, `FAKE_TEST_CASE_SETTING=test` and `FAKE_TEST_CASE_AWKWARD`, a value awkward to quote, and `secretEnv` `FAKE_TEST_CASE_SECRET`, so `run` stops without it, even with `--dry-run`: `FAKE_TEST_CASE_SECRET=x bun run fixture 0206 run test-case-env --dry-run`.
     - Task `env-measured`, with initial prompt `plain` and measurement `envSeen`, a `shell` that prints `FAKE_TEST_CASE_SETTING`'s value, and whether `FAKE_TEST_CASE_SECRET` and `FAKE_HARNESS_KEY` are set and not blank, never their values: `setting test, secret set, key set`.
     - Test case `measured-env`: `fake-keyed` on `alpine`, task `env-measured`, with `env` `FAKE_TEST_CASE_SETTING=test` and `secretEnv` `FAKE_TEST_CASE_SECRET`, so a test can check the measurement container sees all three.
     - `fake-leaker` needs `FAKE_HARNESS_KEY`, and writes it into `/workspace/agent.log`, and it and `FAKE_TEST_CASE_SECRET` into `/workspace/.env`, then replies `leaked`.
     - Test case `leaked-secret`: `fake-leaker` on `alpine`, task `sandbox`, with `secretEnv` `FAKE_TEST_CASE_SECRET`, so a test can check both secrets are found in its postrun image's files.
-  - `0207_image_store`: the shared setup, with `imageStore: { repository: "ghcr.io/acme/thunderjar-images" }`, so `run` and `build` check the `docker login` for `ghcr.io`, then push each image. The fake Docker has a login only when a test gives it one: `fakeDocker({ loggedIn: ["ghcr.io"] })`.
+  - `0207_image_store`: the shared setup, with `imageStore: { repository: "ghcr.io/acme/thunderjar-images" }`, so `run` checks the `docker login` for `ghcr.io`, then push each image. The fake Docker has a login only when a test gives it one: `fakeDocker({ loggedIn: ["ghcr.io"] })`.
   - `0208_parameter_files`: the shared setup, with a fake agent whose script is kept in its `files/` folder.
     - `fake-scripted`, version `1.0.0`, on `fake-model-small-001`, copies `files/scripts/` from `ctx.dir` to `/opt/fake-scripted/`, and its `cli` runs `agent.sh` from there, which writes a correct `isPrime.ts` and replies `Ran from /opt/fake-scripted.` Its `notes.md`, beside `index.ts` but not in `files/`, never reaches the build.
     - Test case `example` names `fake-scripted` in place of `fake-harness-alpha`.
   - `0209_floating_code_state`: the shared setup, with a code state that floats.
-    - Code state `follow-main` resolves the latest commit of the sandbox repository's `main` with `ctx.exec("git ls-remote --exit-code …")`, and clones it at that commit. Tests put a fake `git` first on the `PATH` with `fakeCommand("git", { stdout })`, so nothing reaches the network.
+    - Code state `follow-main` resolves the latest commit of the sandbox repository's `main` with `ctx.exec("git ls-remote --exit-code …")`, and clones it at that commit. Tests pass `hashPermutations` a fake `exec`, so nothing reaches the network.
     - Test case `follow-main`, in place of `example`, names it.
   - `0210_build_secrets`: the shared setup, with build secrets.
-  - `0211_remote_runtime`: `0207`'s image store, plus `runtime: { command: [<THUNDERJAR_DOCKER>, "--context", "cloud"] }`, so `run` runs its containers through the runtime, whose commands the fake Docker records with `--context cloud`. `fakeDocker({ pullDenied: true })` makes the runtime's pulls fail. Tests of a runtime's runner copy it and add `runner: {}`: the fake Docker then really runs the runner, from the runner image's build context.
-    - `thunderjar.config.ts` gives `build: { secrets: [{ id: "github", env: "GITHUB_TOKEN" }], ssh: true }`, so `plan`, `build` and `run` stop without `GITHUB_TOKEN`.
+  - `0211_remote_runtime`: `0207`'s image store, plus `runtime: { command: [<THUNDERJAR_DOCKER>, "--context", "cloud"] }`, so `run` runs its containers through the runtime, whose commands the fake Docker records with `--context cloud`. `fakeDocker({ pullDenied: true })` makes the runtime's pulls fail. There is no runner container any more: a test of the config copies it and adds `runner` only to check the deprecation warning.
+    - `thunderjar.config.ts` gives `build: { secrets: [{ id: "github", env: "GITHUB_TOKEN" }], ssh: true }`, so `run` stops without `GITHUB_TOKEN`, even with `--dry-run`.
     - Code state `private` clones a made-up private repository with `RUN --mount=type=secret,id=github`, reading the token from `/run/secrets/github`. The fake Docker doesn't run it.
     - Test case `example` names `private` in place of `baseline`.
 - **04_unhappy**: projects broken on purpose.
@@ -155,9 +172,9 @@ bun run fixture 0202 plan is-prime-baseline
     - Test cases: `example`, and `beta`, which names `fake-harness-beta/fake-model-large-001`.
   - `0404_empty_parameter_folders`: the shared setup with every declaration deleted: each parameter folder holds only a `.gitkeep`. Test case `example` is left. No `tsconfig.json` or `_generated/`.
 
-- **05_real_agents**: projects that run a real agent against a real model, for `bun run test:agent`.
+- **05_real_agents**: projects that run a real agent against a real model. By hand only: the real agent test of `run` was deleted with the old `run`.
   - `0501_claude_code`: exactly what `init` scaffolds in an empty project.
-    - Test cases, init's: `compare-models`, Claude Code on Haiku 4.5 and Haiku 5.5, which needs `ANTHROPIC_API_KEY`, and `compare-harnesses`, Haiku 5.5 in Claude Code, Copilot CLI and OpenCode, which also needs `COPILOT_GITHUB_TOKEN` and `OPENCODE_API_KEY`. The real agent test runs only `compare-models`.
+    - Test cases, init's: `compare-models`, Claude Code on Haiku 4.5 and Haiku 5.5, which needs `ANTHROPIC_API_KEY`, and `compare-harnesses`, Haiku 5.5 in Claude Code, Copilot CLI and OpenCode, which also needs `COPILOT_GITHUB_TOKEN` and `OPENCODE_API_KEY`. A test of `init` checks the scenario still matches what `init` scaffolds.
 
 - **06_capture**: codebases that `thunderjar capture` is installed into, inside a Docker image, for `bun run test:docker`.
   - `0601_sample_repo`: a tiny JavaScript project that has never had Thunderjar, and, beside `project/`, the `Dockerfile` of the sample repo image: Node, Bun, git, and each starter harness's CLI at its starter version, with `project/` committed at `/work`. Thunderjar isn't in the image: the test installs it from the packed package.
