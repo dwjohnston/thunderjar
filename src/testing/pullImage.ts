@@ -1,3 +1,14 @@
+/**
+ * 🤖
+ * This file was created with AI
+ *
+ * Harness: Claude Code
+ * Session Id: session_01LCLeLkwHj38uSTfHjRd4Ho
+ * Supervising engineer: David Johnston
+ *
+ * Humans: add your notes here
+ */
+
 // Pulls an image a Docker test runs, trying again when the registry doesn't answer: Docker Hub
 // resets the odd connection, and `docker run` pulls once, so a test fails on it before it starts.
 import { $ } from "bun";
