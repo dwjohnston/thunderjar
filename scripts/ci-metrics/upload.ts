@@ -18,12 +18,14 @@
 //   bun scripts/ci-metrics/upload.ts <junit.xml> --outcome <job.status>
 //
 // Reads the database URL from CI_METRICS_DB_URL, and the job's start (epoch seconds) from
-// CI_JOB_STARTED_AT. Without CI_METRICS_DB_URL, e.g. on a fork's pull request, it does nothing.
+// CI_JOB_STARTED_AT. With GITHUB_TOKEN, it also records how long each of the job's earlier steps
+// took, e.g. lint and typecheck, from GitHub's API. Without CI_METRICS_DB_URL, e.g. on a fork's pull request, it does nothing.
 // It only inserts: the tables are made beforehand, by hand, with create-tables.ts.
 
 import { file, SQL } from "bun";
 import { parseJunit } from "./junit";
 import { recordRun } from "./store";
+import { type CiStep, stepsOfJob } from "./steps";
 
 const env = Bun.env;
 const [junitPath] = Bun.argv.slice(2);
@@ -43,6 +45,21 @@ const event = env.GITHUB_EVENT_PATH ? await file(env.GITHUB_EVENT_PATH).json() :
 const startedAt = new Date(Number(env.CI_JOB_STARTED_AT) * 1000);
 const report = parseJunit(await file(junitPath).text());
 
+/** The job's finished steps, from GitHub. None, with a warning, if they can't be read: they're a bonus. */
+async function jobSteps(): Promise<CiStep[]> {
+  if (!env.GITHUB_TOKEN || !env.GITHUB_REPOSITORY || !env.GITHUB_RUN_ID || !env.GITHUB_JOB) return [];
+  const url = `${env.GITHUB_API_URL ?? "https://api.github.com"}/repos/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}/attempts/${env.GITHUB_RUN_ATTEMPT ?? 1}/jobs?per_page=100`;
+  try {
+    const response = await fetch(url, { headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: "application/vnd.github+json" } });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return stepsOfJob(await response.json(), env.GITHUB_JOB);
+  } catch (error) {
+    process.stderr.write(`Couldn't read the job's steps, so recording none: ${error instanceof Error ? error.message : String(error)}\n`);
+    return [];
+  }
+}
+const steps = await jobSteps();
+
 const sql = new SQL(env.CI_METRICS_DB_URL);
 try {
   await recordRun(sql, {
@@ -58,8 +75,8 @@ try {
     outcome,
     startedAt: Number.isNaN(startedAt.getTime()) ? new Date() : startedAt,
     finishedAt: new Date(),
-  }, report);
-  process.stdout.write(`Recorded ${report.tests.length} tests, ${report.totalSeconds.toFixed(1)}s of test time.\n`);
+  }, report, undefined, steps);
+  process.stdout.write(`Recorded ${report.tests.length} tests, ${report.totalSeconds.toFixed(1)}s of test time, ${steps.length} steps.\n`);
 } finally {
   await sql.close();
 }
