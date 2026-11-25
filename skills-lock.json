@@ -3,10 +3,10 @@
   "skills": {
     "ai-generated-content-header": {
       "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/ai-generated-content-header/SKILL.md",
-      "computedHash": "fee82babaf9ac33b681ba9cadc701c1a214b4b8bdd2c15437c5d98fb4bbb4501",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71"
+      "computedHash": "fee82babaf9ac33b681ba9cadc701c1a214b4b8bdd2c15437c5d98fb4bbb4501"
     },
     "concise-output": {
       "source": "jagreehal/jagreehal-claude-skills",
@@ -14,26 +14,33 @@
       "skillPath": "skills/concise-output/SKILL.md",
       "computedHash": "e7df1d7ac9f7e30c24cbe62f3a4a718f68eb2ac90dda4364ccf797eb34d4b9eb"
     },
+    "core-philosophy": {
+      "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
+      "sourceType": "github",
+      "skillPath": "skills/core-philosophy/SKILL.md",
+      "computedHash": "6f11fa2f9f6297d225adaa9f28d2d4a99f7fb2eef13cf928fa5eed97e2e1f80a"
+    },
     "git-always-commit": {
       "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/git-always-commit/SKILL.md",
-      "computedHash": "1b8b66f4e412e2443c422e0b1ddf55b4565802ec938121bc21e3628231de7a36",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71"
+      "computedHash": "1b8b66f4e412e2443c422e0b1ddf55b4565802ec938121bc21e3628231de7a36"
     },
     "github-actions-docs-and-changesets": {
       "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/github-actions-docs-and-changesets/SKILL.md",
-      "computedHash": "7c25096b19989af1d7078622c1ef6cdc9bfe5006948a83954deddebdfce30101",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71"
+      "computedHash": "7c25096b19989af1d7078622c1ef6cdc9bfe5006948a83954deddebdfce30101"
     },
     "github-general": {
       "source": "dwjohnston/agent-skills",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/github-general/SKILL.md",
-      "computedHash": "56d7272fc3f157a696edadc44b700ed8c390af9a42e13ea99b0cdd9d2da3ab1b"
+      "computedHash": "969e82d2230e2a11408edbb7208c0af8827ddef3ca4c694d995cd4a9bb58b51a"
     },
     "langfuse": {
       "source": "langfuse/skills",
@@ -43,35 +50,42 @@
     },
     "markdown-general": {
       "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/markdown-general/SKILL.md",
-      "computedHash": "dc1d3bbd74b0d4383e96308ad9ada468d5bd067aaf7737c3a7fbb9008f892831",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71"
+      "computedHash": "dc1d3bbd74b0d4383e96308ad9ada468d5bd067aaf7737c3a7fbb9008f892831"
     },
     "markdown-writing-markdown-blocks": {
       "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/markdown-writing-markdown-blocks/SKILL.md",
-      "computedHash": "f24a3abaa75a965cde9c3f38dc3522216f86fad3407f35080d1b8b848d895f7f",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71"
+      "computedHash": "f24a3abaa75a965cde9c3f38dc3522216f86fad3407f35080d1b8b848d895f7f"
     },
     "markdown-writing-prompts": {
       "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/markdown-writing-prompts/SKILL.md",
-      "computedHash": "6844c4acf875727f53d01434d7eb087c46bc1db0e61996ffcc935359b97e9126",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71"
+      "computedHash": "6844c4acf875727f53d01434d7eb087c46bc1db0e61996ffcc935359b97e9126"
     },
     "red-green-tdd": {
       "source": "dwjohnston/agent-skills",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/red-green-tdd/SKILL.md",
       "computedHash": "25c02a9daaa320b2dfbcec0575c5854a01b8ed4cf181dbb718dc86d66d7ac886"
     },
+    "sp": {
+      "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
+      "sourceType": "github",
+      "skillPath": "skills/sp/SKILL.md",
+      "computedHash": "11ba7e0d3d42acf6e6c0ffee6b49f3de12954f254c3af9a2744d8dc7a75724ac"
+    },
     "subagents-general": {
       "source": "dwjohnston/agent-skills",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/subagents-general/SKILL.md",
       "computedHash": "d4748e4cfae98b3a77f5f174e114c533e0485052f7b437d4be40df93c40db595"
@@ -85,24 +99,24 @@
     },
     "ts-write-script": {
       "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/ts-write-script/SKILL.md",
-      "computedHash": "76c155b40dccacea6d8862d590c2624895d17831ad1aab56daa383ef84975e2d",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71"
+      "computedHash": "76c155b40dccacea6d8862d590c2624895d17831ad1aab56daa383ef84975e2d"
     },
     "user-get-attention": {
       "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/user-get-attention/SKILL.md",
-      "computedHash": "5e8113f7ed0ef281bcd2818ac5f613c0d77a87a734b0a8c08e728db702ad16fe",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71"
+      "computedHash": "5e8113f7ed0ef281bcd2818ac5f613c0d77a87a734b0a8c08e728db702ad16fe"
     },
     "write-for-the-human": {
       "source": "dwjohnston/agent-skills",
+      "commit": "b710096ee5344a424735fa775a7bbff72cd6a5c9",
       "sourceType": "github",
       "skillPath": "skills/write-for-the-human/SKILL.md",
-      "computedHash": "25d43fa190c726490ba5769c828075f84f2cbe607525328140ae639d0ff56eac",
-      "commit": "5bf3c3a060fec15f76629b9ea1954efe3af7fa71"
+      "computedHash": "25d43fa190c726490ba5769c828075f84f2cbe607525328140ae639d0ff56eac"
     }
   }
 }

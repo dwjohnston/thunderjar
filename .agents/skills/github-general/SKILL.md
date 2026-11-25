@@ -78,6 +78,47 @@ eg.
 ```
 
 
+## Mermaid diagrams
+
+General diagram style lives in markdown-general. These rules are for diagrams GitHub renders.
+
+### Flow top to bottom
+
+`````markdown
+```mermaid
+flowchart TD
+    A[Fetch base] --> B[Rebase]
+    B --> C[Push]
+```
+`````
+
+**Rationale:** Tall diagrams fit GitHub's narrow column. Wide ones shrink until the text is unreadable.
+
+### Escape angle brackets with `#lt;` and `#gt;`
+
+✅ **Do** quote the label and use Mermaid's own escapes.
+
+❌ **Don't** write `<base>` or `&lt;base&gt;`.
+
+`````markdown
+```mermaid
+flowchart TD
+    %% 👍 Good: renders "git fetch origin <base>"
+    A["git fetch origin #lt;base#gt;"]
+```
+`````
+
+`````markdown
+```mermaid
+flowchart TD
+    %% 👎 Bad: on GitHub, both render "git fetch origin"
+    A["git fetch origin <base>"]
+    B["git fetch origin &lt;base&gt;"]
+```
+`````
+
+**Rationale:** Mermaid treats `<base>` as an HTML tag and drops it. GitHub decodes `&lt;` back to `<` before Mermaid sees it, so the entity fails the same way.
+
 ## !!AGENT  is instructions for you 
 
 If you are live monitoring codebases - text content in markdown files `!!AGENT` is instructions for you. 
