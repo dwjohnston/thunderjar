@@ -123,8 +123,25 @@ describe(runManifest, () => {
         expect(deps.state.history().at(8)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
 
         // By the time it's committed, run 1's agent, collect and commit steps have each been timed.
-        expect(deps.state.history().at(8)!.run.timings).toMatchObject({ agent: { count: 1 }, collect: { count: 1 }, commit: { count: 1 } });
-
+        expect(deps.state.history().at(8)!.run.timings).toMatchInlineSnapshot(`
+          {
+            "agent": {
+              "count": 1,
+              "maxMs": 0,
+              "totalMs": 0,
+            },
+            "collect": {
+              "count": 1,
+              "maxMs": 0,
+              "totalMs": 0,
+            },
+            "commit": {
+              "count": 1,
+              "maxMs": 0,
+              "totalMs": 0,
+            },
+          }
+        `)
         // 9-14: then run 2 does the same
         expect(deps.state.history().at(9)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(9)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("running");
@@ -143,10 +160,25 @@ describe(runManifest, () => {
 
         expect(deps.state.history().at(14)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
         expect(deps.state.history().at(14)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("committed");
-
-        // By the time it's committed, run 2's agent, collect and commit steps have each been timed.
-        expect(deps.state.history().at(14)!.run.timings).toMatchObject({ agent: { count: 2 }, collect: { count: 2 }, commit: { count: 2 } });
-
+        expect(deps.state.history().at(8)!.run.timings).toMatchInlineSnapshot(`
+          {
+            "agent": {
+              "count": 1,
+              "maxMs": 0,
+              "totalMs": 0,
+            },
+            "collect": {
+              "count": 1,
+              "maxMs": 0,
+              "totalMs": 0,
+            },
+            "commit": {
+              "count": 1,
+              "maxMs": 0,
+              "totalMs": 0,
+            },
+          }
+        `)
         // 15: the execution recorded as complete
         expect(deps.state.history().at(15)!.run.execution?.status).toBe("complete");
 
@@ -154,5 +186,64 @@ describe(runManifest, () => {
         // The run data store has the execution, complete, and a record of each run.
         expect(await deps.runStore.listExecutions()).toMatchObject([{ executionId: "01exec", status: "complete", matrix: { permutations: 2, iterations: 1 } }]);
         expect(await deps.runStore.containerRunsOf("01exec")).toMatchObject([{ permutation: 1 }, { permutation: 2 }]);
+    });
+
+    it("2 permutations × 3 iterations: runs all 6, each permutation's iterations in turn", async () => {
+        const deps = fakes();
+        const testCase = config({ permutationCount: 2, iterations: 3 });
+        testCase.permutations[0]!.permutation.hash = "o".repeat(64);
+        testCase.permutations[1]!.permutation.hash = "x".repeat(64);
+        for (const permutation of testCase.permutations) {
+            permutation.harness = { ...permutation.harness, collectReply: (result) => JSON.parse(result).reply };
+        }
+        // Containers are named -<permutation>-<iteration>.
+        for (const container of ["-1-1", "-1-2", "-1-3", "-2-1", "-2-2", "-2-3"]) {
+            deps.runtimeDocker.onRun(container, () => ({
+                files: {
+                    "/thunderjar/run.json": JSON.stringify({ startedAt: 1_000_001_000_000, finishedAt: 1_000_001_000_000, exitCode: 0 }),
+                    "/thunderjar/result.json": JSON.stringify({ reply: "Done: isPrime(7) is true." }),
+                },
+            }));
+        }
+        const manifest = plan(testCase, { concurrency: 1, executionId: "01exec" });
+
+        const records = await runManifest(manifest, testCase, deps);
+
+        // Every run completed: each permutation's 3 iterations, then the next permutation's.
+        expect(records.map(({ runId, outcome }) => `${runId} ${outcome}`)).toEqual([
+            "01exec-oooooooo-i1 completed",
+            "01exec-oooooooo-i2 completed",
+            "01exec-oooooooo-i3 completed",
+            "01exec-xxxxxxxx-i1 completed",
+            "01exec-xxxxxxxx-i2 completed",
+            "01exec-xxxxxxxx-i3 completed",
+        ]);
+
+        // The state at the end. toMatchObject ignores what isn't listed, such as each run's full record.
+        expect(deps.state.get().run).toMatchObject({
+            execution: {
+                executionId: "01exec",
+                status: "complete",
+                matrix: { shape: [1, 1, 1, 2, 1], permutations: 2, iterations: 3 },
+            },
+            images: {},
+            runs: {
+                "01exec-oooooooo-i1": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
+                "01exec-oooooooo-i2": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
+                "01exec-oooooooo-i3": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
+                "01exec-xxxxxxxx-i1": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
+                "01exec-xxxxxxxx-i2": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
+                "01exec-xxxxxxxx-i3": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
+            },
+            timings: {
+                agent: { count: 6, maxMs: 0, totalMs: 0 },
+                collect: { count: 6, maxMs: 0, totalMs: 0 },
+                commit: { count: 6, maxMs: 0, totalMs: 0 },
+            },
+            uploadBacklog: 0,
+        });
+
+        // 40 updates: the empty state, all queued, running, 6 for each of the 6 runs, then complete.
+        expect(deps.state.history()).toHaveLength(1 + 1 + 1 + 6 * 6 + 1);
     });
 });
