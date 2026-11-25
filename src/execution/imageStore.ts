@@ -4,10 +4,8 @@
 // Pushing needs the user's `docker login` for the registry. It's checked before anything is built
 // or run, so a missing login fails in seconds, not after the agents have run.
 import type { ImageStore } from "../api/declarations.ts";
-import type { HashedPermutation } from "../config/permutations.ts";
 import { registryHost } from "../config/projectConfig.ts";
 import { checkLogin, DockerLoginError, type DockerRuntime, localRuntime, pullImage, pushImage } from "../docker/docker.ts";
-import { prerunImage, storedPrerunImage } from "./images.ts";
 
 /** Thrown when Docker has no valid login for the image store's registry. */
 export class ImageStoreLoginError extends Error {
@@ -49,29 +47,6 @@ export async function pushToStore(image: string, reference: string, hooks: PushH
   hooks.onPushed?.(image, reference);
 }
 
-/**
- * Pushes the prerun image of each of `permutations` to `imageStore`, from `runtime`'s daemon, the
- * local one by default, once per image hash, whether it was just built or already existed, so the
- * store has every image an execution starts from. Does nothing for `null`. Throws a
- * DockerPushError, after which nothing else is pushed.
- */
-export async function pushPrerunImages(
-  permutations: HashedPermutation[],
-  imageStore: ImageStore | null,
-  imagePrefix?: string,
-  hooks: PushHooks = {},
-  runtime: DockerRuntime = localRuntime(),
-): Promise<string[]> {
-  if (imageStore === null) return [];
-  const hashes = [...new Set(permutations.map(({ imageHash }) => imageHash))];
-  const pushed: string[] = [];
-  for (const hash of hashes) {
-    const reference = storedPrerunImage(imageStore.repository, hash);
-    await pushToStore(prerunImage(hash, imagePrefix), reference, hooks, runtime);
-    pushed.push(reference);
-  }
-  return pushed;
-}
 
 export type PullHooks = {
   /** Called as the runtime starts pulling each image. */

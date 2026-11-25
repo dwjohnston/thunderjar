@@ -50,7 +50,7 @@ const envShown = ({ env, secretEnv, testCaseEnv }: PlannedExecution["permutation
  * The execution's ID, then each permutation's prerun image, with each iteration's postrun image,
  * the environment variables its container is given, by name, or with their values for the test
  * case's `env`, any more `docker run` options, and
- * the command it runs: its prerun image's run script. `build --dry-run` shows what the script is.
+ * the command it runs: its prerun image's run script.
  */
 export function renderExecution({ executionId, permutations }: PlannedExecution, paint: Paint = plain): string {
   const f = (label: string, value: string) => field(label, value, paint);
@@ -89,7 +89,7 @@ export function executionPlanJson({ executionId, permutations }: PlannedExecutio
       secretEnv,
       runOptions,
       timeoutSeconds,
-      // Each iteration runs its prerun image's run script. `build --dry-run` shows what the script is.
+      // Each iteration runs its prerun image's run script.
       iterations: iterations.map(({ number, postrunImage }) => ({ number, postrunImage, command: `sh ${RUN_SCRIPT_PATH}` })),
     })),
   };

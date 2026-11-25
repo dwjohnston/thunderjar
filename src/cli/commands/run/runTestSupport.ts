@@ -6,7 +6,7 @@ import { type ExecutionRecord, type RecordedMeasure, type RecordedOutcome, setup
 import { TMP_DIR } from "../../../testing/cli.ts";
 import type { FakeDocker } from "../../../testing/fakeDocker.ts";
 
-/** What 0202's fake-harness-alpha needs: `plan` and `run` stop without it. */
+/** What 0202's fake-harness-alpha needs: `run` stops without it. */
 export const KEY = { FAKE_HARNESS_KEY: "fake-key" };
 
 /** The value of 0206's test-case-env's secretEnv: never in a command, a log, a record or a postrun image. */

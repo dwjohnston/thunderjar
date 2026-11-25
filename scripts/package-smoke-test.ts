@@ -40,17 +40,6 @@ const STEPS: { args: string[]; expect: string[] }[] = [
     ],
   },
   { args: ["generate"], expect: ["parameterNames.d.ts"] },
-  { args: ["plan", "compare-models"], expect: ["claude-code-2.1.311/claude-haiku-4-5-20251001", "claude-code-2.1.311/claude-haiku-5-5"] },
-  {
-    args: ["plan", "compare-harnesses"],
-    expect: ["claude-code-2.1.311/claude-haiku-5-5", "copilot-1.0.105/claude-haiku-5.5", "opencode-1.19.5/opencode/claude-haiku-5-5"],
-  },
-  // bun, which the bunTestFile measurement runs its tests with, is in the base image. The
-  // harness writes the run script, and the initial prompt the prompt, into the image.
-  {
-    args: ["build", "compare-models", "--dry-run"],
-    expect: ["npm install --global bun@1.3.14", "@anthropic-ai/claude-code@2.1.311", "/thunderjar/thunderjar-run.sh", "claude -p", "/thunderjar/prompt.txt"],
-  },
   { args: ["run", "compare-models", "--dry-run"], expect: ["sh /thunderjar/thunderjar-run.sh"] },
   // Capture keeps its records in the project's git repository, made by `git init` before the steps.
   { args: ["capture", "install", "--harness", "claude-code"], expect: [".claude/settings.local.json"] },

@@ -278,18 +278,18 @@ Permutation 1: prerun image thunderjar-prerun:70748710
   });
 
   test("env and secretEnv change no hash: the prerun image is the same without them", async () => {
-    const withEnv = JSON.parse((await thunderjar(scenario("0206"), ["plan", "test-case-env", "--json"], { env: TEST_CASE_SECRET })).stdout);
-    expect(withEnv.env).toEqual({ FAKE_TEST_CASE_SETTING: "test", FAKE_TEST_CASE_AWKWARD: AWKWARD_VALUE });
-    expect(withEnv.secretEnv).toEqual(["FAKE_TEST_CASE_SECRET"]);
+    const withEnv = JSON.parse((await thunderjar(scenario("0206"), ["run", "test-case-env", "--dry-run", "--json"], { env: TEST_CASE_SECRET })).stdout);
+    expect(withEnv.permutations[0].testCaseEnv).toEqual({ FAKE_TEST_CASE_SETTING: "test", FAKE_TEST_CASE_AWKWARD: AWKWARD_VALUE });
+    expect(withEnv.permutations[0].secretEnv).toEqual(["FAKE_TEST_CASE_SECRET"]);
 
     await using copy = await copyScenarioProject("0206");
     const file = `${copy.dir}/.thunderjar/test-cases/test-case-env.ts`;
     const text = await Bun.file(file).text();
     await Bun.write(file, text.slice(0, text.indexOf("  env: {")) + "});\n");
-    const without = JSON.parse((await thunderjar(copy.dir, ["plan", "test-case-env", "--json"])).stdout);
+    const without = JSON.parse((await thunderjar(copy.dir, ["run", "test-case-env", "--dry-run", "--json"])).stdout);
 
-    expect(without.env).toEqual({});
-    expect(without.secretEnv).toEqual([]);
+    expect(without.permutations[0].testCaseEnv).toEqual({});
+    expect(without.permutations[0].secretEnv).toEqual([]);
     expect(without.permutations[0].hash).toBe(withEnv.permutations[0].hash);
     expect(without.permutations[0].prerunImage).toBe(withEnv.permutations[0].prerunImage);
   });
