@@ -14,7 +14,7 @@
 // only write to the state, and so does this, so nothing here prints or exits. What went wrong
 // becomes the state's `failure`, and the exit code is returned.
 import { moduleLogger } from "../../log/logger.ts";
-import { addWarning, type RunState, setFailure, setPhase, updateRun } from "../../services/ApplicationState/ApplicationState.ts";
+import { type RunState, setFailure, setPhase, updateRun } from "../../services/ApplicationState/ApplicationState.ts";
 import type { StopSignal } from "../../services/Io/Io.ts";
 import { describeFailure } from "./describeFailure.ts";
 import { resolveTestCase } from "./resolveTestCase.ts";

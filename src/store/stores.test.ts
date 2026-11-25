@@ -49,7 +49,9 @@ describe(createStores, () => {
   });
 
   test("with no data dir, the config's SQLite file, resolved against the project folder, found from a folder inside it", async () => {
-    const project = scenario("0202");
+    // A throwaway project, not a shared scenario: a `run` there by hand leaves a store file git doesn't show.
+    const project = await projectWith(`sqliteStore({ path: "./.thunderjar/.data/runs.sqlite" })`);
+    await $`mkdir -p ${project}/.thunderjar/parameters`.quiet();
     const { store, where } = await createStores(FakeEnv({ cwd: `${project}/.thunderjar/parameters` })).open();
     expect(where).toBe(`${project}/.thunderjar/.data/runs.sqlite`);
     // Reading a store with no file gives nothing, and creates nothing.

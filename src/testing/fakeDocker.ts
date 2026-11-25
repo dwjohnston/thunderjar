@@ -167,7 +167,6 @@ export async function fakeDocker({
   loggedIn = [],
   unreachable = false,
   pullDenied = false,
-  stored = [],
   slowStart = {},
   env = {},
 }: {
@@ -177,8 +176,6 @@ export async function fakeDocker({
   loggedIn?: string[];
   unreachable?: boolean;
   pullDenied?: boolean;
-  /** References already in the registry, as if pushed before. */
-  stored?: string[];
   /** How many seconds `run` waits before it makes a container, by the end of its name, e.g. `{ "-1-1": 3 }`. */
   slowStart?: Record<string, number>;
   /** The environment of each image that has one, as `NAME=value` entries, by image. */
@@ -192,7 +189,6 @@ export async function fakeDocker({
   await Bun.write(`${dir}/logins`, lines(loggedIn));
   if (unreachable) await Bun.write(`${dir}/unreachable`, "");
   if (pullDenied) await Bun.write(`${dir}/pull-denied`, "");
-  if (stored.length > 0) await Bun.write(`${dir}/pushed`, lines(stored));
   for (const [image, entries] of Object.entries(env)) await Bun.write(envFile(dir, image), JSON.stringify(entries));
   // A new Bun.file each time: one read caches the file's size, so a second would miss what was appended since.
   const commandsFile = () => Bun.file(`${dir}/commands`);

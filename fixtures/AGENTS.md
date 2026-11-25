@@ -55,7 +55,7 @@ Run a command by hand in a scenario with its ID:
 bun run fixture 0202 run is-prime-baseline --dry-run
 ```
 
-That writes a log into the scenario's `.thunderjar/logs/`. It is git-ignored, but `copyScenarioProject` copies it, so delete it afterwards.
+That writes a log into the scenario's `.thunderjar/logs/`. It is git-ignored, but `copyScenarioProject` copies it, so delete it afterwards. A `run` without `--data-dir` also leaves `.thunderjar/.data/`: delete that too.
 
 ## What scenarios are for, since `run` was rebuilt
 

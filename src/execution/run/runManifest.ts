@@ -176,8 +176,10 @@ export async function runManifest(manifest: Manifest, deps: RunManifestDeps, con
   });
 
   let thrown: { error: unknown } | undefined;
+  let abandoned = false;
   try {
-    if ((await settled(work, control, clock)) === ABANDONED) log.warn({ executionId, ended: ended.size, runs: manifest.runs.length }, "gave up waiting for the execution to stop");
+    abandoned = (await settled(work, control, clock)) === ABANDONED;
+    if (abandoned) log.warn({ executionId, ended: ended.size, runs: manifest.runs.length }, "gave up waiting for the execution to stop");
   } catch (error) {
     // Not expected: a run's own failures are in its record. Still recorded as failed, below.
     thrown = { error };
@@ -197,7 +199,11 @@ export async function runManifest(manifest: Manifest, deps: RunManifestDeps, con
 
   // A container that never started may have been left created, and one started as the runs were
   // being stopped may have been missed: none of this execution's is wanted now.
-  if (control.shouldStop() || runs.some(({ record }) => record?.execution.failedToStart !== undefined)) await removeContainers();
+  if (control.shouldStop() || runs.some(({ record }) => record?.execution.failedToStart !== undefined)) {
+    const removing = removeContainers();
+    // Tried once more, but a runtime that has already been given up on isn't waited for again.
+    if (!abandoned) await settled(removing, control, clock);
+  }
   for (const note of notesOf(manifest, runs)) update((run) => addNote(run, note));
   update((run) => ({ ...run, recordedIn: displayPath(deps.env.cwd, where) }));
 

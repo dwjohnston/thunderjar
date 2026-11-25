@@ -14,7 +14,7 @@
  */
 
 import { type Command, InvalidArgumentError, Option } from "commander";
-import { OVERRIDABLE, OVERRIDES, type Overrides } from "../config/overrides.ts";
+import { OVERRIDABLE, OVERRIDES } from "../config/overrides.ts";
 
 /** A comma-separated list of names, e.g. `snerk,glurk`. */
 const names = (value: string): string[] => {
@@ -37,9 +37,6 @@ export function overrideOptions(): Option[] {
     return new Option(`${flag} <names>`, `use these ${what}, comma-separated, instead of the test case's`).argParser(names);
   });
 }
-
-/** The overrides among a command's parsed options. */
-export const overridesOf = (options: Overrides): Overrides => Object.fromEntries(OVERRIDABLE.map((field) => [field, options[field]]));
 
 /** `command`, with every override flag. */
 export function withOverrideOptions(command: Command): Command {

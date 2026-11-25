@@ -26,7 +26,7 @@ Everything `thunderjar run <test case>` does is in this folder. The command file
 |---|---|---|---|
 | 1 | `runCommand` | the test case's name, `RunOptions`, every dependency | The displayer, the interrupt handler, turning errors into the state's `failure`, the exit code |
 | 2 | `runTestCase` | a `TestCaseConfig`, a `RunMode` | The manifest, how far the mode goes, the runtime's hooks, the phase |
-| 3 | `runManifest` | a `Manifest` whose images are ready | The run data store, the scheduler, the upload queue, the execution record |
+| 3 | `runManifest` | a `Manifest` whose images are ready | The scheduler, the upload queue, the execution record, removing containers on a stop |
 
 - Options split three ways at level 1, in `splitOptions`, and none goes to two:
   - **Overrides** are merged into the `TestCaseConfig`, e.g. `--iterations`, `--image-prefix`.
@@ -34,6 +34,8 @@ Everything `thunderjar run <test case>` does is in this folder. The command file
   - **Output** sets the displayer's mode: `interactive` or `json`.
 - A dry run stops once the manifest is in the state. `--build-only` stops after `ensureImages`.
 - Only a full run runs the hooks: `beforeExecution` before anything is built, `afterExecution` however it ended.
+- Only a full run opens the run data store. `runTestCase` opens and checks it before `beforeExecution`, and hands it to `runManifest`.
+- `--build-only` needs the build secrets set, not the variables a harness needs: `runCommand` tells `resolveTestCase` so with `forRuns: false`.
 
 ## The flow
 
@@ -70,7 +72,8 @@ Each file has its test beside it, `<name>.test.ts`.
 | `runTestCase.ts` | Level 2. Also `RuntimeHookError` and `hookEnv`. |
 | `plan.ts` | `TestCaseConfig` to `Manifest`. Pure and synchronous. |
 | `ensureImages.ts` | Builds, pushes or pulls each prerun image, so every run can start. |
-| `runManifest.ts` | Level 3. Also `RunControl`, how level 1 asks the runs to stop. |
+| `runManifest.ts` | Level 3. Also `openAndCheck`, which opens the run data store. |
+| `runControl.ts` | `RunControl`, how level 1 asks the levels below to stop, and `settled`, which bounds the wait. |
 | `scheduler.ts` | Runs a list through a task, a fixed number at once, with cache warm-up and backpressure. Knows nothing of Docker. |
 | `runPermutation.ts` | One run, start to finish. Returns a `RunRecord`. |
 | `uploadQueue.ts` | Pushes committed postrun images behind the runs. |
@@ -164,6 +167,47 @@ Whether an image needs building is not in the manifest: `ensureImages` works tha
 - An agent that exits non-zero, or times out, is a result: status `finished` or `timedOut`, committed and measured like any other.
 - `runManifest` decides whether the execution is `failed`.
 
+### Asked to stop, everything winds down within a bound
+
+`runCommand` makes one `RunControl` and passes it down. The first Ctrl-C or SIGTERM calls `stop()`, a second `force()`.
+
+| Who | On `stop()` |
+|---|---|
+| `ensureImages` | Starts no other image. The one under way finishes. |
+| The scheduler | Starts no other run. Each not started is `cancelled`. |
+| `runManifest` | Removes the execution's containers, then again each second. Cancels the uploads still waiting. Records the execution as `failed`. |
+| `runPermutation` | Goes no further than the step it is on. The run is `crashed`, with `STOPPED` as why. |
+| `runTestCase` | Still runs `afterExecution`. |
+
+✅ **Do** wrap a wait that a stop should cut short in `settled(work, control, clock)`.
+
+```ts
+// 👍 Good
+await settled(ensureImages(manifest, deps, control), control, deps.clock);
+```
+
+❌ **Don't** await a build, a push or the scheduler bare where a stop can arrive.
+
+```ts
+// 👎 Bad
+await uploads.drain();
+```
+
+**Why:** whoever stops a command kills it outright if it lingers, e.g. a CI runner after its grace period. Then `afterExecution` never runs, and a rented runtime is left up.
+
+- `settled` waits `STOP_SETTLE_MS`, 15 seconds, after a stop, and not at all once forced. Then it gives `ABANDONED`.
+- What was given up on goes on unawaited. `run.ts` calls `process.exit` after an interrupt for that reason.
+- A new step that starts something on the runtime needs a `control.shouldStop()` check before it.
+- The hooks themselves are never cut short.
+
+### A store that can't record stops the runs
+
+`runManifest` wraps the store it gives `runPermutation`. Once a `recordContainerRun` fails, no other run starts: each is `cancelled`.
+
+**Why:** an agent whose run can't be recorded costs the same and leaves nothing.
+
+A `RunRecord`'s `record` is only ever what the store took.
+
 ### Uploads go through the queue
 
 ✅ **Do** hand a committed postrun image to `uploads.enqueue`.
@@ -217,6 +261,8 @@ expect(fakes.hostDocker.calls).toEqual([]);
   - Register it with `runtimeDocker.on("", fakeAgent())` for every container, or `on("-1-1", …)` for one.
 - **`aManifest()`, `aTestCaseConfig()`**
   - Small plain values: test case `example`, two permutations, two iterations.
+- **`createRunControl()`**
+  - Pass it as the control, then call `stop()` or `force()` where the test wants the signal.
 - **The clock only moves when the test moves it.**
   - Start the function, `await clock.advance(ms)`, then await the result.
   - An agent, a warm-up, a timeout and an upload each wait on the clock.
@@ -289,6 +335,7 @@ The manifest is public: `--dry-run --json` prints it. Removing or renaming a fie
 2. Add it to both `STATUS_ORDER` lists: in the Displayer service and in `render.ts`.
 3. Write it from the step that owns it, with `patchRun`.
 4. Check `SHOWS_UPLOAD` and `didntSucceed` in `runManifest.ts`, and `anyStarted` in `runCommand.ts`: each decides by status.
+   - `runManifest` also reads `queued` to tell a run that never started from one it gave up on.
 
 A status that ends a run also needs adding to `RunRecord`'s.
 
@@ -306,14 +353,16 @@ A status that ends a run also needs adding to `RunRecord`'s.
 | The plan says | The code does | Why |
 |---|---|---|
 | `runPermutation(run, deps, uploads)` | It also takes the manifest, and a `store` in its deps. | A `PlannedRun` names its permutation by hash. The store is opened once per execution. |
-| `runManifest(manifest, deps)` and `runTestCase(config, deps, mode)` | Each takes a last `RunControl`. | Level 1 needs a way to say "stop starting runs" on Ctrl-C. |
+| `runManifest(manifest, deps)` and `runTestCase(config, deps, mode)` | Each takes a `RunControl`, as do `ensureImages` and `runPermutation`. `runManifest` also takes the opened store. | Level 1 needs a way to say "stop" on Ctrl-C. The store is checked before the hooks. |
+| `resolveTestCase(name, overrides, deps)` | It takes a last `{ forRuns }`. | `--build-only` must not need the harness's keys, as `build` didn't. |
+| `await uploads.drain()` | The scheduler and the drain are awaited through `settled`. | A stop must not wait for every queued push. |
 | `runCommand` returns what level 2 does | It returns the exit code, and never throws. | The command file only sets `process.exitCode`. |
 | `Dependencies` holds `logger`, `stdout`, `stderr` | It holds `io`, `commands`, `stores` and `measurer` instead. | The logger is imported directly. Hooks, the store and measurements need faking too. |
 | The logger writes to `env.logPath` | There is no such field. The displayer is given `logPath()` from the logger, lazily. | The path is only known once commander has parsed the command line. |
 | `resolveTestCase` takes all of `deps` | It takes `env` and `random`. | It touches no Docker: the login check is `ensureImages`'s. |
 | `plan` gets `deps.env.concurrency` | It gets `--concurrency`, else the env's, else the runtime's, else 1. | The flag and the runtime's setting were kept. |
 | `scheduler.run(manifest, task)` | It takes a third argument, what a skipped run becomes. | Runs not started on an interrupt end as `cancelled`. |
-| `createUploadQueue(docker)` | It takes options, and returns a queue with `failures()`. | A failed push fails the execution, without rejecting `drain()`. |
+| `createUploadQueue(docker)` | It takes options, and returns a queue with `failures()` and `cancel(reason)`. | A failed push fails the execution, without rejecting `drain()`. A stop drops what is still waiting. |
 | Warnings are part of what is shown | The displayer writes each to stderr. They are not in the frame. | They would show twice. |
 | On a remote runtime, containers start from the stored image | With no image store, they start from the local name. | There is no stored name to use. |
 
@@ -321,12 +370,15 @@ Smaller choices the plan doesn't cover:
 
 - **A non-zero exit is `finished`.**
   - The exit code is on the record. `timedOut`, `crashed` and `cancelled` are the other three.
-- **The run data store is checked in `runManifest`.**
-  - So after the images are built. The old code checked before building.
+- **The run data store is checked in `runTestCase`, before `beforeExecution`.**
+  - As the old code did. `runManifest` opens and checks it itself only if it isn't given one.
 - **A failing `beforeExecution` skips `afterExecution`.**
 - **`--build-only` runs no hooks.**
-- **Uploads drain after an interrupt.**
-  - The old code gave up after 15 seconds.
+- **An interrupt is bounded, as in the old code: 15 seconds.**
+  - Unlike the old code, the execution is still recorded as `failed` after that.
+- **A stop during `beforeExecution` waits for the hook.**
+  - A second signal doesn't cut it short either. Then nothing is built, and `afterExecution` runs.
+- **An execution asked to stop is `failed`, whatever its runs say.**
 - **The loaders and `hashPermutations` are not injected.**
   - They read the real filesystem, and a parameter's `resolve` runs on the host's shell.
 - **`render.ts` and `describeFailure.ts` keep their own small formatters.**

@@ -28,9 +28,13 @@
 ```ts
 // 👍 Good
 .action(async (name: string, options: RunOptions) => {
-  process.exitCode = await runCommand(name, options, deps);
+  const exitCode = await runCommand(name, options, deps);
+  process.exitCode = exitCode;
+  if (exitCode === INTERRUPTED || exitCode === TERMINATED) process.exit(exitCode);
 });
 ```
+
+The `process.exit` is the one exception to "wiring only". After Ctrl-C, `runCommand` may have given up waiting for a `docker` process, which would otherwise keep Thunderjar alive.
 
 ✅ **Do** put what a command does in a function that takes `Dependencies`, in a lower layer, and test it there with fakes.
 

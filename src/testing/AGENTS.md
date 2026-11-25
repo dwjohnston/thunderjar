@@ -42,4 +42,4 @@ Helpers for tests that run the real CLI in a fixture scenario. See [fixtures/AGE
 
 Running a command by hand in a scenario writes a log into the scenario's `.thunderjar/logs/`. The folder is git-ignored, but `copyScenarioProject` copies it, and a test that counts log files then fails.
 
-✅ **Do** delete a scenario's `.thunderjar/logs/` after running a command in it by hand.
+✅ **Do** delete a scenario's `.thunderjar/logs/` after running a command in it by hand. After a `run` without `--data-dir`, delete its `.thunderjar/.data/` too.

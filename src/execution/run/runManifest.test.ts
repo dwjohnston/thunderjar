@@ -286,6 +286,25 @@ describe("runManifest: uploads", () => {
   });
 });
 
+describe("runManifest: something unexpected", () => {
+  it("records the execution as failed, and throws what was thrown, if a run's task throws outside its own run", async () => {
+    const fakes = fakesWith();
+    // A state that can't show an upload: the one step of a task that isn't `runPermutation`'s.
+    const update = fakes.state.update.bind(fakes.state);
+    fakes.state.update = (change) => {
+      const next = change(fakes.state.get());
+      if (Object.values(next.run.runs).some(({ status }) => status === "uploading" || status === "uploaded")) throw new Error("the display broke");
+      update(() => next);
+    };
+
+    const error = await runIt(fakes, aManifest({}, { imageStore: AN_IMAGE_STORE })).catch((e: unknown) => e);
+
+    expect((error as Error).message).toBe("the display broke");
+    expect(fakes.store.executions.map(({ status }) => status)).toEqual(["failed"]);
+    expect(fakes.state.get().run.recordedIn).toBe("memory");
+  });
+});
+
 describe("runManifest: a run data store that stops working", () => {
   /** Fakes whose store takes the execution's start, then fails every write once the first run's agent has ended. */
   function failingStore(): FakeDependencies {
@@ -459,6 +478,16 @@ describe("runManifest: asked to stop", () => {
     expect(result.execution.status).toBe("failed");
     // Said once, however many times it was tried.
     expect(fakes.state.get().run.warnings).toEqual(["Couldn't remove the execution's containers: the runtime isn't answering"]);
+  });
+
+  it("gives up as soon on a runtime that never answers at all", async () => {
+    const fakes = fakesWith(fakeAgent({ durationMs: 600_000 }));
+    fakes.runtimeDocker.removeContainersNamed = () => new Promise<string[]>(() => {});
+
+    const { result, took } = await stopIt(fakes, aManifest(), 2_000);
+
+    expect(took).toBe(STOP_SETTLE_MS);
+    expect(result.execution.status).toBe("failed");
   });
 
   it("stops waiting at once when forced", async () => {

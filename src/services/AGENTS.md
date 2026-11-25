@@ -10,11 +10,11 @@ Each row is one folder here. All but `ContainerRunner` are fields of `Dependenci
 | `Env` | What the command was started with: `cwd`, `variables`, and the settings read from them, e.g. `concurrency`, `uploadBacklogCap`, `tmpDir`. A plain object. | `FakeEnv(overrides)` | Safe defaults. It is a function, not a class. |
 | `Random` | `bytes`, `uuid`, `ulid`. | `FakeRandom` | The same sequence every run. `setUlids`, `setBytes` pin values. |
 | `Fs` | Files and folders, e.g. `readText`, `write`, `copyDir`, `removeDir`. | `FakeFs` | In memory. `files()` lists what is there. |
-| `Io` | stdin, stdout, stderr, and `onStop` for Ctrl-C. | `FakeIo` | `stdout.text()`, `stdout.lastFrame()`, `interrupt()`, `terminate()`. |
+| `Io` | stdin, stdout, stderr, and `onStop` for Ctrl-C. An output says its `columns` and `rows` if it is a terminal. | `FakeIo` | `stdout.text()`, `stdout.lastFrame()`, `interrupt()`, `terminate()`, `stopListeners`. `rows` only if the test gives some. |
 | `CommandRunner` | Runs a host command and waits: `run(command, env)` gives its exit code and stderr. `run` uses it for the runtime's hooks. | `FakeCommandRunner` | `calls`, and `fail(prefix, result)`. Everything else exits 0. |
 | `Docker` | `DockerService`: what `run` asks of Docker. There are two, `hostDocker` and `runtimeDocker`. | `FakeDocker`, with `FakeRegistry` | See below. |
 | `ApplicationState` | The run state the displayer shows: `get`, `update`, and helpers such as `patchRun`, `setImageStatus`, `addNote`. | `FakeApplicationState` | `history()`: every state there has been. |
-| `Displayer` | Shows the state: a frame each second on a terminal, or JSON at `stop()`. | `FakeDisplayer` | Prints nothing. Keeps the `mode` it was set to. |
+| `Displayer` | Shows the state: a frame each second on a terminal, or JSON at `stop()`. A frame taller than the terminal is drawn as its last rows, then whole at `stop()`. In JSON mode the state's `notes` go to stderr. | `FakeDisplayer` | Prints nothing. Keeps the `mode` it was set to. |
 | `ContainerRunner` | Old path: the three steps the real `runContainer` runs on. Not in `Dependencies`. | `FakeContainerRunner` | A `FakeDocker` under another name. |
 
 Two services live outside this folder, beside the types they need:
@@ -96,6 +96,7 @@ runtime.on("-1", async ({ start, write, clock }) => {
   - `logOut(host)` makes `checkLogin` throw.
 - **Timing**
   - `takes("build" | "push" | "pull", ms)` makes each take that long on the clock.
+  - `takes("run", ms)` makes each `run` take that long to create its container: until then `removeContainersNamed` finds none.
 - **Looking at it**
   - `calls` and `called(method)`: every call, so a test can check which of two Dockers was asked.
   - `builds`, `images()`, `containers()`, `container(name)`, `imageFiles(image)`.

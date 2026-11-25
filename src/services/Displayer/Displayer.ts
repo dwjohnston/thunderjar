@@ -111,7 +111,9 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
     let taken = 0;
     let first = lines.length;
     while (first > 0 && taken + rowsOfLine(lines[first - 1] as string) <= room) taken += rowsOfLine(lines[--first] as string);
-    return first === 0 ? frame : lines.slice(first).map((line) => `${line}\n`).join("");
+    // A last line too tall to fit by itself is drawn all the same: better than nothing.
+    first = Math.min(first, lines.length - 1);
+    return first <= 0 ? frame : lines.slice(first).map((line) => `${line}\n`).join("");
   };
 
   /** Writes the warnings not yet shown to stderr. True if there were any. */

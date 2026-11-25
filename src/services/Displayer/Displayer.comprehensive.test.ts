@@ -304,22 +304,19 @@ describe("notes", () => {
 describe("a frame taller than the terminal", () => {
     /** A frame of `count` lines, `line 1` to `line <count>`, at tick `now`. */
     const lines = (count: number) => (_state: RunState, now: number) => Array.from({ length: count }, (_, i) => `line ${i + 1} at ${now}\n`).join("");
-    /** What each write to stdout moved up over, and how many lines it then drew. */
-    const draws = (text: string) =>
-        text
-            .split("\x1b[0J")
-            .map((drawn) => ({ lines: drawn.split("\n").length - 1, up: /\x1b\[(\d+)A$/.exec(drawn)?.[1] }));
+    /** Moving up `rows` rows and clearing from there: what goes before each redraw. */
+    const redraw = (rows: number) => `\x1b[${rows}A\x1b[0J`;
 
     test("While it polls, only the rows that fit are drawn, its last ones, so each redraw erases exactly the one before", async () => {
         const { io, clock, displayer } = setup("terminal", undefined, { render: lines(30), rows: 10 });
         displayer.start();
         await clock.advance(3000);
 
-        const frames = io.stdout.text().split(/\x1b\[\d+A\x1b\[0J/);
+        const frames = io.stdout.text().split(redraw(9));
         expect(frames.length).toBe(3);
         // One row is left for the cursor.
         expect(frames[0]).toBe(Array.from({ length: 9 }, (_, i) => `line ${i + 22} at 1000\n`).join(""));
-        expect(io.stdout.text()).toContain("\x1b[9A\x1b[0Jline 22 at 2000\n");
+        expect(frames[2]).toBe(Array.from({ length: 9 }, (_, i) => `line ${i + 22} at 3000\n`).join(""));
         expect(io.stdout.text()).not.toContain("line 21 ");
         displayer.stop();
     });
@@ -332,7 +329,9 @@ describe("a frame taller than the terminal", () => {
 
         expect(io.stdout.lastFrame()).toBe(Array.from({ length: 30 }, (_, i) => `line ${i + 1} at 2000\n`).join(""));
         expect(io.stdout.text().split("line 1 at").length - 1).toBe(1);
-        expect(draws(io.stdout.text()).map(({ up }) => up)).toEqual(["9", "9", undefined]);
+        // Each redraw, the last too, moves up over the nine rows drawn, never more.
+        expect(io.stdout.text().split(redraw(9)).length).toBe(3);
+        expect(io.stdout.text().split("\x1b[0J").length).toBe(3);
     });
 
     test("A line that wraps counts as the rows it takes", async () => {
