@@ -29,11 +29,12 @@
 import { $ } from "bun";
 import { registryHost } from "../config/projectConfig.ts";
 import { moduleLogger } from "../log/logger.ts";
+import { RegistryError } from "../services/Docker/errors.ts";
 
 const log = moduleLogger("registry");
 
-/** The registry couldn't be asked, or answered with an error that isn't a refusal, e.g. a 500. */
-export class RegistryError extends Error {}
+// Lives with the Docker service's other errors: re-exported under its old path.
+export { RegistryError };
 
 /** How deleting one image went: deleted, already gone, or refused by the registry, with its reason. */
 export type RegistryDelete = { outcome: "deleted" | "absent" } | { outcome: "refused"; reason: string };

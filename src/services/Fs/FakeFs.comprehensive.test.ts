@@ -61,4 +61,53 @@ describe(FakeFs, () => {
 
         expect(fs.files()).toEqual({ "/a": "1", "/logs/run.log": "done" });
     });
+
+    test("copyDir copies a folder's contents, and its empty folders, into a folder it makes", async () => {
+        const fs = new FakeFs({ "/from/a.txt": "a", "/from/sub/.hidden": "h", "/from-other/x": "x" });
+        await fs.mkdir("/from/empty");
+
+        await fs.copyDir("/from", "/to/deep");
+
+        expect(fs.files()).toEqual({ "/from-other/x": "x", "/from/a.txt": "a", "/from/sub/.hidden": "h", "/to/deep/a.txt": "a", "/to/deep/sub/.hidden": "h" });
+        expect(await fs.isDirectory("/to/deep/empty")).toBe(true);
+    });
+
+    test("copyDir of an empty folder still makes the destination, and adds to one that's there", async () => {
+        const fs = new FakeFs({ "/to/b.txt": "kept", "/to/a.txt": "old", "/from/a.txt": "new" });
+        await fs.mkdir("/nothing");
+
+        await fs.copyDir("/nothing", "/made");
+        await fs.copyDir("/from", "/to");
+
+        expect(await fs.isDirectory("/made")).toBe(true);
+        expect([await fs.readText("/to/a.txt"), await fs.readText("/to/b.txt")]).toEqual(["new", "kept"]);
+    });
+
+    test("copyDir from a missing folder does nothing, not even making the folder", async () => {
+        const fs = new FakeFs();
+
+        await fs.copyDir("/nowhere", "/untouched");
+
+        expect(await fs.isDirectory("/untouched")).toBe(false);
+    });
+
+    test("A copy is its own: changing it leaves the original alone", async () => {
+        const fs = new FakeFs({ "/from/a.txt": "a" });
+
+        await fs.copyDir("/from", "/to");
+        await fs.write("/to/a.txt", "changed");
+
+        expect(await fs.readText("/from/a.txt")).toBe("a");
+    });
+
+    test("removeDir deletes a folder, its files and its folders, and a missing one is fine", async () => {
+        const fs = new FakeFs({ "/r/a/b.txt": "b", "/r-sibling/kept.txt": "kept" });
+        await fs.mkdir("/r/empty");
+
+        await fs.removeDir("/r");
+        await fs.removeDir("/never-there");
+
+        expect(fs.files()).toEqual({ "/r-sibling/kept.txt": "kept" });
+        expect([await fs.isDirectory("/r"), await fs.isDirectory("/r/empty")]).toEqual([false, false]);
+    });
 });

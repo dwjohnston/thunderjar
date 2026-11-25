@@ -36,4 +36,48 @@ describe(createFsService, () => {
     test("Reading a missing file rejects", async () => {
         await expect(fs.readText(`${await dir}/missing`)).rejects.toThrow();
     });
+
+    test("copyDir copies a folder's contents, dotfiles and what symlinks point to, into a folder it makes", async () => {
+        const root = await dir;
+        await fs.write(`${root}/c/from/a.txt`, "a");
+        await fs.write(`${root}/c/from/sub/.hidden`, "h");
+        await fs.write(`${root}/c/elsewhere/target.txt`, "linked");
+        await $`ln -s ${root}/c/elsewhere/target.txt ${root}/c/from/link.txt`.quiet();
+
+        await fs.copyDir(`${root}/c/from`, `${root}/c/to/deep`);
+
+        expect(fs.glob("**", { cwd: `${root}/c/to/deep`, dot: true })).toEqual(["a.txt", "link.txt", "sub/.hidden"]);
+        expect(await fs.readText(`${root}/c/to/deep/link.txt`)).toBe("linked");
+        expect((await $`test -L ${root}/c/to/deep/link.txt`.nothrow().quiet()).exitCode).toBe(1);
+    });
+
+    test("copyDir adds to a folder that's already there, replacing files of the same name", async () => {
+        const root = await dir;
+        await fs.write(`${root}/m/from/a.txt`, "new");
+        await fs.write(`${root}/m/to/a.txt`, "old");
+        await fs.write(`${root}/m/to/b.txt`, "kept");
+
+        await fs.copyDir(`${root}/m/from`, `${root}/m/to`);
+
+        expect([await fs.readText(`${root}/m/to/a.txt`), await fs.readText(`${root}/m/to/b.txt`)]).toEqual(["new", "kept"]);
+    });
+
+    test("copyDir from a missing folder does nothing, not even making the folder", async () => {
+        const root = await dir;
+
+        await fs.copyDir(`${root}/nowhere`, `${root}/untouched`);
+
+        expect(await fs.isDirectory(`${root}/untouched`)).toBe(false);
+    });
+
+    test("removeDir deletes a folder and everything in it, and a missing one is fine", async () => {
+        const root = await dir;
+        await fs.write(`${root}/r/a/b.txt`, "b");
+        await fs.write(`${root}/r-sibling/kept.txt`, "kept");
+
+        await fs.removeDir(`${root}/r`);
+        await fs.removeDir(`${root}/never-there`);
+
+        expect([await fs.isDirectory(`${root}/r`), await fs.exists(`${root}/r-sibling/kept.txt`)]).toEqual([false, true]);
+    });
 });

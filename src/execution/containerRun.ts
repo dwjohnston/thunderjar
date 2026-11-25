@@ -1,14 +1,16 @@
 // One container run: its prerun image's `thunderjar-run.sh`, run in a container from the image,
 // in the image's working directory, then committed into its postrun image. The container is
 // removed afterwards, whatever happens.
-import { DockerContainerError } from "../docker/docker.ts";
 import type { DockerService } from "../services/Docker/Docker.ts";
 import type { Execution } from "../store/runDataStore.ts";
 import { RESULT_PATH, RUN_PATH, START_MARKER, STDERR_PATH, timedRun } from "./runScript.ts";
+import { parseExecution } from "./run/parseExecution.ts";
 import { type SecretSearch, searchableSecrets, searchForSecrets } from "./secretSearch.ts";
 import { type Timer, untimed } from "./timings.ts";
 
 export { NOW_MS_FUNCTION, RUN_PATH, STDERR_PATH } from "./runScript.ts";
+// Moved to run/parseExecution.ts; still exported from here until this file goes.
+export { parseExecution } from "./run/parseExecution.ts";
 
 export type ContainerRun = {
   prerunImage: string;
@@ -42,41 +44,6 @@ export type ContainerRunOutcome = {
   /** What searching its postrun image's files for its secret values came to. Absent if it had none to search for. */
   secrets?: SecretSearch;
 };
-
-/** Whether `value` is plausibly ms since the epoch: from 2001-09-09 (13 digits) up to 2286. */
-const isEpochMs = (value: unknown): value is number =>
-  Number.isInteger(value) && (value as number) >= 1e12 && (value as number) < 1e13;
-
-/** Whether `value` is how one turn ran, as the run script records it. */
-const isTurn = (value: unknown): value is { startedAt: number; finishedAt: number; exitCode: number } => {
-  const { startedAt, finishedAt, exitCode } = (value ?? {}) as Record<string, unknown>;
-  return isEpochMs(startedAt) && isEpochMs(finishedAt) && typeof exitCode === "number";
-};
-
-/**
- * The Execution in the text of RUN_PATH, of a run with a limit of `timeoutSeconds`. If it was
- * killed at `killedAt`, RUN_PATH holds only its start, and it finished when it was killed. Throws
- * a DockerContainerError if it isn't a valid one.
- */
-export function parseExecution(text: string | undefined, timeoutSeconds: number, killedAt?: number): Execution {
-  let parsed: Partial<Execution> | undefined;
-  try {
-    parsed = text === undefined ? undefined : (JSON.parse(text) as Partial<Execution>);
-  } catch {
-    parsed = undefined;
-  }
-  const { startedAt, finishedAt, exitCode, turns } = parsed ?? {};
-  const invalid = () =>
-    new DockerContainerError(`The run script left no valid ${RUN_PATH}: ${text === undefined ? "there is none" : text.trim()}`);
-  if (!isEpochMs(startedAt)) throw invalid();
-  // The times are wall-clock times, so a clock stepped back mid-run, e.g. by time sync on a VM
-  // that has just booted, can put the finish before the start. A run never takes less than nothing.
-  const notBeforeStart = (at: number) => Math.max(at, startedAt);
-  if (killedAt !== undefined) return { startedAt, finishedAt: notBeforeStart(killedAt), exitCode: null, timedOut: true, timeoutSeconds };
-  if (!isEpochMs(finishedAt) || typeof exitCode !== "number") throw invalid();
-  if (turns !== undefined && (!Array.isArray(turns) || !turns.every(isTurn))) throw invalid();
-  return { startedAt, finishedAt: notBeforeStart(finishedAt), exitCode, timedOut: false, timeoutSeconds, ...(turns && { turns }) };
-}
 
 /**
  * Runs `run`, commits its container into its postrun image, even when the agent exits

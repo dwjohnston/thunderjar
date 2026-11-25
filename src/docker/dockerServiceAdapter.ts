@@ -17,12 +17,14 @@ import type { Clock } from "../services/Clock/Clock.ts";
 import type { DockerService } from "../services/Docker/Docker.ts";
 import {
   buildImage,
+  checkLogin,
   commitContainer,
   containerState,
   diskUsage,
   type DockerRuntime,
   followLogs,
   imagesIn,
+  inRegistry,
   pullImage,
   pushImage,
   readContainerFile,
@@ -43,6 +45,9 @@ export function createDockerServiceAdapter(clock: Clock, runtime: DockerRuntime)
     imagesIn: (repository) => imagesIn(repository, runtime),
     push: (image, reference) => pushImage(image, reference, runtime),
     pull: (reference) => pullImage(reference, runtime),
+    // These two use the local `docker` CLI, whatever the runtime: see checkLogin and inRegistry.
+    inRegistry: (reference) => inRegistry(reference),
+    checkLogin: (host) => checkLogin(host),
     run: (image, name, script, options) => runContainer(image, name, script, { ...options, runtime, clock }),
     commit: (name, image, like, kept) => commitContainer(name, image, like, runtime, kept),
     removeContainer: (name) => removeContainer(name, runtime),

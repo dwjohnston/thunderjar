@@ -23,15 +23,23 @@ export interface Fs {
   mkdir(path: string): Promise<void>;
   /** Deletes the file, if there is one. */
   remove(path: string): Promise<void>;
+  /**
+   * Copies what's in the folder `from` into the folder `to`, making `to`: files of the same name are
+   * replaced, and a symlink is copied as what it points to. Does nothing if `from` is missing.
+   */
+  copyDir(from: string, to: string): Promise<void>;
+  /** Deletes the folder and everything in it, if it's there. */
+  removeDir(path: string): Promise<void>;
   /** The paths under `cwd` matching `pattern`, sorted, relative to `cwd`. None if `cwd` is missing. */
   glob(pattern: string, options: GlobOptions): string[];
 }
 
 /** The real filesystem. Built only at an entry point. */
 export function createFsService(): Fs {
+  const isDirectory = (path: string) => Bun.file(path).stat().then((stat) => stat.isDirectory(), () => false);
   return {
     exists: (path) => Bun.file(path).exists(),
-    isDirectory: (path) => Bun.file(path).stat().then((stat) => stat.isDirectory(), () => false),
+    isDirectory,
     readText: (path) => Bun.file(path).text(),
     readBytes: (path) => Bun.file(path).bytes(),
     write: async (path, data) => void (await Bun.write(path, data)),
@@ -40,6 +48,13 @@ export function createFsService(): Fs {
       const file = Bun.file(path);
       if (await file.exists()) await file.delete();
     },
+    copyDir: async (from, to) => {
+      if (!(await isDirectory(from))) return;
+      await $`mkdir -p ${to}`.quiet();
+      // `from/.` copies the contents, dotfiles included, not the folder itself.
+      await $`cp -RL ${`${from}/.`} ${to}`.quiet();
+    },
+    removeDir: async (path) => void (await $`rm -rf ${path}`.quiet()),
     glob(pattern, { cwd, onlyFiles = true, dot = false }) {
       try {
         return [...new Glob(pattern).scanSync({ cwd, onlyFiles, dot })].sort();

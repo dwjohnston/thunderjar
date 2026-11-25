@@ -45,8 +45,8 @@ const COMPLETE = "complete";
  * How long a search may take before it's given up on: THUNDERJAR_SECRET_SEARCH_TIMEOUT_SECONDS,
  * or 120. Enough to read a large image's files, so a huge one can't hang a run.
  */
-export const secretSearchTimeoutSeconds = (): number => {
-  const seconds = Number(Bun.env.THUNDERJAR_SECRET_SEARCH_TIMEOUT_SECONDS);
+export const secretSearchTimeoutSeconds = (env: Record<string, string | undefined> = Bun.env): number => {
+  const seconds = Number(env.THUNDERJAR_SECRET_SEARCH_TIMEOUT_SECONDS);
   return Number.isFinite(seconds) && seconds > 0 ? seconds : 120;
 };
 
@@ -109,12 +109,19 @@ export function parseSecretSearch(text: string | undefined, names: string[]): Fo
  * Searches the files of the postrun image `image` for the values of the secret variables `names`,
  * in the container `container`, which is removed afterwards. Undefined, and no container, if none
  * is worth searching for: see searchableSecrets. Never throws: a search that fails, or takes
- * longer than secretSearchTimeoutSeconds(), is `failed`, with why, and the run goes on.
+ * longer than secretSearchTimeoutSeconds(), is `failed`, with why, and the run goes on. `env` is
+ * Thunderjar's own environment, which the values are looked up in: the process's, unless given.
  */
-export async function searchForSecrets(image: string, container: string, names: string[], docker: Pick<DockerService, "run" | "readFile" | "removeContainer">): Promise<SecretSearch | undefined> {
-  const searched = searchableSecrets(names);
+export async function searchForSecrets(
+  image: string,
+  container: string,
+  names: string[],
+  docker: Pick<DockerService, "run" | "readFile" | "removeContainer">,
+  env: Record<string, string | undefined> = Bun.env,
+): Promise<SecretSearch | undefined> {
+  const searched = searchableSecrets(names, env);
   if (searched.length === 0) return undefined;
-  const timeoutSeconds = secretSearchTimeoutSeconds();
+  const timeoutSeconds = secretSearchTimeoutSeconds(env);
   const startedAt = Date.now();
   try {
     // As root, to read every file; with no network, as it needs none.

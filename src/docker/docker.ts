@@ -11,49 +11,14 @@ import { moduleLogger } from "../log/logger.ts";
 import { type Clock, createClockService, type TimerHandle } from "../services/Clock/Clock.ts";
 import type { ContainerRunner } from "../services/ContainerRunner/ContainerRunner.ts";
 import type { ContainerProcess, ContainerRuns, ContainerState, ContainerStop, ExecResult } from "../services/Docker/Docker.ts";
+import { DockerBuildError, DockerContainerError, DockerLoginError, DockerPullError, DockerPushError, DockerUnavailableError } from "../services/Docker/errors.ts";
+
+// The error classes live with the service, so its fake throws the same ones: re-exported under their old path.
+export { DockerBuildError, DockerContainerError, DockerLoginError, DockerPullError, DockerPushError, DockerUnavailableError };
 
 export type { ContainerState, ContainerStop, ExecResult };
 
 const log = moduleLogger("docker");
-
-/** Thrown when the Docker CLI can't be run, or can't reach its daemon. */
-export class DockerUnavailableError extends Error {}
-
-/** Thrown when `docker build` fails: the message is Docker's reason, and `image` the image it was building. */
-export class DockerBuildError extends Error {
-  constructor(
-    message: string,
-    readonly image = "",
-  ) {
-    super(message);
-  }
-}
-
-/** Thrown when `docker login` finds no valid login for a registry: the message is Docker's reason. */
-export class DockerLoginError extends Error {}
-
-/** Thrown when tagging or pushing an image fails: the message is Docker's reason, and `reference` where it was pushing to. */
-export class DockerPushError extends Error {
-  constructor(
-    message: string,
-    readonly reference = "",
-  ) {
-    super(message);
-  }
-}
-
-/** Thrown when running, reading from, committing or removing a container fails: the message is Docker's reason. */
-export class DockerContainerError extends Error {}
-
-/** Thrown when a runtime can't pull an image from the image store: the message is Docker's reason, and `reference` the image. */
-export class DockerPullError extends Error {
-  constructor(
-    message: string,
-    readonly reference = "",
-  ) {
-    super(message);
-  }
-}
 
 const dockerBinary = () => Bun.env.THUNDERJAR_DOCKER || "docker";
 

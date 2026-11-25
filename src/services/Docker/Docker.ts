@@ -50,6 +50,8 @@ export type RunContainerOptions = {
 /** Whether a container is running, and the code it exited with if not. */
 export type ContainerState = { running: boolean; exitCode: number };
 
+export { DockerBuildError, DockerContainerError, DockerLoginError, DockerPullError, DockerPushError, DockerUnavailableError, RegistryError } from "./errors";
+
 export type ExecResult = { stdout: string; stderr: string; exitCode: number };
 
 /** A shell session in a running container. */
@@ -145,6 +147,8 @@ export interface DockerService
     | "imagesIn"
     | "push"
     | "pull"
+    | "inRegistry"
+    | "checkLogin"
     | "run"
     | "commit"
     | "removeContainer"
