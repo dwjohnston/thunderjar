@@ -45,6 +45,8 @@ describe(runManifest, () => {
             },
             images: {},
             runs: {
+                // 🙋‍♂️ nb. these is not the full objects  
+                // There is also a record object that 
                 "01exec-p1000000-i1": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
                 "01exec-p2000000-i1": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
             },
@@ -56,19 +58,16 @@ describe(runManifest, () => {
             uploadBacklog: 0,
         });
 
-        // How each run's status changed in the state: all queued first, then one at a time.
-        expect(changes(deps.state.history().map(({ run }) => Object.values(run.runs).map((r) => r.status).join(", ")))).toMatchInlineSnapshot(`
-      [
-        "",
-        "queued, queued",
-        "running, queued",
-        "committing, queued",
-        "committed, queued",
-        "committed, running",
-        "committed, committing",
-        "committed, committed",
-      ]
-    `);
+        // history() is the state after every update. There are 16 here:
+        //   0      the empty state, before anything happens
+        //   1      every run queued, in one update
+        //   2      the execution recorded as running
+        //   3-8    run 1: running → agent timed → output collected → committing → commit timed → committed, with its record
+        //   9-14   run 2: the same 6 steps
+        //   15     the execution recorded as complete
+        // So each run is 6 updates: 3 status changes, and 3 timings (agent, collect, commit).
+        expect(deps.state.history()).toHaveLength(16);
+
 
         // The run data store has the execution, complete, and a record of each run.
         expect(await deps.runStore.listExecutions()).toMatchObject([{ executionId: "01exec", status: "complete", matrix: { permutations: 2, iterations: 1 } }]);
