@@ -150,6 +150,7 @@ export function fitTo(frame: string, columns: number): string {
   const cut = (line: string) => {
     let visible = 0;
     let out = "";
+    // oxlint-disable-next-line no-control-regex -- a colour code starts with the escape character
     for (const part of line.split(/(\x1b\[\d+m)/)) {
       if (part.startsWith("\x1b[")) out += part;
       else if (visible < columns) {
