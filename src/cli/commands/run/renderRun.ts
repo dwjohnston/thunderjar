@@ -145,6 +145,23 @@ function showTimings(timings: NonNullable<RunState["timings"]>): string[] {
   ];
 }
 
+/** `frame` with each line cut to `columns` characters, not counting colour codes, so none wraps on a terminal that wide. */
+export function fitTo(frame: string, columns: number): string {
+  const cut = (line: string) => {
+    let visible = 0;
+    let out = "";
+    for (const part of line.split(/(\x1b\[\d+m)/)) {
+      if (part.startsWith("\x1b[")) out += part;
+      else if (visible < columns) {
+        out += part.slice(0, columns - visible);
+        visible += part.length;
+      }
+    }
+    return visible > columns ? `${out.slice(0, -1)}…\x1b[0m` : out;
+  };
+  return frame.split("\n").map(cut).join("\n");
+}
+
 /**
  * One frame of `state`, at `now`. "" before there's a manifest. A dry run is the manifest alone.
  * Otherwise: the execution, each pre-run image and where it is, each run on a line with how it

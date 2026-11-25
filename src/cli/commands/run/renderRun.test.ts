@@ -15,7 +15,7 @@ import { config, permutation } from "../../../runNext/testing/fixtures.ts";
 import type { Manifest } from "../../../runNext/types.ts";
 import { addTiming, emptyRunState, patchRun, type RunState, setImageStatus } from "../../../services/ApplicationState/ApplicationState.ts";
 import type { ContainerRunRecord } from "../../../services/RunDataStore/RunDataStore.ts";
-import { renderRun } from "./renderRun.ts";
+import { fitTo, renderRun } from "./renderRun.ts";
 
 const manifest = plan(config({ permutationCount: 2, iterations: 2 }), { concurrency: 2, executionId: "01exec" });
 const [first, second, third] = manifest.runs.map(({ runId }) => runId) as [string, string, string];
@@ -115,5 +115,15 @@ Images
 Timings
   building prerun images  2×  total 0:36  longest 0:34
 `);
+  });
+});
+
+describe(fitTo, () => {
+  test("cuts each line that's too wide, and leaves the rest", () => {
+    expect(fitTo("short\na line that is too wide\n", 10)).toBe("short\na line th…\x1b[0m\n");
+  });
+
+  test("doesn't count colour codes", () => {
+    expect(fitTo("\x1b[32mgreen\x1b[39m\n", 5)).toBe("\x1b[32mgreen\x1b[39m\n");
   });
 });

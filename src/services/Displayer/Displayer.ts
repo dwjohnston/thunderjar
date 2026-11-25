@@ -26,8 +26,11 @@ export type DisplayerDeps<M> = {
   logPath: string | undefined;
   /** One line for the manifest. Its indented JSON by default. */
   describeManifest?: (manifest: M) => string;
-  /** Draws a frame, in place of `renderState`. A frame is "", or ends with a newline. */
-  render?: (state: RunState<M>, now: number) => string;
+  /**
+   * Draws a frame, in place of `renderState`. A frame is "", or ends with a newline. `final` is
+   * whether it's the last one: one redrawn in place mustn't wrap, or the next would be drawn too low.
+   */
+  render?: (state: RunState<M>, now: number, final: boolean) => string;
 };
 
 const POLL_MS = 1000;
@@ -61,8 +64,8 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
   let timer: TimerHandle | undefined;
   let drawnLines = 0;
 
-  const draw = () => {
-    const frame = render ? render(state.get().run, clock.now()) : renderState(state.get().run, clock.now(), describeManifest);
+  const draw = (final = false) => {
+    const frame = render ? render(state.get().run, clock.now(), final) : renderState(state.get().run, clock.now(), describeManifest);
     // On a terminal, move up over the last frame and clear to the end before drawing the next.
     stdout.write(drawnLines > 0 ? `\x1b[${drawnLines}A\x1b[0J${frame}` : frame);
     drawnLines = frame.split("\n").length - 1;
@@ -90,7 +93,7 @@ export function createDisplayerService<M>(deps: DisplayerDeps<M>): Displayer {
       clock.clearTimeout(timer);
       timer = undefined;
       if (mode === "json") stdout.write(`${JSON.stringify(state.get().run, null, 2)}\n`);
-      else draw();
+      else draw(true);
     },
   };
 }

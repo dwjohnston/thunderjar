@@ -7,7 +7,7 @@ const [command, hook, ...rest] = process.argv.slice(2);
 if (command === "capture" && isHook(hook)) {
   await runHookCommand(hook, harnessArg(rest));
 } else {
-  const [{ createProgram }, { createClockService }, { createEnvService }, { createIoService }, { createDockerService }, { findThunderjarRoot, ConfigError }, { loadProjectConfig }, { dataDirFromArgs, openStore }, { lazyRunDataStore }, { createRandomService }, { createFsService }, { createApplicationStateService }, { createDisplayerService }, { renderRun }, { painter }] =
+  const [{ createProgram }, { createClockService }, { createEnvService }, { createIoService }, { createDockerService }, { findThunderjarRoot, ConfigError }, { loadProjectConfig }, { dataDirFromArgs, openStore }, { lazyRunDataStore }, { createRandomService }, { createFsService }, { createApplicationStateService }, { createDisplayerService }, { renderRun, fitTo }, { painter }] =
     await Promise.all([
       import("./program.ts"),
       import("../services/Clock/Clock.ts"),
@@ -59,7 +59,11 @@ if (command === "capture" && isHook(hook)) {
     stdout: io.stdout,
     stderr: io.stderr,
     logPath: undefined,
-    render: (run, now) => renderRun(run, now, { paint, cwd: env.cwd }),
+    // A frame that will be redrawn is cut to the terminal's width; the last one is whole.
+    render: (run, now, final) => {
+      const frame = renderRun(run, now, { paint, cwd: env.cwd });
+      return final || io.stdout.columns === undefined ? frame : fitTo(frame, io.stdout.columns);
+    },
   });
   /** A whole number of at least `least` in the variable `name`, or `fallback` if it's unset or isn't one. */
   const setting = <T>(name: string, least: number, fallback: T): number | T => {
