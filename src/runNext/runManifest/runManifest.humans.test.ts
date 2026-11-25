@@ -21,6 +21,9 @@ describe(runManifest, () => {
     it("happy path: records the execution as running, runs each run in turn, then records it complete", async () => {
         const deps = fakes();
         const testCase = config({ permutationCount: 2 });
+        // Hashes that are easy to tell apart: they give the run IDs 01exec-oooooooo-i1 and 01exec-xxxxxxxx-i1.
+        testCase.permutations[0]!.permutation.hash = "o".repeat(64);
+        testCase.permutations[1]!.permutation.hash = "x".repeat(64);
         // Each harness reads the agent's reply from its result file.
         for (const permutation of testCase.permutations) {
             permutation.harness = { ...permutation.harness, collectReply: (result) => JSON.parse(result).reply };
@@ -40,8 +43,8 @@ describe(runManifest, () => {
 
         // Every run completed.
         expect(records.map(({ runId, outcome }) => `${runId} ${outcome}`)).toEqual([
-            "01exec-p1000000-i1 completed",
-            "01exec-p2000000-i1 completed",
+            "01exec-oooooooo-i1 completed",
+            "01exec-xxxxxxxx-i1 completed",
         ]);
 
         // Each run's record has the agent's reply, read from its result file.
@@ -66,8 +69,8 @@ describe(runManifest, () => {
             runs: {
                 // 🙋‍♂️ nb. these is not the full objects  
                 // There is also a record object that 
-                "01exec-p1000000-i1": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
-                "01exec-p2000000-i1": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
+                "01exec-oooooooo-i1": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
+                "01exec-xxxxxxxx-i1": { status: "committed", startedAt: 1000001000000, finishedAt: 1000001000000 },
             },
             timings: {
                 agent: { count: 2, maxMs: 0, totalMs: 0 },
@@ -93,40 +96,40 @@ describe(runManifest, () => {
         expect(deps.state.history().at(0)!.run.execution).toBeUndefined();
 
         // 1: every run queued, in one update
-        expect(deps.state.history().at(1)!.run.runs["01exec-p1000000-i1"]?.status).toBe("queued");
-        expect(deps.state.history().at(1)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(1)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(1)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
         expect(deps.state.history().at(1)!.run.execution).toBeUndefined();
 
         // 2: the execution recorded as running
         expect(deps.state.history().at(2)!.run.execution?.status).toBe("running");
 
         // 3-8: run 1 goes running → committing → committed, while run 2 waits
-        expect(deps.state.history().at(3)!.run.runs["01exec-p1000000-i1"]?.status).toBe("running");
-        expect(deps.state.history().at(3)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
-        expect(deps.state.history().at(4)!.run.runs["01exec-p1000000-i1"]?.status).toBe("running");
-        expect(deps.state.history().at(4)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
-        expect(deps.state.history().at(5)!.run.runs["01exec-p1000000-i1"]?.status).toBe("running");
-        expect(deps.state.history().at(5)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
-        expect(deps.state.history().at(6)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committing");
-        expect(deps.state.history().at(6)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
-        expect(deps.state.history().at(7)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committing");
-        expect(deps.state.history().at(7)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
-        expect(deps.state.history().at(8)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
-        expect(deps.state.history().at(8)!.run.runs["01exec-p2000000-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(3)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(3)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(4)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(4)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(5)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(5)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(6)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committing");
+        expect(deps.state.history().at(6)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(7)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committing");
+        expect(deps.state.history().at(7)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
+        expect(deps.state.history().at(8)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(8)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("queued");
 
         // 9-14: then run 2 does the same
-        expect(deps.state.history().at(9)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
-        expect(deps.state.history().at(9)!.run.runs["01exec-p2000000-i1"]?.status).toBe("running");
-        expect(deps.state.history().at(10)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
-        expect(deps.state.history().at(10)!.run.runs["01exec-p2000000-i1"]?.status).toBe("running");
-        expect(deps.state.history().at(11)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
-        expect(deps.state.history().at(11)!.run.runs["01exec-p2000000-i1"]?.status).toBe("running");
-        expect(deps.state.history().at(12)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
-        expect(deps.state.history().at(12)!.run.runs["01exec-p2000000-i1"]?.status).toBe("committing");
-        expect(deps.state.history().at(13)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
-        expect(deps.state.history().at(13)!.run.runs["01exec-p2000000-i1"]?.status).toBe("committing");
-        expect(deps.state.history().at(14)!.run.runs["01exec-p1000000-i1"]?.status).toBe("committed");
-        expect(deps.state.history().at(14)!.run.runs["01exec-p2000000-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(9)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(9)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(10)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(10)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(11)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(11)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("running");
+        expect(deps.state.history().at(12)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(12)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("committing");
+        expect(deps.state.history().at(13)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(13)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("committing");
+        expect(deps.state.history().at(14)!.run.runs["01exec-oooooooo-i1"]?.status).toBe("committed");
+        expect(deps.state.history().at(14)!.run.runs["01exec-xxxxxxxx-i1"]?.status).toBe("committed");
 
         // 15: the execution recorded as complete
         expect(deps.state.history().at(15)!.run.execution?.status).toBe("complete");
