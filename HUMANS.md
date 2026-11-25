@@ -156,4 +156,4 @@ describe(readTodo, () => {
 
 Auto memory is disabled. 
 
-You're welcome to use memory. Your memory file is [project-md](./project-md/MEMORY.md)
+You're welcome to use memory. Your memory file is [project-md/MEMORY.md](./project-md/MEMORY.md)
