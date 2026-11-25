@@ -10,8 +10,8 @@
  */
 
 // Pushes committed post-run images, with its own concurrency, so a run slot frees up at commit.
-import type { DockerService } from "../services/Docker/Docker.ts";
-import type { CommittedImage } from "./types.ts";
+import type { DockerService } from "../../services/Docker/Docker.ts";
+import type { CommittedImage } from "../types.ts";
 
 export interface UploadQueue {
   enqueue(image: CommittedImage): void;

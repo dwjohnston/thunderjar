@@ -10,10 +10,10 @@
  */
 
 // Level 3: run every planned run, up to the concurrency, then wait for the uploads.
-import { runPermutation } from "./runPermutation.ts";
-import { createScheduler } from "./scheduler.ts";
-import type { Dependencies, Manifest, RunRecord } from "./types.ts";
-import { createUploadQueue } from "./uploadQueue.ts";
+import { runPermutation } from "../runPermutation/runPermutation.ts";
+import { createScheduler } from "../scheduler/scheduler.ts";
+import type { Dependencies, Manifest, RunRecord } from "../types.ts";
+import { createUploadQueue } from "../uploadQueue/uploadQueue.ts";
 
 export async function runManifest(manifest: Manifest, deps: Dependencies): Promise<RunRecord[]> {
   const uploads = createUploadQueue(deps.runtimeDocker);
