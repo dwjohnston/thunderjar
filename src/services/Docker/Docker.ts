@@ -1,5 +1,5 @@
 // What Thunderjar asks of Docker, as one injected service, so a test can pass a FakeDocker in its
-// place. The real one is `cliDocker(runtime)` in src/docker/cliDocker.ts: it lives there, not here,
+// place. The real one is `createDockerService(clock, runtime)` in src/docker/cliDocker.ts: it lives there, not here,
 // because it runs src/docker/'s functions, and `services` is a lower layer than `docker`.
 //
 // The types each method takes and returns live here, for the same reason, and src/docker/

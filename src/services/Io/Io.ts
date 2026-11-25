@@ -77,7 +77,7 @@ const output = (stream: { write(text: string): unknown; isTTY?: boolean; columns
 });
 
 /** The real Io: this process's streams and signals. stdin is only read once something asks. */
-export function processIo(): Io {
+export function createIoService(): Io {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   const decoder = new TextDecoder();
   const lines = lineReader(async () => {

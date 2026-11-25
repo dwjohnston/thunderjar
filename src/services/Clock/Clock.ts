@@ -10,8 +10,12 @@ export interface Clock {
   sleep(ms: number): Promise<void>;
 }
 
-/** Real time. Built only at an entry point: `new SystemClock()`. */
-export class SystemClock implements Clock {
+/** Real time. Built only at an entry point. */
+export function createClockService(): Clock {
+  return new SystemClock();
+}
+
+class SystemClock implements Clock {
   private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
   private nextId = 1;
 
