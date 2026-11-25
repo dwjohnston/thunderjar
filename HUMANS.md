@@ -9,7 +9,6 @@ If an AGENTS.md file is present at directory, the file structure looks like this
 ```
 HUMANS.md 
 AGENTS.md  // Contains @HUMANS.md at the top, additional instructions later. 
-CLAUDE.md  // Just contains @AGENTS.md
 ```
 
 HUMANS.md files should be considered canoncial. 
