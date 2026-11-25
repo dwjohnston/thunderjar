@@ -27,6 +27,7 @@ import { overridesOf, withOverrideOptions } from "../../overrides.ts";
 import { print, printError as error, printJson, printWarning } from "../../output.ts";
 import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.ts";
 import { runDisplay, showSecrets, showTimings, showUnclean, showUnsearched, storeFailure } from "./runDisplay.ts";
+import type { Services } from "../../services.ts";
 
 /** How far a dry run's iteration fields are indented, and how wide their labels are. */
 const FIELD_INDENT = "    ";
@@ -137,6 +138,7 @@ const INTERRUPT_SETTLE_MS = 15_000;
  * nothing on stdout.
  */
 async function run(
+  _services: Services,
   cwd: string,
   name: string,
   imagePrefix: string,
@@ -318,7 +320,7 @@ async function run(
   }
 }
 
-export function createRunCommand(): Command {
+export function createRunCommand(services: Services): Command {
   return withOverrideOptions(new Command("run"))
     .description(
       "Run a test case: one execution, with a new ID. Builds any missing prerun image, then runs each iteration of each permutation in a container from its prerun image, commits it into its postrun image, takes the task's measurements of it, each in a container from its postrun image, and records it in the run data store. With an image store in thunderjar.config.ts, checks your docker login for its registry first, and pushes each prerun and postrun image there. With a runtime in thunderjar.config.ts, builds the prerun images on it and runs the containers there, from the image store, unless --local is given, and up to its concurrency at once, or --concurrency. Builds up to the config's build concurrency of prerun images at once. With more than one of either, each iteration starts as soon as its own prerun image is ready. --iterations overrides the test case's iterations.",
@@ -349,7 +351,7 @@ export function createRunCommand(): Command {
           const overrides = overridesOf(options);
           if (options.dryRun && options.json) printJson(executionPlanJson(await planDryRun(process.cwd(), name, options.imagePrefix, overrides), overrides));
           else if (options.dryRun) print(await dryRun(process.cwd(), name, options.imagePrefix, overrides, painter()));
-          else await run(process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, overrides, options.json, options.timings);
+          else await run(services, process.cwd(), name, options.imagePrefix, options.dataDir, options.local, options.concurrency, overrides, options.json, options.timings);
         },
       ),
     );
