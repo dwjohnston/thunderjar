@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { FakeClock } from "../Clock/FakeClock";
 import { FakeIo } from "../Io/FakeIo";
-import { setImageStatus, setRunStatus, setUploadBacklog, emptyRunState, updateRun, type ApplicationStateService } from "../ApplicationState/ApplicationState";
+import { setImageStatus, setRunStatus, setUploadBacklog, updateRun, type ApplicationStateService } from "../ApplicationState/ApplicationState";
 import { FakeApplicationState } from "../ApplicationState/FakeApplicationState";
-import { createDisplayerService, renderState } from "./Displayer";
+import { createDisplayerService } from "./Displayer";
 
 /** A lower level: writes to the state, never prints. */
 async function sampleExecution(state: ApplicationStateService, clock: FakeClock): Promise<void> {
@@ -14,22 +14,35 @@ async function sampleExecution(state: ApplicationStateService, clock: FakeClock)
     state.update(updateRun((s) => setUploadBacklog(setRunStatus(s, "run-1", "committed"), 1)));
 }
 
-describe(renderState, () => {
-    it("renders a frame from the state alone", () => {
-        const state = setUploadBacklog(setImageStatus(setRunStatus(setRunStatus(emptyRunState(), "a", "running"), "b", "timedOut"), "base:1", "ready"), 1);
+describe(createDisplayerService, () => {
+    it("in JSON mode, writes the final state as JSON on stop", async () => {
+        const io = new FakeIo();
+        const clock = new FakeClock();
+        const state = new FakeApplicationState();
+        const displayer = createDisplayerService({ state, clock, stdout: io.stdout, stderr: io.stderr, logPath: undefined });
 
-        expect(renderState(state, 0)).toMatchInlineSnapshot(`
-          "Runs: 1 running, 1 timedOut
-          Images:
-            base:1  ready
-          Upload backlog: 1
+        displayer.setMode("json");
+        displayer.start();
+        await sampleExecution(state, clock);
+        displayer.stop();
+
+        expect(io.stdout.text()).toMatchInlineSnapshot(`
+          "{
+            "runs": {
+              "run-1": {
+                "status": "committed"
+              }
+            },
+            "images": {
+              "base:1": "ready"
+            },
+            "uploadBacklog": 1
+          }
           "
         `);
     });
-});
 
-describe(createDisplayerService, () => {
-    it("draws a frame each second while the execution runs, and a final one on stop", async () => {
+    it("in interactive mode, draws a pretty frame each second and a final one on stop", async () => {
         const io = new FakeIo({ stdout: "terminal" });
         const clock = new FakeClock();
         const state = new FakeApplicationState();
