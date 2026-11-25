@@ -19,7 +19,7 @@ Thunderjar is a TypeScript/Bun CLI for
 ## Folder structure 
 
 - `fixtures`: Fixtures - see below for details. 
-- `src/`: the implementation. Its folders are layers, lowest first (see below).
+- `src/`: the implementation.
   - `log/`: the diagnostic logger (pino).
   - `testing/`: the fixture harness that tests use to run the CLI in a scenario, plus fake Docker and registry.
   - `api/`: the public API a project's `.thunderjar/` files use, e.g. the `declareX()` functions and their types.
@@ -60,30 +60,9 @@ Thunderjar is a TypeScript/Bun CLI for
 - `.github/`: CI workflows.
 - `.agents/`: agent skills.
 
-## Layers of `src/`
+## `src/gauntlet`
 
-Each top-level folder of `src/` is a layer. A file may import from its own layer and the layers before it, never from one after it. `bun run lint` enforces this, with oxlint rules generated from `scripts/layers.ts`.
-
-To add a layer, when its first module arrives:
-
-1. Add the folder to `LAYERS` in `scripts/layers.ts`, in its place in the order.
-2. Run `bun run lint:generate`. It rewrites the `overrides` of `.oxlintrc.json`.
-3. Commit both files.
-
-```ts
-// scripts/layers.ts, lowest first
-export const LAYERS: readonly string[] = ["project", "cli"];
-```
-
-✅ **Do** change the layers in `scripts/layers.ts`, and the other rules in `.oxlintrc.json` outside `overrides`.
-
-❌ **Don't** edit the `overrides` of `.oxlintrc.json` by hand. The next `lint:generate` overwrites them.
-
-`bun run lint` fails when a folder in `src/` is not a layer, or when `.oxlintrc.json` is out of date. Rules also apply to files in subfolders, so re-run `bun run lint:generate` after adding a deeper folder too.
-
-**Why:** later modules land in their final place, so nothing needs restructuring. Overrides replace a top-level rule rather than adding to it, so the generator copies the top-level `no-restricted-imports` patterns (the `node:` ban) into each one.
-
-`src/gauntlet` is the exception: it's in `NOT_LAYERS`, not `LAYERS`. Each folder in it is a small project of its own, with its own instructions and tools, that the test cases in `.thunderjar/` set agents to work on. oxlint and `bun test` skip it (`.oxlintrc.json`'s `ignorePatterns`, and `bunfig.toml`).
+`src/gauntlet` isn't Thunderjar code. Each folder in it is a small project of its own, with its own instructions and tools, that the test cases in `.thunderjar/` set agents to work on. oxlint and `bun test` skip it (`.oxlintrc.json`'s `ignorePatterns`, and `bunfig.toml`).
 
 ## Use Bun
 

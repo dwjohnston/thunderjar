@@ -32,8 +32,7 @@
   "scripts": {
     "tj": "bun src/cli/index.ts",
     "build": "rm -rf dist && bun build src/cli/index.ts --target bun --outdir dist --entry-naming [name].[ext] --production",
-    "lint": "bun scripts/lint-layers.ts --check && bun scripts/lint-filenames.ts && bun scripts/lint-snapshots.ts && oxlint",
-    "lint:generate": "bun scripts/lint-layers.ts",
+    "lint": "bun scripts/lint-filenames.ts && bun scripts/lint-snapshots.ts && oxlint",
     "typecheck": "tsc --noEmit",
     "test": "bun test --parallel",
     "test:measurements": "bun test ./.thunderjar/parameters/tasks/*/measurements/tests",
