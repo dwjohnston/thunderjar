@@ -21,6 +21,19 @@ describe(runManifest, () => {
     it("happy path: records the execution as running, runs each run in turn, then records it complete", async () => {
         const deps = fakes();
         const testCase = config({ permutationCount: 2 });
+        // Each harness reads the agent's reply from its result file.
+        for (const permutation of testCase.permutations) {
+            permutation.harness = { ...permutation.harness, collectReply: (result) => JSON.parse(result).reply };
+        }
+        // Each container exits 0, and leaves a result file with the agent's reply.
+        for (const container of ["-1-1", "-2-1"]) {
+            deps.runtimeDocker.onRun(container, () => ({
+                files: {
+                    "/thunderjar/run.json": JSON.stringify({ startedAt: 1_000_001_000_000, finishedAt: 1_000_001_000_000, exitCode: 0 }),
+                    "/thunderjar/result.json": JSON.stringify({ reply: "Done: isPrime(7) is true." }),
+                },
+            }));
+        }
         const manifest = plan(testCase, { concurrency: 1, executionId: "01exec" });
 
         const records = await runManifest(manifest, testCase, deps);
@@ -31,6 +44,179 @@ describe(runManifest, () => {
             "01exec-p2000000-i1 completed",
         ]);
 
+        // Each run's record has the agent's reply, read from its result file.
+        expect(records.map(({ containerRun }) => containerRun?.reply)).toEqual([
+            { outcome: "collected", text: "Done: isPrime(7) is true." },
+            { outcome: "collected", text: "Done: isPrime(7) is true." },
+        ]);
+
+
+        expect(deps.state.get()).toMatchInlineSnapshot(`
+          {
+            "run": {
+              "execution": {
+                "executionId": "01exec",
+                "finishedAt": "1970-01-01T00:16:40.000Z",
+                "matrix": {
+                  "iterations": 1,
+                  "permutations": 2,
+                  "shape": [
+                    1,
+                    1,
+                    1,
+                    2,
+                    1,
+                  ],
+                },
+                "startedAt": "1970-01-01T00:16:40.000Z",
+                "status": "complete",
+                "task": "is-prime",
+                "testCase": "example",
+              },
+              "images": {},
+              "runs": {
+                "01exec-p1000000-i1": {
+                  "finishedAt": 1000001000000,
+                  "record": {
+                    "execution": {
+                      "exitCode": 0,
+                      "finishedAt": 1000001000000,
+                      "startedAt": 1000001000000,
+                      "timedOut": false,
+                      "timeoutSeconds": 600,
+                    },
+                    "executionId": "01exec",
+                    "harnessModel": {
+                      "harness": "harness-1",
+                      "modelId": "model",
+                      "version": "1.0.0",
+                    },
+                    "harnessResult": "{"reply":"Done: isPrime(7) is true."}",
+                    "harnessStderr": null,
+                    "iteration": 1,
+                    "parameters": {
+                      "baseImage": {
+                        "name": "node20",
+                        "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
+                      },
+                      "codeState": {
+                        "name": "baseline",
+                        "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
+                      },
+                      "harnessModel": {
+                        "name": "harness-1/model",
+                        "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
+                      },
+                      "initialPrompt": {
+                        "name": "plain",
+                        "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
+                      },
+                      "promptSet": {
+                        "name": "none",
+                        "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
+                      },
+                    },
+                    "permutation": 1,
+                    "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
+                    "postrunImage": "thunderjar-postrun:01exec-1-1",
+                    "ranAt": "2001-09-09T02:03:20.000Z",
+                    "reply": {
+                      "outcome": "collected",
+                      "text": "Done: isPrime(7) is true.",
+                    },
+                    "result": {},
+                    "task": "is-prime",
+                    "testCase": "example",
+                    "tokenCosts": {
+                      "outcome": "unavailable",
+                      "reason": "notReported",
+                    },
+                  },
+                  "startedAt": 1000001000000,
+                  "status": "committed",
+                },
+                "01exec-p2000000-i1": {
+                  "finishedAt": 1000001000000,
+                  "record": {
+                    "execution": {
+                      "exitCode": 0,
+                      "finishedAt": 1000001000000,
+                      "startedAt": 1000001000000,
+                      "timedOut": false,
+                      "timeoutSeconds": 600,
+                    },
+                    "executionId": "01exec",
+                    "harnessModel": {
+                      "harness": "harness-2",
+                      "modelId": "model",
+                      "version": "1.0.0",
+                    },
+                    "harnessResult": "{"reply":"Done: isPrime(7) is true."}",
+                    "harnessStderr": null,
+                    "iteration": 1,
+                    "parameters": {
+                      "baseImage": {
+                        "name": "node20",
+                        "parameterHash": "baseImage2000000000000000000000000000000000000000000000000000000",
+                      },
+                      "codeState": {
+                        "name": "baseline",
+                        "parameterHash": "codeState2000000000000000000000000000000000000000000000000000000",
+                      },
+                      "harnessModel": {
+                        "name": "harness-2/model",
+                        "parameterHash": "harnessModel2000000000000000000000000000000000000000000000000000",
+                      },
+                      "initialPrompt": {
+                        "name": "plain",
+                        "parameterHash": "initialPrompt200000000000000000000000000000000000000000000000000",
+                      },
+                      "promptSet": {
+                        "name": "none",
+                        "parameterHash": "promptSet2000000000000000000000000000000000000000000000000000000",
+                      },
+                    },
+                    "permutation": 2,
+                    "permutationHash": "p200000000000000000000000000000000000000000000000000000000000000",
+                    "postrunImage": "thunderjar-postrun:01exec-2-1",
+                    "ranAt": "2001-09-09T02:03:20.000Z",
+                    "reply": {
+                      "outcome": "collected",
+                      "text": "Done: isPrime(7) is true.",
+                    },
+                    "result": {},
+                    "task": "is-prime",
+                    "testCase": "example",
+                    "tokenCosts": {
+                      "outcome": "unavailable",
+                      "reason": "notReported",
+                    },
+                  },
+                  "startedAt": 1000001000000,
+                  "status": "committed",
+                },
+              },
+              "timings": {
+                "agent": {
+                  "count": 2,
+                  "maxMs": 0,
+                  "totalMs": 0,
+                },
+                "collect": {
+                  "count": 2,
+                  "maxMs": 0,
+                  "totalMs": 0,
+                },
+                "commit": {
+                  "count": 2,
+                  "maxMs": 0,
+                  "totalMs": 0,
+                },
+              },
+              "uploadBacklog": 0,
+            },
+          }
+        `)
 
         // The state at the end. toMatchObject ignores what isn't listed, such as each run's full record.
         expect(deps.state.get().run).toMatchObject({
@@ -104,1249 +290,6 @@ describe(runManifest, () => {
 
         // 15: the execution recorded as complete
         expect(deps.state.history().at(15)!.run.execution?.status).toBe("complete");
-
-        expect(deps.state.history()).toMatchInlineSnapshot(`
-          [
-            {
-              "run": {
-                "images": {},
-                "runs": {},
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "status": "queued",
-                  },
-                  "01exec-p2000000-i1": {
-                    "status": "queued",
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "status": "queued",
-                  },
-                  "01exec-p2000000-i1": {
-                    "status": "queued",
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "startedAt": 1000000,
-                    "status": "running",
-                  },
-                  "01exec-p2000000-i1": {
-                    "status": "queued",
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "startedAt": 1000000,
-                    "status": "running",
-                  },
-                  "01exec-p2000000-i1": {
-                    "status": "queued",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "startedAt": 1000000,
-                    "status": "running",
-                  },
-                  "01exec-p2000000-i1": {
-                    "status": "queued",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "startedAt": 1000001000000,
-                    "status": "committing",
-                  },
-                  "01exec-p2000000-i1": {
-                    "status": "queued",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "startedAt": 1000001000000,
-                    "status": "committing",
-                  },
-                  "01exec-p2000000-i1": {
-                    "status": "queued",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "commit": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-1",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-1/model",
-                          "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 1,
-                      "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-1-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                  "01exec-p2000000-i1": {
-                    "status": "queued",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "commit": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-1",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-1/model",
-                          "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 1,
-                      "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-1-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                  "01exec-p2000000-i1": {
-                    "startedAt": 1000000,
-                    "status": "running",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "commit": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-1",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-1/model",
-                          "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 1,
-                      "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-1-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                  "01exec-p2000000-i1": {
-                    "startedAt": 1000000,
-                    "status": "running",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "commit": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-1",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-1/model",
-                          "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 1,
-                      "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-1-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                  "01exec-p2000000-i1": {
-                    "startedAt": 1000000,
-                    "status": "running",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "commit": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-1",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-1/model",
-                          "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 1,
-                      "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-1-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                  "01exec-p2000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "startedAt": 1000001000000,
-                    "status": "committing",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "commit": {
-                    "count": 1,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-1",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-1/model",
-                          "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 1,
-                      "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-1-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                  "01exec-p2000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "startedAt": 1000001000000,
-                    "status": "committing",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "commit": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "running",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-1",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-1/model",
-                          "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 1,
-                      "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-1-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                  "01exec-p2000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-2",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage2000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState2000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-2/model",
-                          "parameterHash": "harnessModel2000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt200000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet2000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 2,
-                      "permutationHash": "p200000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-2-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "commit": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-            {
-              "run": {
-                "execution": {
-                  "executionId": "01exec",
-                  "finishedAt": "1970-01-01T00:16:40.000Z",
-                  "matrix": {
-                    "iterations": 1,
-                    "permutations": 2,
-                    "shape": [
-                      1,
-                      1,
-                      1,
-                      2,
-                      1,
-                    ],
-                  },
-                  "startedAt": "1970-01-01T00:16:40.000Z",
-                  "status": "complete",
-                  "task": "is-prime",
-                  "testCase": "example",
-                },
-                "images": {},
-                "runs": {
-                  "01exec-p1000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-1",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState1000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-1/model",
-                          "parameterHash": "harnessModel1000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt100000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet1000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 1,
-                      "permutationHash": "p100000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-1-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                  "01exec-p2000000-i1": {
-                    "finishedAt": 1000001000000,
-                    "record": {
-                      "execution": {
-                        "exitCode": 0,
-                        "finishedAt": 1000001000000,
-                        "startedAt": 1000001000000,
-                        "timedOut": false,
-                        "timeoutSeconds": 600,
-                      },
-                      "executionId": "01exec",
-                      "harnessModel": {
-                        "harness": "harness-2",
-                        "modelId": "model",
-                        "version": "1.0.0",
-                      },
-                      "harnessResult": null,
-                      "harnessStderr": null,
-                      "iteration": 1,
-                      "parameters": {
-                        "baseImage": {
-                          "name": "node20",
-                          "parameterHash": "baseImage2000000000000000000000000000000000000000000000000000000",
-                        },
-                        "codeState": {
-                          "name": "baseline",
-                          "parameterHash": "codeState2000000000000000000000000000000000000000000000000000000",
-                        },
-                        "harnessModel": {
-                          "name": "harness-2/model",
-                          "parameterHash": "harnessModel2000000000000000000000000000000000000000000000000000",
-                        },
-                        "initialPrompt": {
-                          "name": "plain",
-                          "parameterHash": "initialPrompt200000000000000000000000000000000000000000000000000",
-                        },
-                        "promptSet": {
-                          "name": "none",
-                          "parameterHash": "promptSet2000000000000000000000000000000000000000000000000000000",
-                        },
-                      },
-                      "permutation": 2,
-                      "permutationHash": "p200000000000000000000000000000000000000000000000000000000000000",
-                      "postrunImage": "thunderjar-postrun:01exec-2-1",
-                      "ranAt": "2001-09-09T02:03:20.000Z",
-                      "reply": {
-                        "outcome": "unavailable",
-                        "reason": "the agent left no result file",
-                      },
-                      "result": {},
-                      "task": "is-prime",
-                      "testCase": "example",
-                      "tokenCosts": {
-                        "outcome": "unavailable",
-                        "reason": "absent",
-                      },
-                    },
-                    "startedAt": 1000001000000,
-                    "status": "committed",
-                  },
-                },
-                "timings": {
-                  "agent": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "collect": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                  "commit": {
-                    "count": 2,
-                    "maxMs": 0,
-                    "totalMs": 0,
-                  },
-                },
-                "uploadBacklog": 0,
-              },
-            },
-          ]
-        `)
 
 
         // The run data store has the execution, complete, and a record of each run.
