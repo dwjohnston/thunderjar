@@ -59,3 +59,19 @@ export function displayPath(cwd: string, path: string): string {
   const base = resolvePath(cwd, ".");
   return path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path;
 }
+
+/**
+ * The value of `--data-dir` in `args`, the command line after `bun index.ts`, as `--data-dir <dir>`
+ * or `--data-dir=<dir>`, or undefined. Read before Commander parses the command line, so the
+ * composition root can build the run data store; the last one wins, as Commander's does.
+ */
+export function dataDirFromArgs(args: readonly string[]): string | undefined {
+  let dataDir: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === "--") break;
+    if (arg === "--data-dir" && i + 1 < args.length) dataDir = args[++i];
+    else if (arg.startsWith("--data-dir=")) dataDir = arg.slice("--data-dir=".length);
+  }
+  return dataDir;
+}
