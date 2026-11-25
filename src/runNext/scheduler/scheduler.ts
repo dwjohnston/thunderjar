@@ -10,8 +10,8 @@
  */
 
 // Runs each planned run itself, one worker per concurrency slot.
-import type { Clock } from "../services/Clock/Clock.ts";
-import type { Manifest, PlannedRun, RunRecord } from "./types.ts";
+import type { Clock } from "../../services/Clock/Clock.ts";
+import type { Manifest, PlannedRun, RunRecord } from "../types.ts";
 
 export type SchedulerSettings = {
   /** How long the first iteration of a permutation gets to write the prompt cache before the rest start. */

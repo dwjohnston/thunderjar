@@ -10,7 +10,7 @@
  */
 
 // Builds the pre-run images the manifest needs that don't exist yet.
-import type { Dependencies, Manifest } from "./types.ts";
+import type { Dependencies, Manifest } from "../types.ts";
 
 /** The host checks which images exist on the remote; the runtime pulls or builds the rest. */
 export async function ensureImages(_manifest: Manifest, _deps: Pick<Dependencies, "hostDocker" | "runtimeDocker" | "state">): Promise<void> {

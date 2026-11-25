@@ -10,7 +10,7 @@
  */
 
 // The planner: every permutation and run of a test case. Pure.
-import type { Manifest, TestCaseConfig } from "./types.ts";
+import type { Manifest, TestCaseConfig } from "../types.ts";
 
 /**
  * The execution ID is passed in rather than made here, so `plan` stays pure. Open: the architecture

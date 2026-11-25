@@ -10,8 +10,8 @@
  */
 
 // One run: start → secrets → agent → wait → commit, then measure and upload in parallel.
-import type { Dependencies, PlannedRun, RunRecord } from "./types.ts";
-import type { UploadQueue } from "./uploadQueue.ts";
+import type { Dependencies, PlannedRun, RunRecord } from "../types.ts";
+import type { UploadQueue } from "../uploadQueue/uploadQueue.ts";
 
 /** Must never throw: a crash or timeout comes back as a `RunRecord` with that outcome. */
 export async function runPermutation(

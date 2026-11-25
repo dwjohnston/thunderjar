@@ -12,7 +12,7 @@
 // `run-next`: the reimplementation of `run`, hidden until it replaces `run`, `plan` and `build`.
 import { Command } from "commander";
 import { FOLDER } from "../../../config/loader.ts";
-import { runCommand } from "../../../runNext/runCommand.ts";
+import { runCommand } from "../../../runNext/runCommand/runCommand.ts";
 import type { Dependencies, RunOptions } from "../../../runNext/types.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { withOverrideOptions } from "../../overrides.ts";

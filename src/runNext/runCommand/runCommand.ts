@@ -10,9 +10,9 @@
  */
 
 // Level 1: from the command line to a resolved test case, a mode and an output format.
-import type { Overrides } from "../config/overrides.ts";
-import { runTestCase } from "./runTestCase.ts";
-import type { Dependencies, OutputFormat, RunMode, RunOptions, RunRecord, TestCaseConfig } from "./types.ts";
+import type { Overrides } from "../../config/overrides.ts";
+import { runTestCase } from "../runTestCase/runTestCase.ts";
+import type { Dependencies, OutputFormat, RunMode, RunOptions, RunRecord, TestCaseConfig } from "../types.ts";
 
 export async function runCommand(testCaseName: string, options: RunOptions, deps: Dependencies): Promise<RunRecord[] | undefined> {
   const { overrides, mode, output } = splitOptions(options);

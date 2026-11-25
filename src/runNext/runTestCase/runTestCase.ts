@@ -10,11 +10,11 @@
  */
 
 // Level 2: plan the execution, then build its images, then run it, stopping early for the mode.
-import { updateRun } from "../services/ApplicationState/ApplicationState.ts";
-import { ensureImages } from "./ensureImages.ts";
-import { plan } from "./plan.ts";
-import { runManifest } from "./runManifest.ts";
-import type { Dependencies, RunMode, RunRecord, TestCaseConfig } from "./types.ts";
+import { updateRun } from "../../services/ApplicationState/ApplicationState.ts";
+import { ensureImages } from "../ensureImages/ensureImages.ts";
+import { plan } from "../plan/plan.ts";
+import { runManifest } from "../runManifest/runManifest.ts";
+import type { Dependencies, RunMode, RunRecord, TestCaseConfig } from "../types.ts";
 
 export async function runTestCase(config: TestCaseConfig, deps: Dependencies, mode: RunMode = "full"): Promise<RunRecord[] | undefined> {
   const manifest = plan(config, { concurrency: deps.settings.concurrency, executionId: deps.random.ulid() });
