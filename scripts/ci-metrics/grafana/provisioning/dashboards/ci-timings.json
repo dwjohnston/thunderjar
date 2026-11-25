@@ -639,6 +639,97 @@
           "rawSql": "select r.started_at as time, case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end || ' tests, ' || r.job || ' job' as metric, sum(m.duration_ms) / 1000.0 as value\nfrom metrics.ci_test_metrics m join metrics.ci_runs r on r.id = m.ci_run_id\nwhere $__timeFilter(r.started_at) and m.status = 'passed' and case when m.file like '%.docker.test.ts' then 'docker' else 'regular' end in ($kind) and r.job in ($job) and r.outcome in ($outcome)\ngroup by 1, 2 order by 1"
         }
       ]
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Step times",
+      "description": "Each step's median and p90 time in the selected range, e.g. lint and typecheck. Skipped steps are left out.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 24,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Median|p90"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawSql": "select r.job as \"Job\", s.name as \"Step\",\n  percentile_cont(0.5) within group (order by s.seconds) as \"Median\",\n  percentile_cont(0.9) within group (order by s.seconds) as \"p90\",\n  count(*) as \"Runs\"\nfrom metrics.ci_step_metrics s join metrics.ci_runs r on r.id = s.ci_run_id\nwhere $__timeFilter(r.started_at) and s.conclusion <> 'skipped' and r.job in ($job) and r.outcome in ($outcome)\ngroup by r.job, s.name order by min(s.position)"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Step time per run",
+      "description": "How long each step took, run by run. Hide steps by clicking the legend.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ci-metrics"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 24,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "median",
+            "max"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ci-metrics"
+          },
+          "rawSql": "select r.started_at as time, r.job || ': ' || s.name as metric, s.seconds as value\nfrom metrics.ci_step_metrics s join metrics.ci_runs r on r.id = s.ci_run_id\nwhere $__timeFilter(r.started_at) and s.conclusion <> 'skipped' and r.job in ($job) and r.outcome in ($outcome)\norder by 1"
+        }
+      ]
     }
   ]
 }
