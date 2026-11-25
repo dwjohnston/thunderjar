@@ -6,13 +6,14 @@ const [command, hook, ...rest] = process.argv.slice(2);
 if (command === "capture" && isHook(hook)) {
   await runHookCommand(hook, harnessArg(rest));
 } else {
-  const [{ createProgram }, { createClockService }, { createEnvService }, { createIoService }, { createDockerService }, { findThunderjarRoot, ConfigError }, { loadProjectConfig }] =
+  const [{ createProgram }, { createClockService }, { createEnvService }, { createIoService }, { createDockerServiceAdapter }, { localRuntime, remoteRuntime }, { findThunderjarRoot, ConfigError }, { loadProjectConfig }] =
     await Promise.all([
       import("./program.ts"),
       import("../services/Clock/Clock.ts"),
       import("../services/Env/Env.ts"),
       import("../services/Io/Io.ts"),
-      import("../services/Docker/Docker.ts"),
+      import("../docker/dockerServiceAdapter.ts"),
+      import("../docker/docker.ts"),
       import("../config/loader.ts"),
       import("../config/projectConfig.ts"),
     ]);
@@ -31,8 +32,10 @@ if (command === "capture" && isHook(hook)) {
   };
   // Every service is built here, and only here: see src/services/HUMANS.md.
   const env = createEnvService();
-  const hostDocker = createDockerService([env.variables.THUNDERJAR_DOCKER || "docker"]);
+  const clock = createClockService();
+  // Both over the old path, through a temporary adapter, until DockerService has an implementation of its own.
+  const hostDocker = createDockerServiceAdapter(clock, localRuntime());
   const command = await dockerRuntimeCommand(env.cwd);
-  const runtimeDocker = command === null ? hostDocker : createDockerService(command);
-  await createProgram({ clock: createClockService(), env, io: createIoService(), hostDocker, runtimeDocker }).parseAsync();
+  const runtimeDocker = command === null ? hostDocker : createDockerServiceAdapter(clock, remoteRuntime(command));
+  await createProgram({ clock, env, io: createIoService(), hostDocker, runtimeDocker }).parseAsync();
 }
