@@ -7,6 +7,7 @@
   },
   "files": [
     "parameterNames.humans.test.ts",
-    "outOfTheBoxHelpers.humans.test.ts"
+    "outOfTheBoxHelpers.humans.test.ts",
+    "outOfTheBoxHelpers.comprehensive.test.ts"
   ]
 }

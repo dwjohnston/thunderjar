@@ -1,17 +1,22 @@
 // The `thunderjar` library: what a project's `.thunderjar/` files import.
 export { CLAUDE_CODE_COMMAND, CLAUDE_CODE_EFFORTS, CLAUDE_CODE_MODELS, claudeCode, claudeCodeReply, claudeCodeTokenCosts, type ClaudeCodeOptions } from "./claudeCode.ts";
+export { CODEX_COMMAND, CODEX_MODELS, CODEX_REASONING_EFFORTS, codex, codexReply, codexTokenCosts, type CodexOptions } from "./codex.ts";
 export { codeStateGitCheckout, resolveGitCheckout, type CodeStateGitCheckoutConfig } from "./codeStateGitCheckout.ts";
 export { MODEL_PATH, PROMPT_PATH, RESULT_PATH, RUN_SCRIPT_PATH, USAGE_PATH, writeFile, writeModel, writePrompt, writeRunScript } from "./files.ts";
 export {
   COMMAND_PATHS,
   envAssignments,
   envRef,
+  providerId,
+  shellQuote,
   OPENROUTER,
   type CommandContext,
   type CommandPaths,
   type CommandProvider,
   type EnvRef,
+  type HelperOptions,
   type Provider,
+  type ProviderAndModels,
   type WireApi,
 } from "./harnessOptions.ts";
 export {

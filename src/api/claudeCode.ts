@@ -5,9 +5,9 @@
 //
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type RequiredEnv, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
-import { COMMAND_PATHS, type CommandContext, type CommandProvider, envAssignments, envRef, type Provider } from "./harnessOptions.ts";
+import { COMMAND_PATHS, type CommandContext, type CommandProvider, envAssignments, envRef, type HelperOptions } from "./harnessOptions.ts";
 
 type ModelUsage = {
   inputTokens?: unknown;
@@ -91,32 +91,12 @@ export const CLAUDE_CODE_MODELS: HarnessModels = {
  */
 export const CLAUDE_CODE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
-/** What `claudeCode` gets, with or without a provider. */
-type ClaudeCodeCommon = {
-  /** The version of `@anthropic-ai/claude-code` to install, e.g. `"2.1.311"`. */
-  version: string;
-  /** The command its run script runs, from the model, version, paths and provider: `CLAUDE_CODE_COMMAND` by default. */
-  command?: (ctx: CommandContext) => string;
-  /** The variables it needs, as `declareHarness`'s `requiredEnv`. By default, the provider's key, or Claude Code's own. */
-  requiredEnv?: RequiredEnv[];
-};
-
-/** What `claudeCode` gets. */
-export type ClaudeCodeOptions = ClaudeCodeCommon &
-  (
-    | {
-        /** Anthropic, Claude Code's own provider. */
-        provider?: undefined;
-        /** The models it runs, as `declareHarness`'s `models`, e.g. `{ "claude-haiku-5-5": [] }`. By default, `CLAUDE_CODE_MODELS`. */
-        models?: HarnessModels;
-      }
-    | {
-        /** Another provider, which must speak Anthropic's Messages API, e.g. `OPENROUTER`. */
-        provider: Provider;
-        /** The models it runs, by the provider's IDs: required, as the defaults are Anthropic's. */
-        models: HarnessModels;
-      }
-  );
+/**
+ * What `claudeCode` gets: `version` is `@anthropic-ai/claude-code`'s, `command` is
+ * `CLAUDE_CODE_COMMAND` by default, and `models` `CLAUDE_CODE_MODELS`. A `provider` must speak
+ * Anthropic's Messages API.
+ */
+export type ClaudeCodeOptions = HelperOptions;
 
 /**
  * The command that runs Claude Code: the prompt and model read from their files, so quotes and
@@ -174,7 +154,7 @@ const providerEnv = (provider: CommandProvider) => ({
  * ```
  */
 export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND, provider, requiredEnv }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
-  const commandProvider: CommandProvider | undefined = provider && { ...provider, baseUrl: anthropicBaseUrl(provider.baseUrl), wireApi: "anthropic" };
+  const commandProvider: CommandProvider | undefined = provider && { baseUrl: anthropicBaseUrl(provider.baseUrl), apiKeyEnv: provider.apiKeyEnv, wireApi: "anthropic" };
   return declareHarness({
     version,
     models,
