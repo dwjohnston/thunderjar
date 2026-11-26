@@ -46,3 +46,38 @@ describe("codex(), with a provider and its own models (custom-codex)", () => {
     assertType<HarnessModelName>("custom-codex/openai/gpt-5.5/high");
   });
 });
+
+describe("copilot(), with its built-in models", () => {
+  it("names each model it declares", () => {
+    assertType<HarnessModelName>("copilot-1.0.105/claude-haiku-5.5");
+    assertType<HarnessModelName>("copilot-1.0.105/gpt-5.5");
+  });
+
+  it("names no other model", () => {
+    // @ts-expect-error - not one of its models
+    assertType<HarnessModelName>("copilot-1.0.105/nonexistent-model-001");
+    // @ts-expect-error - Anthropic's ID for the model, not Copilot's
+    assertType<HarnessModelName>("copilot-1.0.105/claude-haiku-5-5");
+    // @ts-expect-error - no model ID
+    assertType<HarnessModelName>("copilot-1.0.105");
+    // @ts-expect-error - a version with no harness folder
+    assertType<HarnessModelName>("copilot-9.9.9/gpt-5.5");
+  });
+});
+
+describe("copilot(), with a provider and its own models (custom-copilot)", () => {
+  it("names its models by the provider's IDs, one pair per wire API", () => {
+    assertType<HarnessModelName>("custom-copilot/openai/gpt-5.5/responses");
+    assertType<HarnessModelName>("custom-copilot/openai/gpt-5.5/chat");
+    assertType<HarnessModelName>("custom-copilot/anthropic/claude-haiku-5.5");
+  });
+
+  it("names none of the built-in models", () => {
+    // @ts-expect-error - a built-in model, not one of its own
+    assertType<HarnessModelName>("custom-copilot/gpt-5.5");
+    // @ts-expect-error - no wire API
+    assertType<HarnessModelName>("custom-copilot/openai/gpt-5.5");
+    // @ts-expect-error - a wire API it doesn't try
+    assertType<HarnessModelName>("custom-copilot/anthropic/claude-haiku-5.5/chat");
+  });
+});
