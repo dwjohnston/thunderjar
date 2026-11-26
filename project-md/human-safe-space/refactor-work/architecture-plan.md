@@ -325,10 +325,9 @@ Signals are non-deterministic, so they're injected.
 
 The displayer shows the state's phase, e.g. "Stopping: 2 uploads left. Ctrl+C again to abandon them."
 
-**Open**:
+**Decided**: abandoned runs are recorded in the run data store, like crashes and timeouts.
 
-- Are abandoned runs recorded in the run data store, like crashes and timeouts?
-- Should runs that never started be `abandoned`, or a status of their own?
+**Decided**: runs that never started are `abandoned` too. There's no separate status.
 
 ## Application state and displayer
 
