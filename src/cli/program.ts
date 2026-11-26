@@ -1,5 +1,6 @@
 import { Command, Option } from "commander";
 import pkg from "../../package.json" with { type: "json" };
+import { createAttachCommand } from "./commands/attach/attach.ts";
 import { createCaptureCommand } from "./commands/capture/capture.ts";
 import { createCheckoutCommand } from "./commands/checkout/checkout.ts";
 import { createDbCommand } from "./commands/db/db.ts";
@@ -89,6 +90,7 @@ export function createProgram(services: Services): Command {
     .addCommand(createInitCommand())
     .addCommand(createGenerateCommand())
     .addCommand(createRunCommand(services))
+    .addCommand(createAttachCommand())
     // What a runtime's runner runs, not a command for a user: left out of --help.
     .addCommand(createRunnerCommand(), { hidden: true })
     .addCommand(createDoctorCommand())

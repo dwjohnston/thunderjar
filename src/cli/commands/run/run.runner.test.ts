@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-// `thunderjar run` with a runtime's runner through the CLI: the fake
+// `thunderjar run` with a runtime's runner, and `thunderjar attach`, through the CLI: the fake
 // Docker really runs the runner, from the build context of the runner image.
 import { describe, expect, test } from "bun:test";
 import { $ } from "bun";
@@ -405,10 +405,10 @@ Images
   });
 });
 
-describe("0211 remote runtime, with a runner: detaching", () => {
+describe("0211 remote runtime, with a runner: detaching and attaching", () => {
   /** Starts `run example` in a copy whose agent waits for the file `release`, and resolves once its agent is running. */
   async function startSlowRun(docker: FakeDocker) {
-    const marks = `/tmp/tj-detach-${crypto.randomUUID()}`;
+    const marks = `/tmp/tj-attach-${crypto.randomUUID()}`;
     await $`mkdir -p ${marks}`.quiet();
     const copy = await copyWithRunner({ agent: `touch ${marks}/started && while [ ! -f ${marks}/release ]; do sleep 0.1; done` });
     const env = { ...Bun.env, TMPDIR: TMP_DIR, ...docker.env };
@@ -419,6 +419,7 @@ describe("0211 remote runtime, with a runner: detaching", () => {
     return {
       copy,
       cli,
+      release: () => Bun.write(`${marks}/release`, ""),
       async [Symbol.asyncDispose]() {
         cli.kill("SIGKILL");
         await Bun.write(`${marks}/release`, "");
@@ -428,7 +429,7 @@ describe("0211 remote runtime, with a runner: detaching", () => {
     };
   }
 
-  test("interrupted, run leaves the execution running, and says so", async () => {
+  test("interrupted, run leaves the execution running, and says how to follow or stop it; attach follows it to its end", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
     await using slow = await startSlowRun(docker);
 
@@ -438,11 +439,50 @@ describe("0211 remote runtime, with a runner: detaching", () => {
     const executionId = /^Execution (\S+)/.exec(stdout)?.[1] as string;
     expect(exitCode).toBe(130);
     expect(stderr).toBe(
-      `Error: Detached (SIGINT): execution ${executionId} carries on, on the runtime.\n`,
+      `Error: Detached (SIGINT): execution ${executionId} carries on, on the runtime.\nFollow it again with \`thunderjar attach ${executionId}\`, or stop it with \`thunderjar attach ${executionId} --stop\`.\n`,
     );
     // Still running.
     expect(await docker.containers()).toEqual([`thunderjar-run-${executionId}-1-1`, `thunderjar-runner-${executionId}`]);
 
+    await slow.release();
+    const attached = await thunderjar(slow.copy.dir, ["attach", executionId], { env: docker.env });
+
+    expect(attached.stderr).toBe("");
+    expect(attached.exitCode).toBe(0);
+    // The agent was changed to wait, so its images' hashes differ from 0211's.
+    expect(attached.stdout.replaceAll(executionId, "<ID>").replace(/-h[0-9a-f]{8}/g, "-h<HASH>")).toBe(`Execution <ULID>
+Following test case example, on the runtime
+ 1/1  iteration 1/1  fake-harness-alpha | plain  ... done (<duration>)
+      Pushing ${REPOSITORY}:postrun-e<ID>-h<HASH>-i00 ... done
+      ${MEASURES}
+Recorded in .thunderjar/.data/runs.sqlite
+`);
+    expect((await readProjectStore(slow.copy.dir)).execution).toMatchObject({ executionId, status: "complete" });
+    expect(await docker.containers()).toEqual([]);
+  }, 30_000);
+
+  test("attach --stop stops the runner, which removes its containers and records the execution as failed", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using slow = await startSlowRun(docker);
+    slow.cli.kill("SIGINT");
+    const stdout = await new Response(slow.cli.stdout).text();
+    await slow.cli.exited;
+    const executionId = /^Execution (\S+)/.exec(stdout)?.[1] as string;
+    const { runnerImage } = await commandsOf(docker);
+
+    const stopped = await thunderjar(slow.copy.dir, ["attach", executionId, "--stop"], { env: docker.env });
+
+    expect(stopped.stderr).toBe("");
+    expect(stopped.stdout).toBe("Stopped execution <ULID>: removed 1 container from the runtime.\n");
+    expect(stopped.exitCode).toBe(0);
+    expect(await docker.containers()).toEqual([]);
+    const commands = await docker.commands();
+    expect(commands).toContain(`${REMOTE} stop --time 30 thunderjar-runner-${executionId}`);
+    // The runner removed its agent's container itself, on its own Docker.
+    expect(commands.some((command) => command.startsWith("docker rm --force") && command.includes(`thunderjar-run-${executionId}-1-1`))).toBe(true);
+    // In the runner's own store: it was never followed to its end, so nothing was copied here.
+    const runnerStore = sqliteStore(`${docker.contextOf(runnerImage as string)}/project/.thunderjar/.data/runs.sqlite`);
+    expect(await runnerStore.listExecutions()).toMatchObject([{ executionId, status: "failed" }]);
   }, 30_000);
 
   test("if the runner dies without saying how the execution ended, run says so, and removes its container", async () => {
@@ -458,4 +498,24 @@ describe("0211 remote runtime, with a runner: detaching", () => {
     expect(stderr).toBe(`Error: The runner of execution ${executionId} stopped (exit code 137) without saying how the execution ended.\n`);
     expect((await docker.containers()).filter((name) => name.startsWith("thunderjar-runner-"))).toEqual([]);
   }, 30_000);
+
+  test("attach to an execution with no runner says so", async () => {
+    await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
+    await using copy = await copyWithRunner();
+
+    const { stdout, stderr, exitCode } = await thunderjar(copy.dir, ["attach", "01JNOSUCHEXECUTION"], { env: docker.env });
+
+    expect(stdout).toBe("");
+    expect(stderr).toBe("Error: There's no runner for execution 01JNOSUCHEXECUTION on the runtime: no container thunderjar-runner-01JNOSUCHEXECUTION.\n");
+    expect(exitCode).toBe(1);
+  });
+
+  test("attach without a runtime in the config is an error", async () => {
+    await using copy = await copyScenarioProject("0207");
+
+    const { stderr, exitCode } = await thunderjar(copy.dir, ["attach", "01JNOSUCHEXECUTION"]);
+
+    expect(stderr).toBe("Error: attach follows an execution on a runtime, and thunderjar.config.ts gives none.\n");
+    expect(exitCode).toBe(1);
+  });
 });

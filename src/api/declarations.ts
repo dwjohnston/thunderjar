@@ -820,7 +820,7 @@ export type RuntimeConfig = {
    * holding Thunderjar and this project's `.thunderjar/` folder, with the runtime's Docker socket.
    * The runner runs the containers, measures them, pushes their postrun images and writes the run
    * data store. `run` only has the runtime build and push the images, starts the runner, and follows it; it can
-   * be interrupted without stopping the execution.
+   * be interrupted without stopping the execution, and `thunderjar attach` follows it again.
    * `{}` is enough to turn it on. Without it, `run` runs each Docker command on the runtime itself.
    * The runtime must already be running: `beforeExecution` and `afterExecution` can't be given with it.
    */
