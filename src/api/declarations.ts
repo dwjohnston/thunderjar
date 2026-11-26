@@ -281,6 +281,17 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
   collectTokenCosts?: TokenCostCollector;
   /**
    * @docs
+   * @name collectSkillsInvoked
+   * @type {(ctx: SkillsInvokedCtx) => Promise<string[]>}
+   * @description
+   * The names of the skills the agent invoked, for the `skillInvoked` instrument, read in the
+   * measurement container: from the agent's transcripts, with `ctx.exec` or `ctx.readFile`, or
+   * from `ctx.harnessResult`. A throw makes the skills unavailable. Without it, a run has none
+   * to read, and `skillInvoked` skips it.
+   */
+  collectSkillsInvoked?: SkillsInvokedCollector;
+  /**
+   * @docs
    * @name requiredEnv
    * @type {(string | { oneOf: string[] })[]}
    * @description
@@ -296,6 +307,15 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
    */
   requiredEnv?: RequiredEnv[];
 };
+
+/** What a harness's `collectSkillsInvoked` can read: the measurement container, and the result file's text. */
+export type SkillsInvokedCtx = Pick<MeasurementContext, "exec" | "readFile" | "harnessResult" | "workdir">;
+
+/** Reads the names of the skills a run's agent invoked, in the order first invoked. */
+export type SkillsInvokedCollector = (ctx: SkillsInvokedCtx) => Promise<string[]>;
+
+/** The skills a run's agent invoked, as its harness's `collectSkillsInvoked` read them, or why there are none. */
+export type SkillsInvoked = { outcome: "collected"; skills: string[] } | { outcome: "unavailable"; reason: string };
 
 /** A model setting's value. */
 export type SettingValue = string | number | boolean;
@@ -413,6 +433,8 @@ export type MeasurementContext = {
   reply: Reply;
   /** Its reply to each turn, in order: one, unless its initial prompt has several turns. */
   replies: Reply[];
+  /** The skills the agent invoked, from its harness's `collectSkillsInvoked`, or why there are none. */
+  skillsInvoked(): Promise<SkillsInvoked>;
   workdir: string;
 };
 
@@ -446,7 +468,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "shell" | "commits" | "filesChanged" | "jsAst"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "skillInvoked" | "shell" | "commits" | "filesChanged" | "jsAst"}
  * @description
  * What to measure. Each instrument takes its own `config`, and returns its own value, the measure:
  *
@@ -456,6 +478,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * | `grep` | `{ glob, pattern }` | `number`: lines across the matching files that match `pattern` | the value |
  * | `bunTestFile` | `{ subject, test }` | `{ passed, total }`: tests passed, of all the tests | the pass rate, `passed / total` |
  * | `replyMatches` | `{ pattern, turn? }` | `boolean`: whether the agent's reply matches `pattern` | the value |
+ * | `skillInvoked` | `{ skills }` | `Record<string, boolean>`: for each of `skills`, whether the agent invoked it, as its harness's `collectSkillsInvoked` reads them | none: give each metric a `score`, e.g. `(v) => v.a` |
  * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
  * | `filesChanged` | `{ glob? }` | `FileChanges`: `{ added, modified, deleted }` paths changed since the start | none: give each metric a `score` |
  * | `commits` | `{}` | `Commit[]`, oldest first: `{ sha, message, files: { added, modified, deleted } }` | none: give each metric a `score` |
@@ -514,6 +537,13 @@ export type InstrumentTypes = {
    * counting from 1, of an initial prompt of several turns, or by default its last.
    */
   replyMatches: { config: { pattern: string; turn?: number }; value: boolean };
+  /**
+   * Did the agent invoke each of `skills`, by name, e.g. `["tj-test-case", "tj-general"]`? Its
+   * value is each skill's answer, e.g. `{ "tj-test-case": true, "tj-general": false }`. Read by its
+   * harness's `collectSkillsInvoked`, in the measurement container: a run whose harness has none,
+   * or whose skills can't be read, is skipped. A metric needs a `score` of its own, e.g. `(v) => v["tj-test-case"]`.
+   */
+  skillInvoked: { config: { skills: string[] }; value: Record<string, boolean> };
   /**
    * What `command`, any shell command, did: its exit code, and its stdout, as it is, up to 64 KiB.
    * It runs with `sh -c` in the measurement container, in `workdir`, so it can use whatever the

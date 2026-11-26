@@ -1,11 +1,13 @@
 // Reading what `claude -p --output-format json` writes: one JSON object, with the reply as
 // `result`, and the tokens and cost of each model it used as `modelUsage`. For a harness's
 // `collectReply` and `collectTokenCosts`, so a Claude Code harness needn't parse it itself, and
-// `claudeCode`, a whole Claude Code harness.
+// `claudeCode`, a whole Claude Code harness. And reading the skills it invoked, for
+// `collectSkillsInvoked`: not from the result, which doesn't list tool calls, but from the session
+// transcripts Claude Code keeps, one JSON object a line, under `~/.claude/projects/`.
 //
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type SkillsInvokedCollector, type TokenCosts } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
 import { COMMAND_PATHS, type CommandContext, type CommandProvider, envAssignments, envRef, type HelperOptions } from "./harnessOptions.ts";
 
@@ -76,6 +78,50 @@ export function claudeCodeTokenCosts(raw: string): TokenCosts {
   return { outcome: "collected", models, ...(apiDurationMs !== undefined && { apiDurationMs }) };
 }
 
+type TranscriptLine = { type?: unknown; message?: { content?: unknown } };
+type ToolUse = { type?: unknown; name?: unknown; input?: { skill?: unknown } };
+
+/**
+ * The skills Claude Code's Skill tool was called with, in `transcripts`, the text of its session
+ * transcripts, one JSON object a line: each once, in the order first called. A line that isn't
+ * JSON, e.g. the last of a session killed mid-write, is skipped.
+ */
+export function claudeCodeSkillsInvoked(transcripts: string): string[] {
+  const skills = new Set<string>();
+  for (const line of transcripts.split("\n")) {
+    if (!line.trim()) continue;
+    let parsed: TranscriptLine;
+    try {
+      parsed = JSON.parse(line) as TranscriptLine;
+    } catch {
+      continue;
+    }
+    const content = parsed?.type === "assistant" ? parsed.message?.content : undefined;
+    if (!Array.isArray(content)) continue;
+    for (const block of content as ToolUse[]) {
+      if (block?.type === "tool_use" && block.name === "Skill" && typeof block.input?.skill === "string") skills.add(block.input.skill);
+    }
+  }
+  return [...skills];
+}
+
+/**
+ * Every session transcript Claude Code wrote, sub-agents' too, in its config folder: `$HOME/.claude`,
+ * or `CLAUDE_CONFIG_DIR` if set. Fails if there are none.
+ */
+const TRANSCRIPTS_COMMAND = `projects="\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"; [ -d "$projects" ] && find "$projects" -type f -name '*.jsonl' -exec cat {} + | grep .`;
+
+/**
+ * The skills the agent invoked, read in the measurement container from Claude Code's session
+ * transcripts, for a harness's `collectSkillsInvoked`. Throws if it left none, e.g. it never
+ * started, so the run is skipped rather than counted as invoking no skill.
+ */
+export const collectClaudeCodeSkillsInvoked: SkillsInvokedCollector = async ({ exec }) => {
+  const { stdout, exitCode } = await exec(TRANSCRIPTS_COMMAND);
+  if (exitCode !== 0) throw new Error("no Claude Code transcripts in ~/.claude/projects");
+  return claudeCodeSkillsInvoked(stdout);
+};
+
 /** The models `claudeCode` declares unless given others: Anthropic's current IDs, as Claude Code takes them. */
 export const CLAUDE_CODE_MODELS: HarnessModels = {
   "claude-fable-5-2": [],
@@ -128,7 +174,8 @@ const providerEnv = (provider: CommandProvider) => ({
  * A complete harness declaration for Claude Code `version`. Its fragment installs Claude Code as
  * root, writes the model ID and the run script, then switches to the image's non-root `node`
  * user, which a `node` base image has: Claude Code won't skip its permission prompts as root, and
- * nobody is there to answer them. Its reply and token costs are read from its JSON result. It
+ * nobody is there to answer them. Its reply and token costs are read from its JSON result, and
+ * the skills it invoked, for `skillInvoked`, from its session transcripts. It
  * needs `CLAUDE_CODE_OAUTH_TOKEN`, a subscription token from `claude setup-token`, or
  * `ANTHROPIC_API_KEY`: the token if both are set, and only the one, as Claude Code would pick the
  * key if given both.
@@ -168,6 +215,7 @@ export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLA
       ].join("\n"),
     collectReply: claudeCodeReply,
     collectTokenCosts: claudeCodeTokenCosts,
+    collectSkillsInvoked: collectClaudeCodeSkillsInvoked,
     requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : [{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }]),
   });
 }

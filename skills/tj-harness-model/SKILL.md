@@ -54,7 +54,7 @@ harnessModel: ["claude-code-2.1.311/claude-haiku-5-5", "codex-0.166.0/openai/gpt
 
 ## Claude Code, Codex, Copilot or OpenCode
 
-Use the agent's helper: one call, with its install, run script, reply and token costs built in.
+Use the agent's helper: one call, with its install, run script, reply, token costs and the skills it invoked built in.
 
 ```ts
 // harnessModels/codex-0.166.0/index.ts
@@ -119,7 +119,7 @@ What each part must do:
 6. Switch to a non-root user, e.g. `USER node`.
 7. List the keys it needs in `requiredEnv`.
 
-To measure the agent's reply and token costs, add `collectReply` and `collectTokenCosts`, which read `result.json`. See `src/api/copilot.ts` in the thunderjar package for a full one.
+To measure the agent's reply and token costs, add `collectReply` and `collectTokenCosts`, which read `result.json`. For the `skillInvoked` instrument, add `collectSkillsInvoked`, which reads the skills the agent invoked in the measurement container. See `src/api/copilot.ts` in the thunderjar package for a full one.
 
 ## A new version
 

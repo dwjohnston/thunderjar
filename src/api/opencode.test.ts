@@ -2,9 +2,16 @@
 import { describe, expect, test } from "bun:test";
 import { declaredBy } from "./declarations.ts";
 import { OPENROUTER } from "./harnessOptions.ts";
-import { opencode, opencodeReply, opencodeTokenCosts } from "./opencode.ts";
+import { collectOpenCodeSkillsInvoked, opencode, opencodeReply, opencodeSkillsInvoked, opencodeTokenCosts } from "./opencode.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/opencode.result.jsonl`).text();
+// OpenCode 1.19.5 in src/gauntlet/nested-skills, on Claude Haiku 4.5: told to use the base and a
+// skills, it found only base, from the root; and told to have a sub-agent load base, whose session
+// isn't in the result, only its task call: `opencode export` printed it.
+const SKILLS_RESULT = await Bun.file(`${import.meta.dir}/opencode.skills.result.jsonl`).text();
+const SUBAGENT_RESULT = await Bun.file(`${import.meta.dir}/opencode.subagent.result.jsonl`).text();
+const SUBAGENT_EXPORT = await Bun.file(`${import.meta.dir}/opencode.subagent.export.json`).text();
+const SUBAGENT_SESSION = "ses_de88413e9ffeuBgcgfDXQyAfDE";
 
 describe("opencodeReply", () => {
   test("is the text of the last step, skipping lines that aren't JSON", () => {
@@ -35,6 +42,72 @@ describe("opencodeTokenCosts", () => {
   });
 });
 
+/** A tool part, as OpenCode writes it in a result's tool_use event and in an export's messages. */
+const toolPart = (tool: string, input: Record<string, unknown>, sessionId?: string) => ({
+  type: "tool",
+  tool,
+  state: { status: "completed", input, ...(sessionId && { metadata: { sessionId } }) },
+});
+
+/** What `opencode export` prints for a session made of `parts`. */
+const exported = (...parts: object[]) => JSON.stringify({ info: { id: "ses_x" }, messages: [{ info: { role: "assistant" }, parts }] });
+
+describe("opencodeSkillsInvoked", () => {
+  test("is each skill the skill tool was called with, in the result, once, in the order first called", () => {
+    expect(opencodeSkillsInvoked(SKILLS_RESULT)).toEqual(["base"]);
+    const raw = [toolPart("skill", { name: "a" }), toolPart("read", { filePath: "a.ts" }), toolPart("skill", { name: "b" }), toolPart("skill", { name: "a" })]
+      .map((part) => JSON.stringify({ type: "tool_use", part }))
+      .join("\n");
+    expect(opencodeSkillsInvoked(raw)).toEqual(["a", "b"]);
+  });
+
+  test("doesn't see a sub-agent's, whose session isn't in the result", () => {
+    expect(opencodeSkillsInvoked(SUBAGENT_RESULT)).toEqual([]);
+  });
+});
+
+describe("collectOpenCodeSkillsInvoked", () => {
+  const ctx = (harnessResult: string, sessions: Record<string, string> = {}) => {
+    const ran: string[] = [];
+    const exec = async (command: string) => {
+      ran.push(command);
+      const output = sessions[command.replace("opencode export ", "")];
+      return output === undefined ? { stdout: "", stderr: "Session not found", exitCode: 1 } : { stdout: output, stderr: "", exitCode: 0 };
+    };
+    return { ran, ctx: { exec, readFile: async () => "", harnessResult, workdir: "/workspace" } };
+  };
+
+  test("is the main agent's, with no sub-agents to export", async () => {
+    const { ran, ctx: c } = ctx(SKILLS_RESULT);
+    expect(await collectOpenCodeSkillsInvoked(c)).toEqual(["base"]);
+    expect(ran).toEqual([]);
+  });
+
+  test("adds a sub-agent's, exporting its session", async () => {
+    const { ran, ctx: c } = ctx(SUBAGENT_RESULT, { [SUBAGENT_SESSION]: SUBAGENT_EXPORT });
+    expect(await collectOpenCodeSkillsInvoked(c)).toEqual(["base"]);
+    expect(ran).toEqual([`opencode export ${SUBAGENT_SESSION}`]);
+  });
+
+  test("adds each sub-agent's own sub-agents', each session exported once", async () => {
+    const { ran, ctx: c } = ctx(SUBAGENT_RESULT, {
+      [SUBAGENT_SESSION]: exported(toolPart("skill", { name: "b" }), toolPart("task", { prompt: "go on" }, "ses_nested")),
+      ses_nested: exported(toolPart("skill", { name: "a" }), toolPart("skill", { name: "b" }), toolPart("task", { prompt: "and again" }, "ses_nested")),
+    });
+    expect(await collectOpenCodeSkillsInvoked(c)).toEqual(["b", "a"]);
+    expect(ran).toEqual([`opencode export ${SUBAGENT_SESSION}`, "opencode export ses_nested"]);
+  });
+
+  test("throws when a sub-agent's session can't be exported, rather than undercount", async () => {
+    await expect(collectOpenCodeSkillsInvoked(ctx(SUBAGENT_RESULT).ctx)).rejects.toThrow(SUBAGENT_SESSION);
+    await expect(collectOpenCodeSkillsInvoked(ctx(SUBAGENT_RESULT, { [SUBAGENT_SESSION]: "not JSON" }).ctx)).rejects.toThrow(SUBAGENT_SESSION);
+  });
+
+  test("throws when the result has no events, so the run is skipped, not counted as invoking none", async () => {
+    await expect(collectOpenCodeSkillsInvoked(ctx("Error: no provider").ctx)).rejects.toThrow("no events");
+  });
+});
+
 const fragment = (harness: ReturnType<typeof opencode>, modelId: string, model: Record<string, string | number> = {}) =>
   harness.applyParameter(undefined, { dir: "parameters/harness", version: "1.19.5", modelId, model, resolved: undefined });
 
@@ -54,6 +127,7 @@ describe("opencode", () => {
     expect(Object.keys(harness.models)).toEqual(["opencode/claude-haiku-5-5", "opencode/gpt-5.5"]);
     expect(harness.collectReply?.(RESULT)).toBe("pong");
     expect(harness.collectTokenCosts?.(RESULT, { version: "1.19.5", modelId: "opencode/gpt-5.5" })).toEqual(opencodeTokenCosts(RESULT, "opencode/gpt-5.5"));
+    expect(harness.collectSkillsInvoked).toBe(collectOpenCodeSkillsInvoked);
   });
 
   test("installs OpenCode as root and its plugin package as node, writes the model and run script, then runs as node", () => {
