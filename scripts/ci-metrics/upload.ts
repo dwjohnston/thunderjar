@@ -62,7 +62,7 @@ const steps = await jobSteps();
 
 const sql = new SQL(env.CI_METRICS_DB_URL);
 try {
-  await recordRun(sql, {
+  const { stepsError } = await recordRun(sql, {
     runId: Number(env.GITHUB_RUN_ID),
     runAttempt: Number(env.GITHUB_RUN_ATTEMPT ?? 1),
     job: env.GITHUB_JOB ?? "unknown",
@@ -76,7 +76,10 @@ try {
     startedAt: Number.isNaN(startedAt.getTime()) ? new Date() : startedAt,
     finishedAt: new Date(),
   }, report, undefined, steps);
-  process.stdout.write(`Recorded ${report.tests.length} tests, ${report.totalSeconds.toFixed(1)}s of test time, ${steps.length} steps.\n`);
+  const recordedSteps = stepsError ? 0 : steps.length;
+  process.stdout.write(`Recorded ${report.tests.length} tests, ${report.totalSeconds.toFixed(1)}s of test time, ${recordedSteps} steps.\n`);
+  // A GitHub annotation: shown on the run's summary, not only in this step's log.
+  if (stepsError) process.stdout.write(`::warning title=CI metrics::Recorded the run and its tests, but not its steps: ${stepsError}\n`);
 } finally {
   await sql.close();
 }
