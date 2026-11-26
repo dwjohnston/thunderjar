@@ -644,11 +644,6 @@ export async function writeContainerFile(name: string, path: string, text: strin
   }
 }
 
-/** Stops the container `name`, giving it `graceSeconds` to stop itself before it's killed. Throws a DockerContainerError. */
-export async function stopContainer(name: string, graceSeconds: number, runtime: DockerRuntime): Promise<void> {
-  await mustRun(["stop", "--time", String(graceSeconds), name], runtime);
-}
-
 /**
  * The state of the container `name` in `runtime`, or undefined if there's no such container.
  * Throws a DockerContainerError if Docker can't be asked.

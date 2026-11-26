@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-// Following an execution that runs on the runtime, in a runner, for `run` and `attach`: its
+// Following an execution that runs on the runtime, in a runner, for `run`: its
 // events are turned into the hooks that write the execution's lines, and its last gives its
 // records, or the error it stopped on.
 import { errorOf, replayEvent, RunnerError, type RunnerEvent } from "../../../execution/runnerEvents.ts";
@@ -25,9 +25,9 @@ import { printError as error } from "../../output.ts";
 /** An execution that has ended: its record, where it's recorded, and its container runs' records, if they were asked for. */
 export type Executed = { execution: ExecutionRecord; recordedIn: string; containerRuns: ContainerRunRecord[] };
 
-/** What's written when `run` or `attach` is interrupted while it follows an execution on the runtime. */
+/** What's written when `run` is interrupted while it follows an execution on the runtime. */
 export const detachedMessage = (signal: string, executionId: string) =>
-  `Detached (${signal}): execution ${executionId} carries on, on the runtime.\nFollow it again with \`thunderjar attach ${executionId}\`, or stop it with \`thunderjar attach ${executionId} --stop\`.`;
+  `Detached (${signal}): execution ${executionId} carries on, on the runtime.`;
 
 /**
  * Follows execution `executionId`'s runner, on the runtime `command` reaches, to its end. `shown`
@@ -94,7 +94,7 @@ async function keepRecords(root: string, executed: Executed): Promise<Executed> 
  */
 export function reportRunnerFailure(caught: unknown, executionId: string): boolean {
   if (caught instanceof RunnerUnreachableError) {
-    error(`${caught.message}\nExecution ${executionId} may still be running there. Follow it again with \`thunderjar attach ${executionId}\`.`);
+    error(`${caught.message}\nExecution ${executionId} may still be running there.`);
   } else if (caught instanceof RunnerLostError) {
     error(caught.message);
   } else if (caught instanceof RunnerError) {

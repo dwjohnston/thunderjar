@@ -24,14 +24,12 @@ import {
   readContainerFile,
   remoteRuntime,
   removeContainer,
-  removeContainersNamed,
   startDetached,
   stderrTail,
-  stopContainer,
   writeContainerFile,
 } from "../docker/docker.ts";
 import { moduleLogger } from "../log/logger.ts";
-import { DEFAULT_IMAGE_PREFIX, executionContainerPrefix, storedPrerunImage } from "./images.ts";
+import { DEFAULT_IMAGE_PREFIX, storedPrerunImage } from "./images.ts";
 import { type PushHooks, pushToStore } from "./imageStore.ts";
 import { inParallel } from "./inParallel.ts";
 import type { PlannedExecution } from "./planExecution.ts";
@@ -230,26 +228,9 @@ export async function followRunner(
   }
 }
 
-/** How long a runner being stopped is given to stop its containers and record its execution as failed. */
-const STOP_GRACE_SECONDS = 30;
-
 /** The runner's diagnostic log, of execution `executionId`, or undefined if it can't be read. */
 export async function runnerLog(command: string[], executionId: string, imagePrefix?: string): Promise<string | undefined> {
   return readContainerFile(runnerContainer(executionId, imagePrefix), RUNNER_LOG_PATH, remoteRuntime(command)).catch(() => undefined);
-}
-
-/**
- * Stops execution `executionId` on the runtime `command` reaches: its runner, then every
- * container it left. Returns the names of the containers removed. Throws a DockerContainerError.
- */
-export async function stopOnRuntime(command: string[], executionId: string, imagePrefix?: string): Promise<string[]> {
-  const runtime = remoteRuntime(command);
-  // Stopped, not killed, so the runner removes the containers it's running and records the execution as failed.
-  await stopContainer(runnerContainer(executionId, imagePrefix), STOP_GRACE_SECONDS, runtime).catch(() => {});
-  const runner = await removeContainersNamed(runnerContainer(executionId, imagePrefix), runtime);
-  const rest = await removeContainersNamed(executionContainerPrefix(executionId, imagePrefix), runtime);
-  log.warn({ executionId, removed: [...runner, ...rest] }, "stopped the execution on the runtime");
-  return [...runner, ...rest];
 }
 
 /** Removes the runner's container of execution `executionId`, once it has ended. Never throws. */
