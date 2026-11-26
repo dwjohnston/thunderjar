@@ -2,6 +2,7 @@
 // them to project/.thunderjar/_generated/. Checked by src/testing/scenarios.typecheck.test.ts, not
 // run for behaviour: every `@ts-expect-error` must be a real error, and every other line must compile.
 import { describe, it } from "bun:test";
+import { CLAUDE_CODE_COMMAND, OPENROUTER, claudeCode, type HarnessDeclaration } from "thunderjar";
 
 function assertType<T>(_value: T) {}
 
@@ -23,5 +24,29 @@ describe("claudeCode(), with its built-in models", () => {
     assertType<HarnessModelName>("claude-code-2.1.311");
     // @ts-expect-error - a version with no harness folder
     assertType<HarnessModelName>("claude-code-9.9.9/claude-haiku-5-5");
+  });
+});
+
+describe("claudeCode(), declaring a harness", () => {
+  it("declares one from a version alone, as harnessModels/<name>/index.ts would export it", () => {
+    assertType<HarnessDeclaration<undefined, undefined>>(claudeCode({ version: "2.1.311" }));
+  });
+
+  it("declares one with a provider, its own models and a bespoke command", () => {
+    assertType<HarnessDeclaration<undefined, undefined>>(
+      claudeCode({
+        version: "2.1.311",
+        provider: OPENROUTER,
+        models: {
+          "anthropic/claude-opus-5.5": [{ effort: { values: ["low", "high"] } }, { thinkingTokens: { values: [8000, 32000] } }],
+        },
+        command: (ctx) => `MAX_THINKING_TOKENS=${ctx.model.thinkingTokens} ${CLAUDE_CODE_COMMAND(ctx)}`,
+      }),
+    );
+  });
+
+  it("needs a version", () => {
+    // @ts-expect-error - no version
+    claudeCode({});
   });
 });
