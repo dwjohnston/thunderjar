@@ -13,7 +13,7 @@ import { expect, test } from "bun:test";
 // The repo's own Copilot harness, in .thunderjar/, which `bun test` doesn't search.
 import copilot from "../../.thunderjar/parameters/harnessModels/copilot-1.0.105/index.ts";
 
-const fragment = (modelId: string) => copilot.applyParameter(undefined, { version: "1.0.105", modelId } as never) as string;
+const fragment = (modelId: string) => copilot.applyParameter(undefined, { dir: "parameters/harnessModels/copilot-1.0.105", version: "1.0.105", modelId, model: {}, resolved: undefined });
 
 test("OpenAI's models run on OpenRouter's Responses API: on Chat Completions OpenAI rejects Copilot's tools", () => {
   expect(fragment("openai/gpt-6.1-sol")).toContain("COPILOT_PROVIDER_WIRE_API=responses");

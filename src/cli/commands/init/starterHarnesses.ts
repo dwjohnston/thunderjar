@@ -55,18 +55,14 @@ const claudeCode = `import { claudeCode } from "thunderjar";
 export default claudeCode({ version: "2.1.311" });
 `;
 
-const copilot = `${IMPORTS}
+const copilot = `import { copilot } from "thunderjar";
 
 // GitHub Copilot CLI. COPILOT_GITHUB_TOKEN is a GitHub token with Copilot access: a fine-grained
 // personal access token with the "Copilot Requests" permission.
-// Which models you can use depends on your Copilot plan and your organization's policy.
-export default declareHarness({
-  version: "1.0.105",
-${models("`copilot --help`, or GitHub's supported models page,", ["claude-haiku-5.5", "gpt-5.5"])}
-${applyParameter("npm install -g @github/copilot@${ctx.version}", 'copilot -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)" --allow-all-tools --no-color > /thunderjar/result.json')}
-${stubReaders}
-  requiredEnv: ["COPILOT_GITHUB_TOKEN"],
-});
+// Which models you can use depends on your Copilot plan and your organization's policy. A test
+// case may name any model it declares, after the folder, e.g. "copilot-1.0.105/claude-haiku-5.5".
+// To name others, pass \`models\`. To run it on OpenRouter, pass \`provider: OPENROUTER\` too.
+export default copilot({ version: "1.0.105" });
 `;
 
 const codex = `import { codex } from "thunderjar";
