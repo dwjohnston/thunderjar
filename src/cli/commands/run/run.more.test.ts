@@ -520,7 +520,7 @@ describe("0201 minimal existing setup", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toBe(`Execution <ULID>
 
-${permutation(1, "4799f255", 1)}
+${permutation(1, "fc978504", 1)}
 `);
   });
 });
