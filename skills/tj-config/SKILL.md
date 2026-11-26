@@ -186,7 +186,7 @@ runtime: {
 
 - `run` builds a runner image, holding Thunderjar and the `.thunderjar/` folder, pushes it to the image store, and starts it on the runtime with the runtime's Docker socket.
 - The runner runs the containers, measures them, pushes postrun images and writes the run data store. `run` only follows it.
-- Ctrl-C leaves the execution running. `thunderjar attach <execution ID>` follows it again, and `attach <execution ID> --stop` stops it.
+- Ctrl-C leaves the execution running.
 - `{}` is enough to turn it on.
   - `registryLogin`: the variables holding a user and token for the image store's registry. The runner logs in with them.
   - `env`: more variables to give the runner, by name.
@@ -198,7 +198,7 @@ runtime: {
 
 **Why:** the execution carries on after `run` is interrupted, so `run` can't tell when the runtime is free to stop.
 
-✅ **Do** use a `postgresStore` with it. With a `sqliteStore`, the runner's records are copied to the local file only once `run` or `attach` has followed the execution to its end.
+✅ **Do** use a `postgresStore` with it. With a `sqliteStore`, the runner's records are copied to the local file only once `run` has followed the execution to its end.
 
 **Why:** Each Docker command sent to a distant runtime is a round trip. On the runtime, they're local. The variables' values are sent as the runner starts, and kept in its memory only.
 
