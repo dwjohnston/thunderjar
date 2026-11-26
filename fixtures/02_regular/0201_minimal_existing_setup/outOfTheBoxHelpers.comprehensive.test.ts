@@ -81,3 +81,38 @@ describe("copilot(), with a provider and its own models (custom-copilot)", () =>
     assertType<HarnessModelName>("custom-copilot/anthropic/claude-haiku-5.5/chat");
   });
 });
+
+describe("opencode(), with its built-in models", () => {
+  it("names each OpenCode Zen model it declares, provider first", () => {
+    assertType<HarnessModelName>("opencode-1.19.5/opencode/claude-haiku-5-5");
+    assertType<HarnessModelName>("opencode-1.19.5/opencode/gpt-5.5");
+  });
+
+  it("names no other model", () => {
+    // @ts-expect-error - no provider part
+    assertType<HarnessModelName>("opencode-1.19.5/gpt-5.5");
+    // @ts-expect-error - not one of its models
+    assertType<HarnessModelName>("opencode-1.19.5/opencode/nonexistent-model-001");
+    // @ts-expect-error - no model ID
+    assertType<HarnessModelName>("opencode-1.19.5");
+    // @ts-expect-error - a version with no harness folder
+    assertType<HarnessModelName>("opencode-9.9.9/opencode/gpt-5.5");
+  });
+});
+
+describe("opencode(), with a provider and its own models (custom-opencode)", () => {
+  it("names its models by their IDs in the provider entry, one pair per reasoning effort", () => {
+    assertType<HarnessModelName>("custom-opencode/openrouter/openai/gpt-5.5/low");
+    assertType<HarnessModelName>("custom-opencode/openrouter/openai/gpt-5.5/high");
+    assertType<HarnessModelName>("custom-opencode/openrouter/anthropic/claude-haiku-5.5");
+  });
+
+  it("names none of the built-in models", () => {
+    // @ts-expect-error - a built-in model, not one of its own
+    assertType<HarnessModelName>("custom-opencode/opencode/gpt-5.5");
+    // @ts-expect-error - no reasoning effort
+    assertType<HarnessModelName>("custom-opencode/openrouter/openai/gpt-5.5");
+    // @ts-expect-error - a reasoning effort it doesn't have
+    assertType<HarnessModelName>("custom-opencode/openrouter/anthropic/claude-haiku-5.5/high");
+  });
+});

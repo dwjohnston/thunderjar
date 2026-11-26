@@ -276,8 +276,8 @@ export default declareCodeState({
 
 describe("0201 minimal existing setup", () => {
   const ALPHA = `${P}/harnessModels/fake-harness-alpha/`;
-  const CUSTOM = ["custom-claude", "custom-codex", "custom-copilot"].map((name) => `${P}/harnessModels/${name}/index.ts`);
-  const STARTERS = ["claude-code-2.1.311", "codex-0.166.0", "copilot-1.0.105"].map((name) => `${P}/harnessModels/${name}/`);
+  const CUSTOM = ["custom-claude", "custom-codex", "custom-copilot", "custom-opencode"].map((name) => `${P}/harnessModels/${name}/index.ts`);
+  const STARTERS = ["claude-code-2.1.311", "codex-0.166.0", "copilot-1.0.105", "opencode-1.19.5"].map((name) => `${P}/harnessModels/${name}/`);
   const GENERATED = "_generated/parameterNames.d.ts";
   // What a minimal setup leaves out: every starter harness but those in STARTERS, the second prompt
   // set, and init's test cases, which use real harnesses. 0201 adds fake-harness-alpha, a custom-*
