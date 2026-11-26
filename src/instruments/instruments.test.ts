@@ -2,9 +2,9 @@
 // host, standing in for a measurement container.
 import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
-import type { MeasurementContext, Reply } from "../api/declarations.ts";
+import type { MeasurementContext, Reply, SkillsInvoked } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, jsAst, replyMatches, shell, STDOUT_LIMIT } from "./instruments.ts";
+import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, jsAst, replyMatches, shell, skillInvoked, STDOUT_LIMIT } from "./instruments.ts";
 
 const ROOT = `${TMP_DIR}/instruments-${crypto.randomUUID()}`;
 
@@ -23,14 +23,17 @@ async function folderWith(files: string[] | Record<string, string>): Promise<str
 
 const NO_REPLY: Reply = { outcome: "unavailable", reason: "its harness has no collectReply" };
 
-/** A context whose workdir is a folder holding `files`, of a run whose reply is `reply`. */
-async function contextWith(files: string[] | Record<string, string>, reply: Reply = NO_REPLY): Promise<MeasurementContext> {
+const NO_SKILLS: SkillsInvoked = { outcome: "unavailable", reason: "its harness has no collectSkillsInvoked" };
+
+/** A context whose workdir is a folder holding `files`, of a run whose reply is `reply`, and whose skills invoked are `skills`. */
+async function contextWith(files: string[] | Record<string, string>, reply: Reply = NO_REPLY, skills: SkillsInvoked = NO_SKILLS): Promise<MeasurementContext> {
   const workdir = await folderWith(files);
   return {
     workdir,
     harnessResult: "",
     reply,
     replies: [reply],
+    skillsInvoked: async () => skills,
     exec: async (command) => {
       const { stdout, stderr, exitCode } = await $`sh -c ${command}`.cwd(workdir).quiet().nothrow();
       return { stdout: stdout.toString(), stderr: stderr.toString(), exitCode };
@@ -42,6 +45,29 @@ async function contextWith(files: string[] | Record<string, string>, reply: Repl
     glob: async (pattern) => (await Array.fromAsync(new Glob(pattern).scan({ cwd: workdir, dot: true }))).toSorted(),
   };
 }
+
+describe("skillInvoked", () => {
+  const invoking = (skills: string[]) => contextWith([], NO_REPLY, { outcome: "collected", skills });
+
+  test("is whether the agent invoked the skill, by its exact name", async () => {
+    expect(await skillInvoked.evaluate({ skill: "tj-test-case" }, await invoking(["tj-general", "tj-test-case"]))).toEqual({ outcome: "measured", data: true });
+    expect(await skillInvoked.evaluate({ skill: "tj-test" }, await invoking(["tj-test-case"]))).toEqual({ outcome: "measured", data: false });
+    expect(await skillInvoked.evaluate({ skill: "tj-test-case" }, await invoking([]))).toEqual({ outcome: "measured", data: false });
+  });
+
+  test("is skipped, saying why, when the skills can't be read", async () => {
+    expect(await skillInvoked.evaluate({ skill: "tj-test-case" }, await contextWith([]))).toEqual({
+      outcome: "skipped",
+      reason: "no skills invoked to read: its harness has no collectSkillsInvoked",
+    });
+  });
+
+  test("needs a skill's name", () => {
+    expect(skillInvoked.checkConfig({ skill: "tj-test-case" })).toEqual([]);
+    expect(skillInvoked.checkConfig({})).toEqual([["config.skill", "must be a skill's name, got undefined"]]);
+    expect(skillInvoked.checkConfig({ skill: "" })).toEqual([["config.skill", 'must be a skill\'s name, got ""']]);
+  });
+});
 
 describe("replyMatches", () => {
   const replying = (text: string) => contextWith([], { outcome: "collected", text });
