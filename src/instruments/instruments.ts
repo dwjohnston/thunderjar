@@ -11,15 +11,16 @@ import { jsAst } from "./jsAst/jsAst.ts";
 import type { Instrument, ScoreKind } from "./instrument.ts";
 import { replyMatches } from "./replyMatches/replyMatches.ts";
 import { shell } from "./shell/shell.ts";
+import { skillInvoked } from "./skillInvoked/skillInvoked.ts";
 
 export type { Instrument, ScoreKind } from "./instrument.ts";
-export { bunTestFile, commits, fileCreated, filesChanged, grep, jsAst, replyMatches, shell };
+export { bunTestFile, commits, fileCreated, filesChanged, grep, jsAst, replyMatches, shell, skillInvoked };
 export { STDOUT_LIMIT } from "./shell/shell.ts";
 
 /** Every built-in instrument, by the name a measurement gives as its `instrument`. */
 export const instruments: {
   [I in InstrumentName]: Instrument<InstrumentTypes[I]["config"], InstrumentTypes[I]["value"]>;
-} = { fileCreated, grep, bunTestFile, replyMatches, shell, commits, filesChanged, jsAst };
+} = { fileCreated, grep, bunTestFile, replyMatches, skillInvoked, shell, commits, filesChanged, jsAst };
 
 export const isInstrumentName = (name: unknown): name is InstrumentName => typeof name === "string" && Object.hasOwn(instruments, name);
 

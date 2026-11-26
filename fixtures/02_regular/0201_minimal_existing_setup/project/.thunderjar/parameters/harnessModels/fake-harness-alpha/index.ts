@@ -1,6 +1,8 @@
 import { declareHarness, writeModel, writeRunScript } from "thunderjar";
 
 // A fake agent: writes a buggy isPrime.ts (2 isn't prime, 15 is) with a @ts-ignore, and a result file.
+// It "invokes" two skills, logging each one's name to /thunderjar/skills.log, a line each, where
+// its collectSkillsInvoked reads them back for the skillInvoked instrument.
 export default declareHarness({
   models: {
     "fake-model-small-001": [],
@@ -20,7 +22,10 @@ export default declareHarness({
       writeModel(ctx.modelId),
       writeRunScript(
         `printf '%s\\n' "// $(cat /thunderjar/prompt.txt)" '// @ts-ignore' 'export const isPrime = (n: number) => n > 1 && n % 2 !== 0;' > isPrime.ts` +
-        ` && echo '{"model":"${ctx.modelId}"}' > /thunderjar/result.json`,
+        ` && echo '{"model":"${ctx.modelId}"}' > /thunderjar/result.json` +
+        ` && printf '%s\\n' tdd is-prime-hints > /thunderjar/skills.log`,
       ),
     ].join("\n"),
+  // Run in the measurement container, from the postrun image, so the log the run script left is there.
+  collectSkillsInvoked: async ({ readFile }) => (await readFile("/thunderjar/skills.log")).split("\n").filter(Boolean),
 });

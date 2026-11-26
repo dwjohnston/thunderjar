@@ -253,7 +253,8 @@ describe("0201 minimal existing setup", () => {
   const CLAUDE_CODE = `${P}/harnessModels/claude-code-2.1.311/`;
   const GENERATED = "_generated/parameterNames.d.ts";
   // What a minimal setup leaves out: every harness but Claude Code, the second prompt set, and init's
-  // test cases, which use real harnesses. 0201 adds fake-harness-alpha, custom-claude (Claude Code through OpenRouter), and one test case of its own, `example`.
+  // test cases, which use real harnesses. 0201 adds fake-harness-alpha, custom-claude (Claude Code through OpenRouter), one test case of its own, `example`,
+  // and a skillInvoked measurement of what fake-harness-alpha's collectSkillsInvoked reads.
   const leftOut = (path: string) =>
     (path.startsWith(`${P}/harnessModels/`) && !path.startsWith(CLAUDE_CODE)) ||
     path.startsWith(`${P}/promptSets/house-style/`) ||
@@ -265,7 +266,7 @@ describe("0201 minimal existing setup", () => {
     const scaffolded = filesIn(copy.dir).filter((path) => !leftOut(path));
     const existing = filesIn(scenario("0201"));
 
-    expect(existing).toEqual([...scaffolded, `${ALPHA}index.ts`, `${CUSTOM_CLAUDE}index.ts`, "test-cases/example.ts", GENERATED].toSorted());
+    expect(existing).toEqual([...scaffolded, `${ALPHA}index.ts`, `${CUSTOM_CLAUDE}index.ts`, `${P}/tasks/is-prime/measurements/skillsInvoked.ts`, "test-cases/example.ts", GENERATED].toSorted());
     for (const path of scaffolded) {
       expect(await read(scenario("0201"), path), path).toBe(await read(copy.dir, path));
     }

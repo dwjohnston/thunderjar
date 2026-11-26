@@ -1,7 +1,7 @@
 // The measurement context over a measurement container: one started from a postrun image, for
 // a container run's measurements, and removed once they're taken. The instrument's logic runs on the host; what it
 // asks of the context runs in the container, so nothing it writes reaches the postrun image.
-import type { MeasurementContext } from "../api/declarations.ts";
+import type { MeasurementContext, SkillsInvoked, SkillsInvokedCollector, SkillsInvokedCtx } from "../api/declarations.ts";
 import { type DockerRuntime, isRuntime, localRuntime } from "../docker/docker.ts";
 import { openShellSession } from "../docker/shellSession.ts";
 import type { DockerService } from "../services/Docker/Docker.ts";
@@ -17,8 +17,26 @@ export type OpenedMeasurementContext = MeasurementContext & {
   close(): Promise<void>;
 };
 
-/** What was recorded of a container run, that an instrument can read without its container. */
-export type Recorded = Pick<MeasurementContext, "harnessResult" | "reply" | "replies">;
+/**
+ * What was recorded of a container run, that an instrument can read without its container, and
+ * its harness's `collectSkillsInvoked`, if it has one, to read the skills in the container.
+ */
+export type Recorded = Pick<MeasurementContext, "harnessResult" | "reply" | "replies"> & { collectSkillsInvoked?: SkillsInvokedCollector | undefined };
+
+/** The skills `collect` reads from `ctx`, or why there are none. */
+export async function readSkillsInvoked(collect: SkillsInvokedCollector | undefined, ctx: SkillsInvokedCtx): Promise<SkillsInvoked> {
+  if (!collect) return { outcome: "unavailable", reason: "its harness has no collectSkillsInvoked" };
+  let skills: unknown;
+  try {
+    skills = await collect(ctx);
+  } catch (error) {
+    return { outcome: "unavailable", reason: `collectSkillsInvoked threw: ${error instanceof Error ? error.message : String(error)}` };
+  }
+  if (!Array.isArray(skills) || !skills.every((skill) => typeof skill === "string")) {
+    return { outcome: "unavailable", reason: "collectSkillsInvoked returned something that isn't a list of names" };
+  }
+  return { outcome: "collected", skills };
+}
 
 /**
  * A context over only what was recorded of a container run, for an instrument that doesn't use
@@ -37,6 +55,7 @@ export function recordedContext({ harnessResult, reply, replies }: Recorded): Op
     readFile: noContainer,
     writeFile: noContainer,
     glob: noContainer,
+    skillsInvoked: noContainer,
     close: async () => {},
   };
 }
@@ -58,7 +77,7 @@ const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
 export async function openMeasurementContext(
   postrunImage: string,
   container: string,
-  { harnessResult, reply, replies }: Recorded,
+  { harnessResult, reply, replies, collectSkillsInvoked }: Recorded,
   where: DockerRuntime | Pick<DockerService, "openShellSession"> = localRuntime(),
   secretEnv: string[] = [],
 ): Promise<OpenedMeasurementContext> {
@@ -72,13 +91,16 @@ export async function openMeasurementContext(
     if (result.exitCode !== 0) throw new Error(`${what}: ${result.stderr.trim() || `exited ${result.exitCode}`}`);
     return result.stdout;
   };
+  const exec = (command: string) => session.run(command);
+  const readFile = (path: string) => mustRun(`can't read ${path}`, `cat -- ${word(path)}`);
   return {
     workdir,
     harnessResult,
     reply,
     replies,
-    exec: (command) => session.run(command),
-    readFile: (path) => mustRun(`can't read ${path}`, `cat -- ${word(path)}`),
+    exec,
+    readFile,
+    skillsInvoked: () => readSkillsInvoked(collectSkillsInvoked, { exec, readFile, harnessResult, workdir }),
     async writeFile(path, contents) {
       await mustRun(`can't write ${path}`, `mkdir -p -- "$(dirname -- ${word(path)})" && cat > ${word(path)}`, contents);
     },
