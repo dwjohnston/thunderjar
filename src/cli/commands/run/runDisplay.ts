@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-// What `run` writes while an execution runs, and once it ends: a line for each build,
+// What `run` and `attach` write while an execution runs, and once it ends: a line for each build,
 // push, pull and container run, or, on a terminal with several at once, a row each, rewritten in
 // place. Driven by the execution's hooks, whether it runs here (runExecution.ts) or on the
 // runtime, its events replayed (runnerEvents.ts).
