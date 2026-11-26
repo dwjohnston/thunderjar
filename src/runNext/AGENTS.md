@@ -2,7 +2,7 @@
 
 What `thunderjar run` runs. See `project-md/human-safe-space/refactor-work/architecture-plan.md`.
 
-Runner mode (`runtime.runner` in the config) is the one exception: it's still on the old path, in `src/cli/commands/run/runOnRunner.ts` and `src/execution/runExecution.ts`.
+Runner mode (`runtime.runner` in the config) is the one exception: it's still on the old path, in `src/cli/commands/run/runOnRunner.deprecated.ts` and `src/execution/runExecution.ts`.
 
 ## How services reach it
 
@@ -51,7 +51,7 @@ Never build a service here or in the command: add it to `Services` and build it 
 - `hooks/`, `timed/`
   - The runtime's hooks, once each per execution; phase timings into the state.
 
-Lower levels never print. They write to the run state, and the displayer draws it with `renderRun` (src/cli/commands/run/renderRun.ts), or prints it as JSON with `--json`.
+Lower levels never print. They write to the run state, and the displayer draws it with `renderRun` (src/services/Displayer/renderRun/renderRun.ts), or prints it as JSON with `--json`.
 
 ## Where it differs from the architecture plan
 

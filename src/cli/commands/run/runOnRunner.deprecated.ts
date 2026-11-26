@@ -20,8 +20,8 @@ import { RunDataStoreError } from "../../../store/runDataStore.ts";
 import { painter } from "../../colour.ts";
 import { displayPath, type OpenStore, openStore } from "../../dataDir.ts";
 import { print, printError as error, printJson, printWarning } from "../../output.ts";
-import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.ts";
-import { runDisplay, showSecrets, showTimings, showUnclean, showUnsearched, storeFailure } from "./runDisplay.ts";
+import { detachedMessage, type Executed, followToEnd, mergeTimings, reportRunnerFailure } from "./followRunner.deprecated.ts";
+import { runDisplay, showSecrets, showTimings, showUnclean, showUnsearched, storeFailure } from "./runDisplay.deprecated.ts";
 
 /** How long an interrupted `run` waits for its execution to be recorded as failed, before it runs afterExecution. */
 const INTERRUPT_SETTLE_MS = 15_000;

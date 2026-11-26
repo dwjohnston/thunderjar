@@ -15,10 +15,10 @@ import { RUN_SCRIPT_PATH } from "../../../api/files.ts";
 import { showOverrides } from "../../../config/overrides.ts";
 import type { Manifest, PlannedPermutation, PlannedRun } from "../../../runNext/types.ts";
 import type { ImageBuildStatus, RunProgress, RunState } from "../../../services/ApplicationState/ApplicationState.ts";
-import { type Paint, padEnd, plain } from "../../colour.ts";
-import { displayPath } from "../../dataDir.ts";
-import { agentEnd, dollars, duration, envEntry, failureHint, knownCost, plural, secretFiles } from "../../format.ts";
-import { showMeasures } from "./runDisplay.ts";
+import { type Paint, padEnd, plain } from "../../../cli/colour.ts";
+import { displayPath } from "../../../cli/dataDir.ts";
+import { agentEnd, dollars, duration, envEntry, failureHint, knownCost, plural, secretFiles } from "../../../cli/format.ts";
+import { showMeasures } from "../../../cli/commands/run/runDisplay.deprecated.ts";
 
 export type RenderOptions = {
   paint?: Paint;
