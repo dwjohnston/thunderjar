@@ -18,7 +18,7 @@ import type { ImageBuildStatus, RunProgress, RunState } from "../../../services/
 import { type Paint, padEnd, plain } from "../../../cli/colour.ts";
 import { displayPath } from "../../../cli/dataDir.ts";
 import { agentEnd, dollars, duration, envEntry, failureHint, knownCost, plural, secretFiles } from "../../../cli/format.ts";
-import { showMeasures } from "../../../cli/commands/run/runDisplay.ts";
+import { showMeasures } from "../../../cli/commands/run/runDisplay.deprecated.ts";
 
 export type RenderOptions = {
   paint?: Paint;

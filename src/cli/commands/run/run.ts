@@ -9,7 +9,7 @@
  * Humans: add your notes here
  */
 
-// `run`: the command line of src/runNext/, and, with a runner in the config, of runOnRunner.ts.
+// `run`: the command line of src/runNext/, and, with a runner in the config, of runOnRunner.deprecated.ts.
 import { Command, InvalidArgumentError, Option } from "commander";
 import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
 import type { Overrides } from "../../../config/overrides.ts";
@@ -24,7 +24,7 @@ import { printError } from "../../output.ts";
 import { overridesOf, withOverrideOptions } from "../../overrides.ts";
 import type { Services } from "../../services.ts";
 import { describeFailure } from "./runFailure.ts";
-import { runOnRunner } from "./runOnRunner.ts";
+import { runOnRunner } from "./runOnRunner.deprecated.ts";
 
 /** The services `runNext` uses, picked from those src/cli/index.ts built. */
 function dependencies(services: Services): Dependencies {
@@ -62,7 +62,7 @@ export function createRunCommand(services: Services): Command {
       reportingConfigErrors(async (name: string, options: Options) => {
         const overrides = overridesOf(options);
         const { cwd } = services.env;
-        // Runner mode is still on the old path: see runOnRunner.ts.
+        // Runner mode is still on the old path: see runOnRunner.deprecated.ts.
         if (!options.dryRun && !options.buildOnly && (await usesRunner(cwd))) {
           await runOnRunner(cwd, name, options.imagePrefix, options.dataDir, options.concurrency, overrides, options.json, options.timings);
           return;
