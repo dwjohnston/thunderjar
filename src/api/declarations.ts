@@ -478,7 +478,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * | `grep` | `{ glob, pattern }` | `number`: lines across the matching files that match `pattern` | the value |
  * | `bunTestFile` | `{ subject, test }` | `{ passed, total }`: tests passed, of all the tests | the pass rate, `passed / total` |
  * | `replyMatches` | `{ pattern, turn? }` | `boolean`: whether the agent's reply matches `pattern` | the value |
- * | `skillInvoked` | `{ skill }` | `boolean`: whether the agent invoked the skill `skill`, as its harness's `collectSkillsInvoked` reads it | the value |
+ * | `skillInvoked` | `{ skills }` | `Record<string, boolean>`: for each of `skills`, whether the agent invoked it, as its harness's `collectSkillsInvoked` reads them | none: give each metric a `score`, e.g. `(v) => v.a` |
  * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
  * | `filesChanged` | `{ glob? }` | `FileChanges`: `{ added, modified, deleted }` paths changed since the start | none: give each metric a `score` |
  * | `commits` | `{}` | `Commit[]`, oldest first: `{ sha, message, files: { added, modified, deleted } }` | none: give each metric a `score` |
@@ -538,11 +538,12 @@ export type InstrumentTypes = {
    */
   replyMatches: { config: { pattern: string; turn?: number }; value: boolean };
   /**
-   * Did the agent invoke the skill `skill`, by its name, e.g. `"tj-test-case"`? Read by its
+   * Did the agent invoke each of `skills`, by name, e.g. `["tj-test-case", "tj-general"]`? Its
+   * value is each skill's answer, e.g. `{ "tj-test-case": true, "tj-general": false }`. Read by its
    * harness's `collectSkillsInvoked`, in the measurement container: a run whose harness has none,
-   * or whose skills can't be read, is skipped.
+   * or whose skills can't be read, is skipped. A metric needs a `score` of its own, e.g. `(v) => v["tj-test-case"]`.
    */
-  skillInvoked: { config: { skill: string }; value: boolean };
+  skillInvoked: { config: { skills: string[] }; value: Record<string, boolean> };
   /**
    * What `command`, any shell command, did: its exit code, and its stdout, as it is, up to 64 KiB.
    * It runs with `sh -c` in the measurement container, in `workdir`, so it can use whatever the
