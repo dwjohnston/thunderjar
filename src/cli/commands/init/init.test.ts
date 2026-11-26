@@ -249,22 +249,23 @@ export default declareCodeState({
 
 describe("0201 minimal existing setup", () => {
   const ALPHA = `${P}/harnessModels/fake-harness-alpha/`;
+  const CUSTOM_CLAUDE = `${P}/harnessModels/custom-claude/`;
   const CLAUDE_CODE = `${P}/harnessModels/claude-code-2.1.311/`;
   const GENERATED = "_generated/parameterNames.d.ts";
   // What a minimal setup leaves out: every harness but Claude Code, the second prompt set, and init's
-  // test cases, which use real harnesses. 0201 adds fake-harness-alpha, and one test case of its own, `example`.
+  // test cases, which use real harnesses. 0201 adds fake-harness-alpha, custom-claude (Claude Code through OpenRouter), and one test case of its own, `example`.
   const leftOut = (path: string) =>
     (path.startsWith(`${P}/harnessModels/`) && !path.startsWith(CLAUDE_CODE)) ||
     path.startsWith(`${P}/promptSets/house-style/`) ||
     path.startsWith("test-cases/");
 
-  test("is what init scaffolds in 0101, with fake-harness-alpha beside Claude Code, no starters, and its own test case", async () => {
+  test("is what init scaffolds in 0101, with fake-harness-alpha and custom-claude beside Claude Code, no starters, and its own test case", async () => {
     await using copy = await copyScenarioProject("0101");
     await init(copy.dir);
     const scaffolded = filesIn(copy.dir).filter((path) => !leftOut(path));
     const existing = filesIn(scenario("0201"));
 
-    expect(existing).toEqual([...scaffolded, `${ALPHA}index.ts`, "test-cases/example.ts", GENERATED].toSorted());
+    expect(existing).toEqual([...scaffolded, `${ALPHA}index.ts`, `${CUSTOM_CLAUDE}index.ts`, "test-cases/example.ts", GENERATED].toSorted());
     for (const path of scaffolded) {
       expect(await read(scenario("0201"), path), path).toBe(await read(copy.dir, path));
     }

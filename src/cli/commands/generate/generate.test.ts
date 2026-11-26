@@ -26,13 +26,16 @@ type TaskName = "is-prime";
 type InitialPromptNames = {
   "is-prime": "plain";
 };
-type HarnessName = "claude-code-2.1.311" | "fake-harness-alpha";
+type HarnessName = "claude-code-2.1.311" | "custom-claude" | "fake-harness-alpha";
 type HarnessModelName =
   | "claude-code-2.1.311/claude-fable-5-2"
   | "claude-code-2.1.311/claude-opus-5-5"
   | "claude-code-2.1.311/claude-sonnet-5-5"
   | "claude-code-2.1.311/claude-haiku-5-5"
   | "claude-code-2.1.311/claude-haiku-4-5-20251001"
+  | "custom-claude/anthropic/claude-opus-5.5/low"
+  | "custom-claude/anthropic/claude-opus-5.5/high"
+  | "custom-claude/anthropic/claude-sonnet-5.5"
   | "fake-harness-alpha/fake-model-small-001"
   | "fake-harness-alpha/fake-model-effort-001/low"
   | "fake-harness-alpha/fake-model-effort-001/high"

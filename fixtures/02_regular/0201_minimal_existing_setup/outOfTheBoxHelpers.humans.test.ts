@@ -2,9 +2,8 @@
 // them to project/.thunderjar/_generated/. Checked by src/testing/scenarios.typecheck.test.ts, not
 // run for behaviour: every `@ts-expect-error` must be a real error, and every other line must compile.
 import { describe, it } from "bun:test";
-import { CLAUDE_CODE_COMMAND, OPENROUTER, claudeCode, type HarnessDeclaration } from "thunderjar";
 
-function assertType<T>(_value: T) {}
+function assertType<T>(_value: T) { }
 
 describe("claudeCode(), with its built-in models", () => {
   it("names any of Anthropic's current models", () => {
@@ -27,26 +26,20 @@ describe("claudeCode(), with its built-in models", () => {
   });
 });
 
-describe("claudeCode(), declaring a harness", () => {
-  it("declares one from a version alone, as harnessModels/<name>/index.ts would export it", () => {
-    assertType<HarnessDeclaration<undefined, undefined>>(claudeCode({ version: "2.1.311" }));
+describe("claudeCode(), with a provider and its own models (custom-claude)", () => {
+
+  it("names its models by the provider's IDs, one pair per effort level", () => {
+    assertType<HarnessModelName>("custom-claude/anthropic/claude-opus-5.5/low");
+    assertType<HarnessModelName>("custom-claude/anthropic/claude-opus-5.5/high");
+    assertType<HarnessModelName>("custom-claude/anthropic/claude-sonnet-5.5");
   });
 
-  it("declares one with a provider, its own models and a bespoke command", () => {
-    assertType<HarnessDeclaration<undefined, undefined>>(
-      claudeCode({
-        version: "2.1.311",
-        provider: OPENROUTER,
-        models: {
-          "anthropic/claude-opus-5.5": [{ effort: { values: ["low", "high"] } }, { thinkingTokens: { values: [8000, 32000] } }],
-        },
-        command: (ctx) => `MAX_THINKING_TOKENS=${ctx.model.thinkingTokens} ${CLAUDE_CODE_COMMAND(ctx)}`,
-      }),
-    );
-  });
-
-  it("needs a version", () => {
-    // @ts-expect-error - no version
-    claudeCode({});
+  it("names none of the built-in models", () => {
+    // @ts-expect-error - a built-in model, not one of its own
+    assertType<HarnessModelName>("custom-claude/claude-opus-5-5");
+    // @ts-expect-error - no effort level
+    assertType<HarnessModelName>("custom-claude/anthropic/claude-opus-5.5");
+    // @ts-expect-error - an effort level it doesn't have
+    assertType<HarnessModelName>("custom-claude/anthropic/claude-sonnet-5.5/high");
   });
 });
