@@ -2,7 +2,7 @@
 // host, standing in for a measurement container.
 import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
-import type { MeasurementContext, Reply, SkillsInvoked } from "../api/declarations.ts";
+import type { MeasurementContext, Reply, SkillsInvoked, ToolCalls } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
 import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, jsAst, replyMatches, shell, skillInvoked, STDOUT_LIMIT } from "./instruments.ts";
 
@@ -23,6 +23,8 @@ async function folderWith(files: string[] | Record<string, string>): Promise<str
 
 const NO_REPLY: Reply = { outcome: "unavailable", reason: "its harness has no collectReply" };
 
+const NO_TOOL_CALLS: ToolCalls = { outcome: "unavailable", reason: "its harness has no collectToolCalls" };
+
 const NO_SKILLS: SkillsInvoked = { outcome: "unavailable", reason: "its harness has no collectSkillsInvoked" };
 
 /** A context whose workdir is a folder holding `files`, of a run whose reply is `reply`, and whose skills invoked are `skills`. */
@@ -34,6 +36,7 @@ async function contextWith(files: string[] | Record<string, string>, reply: Repl
     reply,
     replies: [reply],
     skillsInvoked: async () => skills,
+    toolCalls: async () => NO_TOOL_CALLS,
     exec: async (command) => {
       const { stdout, stderr, exitCode } = await $`sh -c ${command}`.cwd(workdir).quiet().nothrow();
       return { stdout: stdout.toString(), stderr: stderr.toString(), exitCode };

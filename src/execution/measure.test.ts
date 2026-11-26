@@ -29,6 +29,7 @@ function opener(files: Record<string, string>, log: string[]) {
       replies: [{ outcome: "unavailable", reason: "its harness has no collectReply" }],
       exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }),
       skillsInvoked: async () => ({ outcome: "unavailable", reason: "its harness has no collectSkillsInvoked" }),
+      toolCalls: async () => ({ outcome: "unavailable", reason: "its harness has no collectToolCalls" }),
       readFile: async (path) => {
         const text = written[path] ?? files[path];
         if (text === undefined) throw new Error(`no ${path}`);

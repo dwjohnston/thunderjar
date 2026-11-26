@@ -1,7 +1,7 @@
 // `measure()`: takes a measurement against fixture files, on the host, for a project's own
 // `bun test` tests of its measurements. It ships in the package, as `thunderjar/testing`.
 import { $, Glob } from "bun";
-import type { DeclaredMeasurement, MeasurementContext, Metric, Reply } from "../api/declarations.ts";
+import type { DeclaredMeasurement, MeasurementContext, Metric, Reply, ToolCall } from "../api/declarations.ts";
 import { scoreOf } from "../execution/scoreOf.ts";
 import { type Instrument, instruments } from "../instruments/instruments.ts";
 
@@ -12,6 +12,12 @@ export type MeasureOptions = {
   reply?: string;
   /** The skills the agent invoked, for `skillInvoked`. Default: none. */
   skillsInvoked?: string[];
+  /**
+   * The tool calls the agent made, for `toolCalled` and `fileRead`, e.g.
+   * `[{ tool: "Read", kind: "read", paths: ["AGENTS.md"] }]`. Relative paths are from the
+   * workspace. Default: none.
+   */
+  toolCalls?: ToolCall[];
 };
 
 export type Measured<Name extends string> = {
@@ -23,7 +29,7 @@ export type Measured<Name extends string> = {
 };
 
 /** A MeasurementContext over `dir`: commands run in it with Bun's `$`, files are read from it. */
-function contextOver(dir: string, text: string, skills: string[]): MeasurementContext {
+function contextOver(dir: string, text: string, skills: string[], calls: ToolCall[]): MeasurementContext {
   const reply: Reply = { outcome: "collected", text };
   const at = (path: string) => (path.startsWith("/") ? path : `${dir}/${path}`);
   return {
@@ -32,6 +38,7 @@ function contextOver(dir: string, text: string, skills: string[]): MeasurementCo
     reply,
     replies: [reply],
     skillsInvoked: async () => ({ outcome: "collected", skills }),
+    toolCalls: async () => ({ outcome: "collected", calls }),
     async exec(command) {
       const result = await $`sh -c ${command}`.cwd(dir).quiet().nothrow();
       return { stdout: result.stdout.toString(), stderr: result.stderr.toString(), exitCode: result.exitCode };
@@ -66,7 +73,7 @@ export async function measure<Name extends string>(measurement: DeclaredMeasurem
       if (!(await source.exists())) throw new Error(`fixture ${fixture} for ${path} doesn't exist`);
       await Bun.write(`${dir}/${path}`, source);
     }
-    const result = await instrument.evaluate(measurement.config as Record<string, string>, contextOver(dir, options.reply ?? "", options.skillsInvoked ?? []));
+    const result = await instrument.evaluate(measurement.config as Record<string, string>, contextOver(dir, options.reply ?? "", options.skillsInvoked ?? [], options.toolCalls ?? []));
     const metrics: Record<string, number | boolean | undefined> = {};
     for (const [name, metric] of Object.entries(measurement.metrics as Record<string, Metric>)) {
       if (result.outcome !== "measured") {
