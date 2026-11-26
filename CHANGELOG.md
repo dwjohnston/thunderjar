@@ -1,5 +1,52 @@
 # thunderjar
 
+## 0.5.0
+
+### Minor Changes
+
+- bb21e5b: A harness declares the models it runs, in `models`, which is required, and a test case may only name those. A model's settings can have variants, such as an effort level, each an extra part of the pair's name, e.g. `codex-0.166.0/openai/gpt-6.1-sol/high`, which the harness's fragment reads as `ctx.model`. `generate` writes the declared names out as a literal union. `claudeCode()` takes `models` too.
+- 0c03fcd: A `postgresStore` no longer creates its tables on first use. Run the new `thunderjar db setup` once, with an admin URL in `THUNDERJAR_DB_URL_ADMIN` (or the store's `adminUrlEnv`), to create them. The URL in `urlEnv` then needs only SELECT, INSERT and UPDATE. `doctor` checks that the tables exist.
+
+  The tables are now in the `thunderjar` schema, or the store's `schema`, instead of the connection's search path, usually `public`. To keep existing runs, move them before upgrading:
+
+  ```sql
+  CREATE SCHEMA thunderjar;
+  ALTER TABLE public.thunderjar_executions SET SCHEMA thunderjar;
+  ALTER TABLE public.thunderjar_container_runs SET SCHEMA thunderjar;
+  ```
+
+  Or keep them where they are with `postgresStore({ urlEnv: "THUNDERJAR_DB_URL", schema: "public" })`.
+
+- 2b67618: `run` is reimplemented, and what it prints has changed.
+
+  - It shows one view of the whole execution, redrawn each second on a terminal: each prerun image and each run, with how it ended and its measures.
+  - `run --json` prints the final run state: the manifest, each run's status and record, and the execution's record.
+  - `run --dry-run --json` prints the manifest.
+  - New: `run --build-only` builds, or pulls, the prerun images and runs nothing.
+  - Removed: `run --local`. To run on the local Docker daemon, use a config without a `runtime`.
+  - Every prerun image is ready before the first run starts.
+  - An agent that exits non-zero or times out is still committed, recorded and pushed, but no longer measured.
+  - Docker failing under one run fails that run, not the whole execution.
+  - Execution IDs are lower case.
+  - New settings, from the environment: `THUNDERJAR_CONCURRENCY`, `THUNDERJAR_UPLOAD_BACKLOG_CAP`, `THUNDERJAR_UPLOAD_CONCURRENCY` and `THUNDERJAR_CACHE_WARMUP_MS`.
+
+- b0a4a75: Tag the workspace's starting commit as `refs/thunderjar/start` in the prerun image. Every prerun image's hash changes, so existing images are rebuilt once.
+
+### Patch Changes
+
+- 95439cd: Update Bun to 1.4.5.
+- 5d934d8: Add `capture push --session <id>`, which pushes one session's capture.
+- d2fa7e4: Add `checkout <run>`, which brings a container run's end state back as a local branch, `thunderjar/run/<test case>/<execution>/<run>`: the agent's commits, plus a commit of anything it left uncommitted. `--shell` opens a shell in its postrun image instead, on the configured runtime.
+- 69bab0a: Add an `install` option to `codeStateGitCheckout`: a command run in `/workspace` after the checkout, e.g. `bun install --frozen-lockfile`.
+- 69bab0a: Add `codeStateGitCheckout`, a code state for a commit, a branch or a tag of a git repository.
+- ce8c961: Add the `commits` instrument: the commits the agent made since `refs/thunderjar/start`, oldest first, each with its `sha`, `message` and `files` added, modified and deleted. Also exports the `Commit` and `FileChanges` types.
+- 99ba344: Add the `filesChanged` instrument: everything changed since `refs/thunderjar/start`, committed or not, as one `FileChanges`. Untracked files count as added, git-ignored ones are left out, and a rename is a deletion plus an addition. `glob` limits it to matching paths.
+- 6568b04: Add the `jsAst` instrument: for each JavaScript or TypeScript file matching `glob`, how many nodes of its syntax tree each of `selectors`, esquery selectors by name, matches. A file that doesn't parse counts 0, with its `parseError`.
+- 6568b04: Add `measure()`, from `thunderjar/testing`, to test a measurement against fixture files with `bun test`.
+- bc076ae: Add `purge capture`, which deletes captured sessions from both stores, `refs/thunderjar/capture/<session>/*` and the `thunderjar/capture/<session>` branches, here or with `--from remote|all` on a remote. Picks sessions by ID, `--older-than`, `--verdict` or `--all`, and takes `-y`, `--dry-run` and `--json`.
+- 69016fd: Add a `remeasure <test case | execution>` command. It takes the task's measurements, as they are on disk now, of past container runs, each in a new measurement container from its postrun image, without running the agent again. The new measures are what `show` shows; the earlier ones are kept beside them, in the record's `earlierResults`. Runs whose postrun image was purged, or whose container never started, are skipped and listed. Supports `--json`.
+- e74ba9e: Add parameter overrides to `run`, `plan` and `build`: `--base-image`, `--code-state`, `--prompt-set`, `--harness-model`, `--initial-prompt` and `--iterations` each replace one of the test case's lists for one execution, comma-separated. An unknown name fails before anything builds, listing the known ones. The execution records its overrides, and `executions` and `show` list them.
+
 ## 0.4.1
 
 ### Patch Changes
