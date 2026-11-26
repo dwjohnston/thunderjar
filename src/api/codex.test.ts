@@ -1,6 +1,6 @@
 // The Codex readers, against a `codex exec --json` result: JSON lines, one event each.
 import { describe, expect, test } from "bun:test";
-import { CODEX_REASONING_EFFORTS, codex, codexReply, codexSkillsInvoked, codexTokenCosts, collectCodexSkillsInvoked } from "./codex.ts";
+import { CODEX_REASONING_EFFORTS, codex, codexReply, codexSkillsInvoked, codexTokenCosts, codexToolCalls, collectCodexSkillsInvoked, collectCodexToolCalls } from "./codex.ts";
 import { declaredBy } from "./declarations.ts";
 import { OPENROUTER } from "./harnessOptions.ts";
 
@@ -142,5 +142,41 @@ USER node`,
 
   test("its required variables can be replaced", () => {
     expect(codex({ version: "0.166.0", requiredEnv: [{ oneOf: ["CODEX_API_KEY", "OPENAI_API_KEY"] }] }).requiredEnv).toEqual([{ oneOf: ["CODEX_API_KEY", "OPENAI_API_KEY"] }]);
+  });
+});
+
+describe("codexToolCalls", () => {
+  test("is each completed command, in order, as a shell call", () => {
+    expect(codexToolCalls(SKILLS_RESULT)).toEqual([
+      { tool: "command_execution", kind: "shell", paths: [], command: `/bin/bash -lc "sed -n '1,200p' .agents/skills/base/SKILL.md"` },
+      { tool: "command_execution", kind: "shell", paths: [], command: "/bin/bash -lc 'cat a/.agents/skills/a/SKILL.md && cat a/a.ts'" },
+    ]);
+  });
+
+  // Not recorded from a real Codex: the shapes of Codex's file_change, mcp_tool_call and web_search items.
+  test("reads a file change's paths, names an MCP tool as Claude Code does, and skips items that aren't tool calls", () => {
+    const completed = (item: object) => JSON.stringify({ type: "item.completed", item });
+    const raw = [
+      completed({ id: "item_0", type: "file_change", changes: [{ path: "/workspace/a.ts", kind: "update" }, { path: "/workspace/b.ts", kind: "add" }], status: "completed" }),
+      completed({ id: "item_1", type: "mcp_tool_call", server: "docs", tool: "search", arguments: {}, status: "completed" }),
+      completed({ id: "item_2", type: "web_search", query: "bun glob" }),
+      completed({ id: "item_3", type: "reasoning", text: "Thinking." }),
+      completed({ id: "item_4", type: "agent_message", text: "Done." }),
+      JSON.stringify({ type: "item.started", item: { id: "item_5", type: "command_execution", command: "ls", status: "in_progress" } }),
+    ].join("\n");
+    expect(codexToolCalls(raw)).toEqual([
+      { tool: "file_change", kind: "edit", paths: ["/workspace/a.ts", "/workspace/b.ts"] },
+      { tool: "mcp__docs__search", kind: "other", paths: [] },
+      { tool: "web_search", kind: "web", paths: [] },
+    ]);
+  });
+});
+
+describe("collectCodexToolCalls", () => {
+  const ctx = (harnessResult: string) => ({ exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }), readFile: async () => "", harnessResult, workdir: "/workspace" });
+
+  test("reads the result, and throws on one with no events, so the run is skipped", async () => {
+    expect(await collectCodexToolCalls(ctx(SKILLS_RESULT))).toHaveLength(2);
+    await expect(collectCodexToolCalls(ctx(""))).rejects.toThrow("no events in Codex's JSONL output");
   });
 });

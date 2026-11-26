@@ -1,7 +1,7 @@
 // The Claude Code readers, against a real `claude -p --output-format json` result, from Claude Code
 // 2.1.316 run on DeepSeek's Anthropic-compatible API, whose model its price table doesn't know.
 import { describe, expect, test } from "bun:test";
-import { CLAUDE_CODE_COMMAND, CLAUDE_CODE_EFFORTS, claudeCode, claudeCodeReply, claudeCodeSkillsInvoked, claudeCodeTokenCosts, collectClaudeCodeSkillsInvoked } from "./claudeCode.ts";
+import { CLAUDE_CODE_COMMAND, CLAUDE_CODE_EFFORTS, claudeCode, claudeCodeReply, claudeCodeSkillsInvoked, claudeCodeTokenCosts, claudeCodeToolCalls, collectClaudeCodeSkillsInvoked, collectClaudeCodeToolCalls } from "./claudeCode.ts";
 import { declaredBy } from "./declarations.ts";
 import { OPENROUTER } from "./harnessOptions.ts";
 
@@ -240,5 +240,42 @@ USER node`,
 
   test("its required variables can be replaced, e.g. for a command that needs more", () => {
     expect(claudeCode({ version: "2.1.311", requiredEnv: ["ANTHROPIC_API_KEY", "GITHUB_TOKEN"] }).requiredEnv).toEqual(["ANTHROPIC_API_KEY", "GITHUB_TOKEN"]);
+  });
+});
+
+// Claude Code 2.x on Claude Haiku 4.5, asked to read, grep, glob, cat, create and edit, one tool
+// each. Grep and Glob were deferred, so it called ToolSearch, then used Bash. Trimmed to its
+// prompt and assistant lines.
+const TOOLS_TRANSCRIPT = await Bun.file(`${import.meta.dir}/claudeCode.tools.transcript.jsonl`).text();
+
+describe("claudeCodeToolCalls", () => {
+  test("is each tool call, in order, with its kind, paths and command", () => {
+    expect(claudeCodeToolCalls(TOOLS_TRANSCRIPT)).toEqual([
+      { tool: "Read", kind: "read", paths: ["/workspace/a/a.ts"] },
+      { tool: "ToolSearch", kind: "other", paths: [] },
+      { tool: "ToolSearch", kind: "other", paths: [] },
+      { tool: "Bash", kind: "shell", paths: [], command: 'grep -r "fruit" /workspace' },
+      { tool: "Bash", kind: "shell", paths: [], command: 'find /workspace -name "*.ts"' },
+      { tool: "Bash", kind: "shell", paths: [], command: "cat /workspace/c.ts" },
+      { tool: "Write", kind: "edit", paths: ["/workspace/notes.txt"] },
+      { tool: "Edit", kind: "edit", paths: ["/workspace/notes.txt"] },
+    ]);
+  });
+
+  test("counts a call repeated across lines once, by its ID", () => {
+    const line = JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_1", name: "Glob", input: { pattern: "*.ts", path: "src" } }] } });
+    expect(claudeCodeToolCalls(`${line}\n${line}`)).toEqual([{ tool: "Glob", kind: "search", paths: [] }]);
+  });
+});
+
+describe("collectClaudeCodeToolCalls", () => {
+  const ctx = (stdout: string, exitCode: number) => ({ exec: async () => ({ stdout, stderr: "", exitCode }), readFile: async () => "", harnessResult: "", workdir: "/workspace" });
+
+  test("reads the transcripts, as collectClaudeCodeSkillsInvoked does", async () => {
+    expect((await collectClaudeCodeToolCalls(ctx(TOOLS_TRANSCRIPT, 0))).map((call) => call.tool)).toEqual(["Read", "ToolSearch", "ToolSearch", "Bash", "Bash", "Bash", "Write", "Edit"]);
+  });
+
+  test("throws when there are no transcripts, so the run is skipped", async () => {
+    await expect(collectClaudeCodeToolCalls(ctx("", 1))).rejects.toThrow("no Claude Code transcripts");
   });
 });

@@ -1,7 +1,7 @@
 // The Copilot readers, against a `copilot --output-format json` result: JSON lines, one event each,
 // with the usage line the run script appended.
 import { describe, expect, test } from "bun:test";
-import { collectCopilotSkillsInvoked, copilot, copilotReply, copilotSkillsInvoked, copilotTokenCosts } from "./copilot.ts";
+import { collectCopilotSkillsInvoked, collectCopilotToolCalls, copilot, copilotReply, copilotSkillsInvoked, copilotTokenCosts, copilotToolCalls } from "./copilot.ts";
 import { declaredBy } from "./declarations.ts";
 import { OPENROUTER } from "./harnessOptions.ts";
 
@@ -160,5 +160,37 @@ USER node`,
 
   test("its required variables can be replaced", () => {
     expect(copilot({ version: "1.0.105", requiredEnv: [{ oneOf: ["COPILOT_GITHUB_TOKEN", "GH_TOKEN"] }] }).requiredEnv).toEqual([{ oneOf: ["COPILOT_GITHUB_TOKEN", "GH_TOKEN"] }]);
+  });
+});
+
+// Copilot 1.0.105 on Claude Haiku 4.5, in BYOK mode, asked to view, grep, glob, cat, create and
+// edit, one tool each. Its streaming *_delta events are left out.
+const TOOLS_RESULT = await Bun.file(`${import.meta.dir}/copilot.tools.result.jsonl`).text();
+
+describe("copilotToolCalls", () => {
+  test("is each tool Copilot started, in order, with its kind, paths and command", () => {
+    expect(copilotToolCalls(TOOLS_RESULT)).toEqual([
+      { tool: "view", kind: "read", paths: ["/workspace/a/a.ts"] },
+      { tool: "grep", kind: "search", paths: [] },
+      { tool: "glob", kind: "search", paths: [] },
+      { tool: "bash", kind: "shell", paths: [], command: "cat c.ts" },
+      { tool: "create", kind: "edit", paths: ["/workspace/notes.txt"] },
+      { tool: "edit", kind: "edit", paths: ["/workspace/notes.txt"] },
+    ]);
+  });
+
+  test("includes sub-agents' calls, and names a tool it doesn't know as other", () => {
+    expect(copilotToolCalls(SKILLS_RESULT).map(({ tool, kind }) => `${tool}:${kind}`)).toEqual(["task:subagent", "task:subagent", "skill:skill"]);
+    const started = JSON.stringify({ type: "tool.execution_start", data: { toolCallId: "t1", toolName: "report_intent", arguments: { intent: "Reading" } } });
+    expect(copilotToolCalls(started)).toEqual([{ tool: "report_intent", kind: "other", paths: [] }]);
+  });
+});
+
+describe("collectCopilotToolCalls", () => {
+  const ctx = (harnessResult: string) => ({ exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }), readFile: async () => "", harnessResult, workdir: "/workspace" });
+
+  test("reads the result, and throws on one with no events, so the run is skipped", async () => {
+    expect(await collectCopilotToolCalls(ctx(TOOLS_RESULT))).toHaveLength(6);
+    await expect(collectCopilotToolCalls(ctx(""))).rejects.toThrow("no events in Copilot's JSONL output");
   });
 });

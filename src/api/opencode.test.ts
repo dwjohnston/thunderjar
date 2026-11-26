@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { declaredBy } from "./declarations.ts";
 import { OPENROUTER } from "./harnessOptions.ts";
-import { collectOpenCodeSkillsInvoked, opencode, opencodeReply, opencodeSkillsInvoked, opencodeTokenCosts } from "./opencode.ts";
+import { collectOpenCodeSkillsInvoked, collectOpenCodeToolCalls, opencode, opencodeReply, opencodeSkillsInvoked, opencodeTokenCosts, opencodeToolCalls } from "./opencode.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/opencode.result.jsonl`).text();
 // OpenCode 1.19.5 in src/gauntlet/nested-skills, on Claude Haiku 4.5: told to use the base and a
@@ -203,5 +203,49 @@ USER node`,
 
   test("its required variables can be replaced, e.g. for OpenCode's built-in openrouter provider, which reads OPENROUTER_API_KEY itself", () => {
     expect(opencode({ version: "1.19.5", models: { "openrouter/openai/gpt-5.5": [] }, requiredEnv: ["OPENROUTER_API_KEY"] }).requiredEnv).toEqual(["OPENROUTER_API_KEY"]);
+  });
+});
+
+// OpenCode 1.19.5 on Claude Haiku 4.5, asked to read, grep, glob, list, cat, create and edit, one
+// tool each. It has no list tool: it read the folder instead.
+const TOOLS_RESULT = await Bun.file(`${import.meta.dir}/opencode.tools.result.jsonl`).text();
+
+describe("opencodeToolCalls", () => {
+  test("is each tool call, in order, with its kind, paths, command and the folder the command ran in", () => {
+    expect(opencodeToolCalls(TOOLS_RESULT)).toEqual([
+      { tool: "read", kind: "read", paths: ["/workspace/a/a.ts"] },
+      { tool: "grep", kind: "search", paths: [] },
+      { tool: "glob", kind: "search", paths: [] },
+      { tool: "read", kind: "read", paths: ["/workspace/b"] },
+      { tool: "bash", kind: "shell", paths: [], command: "cat c.ts", cwd: "/workspace" },
+      { tool: "write", kind: "edit", paths: ["/workspace/notes.txt"] },
+      { tool: "edit", kind: "edit", paths: ["/workspace/notes.txt"] },
+    ]);
+  });
+
+  test("reads a patch's files", () => {
+    const patch = toolPart("apply_patch", { patchText: "*** Begin Patch\n*** Update File: a.ts\n@@\n-1\n+2\n*** Add File: b.ts\n+3\n*** End Patch" });
+    expect(opencodeToolCalls(JSON.stringify({ type: "tool_use", part: patch }))).toEqual([{ tool: "apply_patch", kind: "edit", paths: ["a.ts", "b.ts"] }]);
+  });
+});
+
+describe("collectOpenCodeToolCalls", () => {
+  const ctx = (harnessResult: string, sessions: Record<string, string> = {}) => ({
+    exec: async (command: string) => {
+      const output = sessions[command.replace("opencode export ", "")];
+      return output === undefined ? { stdout: "", stderr: "no such session", exitCode: 1 } : { stdout: output, stderr: "", exitCode: 0 };
+    },
+    readFile: async () => "",
+    harnessResult,
+    workdir: "/workspace",
+  });
+
+  test("adds a sub-agent's calls after the main agent's, exporting its session", async () => {
+    const calls = await collectOpenCodeToolCalls(ctx(SUBAGENT_RESULT, { [SUBAGENT_SESSION]: SUBAGENT_EXPORT }));
+    expect(calls.map((call) => call.tool)).toEqual(["task", "skill"]);
+  });
+
+  test("throws when a sub-agent's session can't be exported, rather than undercount", async () => {
+    await expect(collectOpenCodeToolCalls(ctx(SUBAGENT_RESULT))).rejects.toThrow(`couldn't export OpenCode sub-agent session ${SUBAGENT_SESSION}`);
   });
 });
