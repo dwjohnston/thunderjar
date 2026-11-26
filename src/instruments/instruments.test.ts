@@ -49,23 +49,28 @@ async function contextWith(files: string[] | Record<string, string>, reply: Repl
 describe("skillInvoked", () => {
   const invoking = (skills: string[]) => contextWith([], NO_REPLY, { outcome: "collected", skills });
 
-  test("is whether the agent invoked the skill, by its exact name", async () => {
-    expect(await skillInvoked.evaluate({ skill: "tj-test-case" }, await invoking(["tj-general", "tj-test-case"]))).toEqual({ outcome: "measured", data: true });
-    expect(await skillInvoked.evaluate({ skill: "tj-test" }, await invoking(["tj-test-case"]))).toEqual({ outcome: "measured", data: false });
-    expect(await skillInvoked.evaluate({ skill: "tj-test-case" }, await invoking([]))).toEqual({ outcome: "measured", data: false });
+  test("is, for each skill, whether the agent invoked it, by its exact name", async () => {
+    expect(await skillInvoked.evaluate({ skills: ["tj-test-case", "tj-test", "tj-config"] }, await invoking(["tj-general", "tj-test-case"]))).toEqual({
+      outcome: "measured",
+      data: { "tj-test-case": true, "tj-test": false, "tj-config": false },
+    });
+    expect(await skillInvoked.evaluate({ skills: ["tj-test-case"] }, await invoking([]))).toEqual({ outcome: "measured", data: { "tj-test-case": false } });
   });
 
   test("is skipped, saying why, when the skills can't be read", async () => {
-    expect(await skillInvoked.evaluate({ skill: "tj-test-case" }, await contextWith([]))).toEqual({
+    expect(await skillInvoked.evaluate({ skills: ["tj-test-case"] }, await contextWith([]))).toEqual({
       outcome: "skipped",
       reason: "no skills invoked to read: its harness has no collectSkillsInvoked",
     });
   });
 
-  test("needs a skill's name", () => {
-    expect(skillInvoked.checkConfig({ skill: "tj-test-case" })).toEqual([]);
-    expect(skillInvoked.checkConfig({})).toEqual([["config.skill", "must be a skill's name, got undefined"]]);
-    expect(skillInvoked.checkConfig({ skill: "" })).toEqual([["config.skill", 'must be a skill\'s name, got ""']]);
+  test("needs a list of at least one skill's name", () => {
+    expect(skillInvoked.checkConfig({ skills: ["tj-test-case"] })).toEqual([]);
+    const problem = (got: string): [string, string][] => [["config.skills", `must be a list of skills' names, at least one, got ${got}`]];
+    expect(skillInvoked.checkConfig({})).toEqual(problem("undefined"));
+    expect(skillInvoked.checkConfig({ skills: "tj-test-case" })).toEqual(problem('"tj-test-case"'));
+    expect(skillInvoked.checkConfig({ skills: [] })).toEqual(problem("[]"));
+    expect(skillInvoked.checkConfig({ skills: ["a", ""] })).toEqual(problem('["a",""]'));
   });
 });
 
@@ -369,11 +374,11 @@ describe("jsAst", () => {
   });
 });
 
-test("every instrument versions its value, and every built-in one but commits, filesChanged and jsAst has a default score", () => {
+test("every instrument versions its value, and every built-in one but commits, filesChanged, jsAst and skillInvoked has a default score", () => {
   for (const [name, instrument] of Object.entries(instruments)) {
     expect(instrument.version).toBeGreaterThanOrEqual(1);
-    // Lists of commits or files, and counts per file by selector, have no obvious score: each metric reads them with its own.
-    if (name === "commits" || name === "filesChanged" || name === "jsAst") expect(instrument.defaultScore).toBeUndefined();
+    // Lists of commits or files, counts per file by selector, and answers per skill, have no obvious score: each metric reads them with its own.
+    if (name === "commits" || name === "filesChanged" || name === "jsAst" || name === "skillInvoked") expect(instrument.defaultScore).toBeUndefined();
     else expect(instrument.defaultScore).toBeDefined();
   }
   // Version 1's value was whether the command exited 0.

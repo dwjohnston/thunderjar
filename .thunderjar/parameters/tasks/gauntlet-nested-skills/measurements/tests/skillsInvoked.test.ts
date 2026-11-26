@@ -12,18 +12,13 @@
 
 import { expect, test } from "bun:test";
 import { measure } from "thunderjar/testing";
-import invokedA from "../invokedA.ts";
-import invokedB from "../invokedB.ts";
-import invokedBase from "../invokedBase.ts";
+import skillsInvoked from "../skillsInvoked.ts";
 
 // A run that picked up the base skill and a's, as it should asked about a.ts, and not b's.
 test("a run that invoked base and a counts as invoking them, and not b", async () => {
-  const skillsInvoked = ["base", "a"];
-  expect((await measure(invokedBase, { skillsInvoked })).metrics).toEqual({ invokedBase: true });
-  expect((await measure(invokedA, { skillsInvoked })).metrics).toEqual({ invokedA: true });
-  expect((await measure(invokedB, { skillsInvoked })).metrics).toEqual({ invokedB: false });
+  expect((await measure(skillsInvoked, { skillsInvoked: ["base", "a"] })).metrics).toEqual({ invokedBase: true, invokedA: true, invokedB: false });
 });
 
 test("a run that invoked no skill counts as invoking none of them", async () => {
-  expect((await measure(invokedBase, { skillsInvoked: [] })).metrics).toEqual({ invokedBase: false });
+  expect((await measure(skillsInvoked, { skillsInvoked: [] })).metrics).toEqual({ invokedBase: false, invokedA: false, invokedB: false });
 });
