@@ -2,9 +2,9 @@
 // host, standing in for a measurement container.
 import { afterAll, describe, expect, test } from "bun:test";
 import { $, Glob } from "bun";
-import type { MeasurementContext, Reply, SkillsInvoked } from "../api/declarations.ts";
+import type { MeasurementContext, Reply, SkillsInvoked, ToolCall, ToolCalls } from "../api/declarations.ts";
 import { TMP_DIR } from "../testing/cli.ts";
-import { bunTestFile, fileCreated, grep, instruments, isInstrumentName, jsAst, replyMatches, shell, skillInvoked, STDOUT_LIMIT } from "./instruments.ts";
+import { bunTestFile, fileCreated, fileRead, grep, instruments, isInstrumentName, jsAst, replyMatches, shell, skillInvoked, STDOUT_LIMIT, toolCalled } from "./instruments.ts";
 
 const ROOT = `${TMP_DIR}/instruments-${crypto.randomUUID()}`;
 
@@ -23,6 +23,8 @@ async function folderWith(files: string[] | Record<string, string>): Promise<str
 
 const NO_REPLY: Reply = { outcome: "unavailable", reason: "its harness has no collectReply" };
 
+const NO_TOOL_CALLS: ToolCalls = { outcome: "unavailable", reason: "its harness has no collectToolCalls" };
+
 const NO_SKILLS: SkillsInvoked = { outcome: "unavailable", reason: "its harness has no collectSkillsInvoked" };
 
 /** A context whose workdir is a folder holding `files`, of a run whose reply is `reply`, and whose skills invoked are `skills`. */
@@ -34,6 +36,7 @@ async function contextWith(files: string[] | Record<string, string>, reply: Repl
     reply,
     replies: [reply],
     skillsInvoked: async () => skills,
+    toolCalls: async () => NO_TOOL_CALLS,
     exec: async (command) => {
       const { stdout, stderr, exitCode } = await $`sh -c ${command}`.cwd(workdir).quiet().nothrow();
       return { stdout: stdout.toString(), stderr: stderr.toString(), exitCode };
@@ -71,6 +74,62 @@ describe("skillInvoked", () => {
     expect(skillInvoked.checkConfig({ skills: "tj-test-case" })).toEqual(problem('"tj-test-case"'));
     expect(skillInvoked.checkConfig({ skills: [] })).toEqual(problem("[]"));
     expect(skillInvoked.checkConfig({ skills: ["a", ""] })).toEqual(problem('["a",""]'));
+  });
+});
+
+/** A context of a run whose tool calls are `calls`, in `/workspace`. */
+const calling = async (calls: ToolCall[]): Promise<MeasurementContext> => ({ ...(await contextWith([])), workdir: "/workspace", toolCalls: async () => ({ outcome: "collected", calls }) });
+
+describe("toolCalled", () => {
+  const calls: ToolCall[] = [
+    { tool: "Read", kind: "read", paths: ["a.ts"] },
+    { tool: "Bash", kind: "shell", paths: [], command: "ls" },
+    { tool: "Bash", kind: "shell", paths: [], command: "pwd" },
+    { tool: "TodoWrite", kind: "other", paths: [] },
+  ];
+
+  test("counts the calls of each kind, or of each tool by its harness's name", async () => {
+    expect(await toolCalled.evaluate({ tools: ["shell", "read", "Read", "TodoWrite", "web", "view"] }, await calling(calls))).toEqual({
+      outcome: "measured",
+      data: { shell: 2, read: 1, Read: 1, TodoWrite: 1, web: 0, view: 0 },
+    });
+  });
+
+  test("is skipped, saying why, when the tool calls can't be read", async () => {
+    expect(await toolCalled.evaluate({ tools: ["shell"] }, await contextWith([]))).toEqual({ outcome: "skipped", reason: "no tool calls to read: its harness has no collectToolCalls" });
+  });
+
+  test("needs a list of at least one tool", () => {
+    expect(toolCalled.checkConfig({ tools: ["shell"] })).toEqual([]);
+    const problem = (got: string): [string, string][] => [["config.tools", `must be a list of tool kinds or names, at least one, got ${got}`]];
+    expect(toolCalled.checkConfig({})).toEqual(problem("undefined"));
+    expect(toolCalled.checkConfig({ tools: [] })).toEqual(problem("[]"));
+    expect(toolCalled.checkConfig({ tools: ["shell", ""] })).toEqual(problem('["shell",""]'));
+  });
+});
+
+describe("fileRead", () => {
+  test("is, for each path or glob, whether a read tool or a shell command read a matching file", async () => {
+    const ctx = await calling([
+      { tool: "Read", kind: "read", paths: ["/workspace/AGENTS.md"] },
+      { tool: "Bash", kind: "shell", paths: [], command: "cat docs/guide.md | head -5" },
+      { tool: "Write", kind: "edit", paths: ["/workspace/notes.txt"] },
+    ]);
+    expect(await fileRead.evaluate({ paths: ["AGENTS.md", "docs/*.md", "notes.txt", "/workspace/AGENTS.md", "README.md"] }, ctx)).toEqual({
+      outcome: "measured",
+      data: { "AGENTS.md": true, "docs/*.md": true, "notes.txt": false, "/workspace/AGENTS.md": true, "README.md": false },
+    });
+  });
+
+  test("is skipped, saying why, when the tool calls can't be read", async () => {
+    expect(await fileRead.evaluate({ paths: ["AGENTS.md"] }, await contextWith([]))).toEqual({ outcome: "skipped", reason: "no tool calls to read: its harness has no collectToolCalls" });
+  });
+
+  test("needs a list of at least one path, not from ~", () => {
+    expect(fileRead.checkConfig({ paths: ["AGENTS.md", "/etc/hosts"] })).toEqual([]);
+    const problem = (got: string): [string, string][] => [["config.paths", `must be a list of paths or globs, relative to the workdir or absolute, at least one, got ${got}`]];
+    expect(fileRead.checkConfig({ paths: [] })).toEqual(problem("[]"));
+    expect(fileRead.checkConfig({ paths: ["~/.bashrc"] })).toEqual(problem('["~/.bashrc"]'));
   });
 });
 
@@ -374,11 +433,11 @@ describe("jsAst", () => {
   });
 });
 
-test("every instrument versions its value, and every built-in one but commits, filesChanged, jsAst and skillInvoked has a default score", () => {
+test("every instrument versions its value, and every built-in one but commits, filesChanged, jsAst, skillInvoked, toolCalled and fileRead has a default score", () => {
   for (const [name, instrument] of Object.entries(instruments)) {
     expect(instrument.version).toBeGreaterThanOrEqual(1);
-    // Lists of commits or files, counts per file by selector, and answers per skill, have no obvious score: each metric reads them with its own.
-    if (name === "commits" || name === "filesChanged" || name === "jsAst" || name === "skillInvoked") expect(instrument.defaultScore).toBeUndefined();
+    // Lists of commits or files, counts per file by selector, and answers per skill, tool or file, have no obvious score: each metric reads them with its own.
+    if (["commits", "filesChanged", "jsAst", "skillInvoked", "toolCalled", "fileRead"].includes(name)) expect(instrument.defaultScore).toBeUndefined();
     else expect(instrument.defaultScore).toBeDefined();
   }
   // Version 1's value was whether the command exited 0.

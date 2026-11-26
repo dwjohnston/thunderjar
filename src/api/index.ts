@@ -1,16 +1,18 @@
 // The `thunderjar` library: what a project's `.thunderjar/` files import.
-export { CLAUDE_CODE_COMMAND, CLAUDE_CODE_EFFORTS, CLAUDE_CODE_MODELS, claudeCode, claudeCodeReply, claudeCodeSkillsInvoked, claudeCodeTokenCosts, collectClaudeCodeSkillsInvoked, type ClaudeCodeOptions } from "./claudeCode.ts";
-export { CODEX_COMMAND, CODEX_MODELS, CODEX_REASONING_EFFORTS, codex, codexReply, codexSkillsInvoked, codexTokenCosts, collectCodexSkillsInvoked, type CodexOptions } from "./codex.ts";
+export { CLAUDE_CODE_COMMAND, CLAUDE_CODE_EFFORTS, CLAUDE_CODE_MODELS, claudeCode, claudeCodeReply, claudeCodeSkillsInvoked, claudeCodeTokenCosts, claudeCodeToolCalls, collectClaudeCodeSkillsInvoked, collectClaudeCodeToolCalls, type ClaudeCodeOptions } from "./claudeCode.ts";
+export { CODEX_COMMAND, CODEX_MODELS, CODEX_REASONING_EFFORTS, codex, codexReply, codexSkillsInvoked, codexTokenCosts, codexToolCalls, collectCodexSkillsInvoked, collectCodexToolCalls, type CodexOptions } from "./codex.ts";
 export { codeStateGitCheckout, resolveGitCheckout, type CodeStateGitCheckoutConfig } from "./codeStateGitCheckout.ts";
-export { collectCopilotSkillsInvoked, COPILOT_COMMAND, COPILOT_MODELS, COPILOT_USAGE_TYPE, copilot, copilotReply, copilotSkillsInvoked, copilotTokenCosts, type CopilotOptions } from "./copilot.ts";
+export { collectCopilotSkillsInvoked, collectCopilotToolCalls, COPILOT_COMMAND, COPILOT_MODELS, COPILOT_USAGE_TYPE, copilot, copilotReply, copilotSkillsInvoked, copilotTokenCosts, copilotToolCalls, type CopilotOptions } from "./copilot.ts";
 export {
   collectOpenCodeSkillsInvoked,
+  collectOpenCodeToolCalls,
   OPENCODE_COMMAND,
   OPENCODE_MODELS,
   opencode,
   opencodeReply,
   opencodeSkillsInvoked,
   opencodeTokenCosts,
+  opencodeToolCalls,
   type OpenCodeModelConfig,
   type OpenCodeModels,
   type OpenCodeModelSetting,
@@ -85,4 +87,10 @@ export type {
   TestCaseDeclaration,
   TokenCostCollector,
   TokenCosts,
+  ToolCall,
+  ToolCalls,
+  ToolCallsCollector,
+  ToolCallsCtx,
+  ToolKind,
 } from "./declarations.ts";
+export { TOOL_KINDS, toolCallOf, type ToolShape } from "./toolCalls.ts";

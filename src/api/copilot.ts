@@ -12,14 +12,15 @@
  *
  */
 // Reading what `copilot --output-format json` writes: JSON lines, one event each, and the usage
-// line the run script appends. For a harness's `collectReply`, `collectTokenCosts` and
-// `collectSkillsInvoked`, so a Copilot harness needn't parse it itself, and `copilot`, a whole
-// Copilot harness.
+// line the run script appends. For a harness's `collectReply`, `collectTokenCosts`,
+// `collectSkillsInvoked` and `collectToolCalls`, so a Copilot harness needn't parse it itself, and
+// `copilot`, a whole Copilot harness.
 //
 // Copilot's JSON lines leave out its token events, so the run script also has it write its usage
 // statistics to a file, and appends them to the result file as one more line:
 // {"type":"thunderjar.usage","data":<the usage file>}.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type SkillsInvokedCollector, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type SkillsInvokedCollector, type TokenCosts, type ToolCall, type ToolCallsCollector } from "./declarations.ts";
+import { toolCallOf, type ToolShape } from "./toolCalls.ts";
 import { writeModel, writeRunScript } from "./files.ts";
 import { COMMAND_PATHS, type CommandContext, type CommandPaths, type CommandProvider, envAssignments, envRef, type HelperOptions, type WireApi } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
@@ -58,6 +59,43 @@ export function copilotSkillsInvoked(raw: string): string[] {
 export const collectCopilotSkillsInvoked: SkillsInvokedCollector = async ({ harnessResult }) => {
   if (jsonLines(harnessResult).length === 0) throw new Error("no events in Copilot's JSONL output");
   return copilotSkillsInvoked(harnessResult);
+};
+
+/** Copilot's tools, by name, as `ToolCall`s read them. Any other, e.g. `report_intent` or `read_bash`, is `other`. */
+const COPILOT_TOOLS: Record<string, ToolShape> = {
+  view: { kind: "read", paths: ["path"] },
+  create: { kind: "edit", paths: ["path"] },
+  edit: { kind: "edit", paths: ["path"] },
+  str_replace_editor: { kind: "edit", paths: ["path"] },
+  apply_patch: { kind: "edit", patch: "input" },
+  // glob's path is a folder it lists, not a file it reads; grep's can be a file it reads.
+  glob: { kind: "search" },
+  grep: { kind: "search", paths: ["path"] },
+  bash: { kind: "shell", command: "command" },
+  web_fetch: { kind: "web" },
+  web_search: { kind: "web" },
+  task: { kind: "subagent" },
+  skill: { kind: "skill" },
+};
+
+/**
+ * Every tool call in `raw`, Copilot's JSON lines, in order: each tool Copilot started, the main
+ * agent's and sub-agents', once, by its call ID.
+ */
+export function copilotToolCalls(raw: string): ToolCall[] {
+  const seen = new Set<unknown>();
+  return jsonLines<Event>(raw).flatMap(({ type, data }) => {
+    if (type !== "tool.execution_start" || typeof data?.toolName !== "string") return [];
+    if (data.toolCallId !== undefined && seen.has(data.toolCallId)) return [];
+    seen.add(data.toolCallId);
+    return [toolCallOf(data.toolName, data.arguments, COPILOT_TOOLS)];
+  });
+}
+
+/** Every tool call the agent made, read from its result, for a harness's `collectToolCalls`. Throws if the result has no events, as `collectCopilotSkillsInvoked` does. */
+export const collectCopilotToolCalls: ToolCallsCollector = async ({ harnessResult }) => {
+  if (jsonLines(harnessResult).length === 0) throw new Error("no events in Copilot's JSONL output");
+  return copilotToolCalls(harnessResult);
 };
 
 /** The type of the line the run script appends to the result, holding Copilot's usage statistics. */
@@ -170,6 +208,7 @@ export function copilot({ version, models = COPILOT_MODELS, provider, command = 
     collectReply: copilotReply,
     collectTokenCosts: copilotTokenCosts,
     collectSkillsInvoked: collectCopilotSkillsInvoked,
+    collectToolCalls: collectCopilotToolCalls,
     requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : ["COPILOT_GITHUB_TOKEN"]),
   });
 }

@@ -182,7 +182,7 @@ export async function runPermutation(
     try {
       let opened = 0;
       const reply = record.reply as Reply;
-      const recorded = { harnessResult: harnessResult ?? "", reply, replies: [reply], collectSkillsInvoked: resolved.harness.collectSkillsInvoked };
+      const recorded = { harnessResult: harnessResult ?? "", reply, replies: [reply], collectSkillsInvoked: resolved.harness.collectSkillsInvoked, collectToolCalls: resolved.harness.collectToolCalls };
       // The variables the agent was given by name: its postrun image has them blank.
       const secretEnv = [...new Set([...planned.env, ...planned.secretEnv])];
       // In a throwaway container from the postrun image, so the image is exactly what the agent left.

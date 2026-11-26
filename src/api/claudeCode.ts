@@ -1,13 +1,15 @@
 // Reading what `claude -p --output-format json` writes: one JSON object, with the reply as
 // `result`, and the tokens and cost of each model it used as `modelUsage`. For a harness's
 // `collectReply` and `collectTokenCosts`, so a Claude Code harness needn't parse it itself, and
-// `claudeCode`, a whole Claude Code harness. And reading the skills it invoked, for
-// `collectSkillsInvoked`: not from the result, which doesn't list tool calls, but from the session
-// transcripts Claude Code keeps, one JSON object a line, under `~/.claude/projects/`.
+// `claudeCode`, a whole Claude Code harness. And reading the skills it invoked and the tools it
+// called, for `collectSkillsInvoked` and `collectToolCalls`: not from the result, which doesn't
+// list tool calls, but from the session transcripts Claude Code keeps, one JSON object a line,
+// under `~/.claude/projects/`.
 //
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type SkillsInvokedCollector, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type SkillsInvokedCollector, type TokenCosts, type ToolCall, type ToolCallsCollector } from "./declarations.ts";
+import { toolCallOf, type ToolShape } from "./toolCalls.ts";
 import { writeModel, writeRunScript } from "./files.ts";
 import { COMMAND_PATHS, type CommandContext, type CommandProvider, envAssignments, envRef, type HelperOptions } from "./harnessOptions.ts";
 
@@ -79,7 +81,7 @@ export function claudeCodeTokenCosts(raw: string): TokenCosts {
 }
 
 type TranscriptLine = { type?: unknown; message?: { content?: unknown } };
-type ToolUse = { type?: unknown; name?: unknown; input?: { skill?: unknown } };
+type ToolUse = { type?: unknown; id?: unknown; name?: unknown; input?: { skill?: unknown } };
 
 /**
  * The skills Claude Code's Skill tool was called with, in `transcripts`, the text of its session
@@ -105,6 +107,54 @@ export function claudeCodeSkillsInvoked(transcripts: string): string[] {
   return [...skills];
 }
 
+/** Claude Code's tools, by name, as `ToolCall`s read them. Any other, e.g. `TodoWrite` or an MCP tool, is `other`. */
+const CLAUDE_CODE_TOOLS: Record<string, ToolShape> = {
+  Read: { kind: "read", paths: ["file_path"] },
+  NotebookRead: { kind: "read", paths: ["notebook_path"] },
+  LS: { kind: "read", paths: ["path"] },
+  Write: { kind: "edit", paths: ["file_path"] },
+  Edit: { kind: "edit", paths: ["file_path"] },
+  MultiEdit: { kind: "edit", paths: ["file_path"] },
+  NotebookEdit: { kind: "edit", paths: ["notebook_path"] },
+  // Glob's path is a folder it lists, not a file it reads; Grep's can be a file it reads.
+  Glob: { kind: "search" },
+  Grep: { kind: "search", paths: ["path"] },
+  Bash: { kind: "shell", command: "command" },
+  WebFetch: { kind: "web" },
+  WebSearch: { kind: "web" },
+  Task: { kind: "subagent" },
+  Agent: { kind: "subagent" },
+  Skill: { kind: "skill" },
+};
+
+/**
+ * Every tool call in `transcripts`, the text of Claude Code's session transcripts, one JSON
+ * object a line, in the order found: each once, by its ID, though a message split over several
+ * lines repeats it. A line that isn't JSON is skipped.
+ */
+export function claudeCodeToolCalls(transcripts: string): ToolCall[] {
+  const calls: ToolCall[] = [];
+  const seen = new Set<unknown>();
+  for (const line of transcripts.split("\n")) {
+    if (!line.trim()) continue;
+    let parsed: TranscriptLine;
+    try {
+      parsed = JSON.parse(line) as TranscriptLine;
+    } catch {
+      continue;
+    }
+    const content = parsed?.type === "assistant" ? parsed.message?.content : undefined;
+    if (!Array.isArray(content)) continue;
+    for (const block of content as ToolUse[]) {
+      if (block?.type !== "tool_use" || typeof block.name !== "string") continue;
+      if (block.id !== undefined && seen.has(block.id)) continue;
+      seen.add(block.id);
+      calls.push(toolCallOf(block.name, block.input, CLAUDE_CODE_TOOLS));
+    }
+  }
+  return calls;
+}
+
 /**
  * Every session transcript Claude Code wrote, sub-agents' too, in its config folder: `$HOME/.claude`,
  * or `CLAUDE_CONFIG_DIR` if set. Fails if there are none.
@@ -120,6 +170,17 @@ export const collectClaudeCodeSkillsInvoked: SkillsInvokedCollector = async ({ e
   const { stdout, exitCode } = await exec(TRANSCRIPTS_COMMAND);
   if (exitCode !== 0) throw new Error("no Claude Code transcripts in ~/.claude/projects");
   return claudeCodeSkillsInvoked(stdout);
+};
+
+/**
+ * Every tool call the agent and its sub-agents made, read in the measurement container from
+ * Claude Code's session transcripts, for a harness's `collectToolCalls`. Throws if it left none,
+ * as `collectClaudeCodeSkillsInvoked` does.
+ */
+export const collectClaudeCodeToolCalls: ToolCallsCollector = async ({ exec }) => {
+  const { stdout, exitCode } = await exec(TRANSCRIPTS_COMMAND);
+  if (exitCode !== 0) throw new Error("no Claude Code transcripts in ~/.claude/projects");
+  return claudeCodeToolCalls(stdout);
 };
 
 /** The models `claudeCode` declares unless given others: Anthropic's current IDs, as Claude Code takes them. */
@@ -216,6 +277,7 @@ export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLA
     collectReply: claudeCodeReply,
     collectTokenCosts: claudeCodeTokenCosts,
     collectSkillsInvoked: collectClaudeCodeSkillsInvoked,
+    collectToolCalls: collectClaudeCodeToolCalls,
     requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : [{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }]),
   });
 }

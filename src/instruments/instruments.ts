@@ -6,21 +6,23 @@ import { bunTestFile } from "./bunTestFile/bunTestFile.ts";
 import { commits } from "./commits/commits.ts";
 import { fileCreated } from "./fileCreated/fileCreated.ts";
 import { filesChanged } from "./filesChanged/filesChanged.ts";
+import { fileRead } from "./fileRead/fileRead.ts";
 import { grep } from "./grep/grep.ts";
 import { jsAst } from "./jsAst/jsAst.ts";
 import type { Instrument, ScoreKind } from "./instrument.ts";
 import { replyMatches } from "./replyMatches/replyMatches.ts";
 import { shell } from "./shell/shell.ts";
 import { skillInvoked } from "./skillInvoked/skillInvoked.ts";
+import { toolCalled } from "./toolCalled/toolCalled.ts";
 
 export type { Instrument, ScoreKind } from "./instrument.ts";
-export { bunTestFile, commits, fileCreated, filesChanged, grep, jsAst, replyMatches, shell, skillInvoked };
+export { bunTestFile, commits, fileCreated, fileRead, filesChanged, grep, jsAst, replyMatches, shell, skillInvoked, toolCalled };
 export { STDOUT_LIMIT } from "./shell/shell.ts";
 
 /** Every built-in instrument, by the name a measurement gives as its `instrument`. */
 export const instruments: {
   [I in InstrumentName]: Instrument<InstrumentTypes[I]["config"], InstrumentTypes[I]["value"]>;
-} = { fileCreated, grep, bunTestFile, replyMatches, skillInvoked, shell, commits, filesChanged, jsAst };
+} = { fileCreated, grep, bunTestFile, replyMatches, skillInvoked, toolCalled, fileRead, shell, commits, filesChanged, jsAst };
 
 export const isInstrumentName = (name: unknown): name is InstrumentName => typeof name === "string" && Object.hasOwn(instruments, name);
 

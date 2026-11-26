@@ -19,10 +19,11 @@
 // of it. The new measures become the run's `result`; those it had are kept beside them, in
 // `earlierResults`.
 import { Command } from "commander";
-import type { HarnessDeclaration, SkillsInvokedCollector } from "../../../api/declarations.ts";
+import type { HarnessDeclaration } from "../../../api/declarations.ts";
 import { PARAMETERS } from "../../../config/folders.ts";
 import { findThunderjarRoot, loadDeclaration, type Problem } from "../../../config/loader.ts";
 import { loadMeasurements } from "../../../config/measurements.ts";
+import type { Collectors } from "../../../execution/measurementContext.ts";
 import { remeasureContainerRun, skipReason, withNewResult } from "../../../execution/remeasure.ts";
 import { runName } from "../../../execution/executionSummary.ts";
 import { moduleLogger } from "../../../log/logger.ts";
@@ -44,14 +45,15 @@ function reasons(skipped: { reason: string }[]): string {
 }
 
 /**
- * The `collectSkillsInvoked` of the harness folder `harness`, as it is on disk now, or undefined
- * if it has none or can't be loaded, e.g. it was deleted since the run: `skillInvoked` then skips.
+ * The `collectSkillsInvoked` and `collectToolCalls` of the harness folder `harness`, as it is on
+ * disk now, each undefined if it has none or can't be loaded, e.g. it was deleted since the run:
+ * `skillInvoked`, `toolCalled` and `fileRead` then skip.
  */
-async function skillsCollectorOf(root: string, harness: string): Promise<SkillsInvokedCollector | undefined> {
+async function collectorsOf(root: string, harness: string): Promise<Collectors> {
   const problems: Problem[] = [];
   const declaration = (await loadDeclaration(root, `${PARAMETERS}/harnessModels/${harness}/index.ts`, "declareHarness", problems)) as HarnessDeclaration | undefined;
-  if (problems.length > 0) log.debug({ harness, problems }, "couldn't load the harness, so its skills invoked can't be read");
-  return declaration?.collectSkillsInvoked;
+  if (problems.length > 0) log.debug({ harness, problems }, "couldn't load the harness, so its skills invoked and tool calls can't be read");
+  return { collectSkillsInvoked: declaration?.collectSkillsInvoked, collectToolCalls: declaration?.collectToolCalls };
 }
 
 type Options = { dataDir?: string; imagePrefix: string; json?: boolean };
@@ -74,8 +76,8 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix, js
   const remeasured: RunAt[] = [];
   const skipped: (RunAt & { reason: string })[] = [];
   const failed: (RunAt & { error: string })[] = [];
-  const collectors = new Map<string, Promise<SkillsInvokedCollector | undefined>>();
-  const collectorOf = (harness: string) => collectors.get(harness) ?? collectors.set(harness, skillsCollectorOf(root, harness)).get(harness)!;
+  const collectors = new Map<string, Promise<Collectors>>();
+  const collectorOf = (harness: string) => collectors.get(harness) ?? collectors.set(harness, collectorsOf(root, harness)).get(harness)!;
   for (const execution of executions) {
     const measurements = await loadMeasurements(root, execution.task);
     for (const run of await store.containerRunsOf(execution.executionId)) {

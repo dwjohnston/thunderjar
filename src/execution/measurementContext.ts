@@ -1,7 +1,8 @@
 // The measurement context over a measurement container: one started from a postrun image, for
 // a container run's measurements, and removed once they're taken. The instrument's logic runs on the host; what it
 // asks of the context runs in the container, so nothing it writes reaches the postrun image.
-import type { MeasurementContext, SkillsInvoked, SkillsInvokedCollector, SkillsInvokedCtx } from "../api/declarations.ts";
+import type { MeasurementContext, SkillsInvoked, SkillsInvokedCollector, SkillsInvokedCtx, ToolCall, ToolCalls, ToolCallsCollector, ToolCallsCtx } from "../api/declarations.ts";
+import { TOOL_KINDS } from "../api/toolCalls.ts";
 import { type DockerRuntime, isRuntime, localRuntime } from "../docker/docker.ts";
 import { openShellSession } from "../docker/shellSession.ts";
 import type { DockerService } from "../services/Docker/Docker.ts";
@@ -19,9 +20,13 @@ export type OpenedMeasurementContext = MeasurementContext & {
 
 /**
  * What was recorded of a container run, that an instrument can read without its container, and
- * its harness's `collectSkillsInvoked`, if it has one, to read the skills in the container.
+ * its harness's `collectSkillsInvoked` and `collectToolCalls`, if it has them, to read the skills
+ * and tool calls in the container.
  */
-export type Recorded = Pick<MeasurementContext, "harnessResult" | "reply" | "replies"> & { collectSkillsInvoked?: SkillsInvokedCollector | undefined };
+export type Recorded = Pick<MeasurementContext, "harnessResult" | "reply" | "replies"> & Collectors;
+
+/** A harness's collectors that read in the measurement container. */
+export type Collectors = { collectSkillsInvoked?: SkillsInvokedCollector | undefined; collectToolCalls?: ToolCallsCollector | undefined };
 
 /** The skills `collect` reads from `ctx`, or why there are none. */
 export async function readSkillsInvoked(collect: SkillsInvokedCollector | undefined, ctx: SkillsInvokedCtx): Promise<SkillsInvoked> {
@@ -36,6 +41,31 @@ export async function readSkillsInvoked(collect: SkillsInvokedCollector | undefi
     return { outcome: "unavailable", reason: "collectSkillsInvoked returned something that isn't a list of names" };
   }
   return { outcome: "collected", skills };
+}
+
+const isToolCall = (call: unknown): call is ToolCall => {
+  const { tool, kind, paths, command, cwd } = (call ?? {}) as Record<string, unknown>;
+  return (
+    typeof tool === "string" &&
+    (TOOL_KINDS as readonly unknown[]).includes(kind) &&
+    Array.isArray(paths) &&
+    paths.every((path) => typeof path === "string") &&
+    (command === undefined || typeof command === "string") &&
+    (cwd === undefined || typeof cwd === "string")
+  );
+};
+
+/** The tool calls `collect` reads from `ctx`, or why there are none. */
+export async function readToolCalls(collect: ToolCallsCollector | undefined, ctx: ToolCallsCtx): Promise<ToolCalls> {
+  if (!collect) return { outcome: "unavailable", reason: "its harness has no collectToolCalls" };
+  let calls: unknown;
+  try {
+    calls = await collect(ctx);
+  } catch (error) {
+    return { outcome: "unavailable", reason: `collectToolCalls threw: ${error instanceof Error ? error.message : String(error)}` };
+  }
+  if (!Array.isArray(calls) || !calls.every(isToolCall)) return { outcome: "unavailable", reason: "collectToolCalls returned something that isn't a list of tool calls" };
+  return { outcome: "collected", calls };
 }
 
 /**
@@ -56,6 +86,7 @@ export function recordedContext({ harnessResult, reply, replies }: Recorded): Op
     writeFile: noContainer,
     glob: noContainer,
     skillsInvoked: noContainer,
+    toolCalls: noContainer,
     close: async () => {},
   };
 }
@@ -77,7 +108,7 @@ const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
 export async function openMeasurementContext(
   postrunImage: string,
   container: string,
-  { harnessResult, reply, replies, collectSkillsInvoked }: Recorded,
+  { harnessResult, reply, replies, collectSkillsInvoked, collectToolCalls }: Recorded,
   where: DockerRuntime | Pick<DockerService, "openShellSession"> = localRuntime(),
   secretEnv: string[] = [],
 ): Promise<OpenedMeasurementContext> {
@@ -101,6 +132,7 @@ export async function openMeasurementContext(
     exec,
     readFile,
     skillsInvoked: () => readSkillsInvoked(collectSkillsInvoked, { exec, readFile, harnessResult, workdir }),
+    toolCalls: () => readToolCalls(collectToolCalls, { exec, readFile, harnessResult, workdir }),
     async writeFile(path, contents) {
       await mustRun(`can't write ${path}`, `mkdir -p -- "$(dirname -- ${word(path)})" && cat > ${word(path)}`, contents);
     },

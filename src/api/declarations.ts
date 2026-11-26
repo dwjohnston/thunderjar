@@ -292,6 +292,18 @@ export type HarnessDeclaration<C = unknown, R = unknown> = Applies<C, HarnessApp
   collectSkillsInvoked?: SkillsInvokedCollector;
   /**
    * @docs
+   * @name collectToolCalls
+   * @type {(ctx: ToolCallsCtx) => Promise<ToolCall[]>}
+   * @description
+   * Every tool call the agent made, sub-agents' too where the harness records them, in order, for
+   * the `toolCalled` and `fileRead` instruments, read in the measurement container as
+   * `collectSkillsInvoked` reads skills. Each `ToolCall` keeps the harness's own name for its
+   * tool, e.g. `Read` or `view`, and has a `kind` every harness shares, e.g. `read`. A throw makes
+   * the tool calls unavailable. Without it, `toolCalled` and `fileRead` skip the run.
+   */
+  collectToolCalls?: ToolCallsCollector;
+  /**
+   * @docs
    * @name requiredEnv
    * @type {(string | { oneOf: string[] })[]}
    * @description
@@ -316,6 +328,42 @@ export type SkillsInvokedCollector = (ctx: SkillsInvokedCtx) => Promise<string[]
 
 /** The skills a run's agent invoked, as its harness's `collectSkillsInvoked` read them, or why there are none. */
 export type SkillsInvoked = { outcome: "collected"; skills: string[] } | { outcome: "unavailable"; reason: string };
+
+/**
+ * What a tool call was for, in words every harness shares:
+ *
+ * - `read`: read a file, or list a folder, e.g. Claude Code's `Read`, Copilot's `view`.
+ * - `edit`: create, change or delete a file, e.g. `Edit`, `Write`, a patch.
+ * - `search`: find files, or text in them, e.g. `Grep`, `Glob`.
+ * - `shell`: run a shell command, e.g. `Bash`, Codex's `command_execution`.
+ * - `web`: fetch a page, or search the web.
+ * - `skill`: invoke a skill with a skill tool. Codex has none: it reads a skill's SKILL.md with a shell command.
+ * - `subagent`: start a sub-agent, e.g. `Task`.
+ * - `other`: anything else, e.g. a to-do list, an MCP tool. Its `tool` says which.
+ */
+export type ToolKind = "read" | "edit" | "search" | "shell" | "web" | "skill" | "subagent" | "other";
+
+/** One tool call an agent made, as its harness's `collectToolCalls` read it. */
+export type ToolCall = {
+  /** The harness's own name for the tool, e.g. Claude Code's `Read`, Copilot's `view`, Codex's `command_execution`. */
+  tool: string;
+  kind: ToolKind;
+  /** The files or folders its input names, as given, absolute or relative to `workdir`: a `read`'s file, an `edit`'s files, a `search`'s path. */
+  paths: string[];
+  /** A `shell` call's command. */
+  command?: string;
+  /** Where a `shell` call's command ran, when its harness records it, e.g. OpenCode's `workdir`. Otherwise, `workdir`. */
+  cwd?: string;
+};
+
+/** What a harness's `collectToolCalls` can read: the same as `collectSkillsInvoked`. */
+export type ToolCallsCtx = SkillsInvokedCtx;
+
+/** Reads every tool call a run's agent made, in order. */
+export type ToolCallsCollector = (ctx: ToolCallsCtx) => Promise<ToolCall[]>;
+
+/** A run's tool calls, as its harness's `collectToolCalls` read them, or why there are none. */
+export type ToolCalls = { outcome: "collected"; calls: ToolCall[] } | { outcome: "unavailable"; reason: string };
 
 /** A model setting's value. */
 export type SettingValue = string | number | boolean;
@@ -435,6 +483,8 @@ export type MeasurementContext = {
   replies: Reply[];
   /** The skills the agent invoked, from its harness's `collectSkillsInvoked`, or why there are none. */
   skillsInvoked(): Promise<SkillsInvoked>;
+  /** The tool calls the agent made, from its harness's `collectToolCalls`, or why there are none. */
+  toolCalls(): Promise<ToolCalls>;
   workdir: string;
 };
 
@@ -468,7 +518,7 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
 /**
  * @docs
  * @name instrument
- * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "skillInvoked" | "shell" | "commits" | "filesChanged" | "jsAst"}
+ * @type {"fileCreated" | "grep" | "bunTestFile" | "replyMatches" | "skillInvoked" | "toolCalled" | "fileRead" | "shell" | "commits" | "filesChanged" | "jsAst"}
  * @description
  * What to measure. Each instrument takes its own `config`, and returns its own value, the measure:
  *
@@ -479,6 +529,8 @@ export type Reply = { outcome: "collected"; text: string } | { outcome: "unavail
  * | `bunTestFile` | `{ subject, test }` | `{ passed, total }`: tests passed, of all the tests | the pass rate, `passed / total` |
  * | `replyMatches` | `{ pattern, turn? }` | `boolean`: whether the agent's reply matches `pattern` | the value |
  * | `skillInvoked` | `{ skills }` | `Record<string, boolean>`: for each of `skills`, whether the agent invoked it, as its harness's `collectSkillsInvoked` reads them | none: give each metric a `score`, e.g. `(v) => v.a` |
+ * | `toolCalled` | `{ tools }` | `Record<string, number>`: for each of `tools`, a kind such as `shell` or a harness's own tool name such as `Read`, how many calls the agent made of it, as its harness's `collectToolCalls` reads them | none: give each metric a `score`, e.g. `(v) => v.shell` |
+ * | `fileRead` | `{ paths }` | `Record<string, boolean>`: for each of `paths`, a path or glob, whether the agent read a matching file, by a read tool or a recognised shell command | none: give each metric a `score`, e.g. `(v) => v["AGENTS.md"]` |
  * | `shell` | `{ command }` | `{ exitCode, stdout, stdoutTruncated }` | whether `command` exits 0 |
  * | `filesChanged` | `{ glob? }` | `FileChanges`: `{ added, modified, deleted }` paths changed since the start | none: give each metric a `score` |
  * | `commits` | `{}` | `Commit[]`, oldest first: `{ sha, message, files: { added, modified, deleted } }` | none: give each metric a `score` |
@@ -544,6 +596,25 @@ export type InstrumentTypes = {
    * or whose skills can't be read, is skipped. A metric needs a `score` of its own, e.g. `(v) => v["tj-test-case"]`.
    */
   skillInvoked: { config: { skills: string[] }; value: Record<string, boolean> };
+  /**
+   * How many tool calls did the agent make of each of `tools`? Each is a `ToolKind` every harness
+   * shares, e.g. `shell` or `read`, or a harness's own tool name, e.g. Claude Code's `Read` or
+   * Copilot's `view`, which only that harness's runs ever count. Its value is each one's count,
+   * e.g. `{ shell: 4, Read: 2 }`. Read by its harness's `collectToolCalls`, in the measurement
+   * container: a run whose harness has none, or whose tool calls can't be read, is skipped. A
+   * metric needs a `score` of its own, e.g. `(v) => v.shell` or `(v) => v.web > 0`.
+   */
+  toolCalled: { config: { tools: string[] }; value: Record<string, number> };
+  /**
+   * Did the agent read a file matching each of `paths`, a path or a glob, relative to `workdir` or
+   * absolute? Its value is each one's answer, e.g. `{ "AGENTS.md": true }`. Read from its
+   * harness's `collectToolCalls`: a file counts as read when a `read` or `search` call names it,
+   * or a shell command reads it with a program such as `cat`, `head`, `sed` or `grep`. So `false`
+   * means the agent made no read Thunderjar recognises: a script that opens the file isn't one,
+   * nor is a file the harness puts in the agent's context itself, such as Claude Code's CLAUDE.md.
+   * Skipped as `toolCalled` is. A metric needs a `score` of its own.
+   */
+  fileRead: { config: { paths: string[] }; value: Record<string, boolean> };
   /**
    * What `command`, any shell command, did: its exit code, and its stdout, as it is, up to 64 KiB.
    * It runs with `sh -c` in the measurement container, in `workdir`, so it can use whatever the

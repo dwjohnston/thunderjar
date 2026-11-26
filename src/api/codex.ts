@@ -12,17 +12,18 @@
  *
  */
 // Reading what `codex exec --json` writes: JSON lines, one event each. For a harness's
-// `collectReply`, `collectTokenCosts` and `collectSkillsInvoked`, so a Codex harness needn't parse
+// `collectReply`, `collectTokenCosts`, `collectSkillsInvoked` and `collectToolCalls`, so a Codex harness needn't parse
 // it itself, and `codex`, a whole Codex harness.
 //
 // Codex has no skill tool: its prompt lists each skill's SKILL.md, and the agent reads the one it
 // wants with a shell command, which Codex's own telemetry counts as an implicit invocation.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type SkillsInvokedCollector, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type SkillsInvokedCollector, type TokenCosts, type ToolCall, type ToolCallsCollector, type ToolKind } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
 import { COMMAND_PATHS, type CommandContext, type CommandProvider, type HelperOptions, providerId, shellQuote } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
-type Event = { type?: unknown; item?: { type?: unknown; item_type?: unknown; text?: unknown; command?: unknown }; usage?: Record<string, unknown> };
+type Item = { id?: unknown; type?: unknown; item_type?: unknown; text?: unknown; command?: unknown; changes?: unknown; server?: unknown; tool?: unknown };
+type Event = { type?: unknown; item?: Item; usage?: Record<string, unknown> };
 
 /** The last completed agent message with text: Codex's final reply. Throws if there is none. */
 export function codexReply(raw: string): string {
@@ -83,6 +84,40 @@ export const collectCodexSkillsInvoked: SkillsInvokedCollector = async ({ harnes
   return codexSkillsInvoked(harnessResult);
 };
 
+/** The kind of each type of item that is a tool call. Others, e.g. `agent_message` or `reasoning`, aren't. */
+const CODEX_TOOL_ITEMS: Record<string, ToolKind> = {
+  command_execution: "shell",
+  file_change: "edit",
+  web_search: "web",
+  mcp_tool_call: "other",
+  todo_list: "other",
+  collab_tool_call: "subagent",
+};
+
+/** An item's tool call: its type is its tool, but an MCP tool's is `mcp__<server>__<tool>`, as Claude Code names them. */
+function codexToolCall(item: Item & { type: string }): ToolCall {
+  const kind = CODEX_TOOL_ITEMS[item.type] as ToolKind;
+  if (item.type === "mcp_tool_call" && typeof item.server === "string" && typeof item.tool === "string") return { tool: `mcp__${item.server}__${item.tool}`, kind, paths: [] };
+  const paths = Array.isArray(item.changes) ? (item.changes as { path?: unknown }[]).flatMap((change) => (typeof change?.path === "string" ? [change.path] : [])) : [];
+  return { tool: item.type, kind, paths, ...(item.type === "command_execution" && typeof item.command === "string" && { command: item.command }) };
+}
+
+/**
+ * Every tool call in `raw`, Codex's JSON lines: each completed item that is one, in order. Codex
+ * reads files with shell commands, so it makes no `read` call: `fileRead` reads its commands.
+ */
+export function codexToolCalls(raw: string): ToolCall[] {
+  return jsonLines<Event>(raw).flatMap(({ type, item }) =>
+    type === "item.completed" && typeof item?.type === "string" && Object.hasOwn(CODEX_TOOL_ITEMS, item.type) ? [codexToolCall(item as Item & { type: string })] : [],
+  );
+}
+
+/** Every tool call the agent made, read from its result, for a harness's `collectToolCalls`. Throws if the result has no events, as `collectCodexSkillsInvoked` does. */
+export const collectCodexToolCalls: ToolCallsCollector = async ({ harnessResult }) => {
+  if (jsonLines(harnessResult).length === 0) throw new Error("no events in Codex's JSONL output");
+  return codexToolCalls(harnessResult);
+};
+
 /** The reasoning efforts Codex takes, as `-c model_reasoning_effort=…`, for a model's `reasoningEffort` setting. */
 export const CODEX_REASONING_EFFORTS = ["low", "medium", "high"] as const;
 
@@ -120,7 +155,7 @@ export const CODEX_COMMAND = ({ model, paths, provider }: CommandContext): strin
 /**
  * A complete harness declaration for Codex `version`. Its fragment installs Codex as root, writes
  * the model ID and the run script, then switches to the image's non-root `node` user. Its reply,
- * token costs and the skills it invoked are read from its JSON lines. It needs `OPENAI_API_KEY`, or, given a
+ * token costs, the skills it invoked and the tools it called are read from its JSON lines. It needs `OPENAI_API_KEY`, or, given a
  * `provider`, which must speak the Responses API, only the provider's key.
  *
  * ```ts
@@ -150,6 +185,7 @@ export function codex({ version, models = CODEX_MODELS, provider, command = CODE
     collectReply: codexReply,
     collectTokenCosts: (raw, ctx) => codexTokenCosts(raw, ctx.modelId),
     collectSkillsInvoked: collectCodexSkillsInvoked,
+    collectToolCalls: collectCodexToolCalls,
     requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : ["OPENAI_API_KEY"]),
   });
 }

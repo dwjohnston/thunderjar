@@ -43,7 +43,16 @@ Thunderjar comes with these instruments
 | How many lines match? | `grep` | `{ glob, pattern }` |
 | Does the code behave? | `bunTestFile` | `{ subject, test }` |
 | What did the agent say? | `replyMatches` | `{ pattern, turn? }` |
+| Which skills did it invoke? | `skillInvoked` | `{ skills }` |
+| Which tools did it call, and how often? | `toolCalled` | `{ tools }` |
+| Did it read a file? | `fileRead` | `{ paths }` |
 | Anything else | `shell` | `{ command }` |
+
+`toolCalled` takes a kind every harness shares, `read`, `edit`, `search`, `shell`, `web`, `skill`, `subagent` or `other`, or a harness's own tool name, e.g. Claude Code's `Read`. A harness's own name only counts that harness's runs.
+
+`fileRead` counts read tools, and shell commands such as `cat`, `head` or `grep` given the file. A file read some other way, e.g. by a script, counts as not read.
+
+**Why:** `false` means no read Thunderjar recognises, so compare it across harnesses with care. Codex reads every file with shell commands.
 
 `shell` runs in the agent's container after it finishes, in the folder it started in. Its value is the exit code and stdout.
 
@@ -63,6 +72,12 @@ e.g. one of each, as the object passed to `declareMeasurement`:
 
 // replyMatches: did its last reply include ☝️?
 { instrument: "replyMatches", config: { pattern: "☝️" }, metrics: { followedHumansMd: { stat: "rate", better: "higher" } } }
+
+// toolCalled: how many shell commands did it run? A metric needs a score.
+{ instrument: "toolCalled", config: { tools: ["shell"] }, metrics: { shellCalls: { score: (v) => v.shell, stat: "mean" } } }
+
+// fileRead: did it read AGENTS.md? A metric needs a score.
+{ instrument: "fileRead", config: { paths: ["AGENTS.md"] }, metrics: { readAgentsMd: { score: (v) => v["AGENTS.md"], stat: "rate", better: "higher" } } }
 
 // shell: does the project still typecheck?
 { instrument: "shell", config: { command: "bun run typecheck" }, metrics: { typeChecks: { stat: "rate", better: "higher" } } }

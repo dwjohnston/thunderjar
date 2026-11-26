@@ -14,20 +14,23 @@
 // Reading what `opencode run --format json` writes: one JSON event per line, {type, timestamp,
 // sessionID, part}. The reply is in "text" events and the tokens in "step_finish" events, one per
 // model call. Only the main session's events are written, so sub-agents' tokens aren't counted.
-// For a harness's `collectReply`, `collectTokenCosts` and `collectSkillsInvoked`, so an OpenCode
-// harness needn't parse it itself, and `opencode`, a whole OpenCode harness.
+// For a harness's `collectReply`, `collectTokenCosts`, `collectSkillsInvoked` and
+// `collectToolCalls`, so an OpenCode harness needn't parse it itself, and `opencode`, a whole
+// OpenCode harness.
 //
-// The skills come from the skill tool's calls, in "tool_use" events. A sub-agent's are in its own
-// session, which only `opencode export <session>` prints: the result has just its task call.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type SettingValue, type SkillsInvokedCollector, type SkillsInvokedCtx, type TokenCosts } from "./declarations.ts";
+// The tool calls, the skill tool's among them, are in "tool_use" events. A sub-agent's are in its
+// own session, which only `opencode export <session>` prints: the result has just its task call.
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type SettingValue, type SkillsInvokedCollector, type SkillsInvokedCtx, type TokenCosts, type ToolCall, type ToolCallsCollector } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
 import { COMMAND_PATHS, type CommandContext, type CommandProvider, envAssignments, type HelperOptions } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
+import { toolCallOf, type ToolShape } from "./toolCalls.ts";
 
 type Part = {
   type?: unknown;
   text?: unknown;
   tool?: unknown;
+  callID?: unknown;
   state?: { input?: { name?: unknown }; metadata?: { sessionId?: unknown } };
   cost?: unknown;
   tokens?: { input?: unknown; output?: unknown; reasoning?: unknown; cache?: { read?: unknown; write?: unknown } };
@@ -110,28 +113,77 @@ async function exportedParts(exec: SkillsInvokedCtx["exec"], session: string): P
 }
 
 /**
+ * The parts of the main session, from the result, then of each sub-agent's session, exported in
+ * the measurement container, and so on down. Throws if the result has no events, e.g. OpenCode
+ * never started, or a sub-agent's session can't be exported, so the run is skipped rather than
+ * undercounted.
+ */
+async function everySessionsParts({ exec, harnessResult }: SkillsInvokedCtx): Promise<(Part | undefined)[]> {
+  if (jsonLines(harnessResult).length === 0) throw new Error("no events in OpenCode's JSON output");
+  const parts = resultParts(harnessResult);
+  const seen = new Set<string>();
+  const queue = toolCalls(parts).sessions;
+  while (queue.length > 0) {
+    const session = queue.shift() as string;
+    if (seen.has(session)) continue;
+    seen.add(session);
+    const exported = await exportedParts(exec, session);
+    parts.push(...exported);
+    queue.push(...toolCalls(exported).sessions);
+  }
+  return parts;
+}
+
+/**
  * The skills the agent and its sub-agents invoked, for a harness's `collectSkillsInvoked`: the
  * main agent's from the result, each sub-agent's from its session, exported in the measurement
  * container, and so on down. Each once, in the order found. Throws if the result has no events,
  * e.g. OpenCode never started, or a sub-agent's session can't be exported, so the run is skipped
  * rather than undercounted.
  */
-export const collectOpenCodeSkillsInvoked: SkillsInvokedCollector = async ({ exec, harnessResult }) => {
-  if (jsonLines(harnessResult).length === 0) throw new Error("no events in OpenCode's JSON output");
-  const { skills, sessions } = toolCalls(resultParts(harnessResult));
-  const found = new Set(skills);
-  const seen = new Set<string>();
-  const queue = [...sessions];
-  while (queue.length > 0) {
-    const session = queue.shift() as string;
-    if (seen.has(session)) continue;
-    seen.add(session);
-    const calls = toolCalls(await exportedParts(exec, session));
-    for (const skill of calls.skills) found.add(skill);
-    queue.push(...calls.sessions);
-  }
-  return [...found];
+export const collectOpenCodeSkillsInvoked: SkillsInvokedCollector = async (ctx) => [...new Set(toolCalls(await everySessionsParts(ctx)).skills)];
+
+/** OpenCode's tools, by name, as `ToolCall`s read them. Any other, e.g. `todowrite` or an MCP tool, is `other`. */
+const OPENCODE_TOOLS: Record<string, ToolShape> = {
+  // read reads a folder too, listing it, as list does.
+  read: { kind: "read", paths: ["filePath"] },
+  list: { kind: "read", paths: ["path"] },
+  write: { kind: "edit", paths: ["filePath"] },
+  edit: { kind: "edit", paths: ["filePath"] },
+  patch: { kind: "edit", patch: "patchText" },
+  apply_patch: { kind: "edit", patch: "patchText" },
+  // glob's path is a folder it lists, not a file it reads; grep's can be a file it reads.
+  glob: { kind: "search" },
+  grep: { kind: "search", paths: ["path"] },
+  bash: { kind: "shell", command: "command", cwd: "workdir" },
+  webfetch: { kind: "web" },
+  websearch: { kind: "web" },
+  task: { kind: "subagent" },
+  skill: { kind: "skill" },
 };
+
+/** The tool calls among `parts`, each once, by its call ID. */
+function toolCallsOf(parts: (Part | undefined)[]): ToolCall[] {
+  const seen = new Set<unknown>();
+  return parts.flatMap((part) => {
+    if (part?.type !== "tool" || typeof part.tool !== "string") return [];
+    if (part.callID !== undefined && seen.has(part.callID)) return [];
+    seen.add(part.callID);
+    return [toolCallOf(part.tool, part.state?.input, OPENCODE_TOOLS)];
+  });
+}
+
+/** Every tool call the main agent made, in `raw`, the result, in order. Not its sub-agents': `collectOpenCodeToolCalls` adds those. */
+export function opencodeToolCalls(raw: string): ToolCall[] {
+  return toolCallsOf(resultParts(raw));
+}
+
+/**
+ * Every tool call the agent and its sub-agents made, for a harness's `collectToolCalls`: found,
+ * and thrown, as `collectOpenCodeSkillsInvoked` finds skills. The main agent's first, then each
+ * sub-agent's.
+ */
+export const collectOpenCodeToolCalls: ToolCallsCollector = async (ctx) => toolCallsOf(await everySessionsParts(ctx));
 
 /** The models `opencode` declares unless given others: OpenCode Zen's, provider first, as OpenCode takes them. */
 export const OPENCODE_MODELS: OpenCodeModels = {
@@ -257,6 +309,7 @@ export function opencode({ version, models = OPENCODE_MODELS, provider, command 
     collectReply: opencodeReply,
     collectTokenCosts: (raw, ctx) => opencodeTokenCosts(raw, ctx.modelId),
     collectSkillsInvoked: collectOpenCodeSkillsInvoked,
+    collectToolCalls: collectOpenCodeToolCalls,
     requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : ["OPENCODE_API_KEY"]),
   });
 }
