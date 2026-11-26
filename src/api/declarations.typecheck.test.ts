@@ -9,7 +9,9 @@ import {
   declareMeasurement,
   declarePromptSet,
 } from "./declarations.ts";
+import { claudeCode } from "./claudeCode.ts";
 import { writeModel, writeRunScript } from "./files.ts";
+import { OPENROUTER } from "./harnessOptions.ts";
 
 function assertType<T>(_value: T) {}
 
@@ -217,5 +219,19 @@ describe("declareMeasurement: a metric's stat fits its score's type", () => {
       // @ts-expect-error - better is "higher" or "lower"
       metrics: { count: { stat: "mean", better: "fewer" } },
     });
+  });
+});
+
+describe("claudeCode", () => {
+  it("needs models with a provider: its default models are Anthropic's IDs", () => {
+    claudeCode({ version: "2.1.311", provider: OPENROUTER, models: { "anthropic/claude-haiku-5.5": [] } });
+    // @ts-expect-error - a provider without models
+    claudeCode({ version: "2.1.311", provider: OPENROUTER });
+  });
+
+  it("takes its command as a function, never a string", () => {
+    claudeCode({ version: "2.1.311", command: ({ paths }) => `claude -p hi > ${paths.result}` });
+    // @ts-expect-error - a string command
+    claudeCode({ version: "2.1.311", command: "claude -p hi > /thunderjar/result.json" });
   });
 });

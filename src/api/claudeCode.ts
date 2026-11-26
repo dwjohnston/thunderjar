@@ -5,8 +5,9 @@
 //
 // `modelUsage` is read, not the flat `usage`: `usage` counts only the top-level agent loop, so it
 // leaves out what sub-agents spent. Its keys are camelCase, where `usage`'s are snake_case.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
-import { MODEL_PATH, PROMPT_PATH, RESULT_PATH, writeModel, writeRunScript } from "./files.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type RequiredEnv, type TokenCosts } from "./declarations.ts";
+import { writeModel, writeRunScript } from "./files.ts";
+import { COMMAND_PATHS, type CommandContext, type CommandProvider, envAssignments, envRef, type Provider } from "./harnessOptions.ts";
 
 type ModelUsage = {
   inputTokens?: unknown;
@@ -84,22 +85,64 @@ export const CLAUDE_CODE_MODELS: HarnessModels = {
   "claude-haiku-4-5-20251001": [],
 };
 
-/** What `claudeCode` gets. */
-export type ClaudeCodeOptions = {
+/**
+ * The effort levels Claude Code takes, as `--effort`, for a model's `effort` setting, e.g.
+ * `{ "claude-opus-5-5": [{ effort: { values: CLAUDE_CODE_EFFORTS } }] }`.
+ */
+export const CLAUDE_CODE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+/** What `claudeCode` gets, with or without a provider. */
+type ClaudeCodeCommon = {
   /** The version of `@anthropic-ai/claude-code` to install, e.g. `"2.1.311"`. */
   version: string;
-  /** The models it runs, as `declareHarness`'s `models`, e.g. `{ "claude-haiku-5-5": [] }`. By default, `CLAUDE_CODE_MODELS`. */
-  models?: HarnessModels;
-  /** Replaces the command its run script runs: `CLAUDE_CODE_COMMAND` is the default. */
-  command?: string;
+  /** The command its run script runs, from the model, version, paths and provider: `CLAUDE_CODE_COMMAND` by default. */
+  command?: (ctx: CommandContext) => string;
+  /** The variables it needs, as `declareHarness`'s `requiredEnv`. By default, the provider's key, or Claude Code's own. */
+  requiredEnv?: RequiredEnv[];
 };
+
+/** What `claudeCode` gets. */
+export type ClaudeCodeOptions = ClaudeCodeCommon &
+  (
+    | {
+        /** Anthropic, Claude Code's own provider. */
+        provider?: undefined;
+        /** The models it runs, as `declareHarness`'s `models`, e.g. `{ "claude-haiku-5-5": [] }`. By default, `CLAUDE_CODE_MODELS`. */
+        models?: HarnessModels;
+      }
+    | {
+        /** Another provider, which must speak Anthropic's Messages API, e.g. `OPENROUTER`. */
+        provider: Provider;
+        /** The models it runs, by the provider's IDs: required, as the defaults are Anthropic's. */
+        models: HarnessModels;
+      }
+  );
 
 /**
  * The command that runs Claude Code: the prompt and model read from their files, so quotes and
- * newlines reach the agent intact, its result as JSON, without permission prompts.
+ * newlines reach the agent intact, at the model's `effort` if it has one, its result as JSON,
+ * without permission prompts. Given a provider, it points Claude Code at it.
  */
-export const CLAUDE_CODE_COMMAND =
-  `claude -p "$(cat ${PROMPT_PATH})" --model "$(cat ${MODEL_PATH})" --output-format json --dangerously-skip-permissions > ${RESULT_PATH}`;
+export const CLAUDE_CODE_COMMAND = ({ model, paths, provider }: CommandContext): string =>
+  `${provider ? `${envAssignments(providerEnv(provider))} ` : ""}claude -p "$(cat ${paths.prompt})" --model "$(cat ${paths.model})"` +
+  `${model.effort === undefined ? "" : ` --effort ${model.effort}`} --output-format json --dangerously-skip-permissions > ${paths.result}`;
+
+/**
+ * `baseUrl` as `ANTHROPIC_BASE_URL` takes it: without a final `/v1`, which Claude Code adds
+ * itself, as `/v1/messages`. So `OPENROUTER`'s `https://openrouter.ai/api/v1` is
+ * `https://openrouter.ai/api`, its Anthropic-compatible address.
+ */
+const anthropicBaseUrl = (baseUrl: string) => baseUrl.replace(/\/v1\/?$/, "");
+
+/**
+ * The variables that point Claude Code at `provider`: its address, and its key as the auth token.
+ * `ANTHROPIC_API_KEY` is emptied, so Claude Code doesn't use it in the token's place.
+ */
+const providerEnv = (provider: CommandProvider) => ({
+  ANTHROPIC_BASE_URL: provider.baseUrl,
+  ANTHROPIC_AUTH_TOKEN: envRef(provider.apiKeyEnv),
+  ANTHROPIC_API_KEY: "",
+});
 
 /**
  * A complete harness declaration for Claude Code `version`. Its fragment installs Claude Code as
@@ -114,8 +157,24 @@ export const CLAUDE_CODE_COMMAND =
  * // harnessModels/claude-code-2.1.311/index.ts
  * export default claudeCode({ version: "2.1.311" });
  * ```
+ *
+ * Given a `provider`, which must speak Anthropic's Messages API, it needs only the provider's
+ * key, and `models` by the provider's IDs. A model's `effort` setting is passed as `--effort`.
+ * Anything else, e.g. `MAX_THINKING_TOKENS` or `--max-turns`, is bespoke: write it in `command`.
+ *
+ * ```ts
+ * export default claudeCode({
+ *   version: "2.1.311",
+ *   provider: OPENROUTER,
+ *   models: {
+ *     "anthropic/claude-opus-5.5": [{ effort: { values: ["low", "high"] } }, { thinkingTokens: { values: [8000, 32000] } }],
+ *   },
+ *   command: (ctx) => `MAX_THINKING_TOKENS=${ctx.model.thinkingTokens} ${CLAUDE_CODE_COMMAND(ctx)}`,
+ * });
+ * ```
  */
-export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
+export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLAUDE_CODE_COMMAND, provider, requiredEnv }: ClaudeCodeOptions): HarnessDeclaration<undefined, undefined> {
+  const commandProvider: CommandProvider | undefined = provider && { ...provider, baseUrl: anthropicBaseUrl(provider.baseUrl), wireApi: "anthropic" };
   return declareHarness({
     version,
     models,
@@ -124,11 +183,11 @@ export function claudeCode({ version, models = CLAUDE_CODE_MODELS, command = CLA
         `RUN npm install -g @anthropic-ai/claude-code@${ctx.version}`,
         "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
         writeModel(ctx.modelId),
-        writeRunScript(command),
+        writeRunScript(command({ modelId: ctx.modelId, model: ctx.model, version: ctx.version, paths: COMMAND_PATHS, provider: commandProvider })),
         "USER node",
       ].join("\n"),
     collectReply: claudeCodeReply,
     collectTokenCosts: claudeCodeTokenCosts,
-    requiredEnv: [{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }],
+    requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : [{ oneOf: ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"] }]),
   });
 }

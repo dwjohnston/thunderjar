@@ -178,7 +178,7 @@ Recorded in .thunderjar/.data/runs.sqlite
     const again = (await docker.commands()).slice(before);
     expect(again.filter((command) => /^docker (build|tag thunderjar-prerun)/.test(command))).toEqual([]);
     expect(again).toContain(`docker pull --quiet ${PRERUN}`);
-  });
+  }, 20_000); // two whole runs against the fake Docker: near the 5 s default, and over it when the parallel suite loads CI
 
   test("the runner gets the variables it needs in its submission, and no others: a harness's key reaches its container, and the registry login is used", async () => {
     await using docker = await fakeDocker({ loggedIn: ["ghcr.io"] });
