@@ -113,7 +113,9 @@ export async function createTables(sql: SQL, schema = SCHEMA): Promise<void> {
 }
 
 /**
- * Records a job run, its tests and its steps. It only inserts, so CI's role needs INSERT and nothing else. A
+ * Records a job run, its tests and its steps. The run and its tests are recorded together or not at
+ * all; its steps after them, as a bonus: if they can't be, the run is kept and `stepsError` says why.
+ * It only inserts, so CI's role needs INSERT and nothing else. A
  * second record of the same run attempt and job is refused, by ci_runs' unique key: one upload per
  * job, and a re-run is a new attempt.
  */
@@ -123,7 +125,7 @@ export async function recordRun(
   report: JunitReport,
   schema = SCHEMA,
   steps: CiStep[] = [],
-): Promise<void> {
+): Promise<{ stepsError?: string }> {
   const row = {
     id: crypto.randomUUID(),
     run_id: run.runId,
@@ -157,16 +159,20 @@ export async function recordRun(
     for (let i = 0; i < tests.length; i += 1000) {
       await tx`insert into ${tx(schema)}.ci_test_metrics ${tx(tests.slice(i, i + 1000))}`;
     }
-    if (steps.length > 0) {
-      const stepRows = steps.map((s, i) => ({
-        ci_run_id: row.id,
-        recorded_at: run.startedAt,
-        position: i + 1,
-        name: s.name,
-        conclusion: s.conclusion,
-        seconds: s.seconds,
-      }));
-      await tx`insert into ${tx(schema)}.ci_step_metrics ${tx(stepRows)}`;
-    }
   });
+  if (steps.length === 0) return {};
+  const stepRows = steps.map((s, i) => ({
+    ci_run_id: row.id,
+    recorded_at: run.startedAt,
+    position: i + 1,
+    name: s.name,
+    conclusion: s.conclusion,
+    seconds: s.seconds,
+  }));
+  try {
+    await sql`insert into ${sql(schema)}.ci_step_metrics ${sql(stepRows)}`;
+    return {};
+  } catch (error) {
+    return { stepsError: error instanceof Error ? error.message : String(error) };
+  }
 }
