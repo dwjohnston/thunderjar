@@ -19,7 +19,9 @@
 // of it. The new measures become the run's `result`; those it had are kept beside them, in
 // `earlierResults`.
 import { Command } from "commander";
-import { findThunderjarRoot } from "../../../config/loader.ts";
+import type { HarnessDeclaration, SkillsInvokedCollector } from "../../../api/declarations.ts";
+import { PARAMETERS } from "../../../config/folders.ts";
+import { findThunderjarRoot, loadDeclaration, type Problem } from "../../../config/loader.ts";
 import { loadMeasurements } from "../../../config/measurements.ts";
 import { remeasureContainerRun, skipReason, withNewResult } from "../../../execution/remeasure.ts";
 import { runName } from "../../../execution/executionSummary.ts";
@@ -39,6 +41,17 @@ function reasons(skipped: { reason: string }[]): string {
   const counts = Map.groupBy(skipped, ({ reason }) => reason);
   if (counts.size === 1) return [...counts.keys()][0]!;
   return [...counts].map(([reason, runs]) => `${runs.length} ${reason}`).join(", ");
+}
+
+/**
+ * The `collectSkillsInvoked` of the harness folder `harness`, as it is on disk now, or undefined
+ * if it has none or can't be loaded, e.g. it was deleted since the run: `skillInvoked` then skips.
+ */
+async function skillsCollectorOf(root: string, harness: string): Promise<SkillsInvokedCollector | undefined> {
+  const problems: Problem[] = [];
+  const declaration = (await loadDeclaration(root, `${PARAMETERS}/harnessModels/${harness}/index.ts`, "declareHarness", problems)) as HarnessDeclaration | undefined;
+  if (problems.length > 0) log.debug({ harness, problems }, "couldn't load the harness, so its skills invoked can't be read");
+  return declaration?.collectSkillsInvoked;
 }
 
 type Options = { dataDir?: string; imagePrefix: string; json?: boolean };
@@ -61,6 +74,8 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix, js
   const remeasured: RunAt[] = [];
   const skipped: (RunAt & { reason: string })[] = [];
   const failed: (RunAt & { error: string })[] = [];
+  const collectors = new Map<string, Promise<SkillsInvokedCollector | undefined>>();
+  const collectorOf = (harness: string) => collectors.get(harness) ?? collectors.set(harness, skillsCollectorOf(root, harness)).get(harness)!;
   for (const execution of executions) {
     const measurements = await loadMeasurements(root, execution.task);
     for (const run of await store.containerRunsOf(execution.executionId)) {
@@ -72,7 +87,7 @@ async function remeasure(cwd: string, target: string, { dataDir, imagePrefix, js
       }
       let result: Record<string, RecordedMeasure>;
       try {
-        result = await remeasureContainerRun(run, measurements, imagePrefix);
+        result = await remeasureContainerRun(run, measurements, imagePrefix, undefined, await collectorOf(run.harnessModel.harness));
       } catch (error) {
         // Docker couldn't start its measurement container, e.g. its postrun image was deleted
         // without being marked purged: the others may still be measured.

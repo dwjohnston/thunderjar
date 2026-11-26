@@ -378,7 +378,7 @@ export async function runExecution(run: ExecutionToRun, store: RunDataStore, hoo
     if (measurements.length > 0) {
       hooks.onMeasuring?.(permutation, iteration);
       let opened = 0;
-      const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: [reply as Reply] };
+      const recorded = { harnessResult: harnessResult ?? "", reply: reply as Reply, replies: [reply as Reply], collectSkillsInvoked: permutation.harness.collectSkillsInvoked };
       // The variables the agent was given by name: its postrun image has them blank. Already
       // checked before the run, so one unset now is left out by Docker. On a runner, its
       // submission gave it these too.
