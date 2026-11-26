@@ -1,10 +1,13 @@
 // The Codex readers, against a `codex exec --json` result: JSON lines, one event each.
 import { describe, expect, test } from "bun:test";
-import { CODEX_REASONING_EFFORTS, codex, codexReply, codexTokenCosts } from "./codex.ts";
+import { CODEX_REASONING_EFFORTS, codex, codexReply, codexSkillsInvoked, codexTokenCosts, collectCodexSkillsInvoked } from "./codex.ts";
 import { declaredBy } from "./declarations.ts";
 import { OPENROUTER } from "./harnessOptions.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/codex.result.jsonl`).text();
+// Codex 0.166.0 asked about a.ts in src/gauntlet/nested-skills, its model a scripted Responses API
+// server, so the commands are fixed: it reads the base skill, then the a skill and a.ts in one.
+const SKILLS_RESULT = await Bun.file(`${import.meta.dir}/codex.skills.result.jsonl`).text();
 
 describe("codexReply", () => {
   test("is the last completed agent message with text, skipping empty ones and lines that aren't JSON", () => {
@@ -35,6 +38,37 @@ describe("codexTokenCosts", () => {
   });
 });
 
+/** A command Codex ran, as `codex exec --json` reports it once done. */
+const ran = (command: string) => JSON.stringify({ type: "item.completed", item: { id: "item_0", type: "command_execution", command, aggregated_output: "", exit_code: 0, status: "completed" } });
+
+describe("codexSkillsInvoked", () => {
+  test("is each skill whose SKILL.md a command read, once, in the order first read", () => {
+    expect(codexSkillsInvoked(SKILLS_RESULT)).toEqual(["base", "a"]);
+  });
+
+  test("names a skill by its folder, wherever the folder is", () => {
+    const raw = [ran("/bin/bash -lc 'cat ~/.codex/skills/.system/imagegen/SKILL.md'"), ran("/bin/bash -lc 'head -50 \"/workspace/.agents/skills/my-skill/SKILL.md\"'")].join("\n");
+    expect(codexSkillsInvoked(raw)).toEqual(["imagegen", "my-skill"]);
+  });
+
+  test("skips commands that only list skills, and other events", () => {
+    const raw = [ran("/bin/bash -lc 'ls .agents/skills/*/SKILL.md'"), ran("/bin/bash -lc \"find . -name SKILL.md\""), JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "see a/SKILL.md" } })].join("\n");
+    expect(codexSkillsInvoked(raw)).toEqual([]);
+  });
+});
+
+describe("collectCodexSkillsInvoked", () => {
+  const ctx = (harnessResult: string) => ({ exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }), readFile: async () => "", harnessResult, workdir: "/workspace" });
+
+  test("reads them from the result", async () => {
+    expect(await collectCodexSkillsInvoked(ctx(SKILLS_RESULT))).toEqual(["base", "a"]);
+  });
+
+  test("throws when the result has no events, so the run is skipped, not counted as invoking none", async () => {
+    await expect(collectCodexSkillsInvoked(ctx("Error: rate limited"))).rejects.toThrow("no events");
+  });
+});
+
 const fragment = (harness: ReturnType<typeof codex>, modelId: string, model: Record<string, string> = {}) =>
   harness.applyParameter(undefined, { dir: "parameters/harness", version: "0.166.0", modelId, model, resolved: undefined });
 
@@ -51,6 +85,7 @@ describe("codex", () => {
     expect(harness.requiredEnv).toEqual(["OPENAI_API_KEY"]);
     expect(harness.collectReply?.(RESULT)).toBe("pong");
     expect(harness.collectTokenCosts?.(RESULT, { version: "0.166.0", modelId: "gpt-5.5" })).toEqual(codexTokenCosts(RESULT, "gpt-5.5"));
+    expect(harness.collectSkillsInvoked).toBe(collectCodexSkillsInvoked);
   });
 
   test("installs Codex as root, writes the model and run script, then runs as node", () => {

@@ -1,13 +1,15 @@
 // The `thunderjar` library: what a project's `.thunderjar/` files import.
 export { CLAUDE_CODE_COMMAND, CLAUDE_CODE_EFFORTS, CLAUDE_CODE_MODELS, claudeCode, claudeCodeReply, claudeCodeSkillsInvoked, claudeCodeTokenCosts, collectClaudeCodeSkillsInvoked, type ClaudeCodeOptions } from "./claudeCode.ts";
-export { CODEX_COMMAND, CODEX_MODELS, CODEX_REASONING_EFFORTS, codex, codexReply, codexTokenCosts, type CodexOptions } from "./codex.ts";
+export { CODEX_COMMAND, CODEX_MODELS, CODEX_REASONING_EFFORTS, codex, codexReply, codexSkillsInvoked, codexTokenCosts, collectCodexSkillsInvoked, type CodexOptions } from "./codex.ts";
 export { codeStateGitCheckout, resolveGitCheckout, type CodeStateGitCheckoutConfig } from "./codeStateGitCheckout.ts";
-export { COPILOT_COMMAND, COPILOT_MODELS, COPILOT_USAGE_TYPE, copilot, copilotReply, copilotTokenCosts, type CopilotOptions } from "./copilot.ts";
+export { collectCopilotSkillsInvoked, COPILOT_COMMAND, COPILOT_MODELS, COPILOT_USAGE_TYPE, copilot, copilotReply, copilotSkillsInvoked, copilotTokenCosts, type CopilotOptions } from "./copilot.ts";
 export {
+  collectOpenCodeSkillsInvoked,
   OPENCODE_COMMAND,
   OPENCODE_MODELS,
   opencode,
   opencodeReply,
+  opencodeSkillsInvoked,
   opencodeTokenCosts,
   type OpenCodeModelConfig,
   type OpenCodeModels,

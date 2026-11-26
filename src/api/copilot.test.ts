@@ -1,11 +1,14 @@
 // The Copilot readers, against a `copilot --output-format json` result: JSON lines, one event each,
 // with the usage line the run script appended.
 import { describe, expect, test } from "bun:test";
-import { copilot, copilotReply, copilotTokenCosts } from "./copilot.ts";
+import { collectCopilotSkillsInvoked, copilot, copilotReply, copilotSkillsInvoked, copilotTokenCosts } from "./copilot.ts";
 import { declaredBy } from "./declarations.ts";
 import { OPENROUTER } from "./harnessOptions.ts";
 
 const RESULT = await Bun.file(`${import.meta.dir}/copilot.result.jsonl`).text();
+// Copilot 1.0.105 in src/gauntlet/nested-skills, on Claude Haiku 4.5, told to have a sub-agent
+// invoke the base skill. Its ephemeral events, e.g. the streamed deltas, are left out.
+const SKILLS_RESULT = await Bun.file(`${import.meta.dir}/copilot.skills.result.jsonl`).text();
 
 describe("copilotReply", () => {
   test("is the main agent's last message with text, not a sub-agent's", () => {
@@ -35,6 +38,37 @@ describe("copilotTokenCosts", () => {
   });
 });
 
+/** Copilot starting its skill tool on `skill`, as `copilot --output-format json` reports it. */
+const startsSkill = (skill: unknown, agentId?: string) =>
+  JSON.stringify({ type: "tool.execution_start", data: { toolCallId: "toolu_1", toolName: "skill", arguments: { skill } }, ...(agentId && { agentId }) });
+
+describe("copilotSkillsInvoked", () => {
+  test("counts a sub-agent's skill calls, which Copilot writes to the result too", () => {
+    expect(copilotSkillsInvoked(SKILLS_RESULT)).toEqual(["base"]);
+  });
+
+  test("is each skill the skill tool was started on, once, in the order first started", () => {
+    const raw = [startsSkill("a"), startsSkill("b", "sub-1"), startsSkill("a"), startsSkill(undefined)].join("\n");
+    expect(copilotSkillsInvoked(raw)).toEqual(["a", "b"]);
+  });
+
+  test("skips the skills Copilot only loaded, i.e. found", () => {
+    expect(copilotSkillsInvoked(JSON.stringify({ type: "session.skills_loaded", data: { skills: [{ name: "a" }] } }))).toEqual([]);
+  });
+});
+
+describe("collectCopilotSkillsInvoked", () => {
+  const ctx = (harnessResult: string) => ({ exec: async () => ({ stdout: "", stderr: "", exitCode: 0 }), readFile: async () => "", harnessResult, workdir: "/workspace" });
+
+  test("reads them from the result", async () => {
+    expect(await collectCopilotSkillsInvoked(ctx(SKILLS_RESULT))).toEqual(["base"]);
+  });
+
+  test("throws when the result has no events, so the run is skipped, not counted as invoking none", async () => {
+    await expect(collectCopilotSkillsInvoked(ctx("Error: not logged in"))).rejects.toThrow("no events");
+  });
+});
+
 const fragment = (harness: ReturnType<typeof copilot>, modelId: string, model: Record<string, string> = {}) =>
   harness.applyParameter(undefined, { dir: "parameters/harness", version: "1.0.105", modelId, model, resolved: undefined });
 
@@ -51,6 +85,7 @@ describe("copilot", () => {
     expect(harness.requiredEnv).toEqual(["COPILOT_GITHUB_TOKEN"]);
     expect(harness.collectReply?.(RESULT)).toBe("pong");
     expect(harness.collectTokenCosts?.(RESULT, { version: "1.0.105", modelId: "claude-haiku-5.5" })).toEqual(copilotTokenCosts(RESULT));
+    expect(harness.collectSkillsInvoked).toBe(collectCopilotSkillsInvoked);
   });
 
   test("installs and unpacks Copilot as node, writes the model, and a run script that appends the usage line to the result", () => {

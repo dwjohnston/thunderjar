@@ -14,15 +14,21 @@
 // Reading what `opencode run --format json` writes: one JSON event per line, {type, timestamp,
 // sessionID, part}. The reply is in "text" events and the tokens in "step_finish" events, one per
 // model call. Only the main session's events are written, so sub-agents' tokens aren't counted.
-// For a harness's `collectReply` and `collectTokenCosts`, so an OpenCode harness needn't parse it
-// itself, and `opencode`, a whole OpenCode harness.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type SettingValue, type TokenCosts } from "./declarations.ts";
+// For a harness's `collectReply`, `collectTokenCosts` and `collectSkillsInvoked`, so an OpenCode
+// harness needn't parse it itself, and `opencode`, a whole OpenCode harness.
+//
+// The skills come from the skill tool's calls, in "tool_use" events. A sub-agent's are in its own
+// session, which only `opencode export <session>` prints: the result has just its task call.
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type SettingValue, type SkillsInvokedCollector, type SkillsInvokedCtx, type TokenCosts } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
 import { COMMAND_PATHS, type CommandContext, type CommandProvider, envAssignments, type HelperOptions } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
 
 type Part = {
+  type?: unknown;
   text?: unknown;
+  tool?: unknown;
+  state?: { input?: { name?: unknown }; metadata?: { sessionId?: unknown } };
   cost?: unknown;
   tokens?: { input?: unknown; output?: unknown; reasoning?: unknown; cache?: { read?: unknown; write?: unknown } };
 };
@@ -66,6 +72,66 @@ export function opencodeTokenCosts(raw: string, modelId: string): TokenCosts {
   const cost = costUsd > 0 ? { costUsd, costBasis: "list" as const } : {};
   return { outcome: "collected", models: [{ model: modelId, inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, ...cost }] };
 }
+
+/** The skills a session's `parts` called the skill tool with, and the sessions of the sub-agents its task calls started. */
+function toolCalls(parts: (Part | undefined)[]): { skills: string[]; sessions: string[] } {
+  const skills: string[] = [], sessions: string[] = [];
+  for (const part of parts) {
+    if (part?.type !== "tool") continue;
+    const { input, metadata } = part.state ?? {};
+    if (part.tool === "skill" && typeof input?.name === "string") skills.push(input.name);
+    if (part.tool === "task" && typeof metadata?.sessionId === "string") sessions.push(metadata.sessionId);
+  }
+  return { skills, sessions };
+}
+
+const resultParts = (raw: string) => jsonLines<Event>(raw).flatMap((e) => (e.type === "tool_use" ? [e.part] : []));
+
+/**
+ * Each skill the main agent called the skill tool with, in `raw`, the result, once, in the order
+ * first called. Not its sub-agents': `collectOpenCodeSkillsInvoked` adds those.
+ */
+export function opencodeSkillsInvoked(raw: string): string[] {
+  return [...new Set(toolCalls(resultParts(raw)).skills)];
+}
+
+/** A session's tool parts, from `opencode export`. Throws if it can't be exported. */
+async function exportedParts(exec: SkillsInvokedCtx["exec"], session: string): Promise<Part[]> {
+  if (!/^[\w-]+$/.test(session)) throw new Error(`not an OpenCode session ID: ${session}`);
+  const { stdout, exitCode } = await exec(`opencode export ${session}`);
+  let exported: { messages?: { parts?: Part[] }[] };
+  try {
+    exported = JSON.parse(stdout) as typeof exported;
+  } catch {
+    exported = {};
+  }
+  if (exitCode !== 0 || !Array.isArray(exported?.messages)) throw new Error(`couldn't export OpenCode sub-agent session ${session}`);
+  return exported.messages.flatMap((message) => message?.parts ?? []);
+}
+
+/**
+ * The skills the agent and its sub-agents invoked, for a harness's `collectSkillsInvoked`: the
+ * main agent's from the result, each sub-agent's from its session, exported in the measurement
+ * container, and so on down. Each once, in the order found. Throws if the result has no events,
+ * e.g. OpenCode never started, or a sub-agent's session can't be exported, so the run is skipped
+ * rather than undercounted.
+ */
+export const collectOpenCodeSkillsInvoked: SkillsInvokedCollector = async ({ exec, harnessResult }) => {
+  if (jsonLines(harnessResult).length === 0) throw new Error("no events in OpenCode's JSON output");
+  const { skills, sessions } = toolCalls(resultParts(harnessResult));
+  const found = new Set(skills);
+  const seen = new Set<string>();
+  const queue = [...sessions];
+  while (queue.length > 0) {
+    const session = queue.shift() as string;
+    if (seen.has(session)) continue;
+    seen.add(session);
+    const calls = toolCalls(await exportedParts(exec, session));
+    for (const skill of calls.skills) found.add(skill);
+    queue.push(...calls.sessions);
+  }
+  return [...found];
+};
 
 /** The models `opencode` declares unless given others: OpenCode Zen's, provider first, as OpenCode takes them. */
 export const OPENCODE_MODELS: OpenCodeModels = {
@@ -153,7 +219,8 @@ export const OPENCODE_COMMAND = ({ modelId, model, paths, provider }: CommandCon
  * and its plugin package as `node`, where OpenCode looks for it: otherwise every run installs it
  * as it starts, 175 MB of ~/.config and ~/.npm in each postrun image. That's before the model is
  * written, so every model's image shares the layer. Then it writes the model ID and the run
- * script, and switches to `node`. Its reply and token costs are read from its JSON lines. It
+ * script, and switches to `node`. Its reply and token costs are read from its JSON lines, and the
+ * skills it invoked from them and its sub-agents' sessions. It
  * needs `OPENCODE_API_KEY`, an OpenCode Zen key.
  *
  * Model IDs take OpenCode's own form, provider first. A model's settings are OpenCode's own
@@ -189,6 +256,7 @@ export function opencode({ version, models = OPENCODE_MODELS, provider, command 
       ].join("\n"),
     collectReply: opencodeReply,
     collectTokenCosts: (raw, ctx) => opencodeTokenCosts(raw, ctx.modelId),
+    collectSkillsInvoked: collectOpenCodeSkillsInvoked,
     requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : ["OPENCODE_API_KEY"]),
   });
 }

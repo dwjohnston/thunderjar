@@ -12,13 +12,14 @@
  *
  */
 // Reading what `copilot --output-format json` writes: JSON lines, one event each, and the usage
-// line the run script appends. For a harness's `collectReply` and `collectTokenCosts`, so a
-// Copilot harness needn't parse it itself, and `copilot`, a whole Copilot harness.
+// line the run script appends. For a harness's `collectReply`, `collectTokenCosts` and
+// `collectSkillsInvoked`, so a Copilot harness needn't parse it itself, and `copilot`, a whole
+// Copilot harness.
 //
 // Copilot's JSON lines leave out its token events, so the run script also has it write its usage
 // statistics to a file, and appends them to the result file as one more line:
 // {"type":"thunderjar.usage","data":<the usage file>}.
-import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type TokenCosts } from "./declarations.ts";
+import { declareHarness, type HarnessDeclaration, type HarnessModels, type ModelTokenCosts, type SkillsInvokedCollector, type TokenCosts } from "./declarations.ts";
 import { writeModel, writeRunScript } from "./files.ts";
 import { COMMAND_PATHS, type CommandContext, type CommandPaths, type CommandProvider, envAssignments, envRef, type HelperOptions, type WireApi } from "./harnessOptions.ts";
 import { jsonLines, tokenCount } from "./jsonLines.ts";
@@ -34,6 +35,30 @@ export function copilotReply(raw: string): string {
   if (typeof reply !== "string") throw new Error("no assistant.message with content in Copilot's JSONL output");
   return reply;
 }
+
+/**
+ * Each skill Copilot's skill tool was started on, once, in the order first started: the main
+ * agent's and sub-agents', which Copilot writes to the result too, with an `agentId`. Not the
+ * skills it only loaded, i.e. found, which `session.skills_loaded` lists.
+ */
+export function copilotSkillsInvoked(raw: string): string[] {
+  const skills = new Set<string>();
+  for (const { type, data } of jsonLines<Event>(raw)) {
+    const skill = (data?.arguments as { skill?: unknown } | undefined)?.skill;
+    if (type === "tool.execution_start" && data?.toolName === "skill" && typeof skill === "string") skills.add(skill);
+  }
+  return [...skills];
+}
+
+/**
+ * The skills the agent invoked, read from its result, for a harness's `collectSkillsInvoked`.
+ * Throws if the result has no events, e.g. Copilot never started, so the run is skipped rather
+ * than counted as invoking no skill.
+ */
+export const collectCopilotSkillsInvoked: SkillsInvokedCollector = async ({ harnessResult }) => {
+  if (jsonLines(harnessResult).length === 0) throw new Error("no events in Copilot's JSONL output");
+  return copilotSkillsInvoked(harnessResult);
+};
 
 /** The type of the line the run script appends to the result, holding Copilot's usage statistics. */
 export const COPILOT_USAGE_TYPE = "thunderjar.usage";
@@ -118,7 +143,8 @@ const withUsage = (command: string, { usage, result }: CommandPaths) =>
  * as root, and runs it once as `node`, so it unpacks itself into `~/.cache/copilot` in the image:
  * otherwise every run does, 500 MB in each postrun image. That's before the model is written, so
  * every model's image shares the layer. Then it writes the model ID and the run script, and
- * switches to `node`. Its reply and token costs are read from its JSON lines and the usage line.
+ * switches to `node`. Its reply, token costs and the skills it invoked are read from its JSON
+ * lines and the usage line.
  * It needs `COPILOT_GITHUB_TOKEN`, a GitHub token with Copilot access.
  *
  * ```ts
@@ -143,6 +169,7 @@ export function copilot({ version, models = COPILOT_MODELS, provider, command = 
       ].join("\n"),
     collectReply: copilotReply,
     collectTokenCosts: copilotTokenCosts,
+    collectSkillsInvoked: collectCopilotSkillsInvoked,
     requiredEnv: requiredEnv ?? (provider ? [provider.apiKeyEnv] : ["COPILOT_GITHUB_TOKEN"]),
   });
 }
