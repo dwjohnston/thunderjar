@@ -51,7 +51,7 @@ Never build a service here or in the command: add it to `Services` and build it 
 - `hooks/`, `timed/`
   - The runtime's hooks, once each per execution; phase timings into the state.
 
-Lower levels never print. They write to the run state, and the displayer draws it with `renderRun` (src/cli/commands/run/renderRun.ts), or prints it as JSON with `--json`.
+Lower levels never print. They write to the run state, and the displayer draws it with `renderRun` (src/services/Displayer/renderRun/renderRun.ts), or prints it as JSON with `--json`.
 
 ## Where it differs from the architecture plan
 
