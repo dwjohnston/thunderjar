@@ -8,7 +8,11 @@ Items are marked **Decided**, **Suggested** (not yet agreed) or **Open**.
 flowchart TD
   env["process.env"] --> main
   tjconfig["Thunderjar config"] --> main
-  main["main<br/>(composition root)"] -->|"builds"| deps["Dependencies<br/>env, clock, random, fs, logger,<br/>hostDocker, runtimeDocker"]
+  main["main<br/>(composition root)"] -->|"builds"| deps["Dependencies<br/>env, clock, random, fs, logger,<br/>hostDocker, runtimeDocker,<br/>interrupts"]
+  main -->|"SIGINT"| intr["Interrupts<br/>stopRuns, abandonAll"]
+  intr -.-> sched
+  intr -.-> perm
+  intr -.-> uq
   main --> cli["Commander<br/>thunderjar run &lt;name&gt; [options]"]
 
   cli --> L1["Level 1: runCommand(name, options, deps)"]
@@ -130,15 +134,17 @@ runManifest(manifest: Manifest, deps: Dependencies)
 
 ```ts
 async function runManifest(manifest: Manifest, deps: Dependencies) {
-  const uploads = createUploadQueue(deps.runtimeDocker);
+  const { stopRuns, abandonAll } = deps.interrupts;
+  const uploads = createUploadQueue(deps.runtimeDocker, { abandon: abandonAll });
   const scheduler = createScheduler({
     clock: deps.clock,
+    stop: stopRuns, // no new runs after the first Ctrl+C
     isBackedUp: () => uploads.backlog() > deps.env.uploadBacklogCap,
     settings: { cacheWarmupMs: 5_000, backpressurePollMs: 1_000 },
   });
 
   const records = await scheduler.run(manifest, (run) => runPermutation(run, deps, uploads));
-  await uploads.drain();
+  await uploads.drain(); // resolves early on the second Ctrl+C
   return records;
 }
 ```
@@ -250,6 +256,80 @@ interface UploadQueue {
 }
 ```
 
+## Ctrl+C
+
+**Suggested**
+
+- **First Ctrl+C**: stop running.
+  - Running containers are stopped and removed.
+    - Their runs are abandoned: no commit, no image, no measurement.
+  - Runs not yet started never start.
+  - Committed runs carry on:
+    - their measurements finish and are saved;
+    - their images in the upload queue are still uploaded.
+- **Second Ctrl+C**: abandon everything.
+  - Measurement containers are killed. Their results aren't saved.
+  - Pushes are cancelled. Images not yet pushed stay on the runtime machine.
+  - Thunderjar exits with code 130.
+
+| Where the run is | 1st Ctrl+C | 2nd Ctrl+C |
+| --- | --- | --- |
+| Waiting for a slot | Never starts | |
+| Agent running in its container | Container removed, run abandoned | |
+| Committed, measuring | Finishes, result saved | Killed, result lost |
+| Committed, in the upload queue | Uploaded | Push cancelled |
+
+```mermaid
+stateDiagram-v2
+  [*] --> Running
+  Running --> Stopping: 1st Ctrl+C, remove containers
+  Running --> Done: all runs finish
+  Stopping --> Done: measurements and uploads finish
+  Stopping --> Abandoned: 2nd Ctrl+C, kill measurements and pushes
+  Done --> [*]
+  Abandoned --> [*]
+```
+
+### Interrupts service
+
+Signals are non-deterministic, so they're injected.
+
+- `main` is the only place that listens for SIGINT.
+- Each Ctrl+C aborts the next signal.
+  - e.g.
+    ```ts
+    interface Interrupts {
+      stopRuns: AbortSignal;   // aborts on the first Ctrl+C
+      abandonAll: AbortSignal; // aborts on the second
+    }
+    ```
+- Who listens to which signal:
+  - Scheduler: `stopRuns`
+    - Starts no new run.
+  - `runPermutation`: `stopRuns` until the commit, then `abandonAll`
+    - Before the commit, it removes the container and returns an `abandoned` record. It still never throws.
+    - After the commit, only `abandonAll` stops the measurement.
+  - Upload queue: `abandonAll`
+    - Cancels pushes, and `drain()` resolves.
+- `FakeInterrupts` has a `press()` method for tests.
+  - e.g.
+    ```ts
+    const interrupts = new FakeInterrupts();
+    const docker = new FakeDockerService({ onAgentStart: () => interrupts.press() });
+
+    await runManifest(manifest, { ...deps, runtimeDocker: docker, interrupts });
+
+    expect(deps.state.get().runs[runId].status).toBe("abandoned");
+    expect(docker.commits()).toEqual([]);
+    ```
+
+The displayer shows the state's phase, e.g. "Stopping: 2 uploads left. Ctrl+C again to abandon them."
+
+**Open**:
+
+- Are abandoned runs recorded in the run data store, like crashes and timeouts?
+- Should runs that never started be `abandoned`, or a status of their own?
+
 ## Application state and displayer
 
 **Decided**: lower levels only write to the run state, and an injected displayer shows it, either polling it each second (interactive) or printing JSON on exit (`--json`).
@@ -323,4 +403,5 @@ Required services, all built once in `main` and passed in as `Dependencies`:
 - `state`: the run state store
 - `stdout`, `stderr`: output streams
 - `displayer`: shows the state, interactive or JSON
+- `interrupts`: abort signals for the first and second Ctrl+C
 - `runStore`: the run data store, a Postgres database holding run records and measurements, reached from the runtime machine
