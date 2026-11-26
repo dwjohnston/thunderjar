@@ -281,7 +281,8 @@ describe("0201 minimal existing setup", () => {
   const GENERATED = "_generated/parameterNames.d.ts";
   // What a minimal setup leaves out: every starter harness but those in STARTERS, the second prompt
   // set, and init's test cases, which use real harnesses. 0201 adds fake-harness-alpha, a custom-*
-  // harness for each helper (through OpenRouter), and one test case of its own, `example`.
+  // harness for each helper (through OpenRouter), one test case of its own, `example`, and a
+  // skillInvoked measurement of what fake-harness-alpha's collectSkillsInvoked reads.
   const leftOut = (path: string) =>
     (path.startsWith(`${P}/harnessModels/`) && !STARTERS.some((starter) => path.startsWith(starter))) ||
     path.startsWith(`${P}/promptSets/house-style/`) ||
@@ -293,7 +294,7 @@ describe("0201 minimal existing setup", () => {
     const scaffolded = filesIn(copy.dir).filter((path) => !leftOut(path));
     const existing = filesIn(scenario("0201"));
 
-    expect(existing).toEqual([...scaffolded, `${ALPHA}index.ts`, ...CUSTOM, "test-cases/example.ts", GENERATED].toSorted());
+    expect(existing).toEqual([...scaffolded, `${ALPHA}index.ts`, ...CUSTOM, `${P}/tasks/is-prime/measurements/skillsInvoked.ts`, "test-cases/example.ts", GENERATED].toSorted());
     for (const path of scaffolded) {
       expect(await read(scenario("0201"), path), path).toBe(await read(copy.dir, path));
     }

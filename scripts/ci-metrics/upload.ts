@@ -21,9 +21,11 @@
 // CI_JOB_STARTED_AT. With GITHUB_TOKEN, it also records how long each of the job's earlier steps
 // took, e.g. lint and typecheck, from GitHub's API. Without CI_METRICS_DB_URL, e.g. on a fork's pull request, it does nothing.
 // It only inserts: the tables are made beforehand, by hand, with create-tables.ts.
+// On a pull request, a failure is also a comment on it, kept up to date and deleted once an upload works.
 
 import { file, SQL } from "bun";
 import { parseJunit } from "./junit";
+import { syncWarningComment } from "./comment";
 import { recordRun } from "./store";
 import { type CiStep, stepsOfJob } from "./steps";
 
@@ -60,9 +62,27 @@ async function jobSteps(): Promise<CiStep[]> {
 }
 const steps = await jobSteps();
 
+/** Posts, updates or deletes the pull request's warning. A failure here is only logged: it's a bonus too. */
+async function warnOnPullRequest(problem?: string): Promise<void> {
+  const prNumber = event.pull_request?.number;
+  if (!prNumber || !env.GITHUB_TOKEN || !env.GITHUB_REPOSITORY) return;
+  try {
+    await syncWarningComment({
+      apiUrl: env.GITHUB_API_URL ?? "https://api.github.com",
+      repository: env.GITHUB_REPOSITORY,
+      prNumber,
+      job: env.GITHUB_JOB ?? "unknown",
+      token: env.GITHUB_TOKEN,
+      problem,
+    });
+  } catch (error) {
+    process.stderr.write(`Couldn't update the pull request's warning comment: ${error instanceof Error ? error.message : String(error)}\n`);
+  }
+}
+
 const sql = new SQL(env.CI_METRICS_DB_URL);
 try {
-  await recordRun(sql, {
+  const { stepsError } = await recordRun(sql, {
     runId: Number(env.GITHUB_RUN_ID),
     runAttempt: Number(env.GITHUB_RUN_ATTEMPT ?? 1),
     job: env.GITHUB_JOB ?? "unknown",
@@ -76,7 +96,16 @@ try {
     startedAt: Number.isNaN(startedAt.getTime()) ? new Date() : startedAt,
     finishedAt: new Date(),
   }, report, undefined, steps);
-  process.stdout.write(`Recorded ${report.tests.length} tests, ${report.totalSeconds.toFixed(1)}s of test time, ${steps.length} steps.\n`);
+  const recordedSteps = stepsError ? 0 : steps.length;
+  process.stdout.write(`Recorded ${report.tests.length} tests, ${report.totalSeconds.toFixed(1)}s of test time, ${recordedSteps} steps.\n`);
+  // A GitHub annotation: shown on the run's summary, not only in this step's log.
+  if (stepsError) process.stdout.write(`::warning title=CI metrics::Recorded the run and its tests, but not its steps: ${stepsError}\n`);
+  await warnOnPullRequest(stepsError && `Recorded the run and its tests, but not its steps: ${stepsError}`);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stdout.write(`::error title=CI metrics::Recorded nothing: ${message}\n`);
+  await warnOnPullRequest(`Recorded nothing: ${message}`);
+  throw error;
 } finally {
   await sql.close();
 }

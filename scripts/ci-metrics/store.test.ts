@@ -91,6 +91,26 @@ describe.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("recordRun", () => {
     ]);
   });
 
+  test("records the run and its tests when its steps can't be, e.g. ci_step_metrics doesn't exist, and says why", async () => {
+    await using db = await freshSchema();
+    await createTables(db.sql, db.schema);
+    await db.sql`drop table ${db.sql(db.schema)}.ci_step_metrics`;
+
+    const result = await recordRun(
+      db.sql,
+      run,
+      { totalSeconds: 1, tests: [{ file: "a.test.ts", name: "fast", durationMs: 2, status: "passed" }] },
+      db.schema,
+      [{ name: "Run bun run lint", conclusion: "success", seconds: 12 }],
+    );
+
+    expect(result.stepsError).toContain("ci_step_metrics");
+    const runs = await db.sql`select run_id from ${db.sql(db.schema)}.ci_runs`;
+    expect([...runs]).toEqual([{ run_id: "123" }]);
+    const tests = await db.sql`select name from ${db.sql(db.schema)}.ci_test_metrics`;
+    expect([...tests]).toEqual([{ name: "fast" }]);
+  });
+
   test("records a run as a role that may only insert, like CI's ci_metrics_writer", async () => {
     await using db = await freshSchema();
     await createTables(db.sql, db.schema);
@@ -105,7 +125,7 @@ describe.skipIf(!Bun.env.THUNDERJAR_POSTGRES_URL)("recordRun", () => {
     try {
       await expect(
         recordRun(asWriter, run, { totalSeconds: 1, tests: [{ file: "a.test.ts", name: "fast", durationMs: 2, status: "passed" }] }, db.schema),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual({});
     } finally {
       await asWriter.close();
       await db.sql.unsafe(`drop owned by ${writer}`);

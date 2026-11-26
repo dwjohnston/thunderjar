@@ -25,7 +25,10 @@ All three tables are in the `metrics` schema.
   - One row per finished step per job run, e.g. lint or typecheck: name, position, conclusion, time.
   - Read from GitHub's API with the job's `GITHUB_TOKEN`, which needs `actions: read`. If that fails, the upload records the run without its steps.
 
-The upload step runs last in each job, even when tests fail, and never fails the job. Without the `CI_METRICS_DB_URL` secret, e.g. on a fork's PR, it skips.
+The upload step runs last in each job, even when tests fail, and never fails the job. When it can't record a run, or only its steps, it says so loudly instead:
+
+- A `::error::` or `::warning::` annotation on the run's summary.
+- A comment on the pull request, `Warning: the CI metrics aren't uploading`, one per job. It's updated by later uploads, and deleted once one works. It says the pull request needn't act. Needs `pull-requests: write`. Without the `CI_METRICS_DB_URL` secret, e.g. on a fork's PR, it skips.
 
 ## Set up
 
@@ -79,5 +82,7 @@ The dashboard is provisioned from `grafana/provisioning/dashboards/ci-timings.js
   - Creates the tables. Run by hand.
 - `upload.ts`
   - The CI step.
+- `comment.ts`
+  - The pull request's warning comment, when an upload fails.
 - `grafana-start.ts` and `login.ts`
   - Check the dashboard login, then start Grafana.
