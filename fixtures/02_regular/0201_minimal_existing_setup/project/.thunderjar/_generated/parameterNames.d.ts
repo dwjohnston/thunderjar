@@ -7,16 +7,25 @@ type TaskName = "is-prime";
 type InitialPromptNames = {
   "is-prime": "plain";
 };
-type HarnessName = "claude-code-2.1.311" | "custom-claude" | "fake-harness-alpha";
+type HarnessName = "claude-code-2.1.311" | "codex-0.166.0" | "custom-claude" | "custom-codex" | "fake-harness-alpha";
 type HarnessModelName =
   | "claude-code-2.1.311/claude-fable-5-2"
   | "claude-code-2.1.311/claude-opus-5-5"
   | "claude-code-2.1.311/claude-sonnet-5-5"
   | "claude-code-2.1.311/claude-haiku-5-5"
   | "claude-code-2.1.311/claude-haiku-4-5-20251001"
+  | "codex-0.166.0/gpt-6.1-sol/low"
+  | "codex-0.166.0/gpt-6.1-sol/medium"
+  | "codex-0.166.0/gpt-6.1-sol/high"
+  | "codex-0.166.0/gpt-5.5/low"
+  | "codex-0.166.0/gpt-5.5/medium"
+  | "codex-0.166.0/gpt-5.5/high"
   | "custom-claude/anthropic/claude-opus-5.5/low"
   | "custom-claude/anthropic/claude-opus-5.5/high"
   | "custom-claude/anthropic/claude-sonnet-5.5"
+  | "custom-codex/openai/gpt-6.1-sol/low"
+  | "custom-codex/openai/gpt-6.1-sol/high"
+  | "custom-codex/openai/gpt-5.5"
   | "fake-harness-alpha/fake-model-small-001"
   | "fake-harness-alpha/fake-model-effort-001/low"
   | "fake-harness-alpha/fake-model-effort-001/high"
