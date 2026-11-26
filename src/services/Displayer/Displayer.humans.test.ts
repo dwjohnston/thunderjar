@@ -4,7 +4,7 @@ import { FakeIo } from "../Io/FakeIo";
 import { setImageStatus, setRunStatus, setUploadBacklog, updateRun, type ApplicationStateService } from "../ApplicationState/ApplicationState";
 import { FakeApplicationState } from "../ApplicationState/FakeApplicationState";
 import { createDisplayerService } from "./Displayer";
-import { renderRun } from "../../cli/commands/run/renderRun";
+import { renderRun } from "./renderRun/renderRun.ts";
 import { plan } from "../../runNext/plan/plan";
 import { config } from "../../runNext/testing/fixtures";
 import type { Manifest } from "../../runNext/types";

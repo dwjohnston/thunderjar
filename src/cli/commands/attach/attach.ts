@@ -20,8 +20,8 @@ import { displayPath } from "../../dataDir.ts";
 import { imagePrefixOption } from "../../imagePrefix.ts";
 import { jsonOption } from "../../json.ts";
 import { print, printError as error, printJson } from "../../output.ts";
-import { detachedMessage, followToEnd, reportRunnerFailure } from "../run/followRunner.ts";
-import { type RunDisplay, runDisplay, showSecrets, showTimings, showUnclean, showUnsearched } from "../run/runDisplay.ts";
+import { detachedMessage, followToEnd, reportRunnerFailure } from "../run/followRunner.deprecated.ts";
+import { type RunDisplay, runDisplay, showSecrets, showTimings, showUnclean, showUnsearched } from "../run/runDisplay.deprecated.ts";
 
 /**
  * Follows execution `executionId`, running on the runtime of the nearest `.thunderjar/` folder in
