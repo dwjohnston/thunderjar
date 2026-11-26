@@ -89,26 +89,26 @@ export function providerId(baseUrl: string): string {
  * A helper's `provider` and `models`: with no provider, the agent's own, and `models` defaults to
  * its own IDs. With one, `models` is required, as the defaults wouldn't be the provider's IDs.
  */
-export type ProviderAndModels =
+export type ProviderAndModels<M = HarnessModels> =
   | {
       /** The agent's own provider. */
       provider?: undefined;
       /** The models it runs, as `declareHarness`'s `models`. By default, the helper's own list. */
-      models?: HarnessModels;
+      models?: M;
     }
   | {
       /** Another provider, e.g. `OPENROUTER`. */
       provider: Provider;
       /** The models it runs, by the provider's IDs: required, as the defaults are the agent's own provider's. */
-      models: HarnessModels;
+      models: M;
     };
 
 /** The options every helper takes, with its `provider` and `models`. */
-export type HelperOptions = {
+export type HelperOptions<M = HarnessModels, S = Record<string, SettingValue>> = {
   /** The version of the agent to install, e.g. `"0.166.0"`. */
   version: string;
   /** The command its run script runs, from the model, version, paths and provider. By default, the helper's own. */
-  command?: (ctx: CommandContext) => string;
+  command?: (ctx: CommandContext<S>) => string;
   /** The variables it needs, as `declareHarness`'s `requiredEnv`. By default, the provider's key, or the agent's own. */
   requiredEnv?: RequiredEnv[];
-} & ProviderAndModels;
+} & ProviderAndModels<M>;

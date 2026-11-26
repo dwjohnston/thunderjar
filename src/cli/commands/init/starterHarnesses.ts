@@ -11,39 +11,6 @@ export const STARTER_FOLDERS = {
   opencode: "opencode-1.19.5",
 } as const;
 
-/**
- * A harness's `applyParameter`, as source: installs the agent with `install` as root, writes the
- * model ID and a run script that runs `command`, then switches to the image's non-root `node` user.
- */
-const applyParameter = (install: string, command: string) => `  applyParameter: (_config, ctx) =>
-    [
-      \`RUN ${install}\`,
-      "RUN mkdir -p /thunderjar && chown -R node:node /workspace /thunderjar",
-      writeModel(ctx.modelId),
-      // The prompt and model are read from their files, so quotes and newlines reach the agent intact.
-      writeRunScript(\`${command}\`),
-      "USER node",
-    ].join("\\n"),`;
-
-/** Comments on `collectReply` and `collectTokenCosts`, for an agent the library has no reader for yet. */
-const stubReaders = `  // Thunderjar has no reader for this agent's output yet. To measure its reply, and its token
-  // costs, read them from what the run script wrote to /thunderjar/result.json:
-  // collectReply: (raw) => …,
-  // collectTokenCosts: (raw, ctx) => ({ outcome: "collected", models: [{ model: ctx.modelId, … }] }),`;
-
-/**
- * `models`, as source: each model a test case may name, after the folder, e.g.
- * `"<folder>/<model ID>"`, and where to find more.
- */
-const models = (where: string, ids: string[], indent = "  ") =>
-  `${indent}// The models a test case may name, after the folder. Models come and go: check
-${indent}// ${where} for the current IDs.
-${indent}models: {
-${ids.map((id) => `${indent}  ${JSON.stringify(id)}: [],`).join("\n")}
-${indent}},`;
-
-const IMPORTS = `import { declareHarness, writeModel, writeRunScript } from "thunderjar";`;
-
 const claudeCode = `import { claudeCode } from "thunderjar";
 
 // Claude Code. Its fragment installs Claude Code as root, writes the model ID and the run script,
@@ -74,16 +41,12 @@ const codex = `import { codex } from "thunderjar";
 export default codex({ version: "0.166.0" });
 `;
 
-const opencode = `${IMPORTS}
+const opencode = `import { opencode } from "thunderjar";
 
-// OpenCode, on OpenCode Zen. OPENCODE_API_KEY is an OpenCode Zen key.
-export default declareHarness({
-  version: "1.19.5",
-${models("https://opencode.ai/zen/v1/models", ["opencode/claude-haiku-5-5", "opencode/gpt-5.5"])}
-${applyParameter("npm install -g opencode-ai@${ctx.version}", 'opencode run --model "$(cat /thunderjar/model.txt)" --format json "$(cat /thunderjar/prompt.txt)" > /thunderjar/result.json')}
-${stubReaders}
-  requiredEnv: ["OPENCODE_API_KEY"],
-});
+// OpenCode, on OpenCode Zen. OPENCODE_API_KEY is an OpenCode Zen key. A test case may name any
+// model it declares, provider first, after the folder, e.g. "opencode-1.19.5/opencode/claude-haiku-5-5".
+// To name others, pass \`models\`. To run it on OpenRouter, pass \`provider: OPENROUTER\` too.
+export default opencode({ version: "1.19.5" });
 `;
 
 /** Each starter harness's `index.ts`, keyed by its folder under `harnessModels/`. */

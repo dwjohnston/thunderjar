@@ -7,7 +7,7 @@ type TaskName = "is-prime";
 type InitialPromptNames = {
   "is-prime": "plain";
 };
-type HarnessName = "claude-code-2.1.311" | "codex-0.166.0" | "copilot-1.0.105" | "custom-claude" | "custom-codex" | "custom-copilot" | "fake-harness-alpha";
+type HarnessName = "claude-code-2.1.311" | "codex-0.166.0" | "copilot-1.0.105" | "custom-claude" | "custom-codex" | "custom-copilot" | "custom-opencode" | "fake-harness-alpha" | "opencode-1.19.5";
 type HarnessModelName =
   | "claude-code-2.1.311/claude-fable-5-2"
   | "claude-code-2.1.311/claude-opus-5-5"
@@ -31,6 +31,9 @@ type HarnessModelName =
   | "custom-copilot/openai/gpt-5.5/responses"
   | "custom-copilot/openai/gpt-5.5/chat"
   | "custom-copilot/anthropic/claude-haiku-5.5"
+  | "custom-opencode/openrouter/openai/gpt-5.5/low"
+  | "custom-opencode/openrouter/openai/gpt-5.5/high"
+  | "custom-opencode/openrouter/anthropic/claude-haiku-5.5"
   | "fake-harness-alpha/fake-model-small-001"
   | "fake-harness-alpha/fake-model-effort-001/low"
   | "fake-harness-alpha/fake-model-effort-001/high"
@@ -41,7 +44,9 @@ type HarnessModelName =
   | "fake-harness-alpha/fake-model-tuned-001/high/0/fast"
   | "fake-harness-alpha/fake-model-tuned-001/high/0/careful"
   | "fake-harness-alpha/fake-model-tuned-001/high/1/fast"
-  | "fake-harness-alpha/fake-model-tuned-001/high/1/careful";
+  | "fake-harness-alpha/fake-model-tuned-001/high/1/careful"
+  | "opencode-1.19.5/opencode/claude-haiku-5-5"
+  | "opencode-1.19.5/opencode/gpt-5.5";
 
 interface ThunderjarParameterNames {
   baseImage: BaseImageName;
