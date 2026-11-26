@@ -15,7 +15,7 @@
 
 // Remeasuring a past container run: its task's measurements, as they are now, taken in a new
 // measurement container from its postrun image, as `run` took them, without running its agent again.
-import type { Reply } from "../api/declarations.ts";
+import type { Reply, SkillsInvokedCollector } from "../api/declarations.ts";
 import type { Measurement } from "../config/measurements.ts";
 import { type DockerRuntime, localRuntime } from "../docker/docker.ts";
 import type { ContainerRunRecord, RecordedMeasure } from "../store/runDataStore.ts";
@@ -41,15 +41,17 @@ function recordedOf({ harnessResult, reply, turns }: ContainerRunRecord): Record
  * postrun image, named after its container run's container, under `imagePrefix`. Its secret
  * variables are passed in by name, from Thunderjar's own environment, as for `run`. Throws a
  * DockerContainerError if a container can't be started, e.g. its postrun image is gone.
+ * `collectSkillsInvoked` is its harness's, as it is on disk now, if it has one.
  */
 export async function remeasureContainerRun(
   record: ContainerRunRecord,
   measurements: Measurement[],
   imagePrefix?: string,
   runtime: DockerRuntime = remeasureRuntime(),
+  collectSkillsInvoked?: SkillsInvokedCollector,
 ): Promise<Record<string, RecordedMeasure>> {
   const container = containerName(record.executionId, record.permutation, record.iteration, imagePrefix);
-  const recorded = recordedOf(record);
+  const recorded = { ...recordedOf(record), collectSkillsInvoked };
   const secretEnv = [...new Set([...(record.harnessEnv ?? []), ...(record.secretEnv ?? [])])];
   let opened = 0;
   return measureContainerRun(measurements, async (usesContainer) =>

@@ -10,6 +10,8 @@ export type MeasureOptions = {
   files?: Record<string, string>;
   /** The agent's reply, for instruments that read it, e.g. `replyMatches`. Default: "". */
   reply?: string;
+  /** The skills the agent invoked, for `skillInvoked`. Default: none. */
+  skillsInvoked?: string[];
 };
 
 export type Measured<Name extends string> = {
@@ -21,7 +23,7 @@ export type Measured<Name extends string> = {
 };
 
 /** A MeasurementContext over `dir`: commands run in it with Bun's `$`, files are read from it. */
-function contextOver(dir: string, text: string): MeasurementContext {
+function contextOver(dir: string, text: string, skills: string[]): MeasurementContext {
   const reply: Reply = { outcome: "collected", text };
   const at = (path: string) => (path.startsWith("/") ? path : `${dir}/${path}`);
   return {
@@ -29,6 +31,7 @@ function contextOver(dir: string, text: string): MeasurementContext {
     harnessResult: "",
     reply,
     replies: [reply],
+    skillsInvoked: async () => ({ outcome: "collected", skills }),
     async exec(command) {
       const result = await $`sh -c ${command}`.cwd(dir).quiet().nothrow();
       return { stdout: result.stdout.toString(), stderr: result.stderr.toString(), exitCode: result.exitCode };
@@ -63,7 +66,7 @@ export async function measure<Name extends string>(measurement: DeclaredMeasurem
       if (!(await source.exists())) throw new Error(`fixture ${fixture} for ${path} doesn't exist`);
       await Bun.write(`${dir}/${path}`, source);
     }
-    const result = await instrument.evaluate(measurement.config as Record<string, string>, contextOver(dir, options.reply ?? ""));
+    const result = await instrument.evaluate(measurement.config as Record<string, string>, contextOver(dir, options.reply ?? "", options.skillsInvoked ?? []));
     const metrics: Record<string, number | boolean | undefined> = {};
     for (const [name, metric] of Object.entries(measurement.metrics as Record<string, Metric>)) {
       if (result.outcome !== "measured") {

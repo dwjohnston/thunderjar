@@ -1,7 +1,7 @@
 // The Claude Code readers, against a real `claude -p --output-format json` result, from Claude Code
 // 2.1.316 run on DeepSeek's Anthropic-compatible API, whose model its price table doesn't know.
 import { describe, expect, test } from "bun:test";
-import { claudeCode, claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
+import { claudeCode, claudeCodeReply, claudeCodeSkillsInvoked, claudeCodeTokenCosts, collectClaudeCodeSkillsInvoked } from "./claudeCode.ts";
 import { declaredBy } from "./declarations.ts";
 
 const REAL = await Bun.file(`${import.meta.dir}/claudeCode.deepseek.result.json`).text();
@@ -76,6 +76,56 @@ describe("claudeCodeTokenCosts", () => {
   });
 });
 
+/** A transcript line of an assistant message that calls `tools`, each `[name, input]`. */
+const calling = (...tools: [string, Record<string, unknown>][]) =>
+  JSON.stringify({
+    type: "assistant",
+    message: { role: "assistant", content: [{ type: "text", text: "On it." }, ...tools.map(([name, input], i) => ({ type: "tool_use", id: `toolu_${i}`, name, input }))] },
+  });
+
+describe("claudeCodeSkillsInvoked", () => {
+  test("is each skill the Skill tool was called with, once, in the order first called", () => {
+    const transcripts = [
+      JSON.stringify({ type: "user", message: { role: "user", content: "Make a test case" } }),
+      calling(["Skill", { skill: "tj-test-case" }], ["Read", { file_path: "/workspace/a.ts" }]),
+      calling(["Skill", { skill: "tj-general" }]),
+      calling(["Skill", { skill: "tj-test-case", args: "again" }]),
+    ].join("\n");
+    expect(claudeCodeSkillsInvoked(transcripts)).toEqual(["tj-test-case", "tj-general"]);
+  });
+
+  test("skips lines that aren't JSON, e.g. one cut off, and tool calls without a skill", () => {
+    expect(claudeCodeSkillsInvoked(`{"type":"assist\n${calling(["Skill", {}])}\n\n${calling(["Skill", { skill: "a" }])}`)).toEqual(["a"]);
+    expect(claudeCodeSkillsInvoked("")).toEqual([]);
+  });
+});
+
+describe("collectClaudeCodeSkillsInvoked", () => {
+  const ctx = (exec: (command: string) => { stdout: string; exitCode: number }) => ({
+    exec: async (command: string) => ({ stderr: "", ...exec(command) }),
+    readFile: async () => "",
+    harnessResult: "",
+    workdir: "/workspace",
+  });
+
+  test("reads every transcript under Claude Code's projects folder, sub-agents' too", async () => {
+    let ran = "";
+    const skills = await collectClaudeCodeSkillsInvoked(
+      ctx((command) => {
+        ran = command;
+        return { stdout: `${calling(["Skill", { skill: "a" }])}\n`, exitCode: 0 };
+      }),
+    );
+    expect(skills).toEqual(["a"]);
+    expect(ran).toContain('"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"');
+    expect(ran).toContain("-name '*.jsonl'");
+  });
+
+  test("throws when there are no transcripts, so the run is skipped, not counted as invoking none", async () => {
+    await expect(collectClaudeCodeSkillsInvoked(ctx(() => ({ stdout: "", exitCode: 1 })))).rejects.toThrow("no Claude Code transcripts");
+  });
+});
+
 describe("claudeCode", () => {
   const harness = claudeCode({ version: "2.1.311" });
 
@@ -103,6 +153,10 @@ claude -p "$(cat /thunderjar/prompt.txt)" --model "$(cat /thunderjar/model.txt)"
 THUNDERJAR_EOF
 USER node`,
     );
+  });
+
+  test("reads the skills invoked from its transcripts", () => {
+    expect(claudeCode({ version: "2.1.311" }).collectSkillsInvoked).toBe(collectClaudeCodeSkillsInvoked);
   });
 
   test("reads its reply and token costs with the library's readers", () => {

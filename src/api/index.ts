@@ -1,5 +1,5 @@
 // The `thunderjar` library: what a project's `.thunderjar/` files import.
-export { CLAUDE_CODE_COMMAND, CLAUDE_CODE_MODELS, claudeCode, claudeCodeReply, claudeCodeTokenCosts } from "./claudeCode.ts";
+export { CLAUDE_CODE_COMMAND, CLAUDE_CODE_MODELS, claudeCode, claudeCodeReply, claudeCodeSkillsInvoked, claudeCodeTokenCosts, collectClaudeCodeSkillsInvoked } from "./claudeCode.ts";
 export { codeStateGitCheckout, resolveGitCheckout, type CodeStateGitCheckoutConfig } from "./codeStateGitCheckout.ts";
 export { MODEL_PATH, PROMPT_PATH, RESULT_PATH, RUN_SCRIPT_PATH, writeFile, writeModel, writePrompt, writeRunScript } from "./files.ts";
 export {
@@ -45,6 +45,9 @@ export type {
   RunDataStoreDeclaration,
   Score,
   ScoreFor,
+  SkillsInvoked,
+  SkillsInvokedCollector,
+  SkillsInvokedCtx,
   SqliteStore,
   Stat,
   StatFor,
