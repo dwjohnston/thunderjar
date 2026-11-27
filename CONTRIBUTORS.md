@@ -91,10 +91,4 @@ bun run fly:stop                                 # stop it now, if idle; `stop -
 - The app `thunderjar-runtime-dwj` (`FLY_APP`) holds one machine. CI uses its own app.
 - See [`.thunderjar/AGENTS.md`](./.thunderjar/AGENTS.md#the-fly-client) for how it works.
 
-With `THUNDERJAR_ON_RUNTIME=1` as well, the whole execution runs on the Fly machine, in a runner (`runtime.runner`):
-
-- `run` builds and pushes the images, starts the runner, and follows it. Ctrl-C leaves the execution running.
-- `thunderjar attach <execution ID>` follows it again, and `attach <execution ID> --stop` stops it.
-- It also needs `GHCR_USER` and `GHCR_TOKEN`: the runner logs in to ghcr with them.
-
-In CI, comment `/slow-tests` on a PR to run `compare-models` this way, or `/slow-tests <test case>` for another one. The outcome comes back as a PR comment. See [`.github/workflows/slow-tests.yml`](./.github/workflows/slow-tests.yml) for the secrets it needs.
+In CI, comment `/slow-tests` on a PR to run `compare-models` on the Fly machine, or `/slow-tests <test case>` for another one. The outcome comes back as a PR comment. See [`.github/workflows/slow-tests.yml`](./.github/workflows/slow-tests.yml) for the secrets it needs.

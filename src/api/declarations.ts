@@ -739,8 +739,7 @@ export type TestCaseDeclaration<T extends TaskNames = TaskNames> = {
    * them the same way, e.g. for a `shell` measurement that queries a database. The value is never
    * on a command line, in a log, in a run's record or in its postrun image's config: only the name
    * is recorded. If the agent writes a value into a file, the postrun image's files are searched
-   * for it before it's pushed, and `run` warns. `run` stops if one is unset. A runner on
-   * a runtime is sent them without listing them in `runner.env`.
+   * for it before it's pushed, and `run` warns. `run` stops if one is unset.
    */
   secretEnv?: string[];
 };
@@ -832,50 +831,19 @@ export type RuntimeConfig = {
    * it, or size it for the execution. It's given `THUNDERJAR_CONCURRENCY` (how many containers will
    * run at once), `THUNDERJAR_CONTAINERS` (how many runs the execution has: every iteration of
    * every permutation) and `THUNDERJAR_EXECUTION_ID`. If it exits non-zero, nothing is run.
-   * `run --dry-run` doesn't run it. Not with a `runner`.
+   * `run --dry-run` doesn't run it.
    */
   beforeExecution?: string[];
   /**
    * A command `run` runs once the execution ends, whether it succeeded or failed, e.g. to stop
    * the runtime. It's given the same variables as `beforeExecution`. Not run if
-   * `beforeExecution` failed. Not with a `runner`.
+   * `beforeExecution` failed.
    */
   afterExecution?: string[];
   /** @deprecated Renamed `beforeExecution`: it runs once per execution, not per run. */
   beforeRun?: string[];
   /** @deprecated Renamed `afterExecution`: it runs once per execution, not per run. */
   afterRun?: string[];
-  /**
-   * Runs each whole execution on the runtime, in a runner: a container there, from an image
-   * holding Thunderjar and this project's `.thunderjar/` folder, with the runtime's Docker socket.
-   * The runner runs the containers, measures them, pushes their postrun images and writes the run
-   * data store. `run` only has the runtime build and push the images, starts the runner, and follows it; it can
-   * be interrupted without stopping the execution, and `thunderjar attach` follows it again.
-   * `{}` is enough to turn it on. Without it, `run` runs each Docker command on the runtime itself.
-   * The runtime must already be running: `beforeExecution` and `afterExecution` can't be given with it.
-   */
-  runner?: RunnerConfig;
-};
-
-/** How a runtime's runner is started: see `RuntimeConfig.runner`. */
-export type RunnerConfig = {
-  /**
-   * More environment variables the runner is given, by name, beside those the harnesses need and
-   * the run data store's URL. Their values are copied from `run`'s environment as the execution
-   * is submitted, and kept in the runner's memory only.
-   */
-  env?: string[];
-  /**
-   * The variables holding a user name and a password or token for the image store's registry.
-   * The runner logs in with them before it pulls or pushes. Without it, the runner uses no login.
-   */
-  registryLogin?: { usernameEnv: string; passwordEnv: string };
-  /**
-   * More `docker run` options for the runner's container, e.g. another path for the Docker
-   * socket: `["-v", "/run/user/1000/docker.sock:/var/run/docker.sock"]`. By default it mounts
-   * `/var/run/docker.sock`.
-   */
-  runOptions?: string[];
 };
 
 /**

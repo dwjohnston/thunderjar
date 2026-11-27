@@ -58,20 +58,13 @@ export class FakeDocker implements Docker {
   imagesIn = notFaked("imagesIn");
   removeLocalImage = notFaked("removeLocalImage");
   checkLogin = notFaked("checkLogin");
-  login = notFaked("login");
   push = notFaked("push");
   pull = notFaked("pull");
   inRegistry = notFaked("inRegistry");
   run = notFaked("run");
   commit = notFaked("commit");
   removeContainersNamed = notFaked("removeContainersNamed");
-  startDetached = notFaked("startDetached");
-  stop = notFaked("stop");
-  containerState = notFaked("containerState");
   readFile = notFaked("readFile");
-  writeFile = notFaked("writeFile");
-  followLogs = notFaked("followLogs");
-  stderrTail = notFaked("stderrTail");
   openShellSession = notFaked("openShellSession");
   diskUsage = notFaked("diskUsage");
 }

@@ -2,8 +2,6 @@
 
 What `thunderjar run` runs. See `project-md/human-safe-space/refactor-work/architecture-plan.md`.
 
-Runner mode (`runtime.runner` in the config) is the one exception: it's still on the old path, in `src/cli/commands/run/runOnRunner.deprecated.ts` and `src/execution/runExecution.ts`.
-
 ## How services reach it
 
 ```mermaid
