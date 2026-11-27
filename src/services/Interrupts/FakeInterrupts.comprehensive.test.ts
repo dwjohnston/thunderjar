@@ -25,6 +25,15 @@ async function count(to: number, { windDown }: Pick<Interrupts, "windDown">, onT
 }
 
 describe(FakeInterrupts, () => {
+  test("never pressed, nothing is interrupted", async () => {
+    const interrupts = new FakeInterrupts();
+
+    const counted = await count(10, interrupts, () => {});
+
+    expect(counted).toBe(10);
+    expect([interrupts.windDown.aborted, interrupts.forceQuit.aborted]).toEqual([false, false]);
+  });
+
   test("press() winds down first", async () => {
     const interrupts = new FakeInterrupts();
 
