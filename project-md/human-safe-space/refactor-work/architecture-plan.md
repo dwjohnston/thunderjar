@@ -9,7 +9,7 @@ flowchart TD
   env["process.env"] --> main
   tjconfig["Thunderjar config"] --> main
   main["main<br/>(composition root)"] -->|"builds"| deps["Dependencies<br/>env, clock, random, fs, logger,<br/>hostDocker, runtimeDocker,<br/>interrupts"]
-  main -->|"SIGINT"| intr["Interrupts<br/>stopRuns, abandonAll"]
+  main -->|"SIGINT"| intr["Interrupts<br/>stopRuns, forceQuit"]
   intr -.-> sched
   intr -.-> perm
   intr -.-> uq
@@ -134,8 +134,8 @@ runManifest(manifest: Manifest, deps: Dependencies)
 
 ```ts
 async function runManifest(manifest: Manifest, deps: Dependencies) {
-  const { stopRuns, abandonAll } = deps.interrupts;
-  const uploads = createUploadQueue(deps.runtimeDocker, { abandon: abandonAll });
+  const { stopRuns, forceQuit } = deps.interrupts;
+  const uploads = createUploadQueue(deps.runtimeDocker, { forceQuit });
   const scheduler = createScheduler({
     clock: deps.clock,
     stop: stopRuns, // no new runs after the first Ctrl+C
@@ -267,7 +267,7 @@ interface UploadQueue {
   - Committed runs carry on:
     - their measurements finish and are saved;
     - their images in the upload queue are still uploaded.
-- **Second Ctrl+C**: abandon everything.
+- **Second Ctrl+C**: force quit.
   - Measurement containers are killed. Their results aren't saved.
   - Pushes are cancelled. Images not yet pushed stay on the runtime machine.
   - Thunderjar exits with code 130.
@@ -300,16 +300,16 @@ Signals are non-deterministic, so they're injected.
     ```ts
     interface Interrupts {
       stopRuns: AbortSignal;   // aborts on the first Ctrl+C
-      abandonAll: AbortSignal; // aborts on the second
+      forceQuit: AbortSignal; // aborts on the second
     }
     ```
 - Who listens to which signal:
   - Scheduler: `stopRuns`
     - Starts no new run.
-  - `runPermutation`: `stopRuns` until the commit, then `abandonAll`
+  - `runPermutation`: `stopRuns` until the commit, then `forceQuit`
     - Before the commit, it removes the container and returns an `abandoned` record. It still never throws.
-    - After the commit, only `abandonAll` stops the measurement.
-  - Upload queue: `abandonAll`
+    - After the commit, only `forceQuit` stops the measurement.
+  - Upload queue: `forceQuit`
     - Cancels pushes, and `drain()` resolves.
 - `FakeInterrupts` has a `press()` method for tests.
   - e.g.
@@ -323,7 +323,7 @@ Signals are non-deterministic, so they're injected.
     expect(docker.commits()).toEqual([]);
     ```
 
-The displayer shows the state's phase, e.g. "Stopping: 2 uploads left. Ctrl+C again to abandon them."
+The displayer shows the state's phase, e.g. "Stopping: 2 uploads left. Ctrl+C again to force quit."
 
 **Decided**: abandoned runs are recorded in the run data store, like crashes and timeouts.
 
