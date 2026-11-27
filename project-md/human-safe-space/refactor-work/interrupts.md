@@ -2,7 +2,7 @@
 
 Nov 27, 2026 · @David Johnston
 
-A first class `Interupts``Service`  is provided.
+A first class `InterruptsService`  is provided.
 
 This service is responsible for receiving SIGINTs and using these to emit Abort signals. \
 \
