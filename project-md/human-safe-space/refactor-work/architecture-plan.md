@@ -9,7 +9,7 @@ flowchart TD
   env["process.env"] --> main
   tjconfig["Thunderjar config"] --> main
   main["main<br/>(composition root)"] -->|"builds"| deps["Dependencies<br/>env, clock, random, fs, logger,<br/>hostDocker, runtimeDocker,<br/>interrupts"]
-  main -->|"SIGINT"| intr["Interrupts<br/>stopRuns, forceQuit"]
+  main -->|"SIGINT"| intr["Interrupts<br/>windDown, forceQuit"]
   intr -.-> sched
   intr -.-> perm
   intr -.-> uq
@@ -134,11 +134,11 @@ runManifest(manifest: Manifest, deps: Dependencies)
 
 ```ts
 async function runManifest(manifest: Manifest, deps: Dependencies) {
-  const { stopRuns, forceQuit } = deps.interrupts;
+  const { windDown, forceQuit } = deps.interrupts;
   const uploads = createUploadQueue(deps.runtimeDocker, { forceQuit });
   const scheduler = createScheduler({
     clock: deps.clock,
-    stop: stopRuns, // no new runs after the first Ctrl+C
+    windDown, // no new runs after the first Ctrl+C
     isBackedUp: () => uploads.backlog() > deps.env.uploadBacklogCap,
     settings: { cacheWarmupMs: 5_000, backpressurePollMs: 1_000 },
   });
@@ -294,19 +294,25 @@ stateDiagram-v2
 
 Signals are non-deterministic, so they're injected.
 
+**Suggested**: it isn't specific to `run`. It turns Ctrl+C into two general signals, and any long-running command reacts to them in its own way.
+
+- `windDown`: finish what has started, start nothing new.
+- `forceQuit`: stop everything now.
+- e.g. remeasuring: `windDown` lets the measurements in progress finish and save, and `forceQuit` kills them.
+
 - `main` is the only place that listens for SIGINT.
 - Each Ctrl+C aborts the next signal.
   - e.g.
     ```ts
     interface Interrupts {
-      stopRuns: AbortSignal;   // aborts on the first Ctrl+C
+      windDown: AbortSignal;   // aborts on the first Ctrl+C
       forceQuit: AbortSignal; // aborts on the second
     }
     ```
 - Who listens to which signal:
-  - Scheduler: `stopRuns`
+  - Scheduler: `windDown`
     - Starts no new run.
-  - `runPermutation`: `stopRuns` until the commit, then `forceQuit`
+  - `runPermutation`: `windDown` until the commit, then `forceQuit`
     - Before the commit, it removes the container and returns an `abandoned` record. It still never throws.
     - After the commit, only `forceQuit` stops the measurement.
   - Upload queue: `forceQuit`
