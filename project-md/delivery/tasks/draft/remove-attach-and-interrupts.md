@@ -100,7 +100,8 @@ The behaviour is the spec's table:
 
 - **SIGTERM fires `forceQuit` at once**, aborting `windDown` too, and exits 143.
   - What sends it (`docker stop`, a cancelled CI job) follows up with SIGKILL, so there's no time to wind down.
-- The second Ctrl+C exits 130.
+- Any interrupted `run` exits 130, or 143 for SIGTERM.
+  - That includes a wind-down that finishes on its own, so scripts can tell that it was interrupted.
 - Abandoned runs are recorded in the run data store, like crashes and timeouts. That includes runs that never started.
 
 ### The service: `src/services/Interrupts/`
@@ -140,6 +141,7 @@ The behaviour is the spec's table:
     - `removeContainersNamed` for the execution, as `interrupt()` does today, so measurement containers die.
     - Stop waiting on `running`, and run `afterExecution` once, via `runHook`, which already dedupes.
     - Return 130, or 143 for SIGTERM. Keep which signal it was so the code can be picked.
+  - When a wind-down finishes on its own, return 130, not the usual 0 or 1.
   - In `--dry-run` there's nothing to wind down: exit 130 on the first press.
 - **`runTestCase` and `ensureImages`**
   - Not in the spec.
@@ -200,9 +202,3 @@ The behaviour is the spec's table:
 ### Changeset
 
 `patch`: Ctrl+C now winds `run` down, and a second Ctrl+C force-quits.
-
-## Open: ask before deciding otherwise
-
-- **The exit code after a wind-down that finishes.**
-  - The spec says "normal exit". Default: the usual code, which is 1 because abandoned runs didn't complete.
-  - The alternative is 130, so scripts can tell that it was interrupted.
