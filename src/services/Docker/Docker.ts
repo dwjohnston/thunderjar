@@ -65,8 +65,6 @@ export type RunContainerOptions = {
   startMarker?: string;
 };
 
-/** Whether a container is running, and the code it exited with if not. */
-
 export type ExecResult = { stdout: string; stderr: string; exitCode: number };
 
 /** A shell session in a running container. */
