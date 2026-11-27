@@ -14,8 +14,9 @@ import { ConfigError } from "../../config/loader.ts";
 import { DockerLoginError } from "../../docker/docker.ts";
 import { ImageStoreLoginError } from "../../execution/imageStore.ts";
 import { RunDataStoreError } from "../../services/RunDataStore/RunDataStore.ts";
-import { config, fakes } from "../testing/fixtures.ts";
-import { preflight, splitOptions } from "./runCommand.ts";
+import { scenario } from "../../testing/scenario.ts";
+import { config, type Fakes, fakes } from "../testing/fixtures.ts";
+import { preflight, runCommand, splitOptions } from "./runCommand.ts";
 
 describe(splitOptions, () => {
   test("overrides go to the config, the mode to level 2, and the output format to the displayer", () => {
@@ -72,5 +73,99 @@ describe(preflight, () => {
     deps.runStore.failure = new RunDataStoreError("/data/runs.sqlite", "not a database");
 
     expect(preflight(config(), deps)).rejects.toThrow(RunDataStoreError);
+  });
+});
+
+/** Fakes for running scenario 0201's `example` test case: one run, no image store. */
+function inScenario(): Fakes {
+  const deps = fakes();
+  deps.env.cwd = scenario("0201");
+  return deps;
+}
+
+/** An agent that runs until its container is removed. */
+const hangs = () => new Promise<never>(() => {});
+
+describe(runCommand, () => {
+  test("listens for Ctrl+C only while it runs", async () => {
+    const deps = inScenario();
+    let listening: boolean | undefined;
+    deps.runtimeDocker.onRun("-1-1", () => {
+      listening = deps.interrupts.listening;
+      return {};
+    });
+
+    expect((await runCommand("example", {}, deps)).exitCode).toBe(0);
+
+    expect(listening).toBe(true);
+    expect(deps.interrupts.listening).toBe(false);
+  });
+
+  test("the 1st Ctrl+C while its agent runs abandons the run, and exits 130", async () => {
+    const deps = inScenario();
+    deps.runtimeDocker.onRun("-1-1", () => {
+      deps.interrupts.press();
+      return hangs();
+    });
+
+    const { exitCode, records } = await runCommand("example", {}, deps);
+
+    expect(exitCode).toBe(130);
+    expect(records?.map(({ outcome }) => outcome)).toEqual(["abandoned"]);
+    expect(deps.state.get().run).toMatchObject({ stopping: "windDown", error: "Interrupted (SIGINT)", execution: { status: "failed" } });
+  });
+
+  test("a wind down that finishes on its own still exits 130", async () => {
+    const deps = inScenario();
+    const open = deps.runtimeDocker.openShellSession.bind(deps.runtimeDocker);
+    deps.runtimeDocker.openShellSession = async (...args: Parameters<typeof deps.runtimeDocker.openShellSession>) => {
+      deps.interrupts.press();
+      return open(...args);
+    };
+
+    const { exitCode, records } = await runCommand("example", {}, deps);
+
+    expect(exitCode).toBe(130);
+    expect(records?.map(({ outcome, error }) => [outcome, error])).toEqual([["completed", undefined]]);
+  });
+
+  test("the 2nd Ctrl+C removes the execution's containers, and exits 130 without waiting", async () => {
+    const deps = inScenario();
+    deps.runtimeDocker.onRun("-1-1", () => {
+      deps.interrupts.press();
+      deps.interrupts.press();
+      return hangs();
+    });
+
+    const { exitCode } = await runCommand("example", {}, deps);
+
+    expect(exitCode).toBe(130);
+    expect(deps.runtimeDocker.calls.some((call) => call.startsWith("removeContainersNamed thunderjar-run-"))).toBe(true);
+    expect(deps.state.get().run.stopping).toBe("forceQuit");
+    expect(deps.io.stderr.text()).toContain("Interrupted (SIGINT): stopping execution");
+  });
+
+  test("SIGTERM force quits at once, and exits 143", async () => {
+    const deps = inScenario();
+    deps.runtimeDocker.onRun("-1-1", () => {
+      deps.interrupts.terminate();
+      return hangs();
+    });
+
+    const { exitCode } = await runCommand("example", {}, deps);
+
+    expect(exitCode).toBe(143);
+    expect(deps.state.get().run).toMatchObject({ stopping: "forceQuit", error: "Interrupted (SIGTERM)" });
+    expect(deps.interrupts.listening).toBe(false);
+  });
+
+  test("in --dry-run, the 1st Ctrl+C exits 130", async () => {
+    const deps = inScenario();
+    deps.displayer.start = () => deps.interrupts.press();
+
+    const { exitCode } = await runCommand("example", { dryRun: true }, deps);
+
+    expect(exitCode).toBe(130);
+    expect(deps.runtimeDocker.calls).toEqual([]);
   });
 });

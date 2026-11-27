@@ -194,16 +194,26 @@ export async function checkLogin(host: string): Promise<void> {
  * Tags the local image `image` as `reference`, in a registry repository, and pushes it there.
  * Throws a DockerPushError with Docker's reason.
  */
-export async function pushImage(image: string, reference: string, runtime: DockerRuntime = localRuntime()): Promise<void> {
+export async function pushImage(image: string, reference: string, runtime: DockerRuntime = localRuntime(), signal?: AbortSignal): Promise<void> {
   log.info({ image, reference, runtime: runtime.command }, "pushing image");
   const startedAt = Date.now();
-  for (const args of [["tag", image, reference], ["push", "--quiet", reference]]) {
-    const result = await $`${runtime.command} ${args}`.quiet().nothrow();
-    if (result.exitCode !== 0) {
-      log.error({ args, exitCode: result.exitCode, ms: Date.now() - startedAt, stderr: result.stderr.toString() }, "pushing image failed");
-      throw new DockerPushError(reasonOf(result.stderr) || `${named(runtime, args[0])} exited ${result.exitCode}`, reference);
-    }
+  const failed = (args: string[], exitCode: number | null, stderr: string): never => {
+    log.error({ args, exitCode, ms: Date.now() - startedAt, stderr }, "pushing image failed");
+    throw new DockerPushError(reasonOf(stderr) || `${named(runtime, args[0])} exited ${exitCode}`, reference);
+  };
+  const tag = ["tag", image, reference];
+  const tagged = await $`${runtime.command} ${tag}`.quiet().nothrow();
+  if (tagged.exitCode !== 0) failed(tag, tagged.exitCode, tagged.stderr.toString());
+  // Spawned, not $, so `signal` can kill the client: the daemon cancels a push whose client goes.
+  if (signal?.aborted) throw new DockerPushError("cancelled", reference);
+  const push = ["push", "--quiet", reference];
+  const child = Bun.spawn([...runtime.command, ...push], { env: { ...Bun.env }, stdin: "ignore", stdout: "ignore", stderr: "pipe", signal });
+  const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  if (signal?.aborted) {
+    log.warn({ reference, ms: Date.now() - startedAt }, "push cancelled");
+    throw new DockerPushError("cancelled", reference);
   }
+  if (exitCode !== 0) failed(push, exitCode, stderr);
   log.info({ reference, ms: Date.now() - startedAt }, "pushed image");
 }
 

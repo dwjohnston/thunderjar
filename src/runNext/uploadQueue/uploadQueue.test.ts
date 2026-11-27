@@ -12,16 +12,17 @@
 import { describe, expect, test } from "bun:test";
 import { patchRun, updateRun } from "../../services/ApplicationState/ApplicationState.ts";
 import { fakes } from "../testing/fixtures.ts";
-import { createUploadQueue } from "./uploadQueue.ts";
+import { CANCELLED, createUploadQueue } from "./uploadQueue.ts";
 
 /** A `push` a test finishes by hand. */
 function manualPush() {
   const pushing = new Map<string, PromiseWithResolvers<void>>();
   return {
     docker: {
-      push: (_image: string, reference: string) => {
+      push: (_image: string, reference: string, signal?: AbortSignal) => {
         const push = Promise.withResolvers<void>();
         pushing.set(reference, push);
+        signal?.addEventListener("abort", () => push.reject(new Error("killed")));
         return push.promise;
       },
     },
@@ -107,5 +108,41 @@ describe(createUploadQueue, () => {
 
     expect(queue.failures()).toEqual([{ image: image(1), reason: "denied" }]);
     expect(deps.state.get().run.runs["run-1"]?.error).toBe("Its postrun image wasn't pushed to store:postrun-1: denied");
+  });
+
+  test("a force quit cancels the pushes in progress, starts none of those waiting, and resolves drain", async () => {
+    const deps = fakes();
+    const forceQuit = new AbortController();
+    const { docker, pushing } = manualPush();
+    const queue = createUploadQueue(docker, deps, 1, { forceQuit: forceQuit.signal });
+    queue.enqueue(image(1));
+    queue.enqueue(image(2));
+    let drained = false;
+    void queue.drain().then(() => (drained = true));
+
+    forceQuit.abort();
+    await deps.clock.advance(0);
+
+    expect(drained).toBe(true);
+    expect(pushing()).toEqual(["store:postrun-1"]);
+    expect(queue.failures().map(({ image, reason }) => [image.runId, reason])).toEqual([
+      ["run-2", CANCELLED],
+      ["run-1", CANCELLED],
+    ]);
+    expect(deps.state.get().run.runs["run-1"]?.error).toBe(`Its postrun image wasn't pushed to store:postrun-1: ${CANCELLED}`);
+    expect(queue.backlog()).toBe(0);
+  });
+
+  test("after a force quit, an image enqueued is a cancelled failure at once", () => {
+    const deps = fakes();
+    const forceQuit = new AbortController();
+    forceQuit.abort();
+    const { docker, pushing } = manualPush();
+    const queue = createUploadQueue(docker, deps, 1, { forceQuit: forceQuit.signal });
+
+    queue.enqueue(image(1));
+
+    expect(pushing()).toEqual([]);
+    expect(queue.failures()).toEqual([{ image: image(1), reason: CANCELLED }]);
   });
 });

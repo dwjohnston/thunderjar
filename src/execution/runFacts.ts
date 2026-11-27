@@ -5,10 +5,12 @@ import type { Execution } from "../store/runDataStore.ts";
 
 /**
  * How a container run's agent ended, without how long it took: `done`, `exited 1`, `timed out
- * after 5s`, with `, no result file` if it finished but left none, or `failed to start` if its
- * container never did.
+ * after 5s`, with `, no result file` if it finished but left none, `failed to start` if its
+ * container never did, or `abandoned` if Ctrl+C stopped it.
  */
 export function agentEnd(execution: Execution, harnessResult: string | null): string {
+  if (execution.abandoned === "beforeStart") return "abandoned before it started";
+  if (execution.abandoned === "running") return "abandoned";
   if (execution.failedToStart !== undefined) return "failed to start";
   if (execution.timedOut) return `timed out after ${execution.timeoutSeconds}s`;
   const ended = execution.exitCode === 0 ? "done" : `exited ${execution.exitCode}`;

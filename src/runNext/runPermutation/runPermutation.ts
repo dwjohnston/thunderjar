@@ -81,6 +81,47 @@ function containerRunRecord(
   };
 }
 
+/** Why a run's measures weren't saved, when the force quit stopped its measuring. */
+export const MEASURING_CANCELLED = "Measuring it was cancelled: Thunderjar was force quit";
+
+/** The permutation `run` is of, as planned and as resolved. Throws if the manifest or config has none. */
+function permutationOf(run: PlannedRun, { manifest, config }: RunContext): { planned: PlannedPermutation; resolved: ResolvedPermutation } {
+  const planned = manifest.permutations.find((permutation) => permutation.number === run.permutation);
+  const resolved = config.permutations.find((permutation) => permutation.number === run.permutation);
+  if (planned === undefined || resolved === undefined) throw new Error(`Run ${run.runId} has no permutation ${run.permutation}.`);
+  return { planned, resolved };
+}
+
+/**
+ * Records `run` as abandoned by the 1st Ctrl+C, in the run data store and the state: `beforeStart`,
+ * it never started, or `running`, its container was removed before it was committed. `startedAt` is
+ * when its container was started, or now. Never throws: why it couldn't be recorded is its `error`.
+ */
+export async function abandonRun(
+  run: PlannedRun,
+  context: RunContext,
+  deps: Pick<Dependencies, "runStore" | "clock" | "state">,
+  when: NonNullable<Execution["abandoned"]>,
+  startedAt = deps.clock.now(),
+): Promise<RunRecord> {
+  const finishedAt = deps.clock.now();
+  const at = { executionId: context.manifest.executionId, runId: run.runId, when };
+  let record: ContainerRunRecord | undefined;
+  let error: string | undefined;
+  try {
+    const { planned, resolved } = permutationOf(run, context);
+    const execution: Execution = { startedAt, finishedAt, exitCode: null, timedOut: false, timeoutSeconds: planned.timeoutSeconds, abandoned: when };
+    record = containerRunRecord(run, context, planned, resolved, execution, { harnessResult: null, stderr: null });
+    await deps.runStore.recordContainerRun(record);
+    log.warn(at, "container run abandoned");
+  } catch (caught) {
+    log.error({ ...at, err: caught }, "couldn't record an abandoned container run");
+    error = message(caught);
+  }
+  deps.state.update(updateRun((s) => patchRun(s, run.runId, { status: "abandoned", finishedAt, ...(record !== undefined && { record }), ...(error !== undefined && { error }) })));
+  return { runId: run.runId, outcome: "abandoned", startedAt, finishedAt, ...(record !== undefined && { containerRun: record }), ...(error !== undefined && { error }) };
+}
+
 /**
  * Must never throw: a crash or timeout comes back as a `RunRecord` with that outcome.
  *
@@ -89,14 +130,22 @@ function containerRunRecord(
  *   recorded and uploaded, but not measured.
  * - If Docker or the run data store fails under it, it's `crashed`, with why in `error`.
  * - If only measuring fails, it stays `completed`, with why in `error`.
+ *
+ * Ctrl+C:
+ *
+ * - `windDown` before its agent has stopped removes its container: it's `abandoned`, with no commit,
+ *   no image and no measures. After, `windDown` changes nothing.
+ * - `forceQuit` while it's measuring removes its measurement containers. Its measures aren't saved:
+ *   it stays `completed`, with why in `error`.
  */
 export async function runPermutation(
   run: PlannedRun,
   context: RunContext,
-  deps: Pick<Dependencies, "runtimeDocker" | "runStore" | "env" | "clock" | "state">,
+  deps: Pick<Dependencies, "runtimeDocker" | "runStore" | "env" | "clock" | "state" | "interrupts">,
   uploads: UploadQueue,
 ): Promise<RunRecord> {
   const { runtimeDocker: docker, runStore, clock, state, env } = deps;
+  const { windDown, forceQuit } = deps.interrupts;
   const { manifest, config } = context;
   const set = (progress: Partial<RunProgress>) => state.update(updateRun((s) => patchRun(s, run.runId, progress)));
   const at = { executionId: manifest.executionId, runId: run.runId, permutation: run.permutation, iteration: run.iteration };
@@ -112,10 +161,21 @@ export async function runPermutation(
     ...(record !== undefined && { containerRun: record }),
     ...(error !== undefined && { error }),
   });
+  // Once its agent has stopped, `windDown` leaves it to be committed. Until then, it removes its container, which ends `docker.run`.
+  let pastAgent = false;
+  const onWindDown = () => {
+    if (!pastAgent) void docker.removeContainer(run.container).catch(() => {});
+  };
+  // Only while it's measuring, `forceQuit` removes its measurement containers.
+  let measuring = false;
+  const onForceQuit = () => {
+    if (measuring) void docker.removeContainersNamed(`${run.container}-measure-`).catch(() => {});
+  };
+  if (windDown.aborted) return abandonRun(run, context, deps, "beforeStart");
+  windDown.addEventListener("abort", onWindDown);
+  forceQuit.addEventListener("abort", onForceQuit);
   try {
-    const planned = manifest.permutations.find((permutation) => permutation.number === run.permutation);
-    const resolved = config.permutations.find((permutation) => permutation.number === run.permutation);
-    if (planned === undefined || resolved === undefined) throw new Error(`Run ${run.runId} has no permutation ${run.permutation}.`);
+    const { planned, resolved } = permutationOf(run, context);
     const prerunImage = runsFrom(planned);
     set({ status: "running", startedAt: spawnedAt });
     log.info({ ...at, permutationHash: planned.hash, prerunImage }, "container run starting");
@@ -129,6 +189,8 @@ export async function runPermutation(
         startMarker: START_MARKER,
       }),
     );
+    if (windDown.aborted) return await abandonRun(run, context, deps, "running", spawnedAt);
+    pastAgent = true;
     if (stop.outcome === "notStarted") {
       const execution: Execution = {
         startedAt: stop.spawnedAt,
@@ -178,7 +240,12 @@ export async function runPermutation(
     if (run.storedPostrunImage !== undefined) uploads.enqueue({ runId: run.runId, image: run.postrunImage, reference: run.storedPostrunImage });
     if (outcome !== "completed" || config.measurements.length === 0) return result();
 
+    if (forceQuit.aborted) {
+      set({ error: MEASURING_CANCELLED });
+      return result(MEASURING_CANCELLED);
+    }
     set({ measuring: "measuring" });
+    measuring = true;
     try {
       let opened = 0;
       const reply = record.reply as Reply;
@@ -189,14 +256,22 @@ export async function runPermutation(
       const open = async (usesContainer: boolean) =>
         usesContainer ? openMeasurementContext(run.postrunImage, `${run.container}-measure-${++opened}`, recorded, docker, secretEnv) : recordedContext(recorded);
       const measures = await timed(deps, "measure", () => measureContainerRun(config.measurements, open, () => new Date(clock.now())));
+      measuring = false;
+      // Its measurement containers were killed under it: what it measured since isn't to be trusted.
+      if (forceQuit.aborted) {
+        log.warn(at, "measuring cancelled by the force quit");
+        set({ measuring: undefined, error: MEASURING_CANCELLED });
+        return result(MEASURING_CANCELLED);
+      }
       record = { ...record, result: measures };
       await runStore.recordContainerRun(record);
       log.info({ ...at, containers: opened, result: measures }, "measured");
       set({ measuring: "measured", record });
       return result();
     } catch (error) {
+      measuring = false;
       log.error({ ...at, err: error }, "measuring failed");
-      const why = `Measuring it failed: ${message(error)}`;
+      const why = forceQuit.aborted ? MEASURING_CANCELLED : `Measuring it failed: ${message(error)}`;
       set({ measuring: undefined, error: why });
       return result(why);
     }
@@ -206,6 +281,8 @@ export async function runPermutation(
     set({ status: "crashed", finishedAt: clock.now(), error: message(error) });
     return result(message(error));
   } finally {
+    windDown.removeEventListener("abort", onWindDown);
+    forceQuit.removeEventListener("abort", onForceQuit);
     await docker.removeContainer(run.container).catch(() => {});
   }
 }

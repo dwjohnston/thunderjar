@@ -70,6 +70,13 @@ export type Execution = {
    */
   failedToStart?: string;
   /**
+   * Whether Ctrl+C abandoned it: `beforeStart`, its container never started, or `running`, its
+   * container was removed before it was committed. Either way there's no postrun image, its exit
+   * code is null, and `startedAt` and `finishedAt` are when Thunderjar started it, or would have,
+   * and when it gave up on it. Absent from runs that weren't, and from runs recorded before runs could be.
+   */
+  abandoned?: "beforeStart" | "running";
+  /**
    * How each turn ran, of an initial prompt of several turns: those that ran, which stop at the
    * first that exited non-zero. Absent for a single prompt.
    */

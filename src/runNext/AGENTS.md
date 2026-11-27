@@ -23,7 +23,7 @@ flowchart TD
 | `runSettings` | `settings` |
 | `runDataStore` | `runStore` |
 | `runDataStoreLocation` | `runStoreLocation` |
-| `io.stdout`, `io.stderr`, `io.onStop` | `stdout`, `stderr`, `onStop` |
+| `io.stdout`, `io.stderr` | `stdout`, `stderr` |
 | everything else | same name |
 
 Never build a service here or in the command: add it to `Services` and build it in `src/cli/index.ts`.
@@ -31,7 +31,7 @@ Never build a service here or in the command: add it to `Services` and build it 
 ## Where each thing lives
 
 - `runCommand/`
-  - Level 1. Splits the options, resolves the test case, checks what must hold before anything is built, drives the displayer, and handles Ctrl-C.
+  - Level 1. Splits the options, resolves the test case, checks what must hold before anything is built, drives the displayer, and listens for Ctrl+C while it runs.
 - `runTestCase/`
   - Level 2. Plans, then builds images, then runs, stopping early for `--dry-run` and `--build-only`. Runs the runtime's hooks around it.
 - `plan/`
@@ -48,6 +48,22 @@ Never build a service here or in the command: add it to `Services` and build it 
   - Pushes post-run images with its own concurrency.
 - `hooks/`, `timed/`
   - The runtime's hooks, once each per execution; phase timings into the state.
+
+## Ctrl+C
+
+`deps.interrupts` (src/services/Interrupts/) gives two abort signals. Each level reacts to them itself.
+
+| Where the run is | 1st Ctrl+C (`windDown`) | 2nd Ctrl+C, or SIGTERM (`forceQuit`) |
+| --- | --- | --- |
+| Image not yet built or pulled | `skipped` | |
+| Waiting for a slot | Never starts: `abandoned` | |
+| Agent running, not yet committed | Container removed: `abandoned`, no commit, no image | |
+| Committed, measuring | Finishes, result saved | Measurement containers killed, result lost |
+| Committed, in the upload queue | Uploaded | Push cancelled |
+
+- `runCommand` calls `interrupts.listen()`, and its stop function in `finally`.
+  - Not `main`: a SIGINT listener replaces the default exit, so every other command would stop exiting on Ctrl+C.
+- An interrupted `run` exits 130, or 143 for SIGTERM, even if its wind down finished on its own.
 
 Lower levels never print. They write to the run state, and the displayer draws it with `renderRun` (src/services/Displayer/renderRun/renderRun.ts), or prints it as JSON with `--json`.
 

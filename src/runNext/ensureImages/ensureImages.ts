@@ -27,15 +27,18 @@ const log = moduleLogger("runNext");
  * build concurrency at once. Once one fails, no more start, and its error is thrown: a
  * DockerUnavailableError, DockerBuildError, DockerPushError, DockerPullError or ConfigError.
  *
+ * After `windDown`, no build or pull starts: those images are `skipped`. Those in progress finish.
+ *
  * `config` is here for what building needs and the manifest leaves out: each Dockerfile, and the
  * project's files.
  */
 export async function ensureImages(
   manifest: Manifest,
   config: TestCaseConfig,
-  deps: Pick<Dependencies, "hostDocker" | "runtimeDocker" | "state" | "clock">,
+  deps: Pick<Dependencies, "hostDocker" | "runtimeDocker" | "state" | "clock" | "interrupts">,
 ): Promise<void> {
   const { hostDocker, runtimeDocker, state } = deps;
+  const { windDown } = deps.interrupts;
   // One per image: permutations that build the same image share it.
   const images = [...new Map(manifest.permutations.map((permutation) => [permutation.imageHash, permutation])).values()];
   if (images.length === 0) return;
@@ -50,6 +53,7 @@ export async function ensureImages(
   const dockerfileOf = new Map(config.permutations.map(({ permutation }) => [permutation.imageHash, permutation]));
 
   const ensure = async (image: PlannedPermutation) => {
+    if (windDown.aborted) return set(image, "skipped");
     const { prerunImage, storedPrerunImage: reference } = image;
     const build = async () => {
       if (built.has(prerunImage)) return;

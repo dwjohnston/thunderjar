@@ -3,11 +3,12 @@ import type { ContainerRunRecord, ExecutionRecord } from "../RunDataStore/RunDat
 /**
  * Where a run is in its lifecycle: queued, then running, then committing its image and uploading it.
  * A crash or a timeout is its own outcome, distinct from a run that finished and was committed.
+ * `abandoned`: Ctrl+C came before it was committed, or before it started.
  */
-export type RunStatus = "queued" | "running" | "committing" | "committed" | "uploading" | "uploaded" | "crashed" | "timedOut";
+export type RunStatus = "queued" | "running" | "committing" | "committed" | "uploading" | "uploaded" | "crashed" | "timedOut" | "abandoned";
 
-/** Where a pre-run image is: checking the remote, pulling it, or building and pushing it, or done. */
-export type ImageBuildStatus = "checking" | "pulling" | "building" | "pushing" | "ready" | "failed";
+/** Where a pre-run image is: checking the remote, pulling it, or building and pushing it, or done. `skipped`: Ctrl+C came before it started. */
+export type ImageBuildStatus = "checking" | "pulling" | "building" | "pushing" | "ready" | "failed" | "skipped";
 
 /** Whether a run's measurements are being taken, or have been. Absent if it has none, or isn't measured. */
 export type MeasuringStatus = "measuring" | "measured";
@@ -48,6 +49,11 @@ export type RunState<M = unknown> = {
   readonly timings?: Readonly<Record<string, PhaseTotal>>;
   /** Whether the displayer shows `timings`. */
   readonly showTimings?: boolean;
+  /**
+   * Set by Ctrl+C. `windDown`: what has started finishes, nothing new starts. `forceQuit`: everything
+   * is being stopped. How many uploads are left is `uploadBacklog`.
+   */
+  readonly stopping?: "windDown" | "forceQuit";
   /** What the user should know besides: a line each. */
   readonly notes?: readonly string[];
   /** Why it stopped, if it stopped on an error. */

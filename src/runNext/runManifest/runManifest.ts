@@ -16,7 +16,7 @@ import { executionContainerPrefix } from "../../execution/images.ts";
 import { moduleLogger } from "../../log/logger.ts";
 import { patchRun, updateRun } from "../../services/ApplicationState/ApplicationState.ts";
 import type { ExecutionRecord, ExecutionStatus } from "../../services/RunDataStore/RunDataStore.ts";
-import { runPermutation } from "../runPermutation/runPermutation.ts";
+import { abandonRun, runPermutation } from "../runPermutation/runPermutation.ts";
 import { createScheduler } from "../scheduler/scheduler.ts";
 import type { Dependencies, Manifest, RunRecord, TestCaseConfig } from "../types.ts";
 import { createUploadQueue } from "../uploadQueue/uploadQueue.ts";
@@ -26,20 +26,23 @@ const log = moduleLogger("runNext");
 /**
  * Records the execution as `running`, runs each planned run, waits for the uploads, then records it
  * as `complete`, or `failed` if any run didn't complete, anything failed under one, an image
- * couldn't be uploaded, or it was asked to stop. Throws a RunDataStoreError if the execution can't be recorded.
+ * couldn't be uploaded, or it was interrupted. Throws a RunDataStoreError if the execution can't be recorded.
+ *
+ * After `windDown`, no run starts: those that never did are recorded as abandoned. It still waits
+ * for the uploads, until `forceQuit`.
  *
  * `config` is here for what a run needs and the manifest leaves out: its harness's functions and
  * the task's measurements.
  */
 export async function runManifest(manifest: Manifest, config: TestCaseConfig, deps: Dependencies): Promise<RunRecord[]> {
   const { clock, state, runStore, runtimeDocker } = deps;
-  const stopped = () => deps.signal?.aborted ?? false;
-  const uploads = createUploadQueue(runtimeDocker, deps, deps.settings.uploadConcurrency);
+  const { windDown, forceQuit } = deps.interrupts;
+  const uploads = createUploadQueue(runtimeDocker, deps, deps.settings.uploadConcurrency, { forceQuit });
   const scheduler = createScheduler({
     clock,
+    windDown, // no new runs after the first Ctrl+C
     isBackedUp: () => uploads.backlog() > deps.settings.uploadBacklogCap,
     settings: { cacheWarmupMs: deps.settings.cacheWarmupMs, backpressurePollMs: 1_000 },
-    shouldStop: stopped,
   });
 
   /** Logs how much disk the runtime's Docker uses: only for a runtime that isn't this machine, whose disk nobody watches. */
@@ -75,9 +78,13 @@ export async function runManifest(manifest: Manifest, config: TestCaseConfig, de
   let records: RunRecord[] = [];
   let failure: unknown;
   try {
-    records = await scheduler.run(manifest, (run) => runPermutation(run, { manifest, config }, deps, uploads));
-    // Once asked to stop, what's still waiting to upload is left: its containers are being removed.
-    if (!stopped()) await uploads.drain();
+    const context = { manifest, config };
+    records = await scheduler.run(
+      manifest,
+      (run) => runPermutation(run, context, deps, uploads),
+      (run) => abandonRun(run, context, deps, "beforeStart"),
+    );
+    await uploads.drain(); // resolves early on the second Ctrl+C
   } catch (error) {
     failure = error;
     throw error;
@@ -92,7 +99,7 @@ export async function runManifest(manifest: Manifest, config: TestCaseConfig, de
     await logDiskUsage("after");
     const clean =
       failure === undefined &&
-      !stopped() &&
+      !windDown.aborted &&
       records.length === manifest.runs.length &&
       records.every(({ outcome, error }) => outcome === "completed" && error === undefined) &&
       uploads.failures().length === 0;

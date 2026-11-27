@@ -121,4 +121,20 @@ describe(ensureImages, () => {
 
     expect(deps.state.get().run.timings).toEqual({ build: { count: 1, totalMs: 0, maxMs: 0 } });
   });
+
+  test("after the 1st Ctrl+C, a build in progress finishes, and none starts", async () => {
+    const deps = fakes();
+    const { resolved, manifest } = planned({ permutationCount: 2 });
+    const build = deps.runtimeDocker.build.bind(deps.runtimeDocker);
+    deps.runtimeDocker.build = async (...args: Parameters<typeof deps.runtimeDocker.build>) => {
+      deps.interrupts.press();
+      return build(...args);
+    };
+
+    await ensureImages(manifest, resolved, deps);
+
+    expect(did(deps.runtimeDocker.calls)).toEqual([`build ${PRERUN}`]);
+    expect(deps.state.get().run.images).toEqual({ [PRERUN]: "ready", "thunderjar-prerun:i2000000": "skipped" });
+  });
 });
+

@@ -90,18 +90,49 @@ describe(createScheduler, () => {
     expect(started).toEqual(["1.1"]);
   });
 
-  test("once asked to stop, nothing more starts, and the runs never started have no record", async () => {
+  test("once windDown aborts, nothing more starts, and the runs never started come back abandoned", async () => {
     const clock = new FakeClock();
     const { started, task, finish } = manualTask();
-    let stop = false;
-    const running = createScheduler({ clock, isBackedUp: () => false, settings: SETTINGS, shouldStop: () => stop }).run(manifestOf(3, 1, 1), task);
+    const windDown = new AbortController();
+    const running = createScheduler({ clock, isBackedUp: () => false, settings: SETTINGS, windDown: windDown.signal }).run(manifestOf(3, 1, 1), task);
     await clock.advance(0);
 
-    stop = true;
+    windDown.abort();
     finish("1.1");
 
-    expect((await running).map(({ runId }) => runId)).toEqual(["01exec-oooooooo-i1"]);
+    expect((await running).map(({ outcome }) => outcome)).toEqual(["completed", "abandoned", "abandoned"]);
     expect(started).toEqual(["1.1"]);
+  });
+
+  test("a run never started is given to abandon, in order", async () => {
+    const clock = new FakeClock();
+    const windDown = new AbortController();
+    windDown.abort();
+    const abandoned: string[] = [];
+    const abandon = async (run: PlannedRun): Promise<RunRecord> => {
+      abandoned.push(`${run.permutation}.${run.iteration}`);
+      return { runId: run.runId, outcome: "abandoned", startedAt: 0, finishedAt: 0, error: "recorded" };
+    };
+
+    const records = await createScheduler({ clock, isBackedUp: () => false, settings: SETTINGS, windDown: windDown.signal }).run(manifestOf(2, 1, 1), async () => {
+      throw new Error("never started");
+    }, abandon);
+
+    expect(abandoned).toEqual(["1.1", "2.1"]);
+    expect(records.map(({ error }) => error)).toEqual(["recorded", "recorded"]);
+  });
+
+  test("a worker waiting on the upload backlog wakes when windDown aborts", async () => {
+    const clock = new FakeClock();
+    const { started, task } = manualTask();
+    const windDown = new AbortController();
+    const running = createScheduler({ clock, isBackedUp: () => true, settings: SETTINGS, windDown: windDown.signal }).run(manifestOf(1, 1, 1), task);
+    await clock.advance(0);
+
+    windDown.abort();
+
+    expect((await running).map(({ outcome }) => outcome)).toEqual(["abandoned"]);
+    expect(started).toEqual([]);
   });
 
   test("a task that throws, though it mustn't, is a crashed run, and the rest still run", async () => {
