@@ -22,89 +22,96 @@ import { ImageStoreLoginError } from "../../execution/imageStore.ts";
 import { planExecution } from "../../execution/planExecution.ts";
 import { moduleLogger } from "../../log/logger.ts";
 import { addNote, updateRun } from "../../services/ApplicationState/ApplicationState.ts";
-import type { StopSignal } from "../../services/Io/Io.ts";
+import { interruptedExitCode } from "../../services/Interrupts/Interrupts.ts";
 import { runHook } from "../hooks/hooks.ts";
 import { runTestCase } from "../runTestCase/runTestCase.ts";
-import type { Dependencies, OutputFormat, RunMode, RunOptions, RunRecord, RunResult, TestCaseConfig } from "../types.ts";
+import type { Dependencies, OutputFormat, RunMode, RunOptions, RunResult, TestCaseConfig } from "../types.ts";
 
 const log = moduleLogger("runNext");
-
-/** How long an interrupted run waits for its execution to be recorded as failed, before it runs `afterExecution` and gives up on it. */
-const INTERRUPT_SETTLE_MS = 15_000;
 
 /** What the test case is resolved with, besides its name: the overrides, and the options that shape the execution. */
 export type Given = { overrides: Overrides } & Pick<RunOptions, "concurrency" | "imagePrefix">;
 
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
 /**
  * Runs test case `testCaseName`, as far as its mode goes, and returns the exit code: 1 if any run
  * didn't complete, or the execution failed. An error is left in the state, for `--json`, and
- * thrown: the command says what went wrong. Asked to stop, it removes the execution's containers,
- * and returns 130 (SIGINT) or 143 (SIGTERM) once the execution is recorded as failed.
+ * thrown: the command says what went wrong.
+ *
+ * While it runs, it listens for Ctrl+C. Interrupted, it returns 130, or 143 for SIGTERM, even if
+ * what it wound down finished on its own.
+ *
+ * - The 1st Ctrl+C (`windDown`): nothing new starts, what has started finishes. A dry run has
+ *   nothing to wind down, so returns at once.
+ * - The 2nd, or SIGTERM (`forceQuit`): the execution's containers are removed, `afterExecution`
+ *   runs, and it returns without waiting for the rest.
  */
 export async function runCommand(testCaseName: string, options: RunOptions, deps: Dependencies): Promise<RunResult> {
   const { overrides, mode, output } = splitOptions(options);
-  const { displayer, state } = deps;
-  const stopping = new AbortController();
-  const live: Dependencies = { ...deps, signal: stopping.signal };
+  const { displayer, state, interrupts } = deps;
+  const { windDown, forceQuit } = interrupts;
   let config: TestCaseConfig | undefined;
 
-  let shown = false;
-  const stopDisplayer = () => {
-    if (shown) return;
-    shown = true;
-    displayer.stop(); // interactive: final frame; json: write the result to stdout
-  };
-
-  let running: Promise<RunRecord[] | undefined> | undefined;
+  /** Resolves with the exit code once there's nothing more to wait for: a dry run wound down, or a force quit done. */
   const interrupted = Promise.withResolvers<number>();
-  const interrupt = async (signal: StopSignal) => {
-    if (stopping.signal.aborted) return;
-    stopping.abort();
+  const signalOf = (signal: AbortSignal) => (signal.reason === "SIGTERM" ? "SIGTERM" : "SIGINT");
+  const onWindDown = () => {
+    state.update(updateRun((run) => ({ ...run, stopping: "windDown", error: run.error ?? `Interrupted (${signalOf(windDown)})` })));
+    if (mode === "dry-run") interrupted.resolve(interruptedExitCode(interrupts));
+  };
+  const onForceQuit = async () => {
+    state.update(updateRun((run) => ({ ...run, stopping: "forceQuit" })));
     const manifest = state.get().run.manifest;
-    const code = signal === "SIGINT" ? 130 : 143;
-    state.update(updateRun((run) => ({ ...run, error: run.error ?? `Interrupted (${signal})` })));
-    if (manifest === undefined || config === undefined || mode === "dry-run") return interrupted.resolve(code);
-    deps.stderr.write(`Interrupted (${signal}): stopping execution ${manifest.executionId}'s containers.\n`);
+    if (manifest === undefined || config === undefined || mode === "dry-run") return interrupted.resolve(interruptedExitCode(interrupts));
+    deps.stderr.write(`Interrupted (${signalOf(forceQuit)}): stopping execution ${manifest.executionId}'s containers.\n`);
     try {
       const removed = await deps.runtimeDocker.removeContainersNamed(executionContainerPrefix(manifest.executionId, manifest.imagePrefix));
-      log.warn({ executionId: manifest.executionId, removed }, "execution interrupted: removed its containers");
+      log.warn({ executionId: manifest.executionId, removed }, "execution force quit: removed its containers");
     } catch (error) {
-      deps.stderr.write(`Couldn't remove its containers: ${error instanceof Error ? error.message : String(error)}\n`);
+      deps.stderr.write(`Couldn't remove its containers: ${message(error)}\n`);
     }
-    // Its runs fail, now their containers are gone: once they have, the execution is recorded as failed.
-    await Promise.race([running?.catch(() => {}), deps.clock.sleep(INTERRUPT_SETTLE_MS)]);
-    // Level 2 runs it as it ends; this is for one that didn't end in time. It runs once.
-    await runHook("afterExecution", manifest, config).catch((error: unknown) => deps.stderr.write(`The runtime's afterExecution failed: ${error instanceof Error ? error.message : String(error)}\n`));
-    interrupted.resolve(code);
+    // Level 2 runs it as it ends, but nothing waits for that now. It runs once.
+    await runHook("afterExecution", manifest, config).catch((error: unknown) => deps.stderr.write(`The runtime's afterExecution failed: ${message(error)}\n`));
+    interrupted.resolve(interruptedExitCode(interrupts));
   };
-  const unlisten = deps.onStop((signal) => void interrupt(signal));
+  const forceQuitting = () => void onForceQuit();
+  windDown.addEventListener("abort", onWindDown, { once: true });
+  forceQuit.addEventListener("abort", forceQuitting, { once: true });
+  const unlisten = interrupts.listen();
 
   displayer.setMode(output);
   displayer.start();
   try {
-    config = await resolveTestCase(testCaseName, { overrides, concurrency: options.concurrency, imagePrefix: options.imagePrefix }, live);
+    config = await resolveTestCase(testCaseName, { overrides, concurrency: options.concurrency, imagePrefix: options.imagePrefix }, deps);
     if (options.timings) state.update(updateRun((run) => ({ ...run, showTimings: true })));
     if (mode !== "dry-run") {
-      await preflight(config, live);
+      await preflight(config, deps);
       const recordedIn = await deps.runStoreLocation();
       state.update(updateRun((run) => ({ ...run, recordedIn })));
     }
-    running = runTestCase(config, live, mode);
+    const running = runTestCase(config, deps, mode);
     // Awaited below, unless it's interrupted first: then nothing waits for it.
     running.catch(() => {});
     const outcome = await Promise.race([running.then((records) => ({ records })), interrupted.promise.then((exitCode) => ({ exitCode }))]);
     if ("exitCode" in outcome) return { exitCode: outcome.exitCode };
-    if (stopping.signal.aborted) return { exitCode: await interrupted.promise, records: outcome.records };
+    // It ended as it was force quit: its containers may still be being removed.
+    if (forceQuit.aborted) return { exitCode: await interrupted.promise, records: outcome.records };
+    if (windDown.aborted) return { exitCode: interruptedExitCode(interrupts), records: outcome.records };
     const { execution, error } = state.get().run;
     return { exitCode: execution?.status === "failed" || error !== undefined ? 1 : 0, records: outcome.records, ...(error !== undefined && { error }) };
   } catch (error) {
-    if (stopping.signal.aborted) return { exitCode: await interrupted.promise };
-    const why = error instanceof ConfigError ? error.problems.join("\n") : error instanceof Error ? error.message : String(error);
+    if (forceQuit.aborted) return { exitCode: await interrupted.promise };
+    const why = error instanceof ConfigError ? error.problems.join("\n") : message(error);
+    // Wound down, it still says why it failed, but exits as interrupted.
+    if (windDown.aborted) return { exitCode: interruptedExitCode(interrupts), error: why };
     state.update(updateRun((run) => ({ ...run, error: run.error ?? why })));
     throw error;
   } finally {
     unlisten();
-    stopDisplayer();
+    windDown.removeEventListener("abort", onWindDown);
+    forceQuit.removeEventListener("abort", forceQuitting);
+    displayer.stop(); // interactive: final frame; json: write the result to stdout
   }
 }
 

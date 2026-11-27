@@ -126,4 +126,22 @@ describe(fitTo, () => {
   test("doesn't count colour codes", () => {
     expect(fitTo("\x1b[32mgreen\x1b[39m\n", 5)).toBe("\x1b[32mgreen\x1b[39m\n");
   });
+
+  test("while it winds down, says how many uploads are left, and that Ctrl+C again force quits", () => {
+    const state: RunState<Manifest> = { ...planned, uploadBacklog: 2, stopping: "windDown" };
+
+    expect(renderRun(state, NOW)).toContain("Stopping: 2 uploads left. Ctrl+C again to force quit.");
+    expect(renderRun({ ...state, stopping: "forceQuit" }, NOW)).toContain("Force quitting.");
+  });
+
+  test("an abandoned run says so, and how it was abandoned", () => {
+    let state = patchRun(planned, first, { status: "abandoned", record: record({ abandoned: "running", exitCode: null }) });
+    state = patchRun(state, second, { status: "abandoned", record: record({ abandoned: "beforeStart", exitCode: null }) });
+
+    const frame = renderRun(state, NOW);
+
+    expect(frame).toMatch(/1\.1 .* abandoned\n/);
+    expect(frame).toContain("abandoned before it started");
+  });
 });
+

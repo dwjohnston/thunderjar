@@ -99,8 +99,8 @@ export interface Docker {
   // Registry: `checkLogin` and `inRegistry` use the local `docker` CLI, whatever the runtime.
 
   checkLogin(host: string): Promise<void>;
-  /** `pushImage`: tags `image` as `reference`, and pushes it. */
-  push(image: string, reference: string): Promise<void>;
+  /** `pushImage`: tags `image` as `reference`, and pushes it. `signal` cancels the push: then it throws a DockerPushError. */
+  push(image: string, reference: string, signal?: AbortSignal): Promise<void>;
   /** `pullImage`. */
   pull(reference: string): Promise<void>;
   inRegistry(reference: string): Promise<boolean>;
@@ -176,7 +176,7 @@ export function createDockerService(command: string[], { remote = false }: { rem
     build: (contextDir, image, options) => buildImage(contextDir, image, options, runtime),
     imagesIn: (repository) => imagesIn(repository, runtime),
     checkLogin: (host) => checkLogin(host),
-    push: (image, reference) => pushImage(image, reference, runtime),
+    push: (image, reference, signal) => pushImage(image, reference, runtime, signal),
     pull: (reference) => pullImage(reference, runtime),
     inRegistry: (reference) => inRegistry(reference),
     run: (image, name, script, options) => runContainer(image, name, script, { ...options, runtime }),

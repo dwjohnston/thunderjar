@@ -61,7 +61,8 @@ export async function remeasureContainerRun(
 
 /** Why `record` can't be remeasured, or undefined if it can. */
 export function skipReason(record: ContainerRunRecord): string | undefined {
-  if (record.execution.failedToStart !== undefined) return "never started";
+  if (record.execution.failedToStart !== undefined || record.execution.abandoned === "beforeStart") return "never started";
+  if (record.execution.abandoned === "running") return "abandoned: no postrun image";
   if (record.postrunPurge !== undefined) return "postrun image purged";
   return undefined;
 }

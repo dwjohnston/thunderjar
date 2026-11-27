@@ -7,7 +7,7 @@ const [command, hook, ...rest] = process.argv.slice(2);
 if (command === "capture" && isHook(hook)) {
   await runHookCommand(hook, harnessArg(rest));
 } else {
-  const [{ createProgram }, { createClockService }, { createEnvService }, { createIoService }, { createDockerService }, { findThunderjarRoot, ConfigError }, { loadProjectConfig }, { dataDirFromArgs, openStore }, { lazyRunDataStore }, { createRandomService }, { createFsService }, { createApplicationStateService }, { createDisplayerService }, { renderRun, fitTo }, { painter }] =
+  const [{ createProgram }, { createClockService }, { createEnvService }, { createIoService }, { createDockerService }, { findThunderjarRoot, ConfigError }, { loadProjectConfig }, { dataDirFromArgs, openStore }, { lazyRunDataStore }, { createRandomService }, { createFsService }, { createApplicationStateService }, { createDisplayerService }, { renderRun, fitTo }, { painter }, { createInterrupts }] =
     await Promise.all([
       import("./program.ts"),
       import("../services/Clock/Clock.ts"),
@@ -24,6 +24,7 @@ if (command === "capture" && isHook(hook)) {
       import("../services/Displayer/Displayer.ts"),
       import("../services/Displayer/renderRun/renderRun.ts"),
       import("./colour.ts"),
+      import("../services/Interrupts/Interrupts.ts"),
     ]);
   /**
    * The runtime's command, from the config of the project in `cwd`. Null with no runtime, or no
@@ -88,6 +89,7 @@ if (command === "capture" && isHook(hook)) {
     fs: createFsService(),
     state,
     displayer,
+    interrupts: createInterrupts(io),
     runSettings,
   }).parseAsync();
 }

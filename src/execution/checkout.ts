@@ -54,7 +54,8 @@ export const runBranch = (record: ContainerRunRecord) => `thunderjar/run/${recor
 
 /** Why `record` can't be checked out, or undefined if it can. */
 export function unavailableReason(record: ContainerRunRecord): string | undefined {
-  if (record.execution.failedToStart !== undefined) return "it never started";
+  if (record.execution.failedToStart !== undefined || record.execution.abandoned === "beforeStart") return "it never started";
+  if (record.execution.abandoned === "running") return "it was abandoned: it has no postrun image";
   if (record.postrunPurge !== undefined) return "its postrun image was purged";
   return undefined;
 }

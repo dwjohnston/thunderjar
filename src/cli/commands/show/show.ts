@@ -20,7 +20,7 @@ import {
 import { type Paint, padEnd, painter, plain, visibleLength } from "../../colour.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
 import { dataDirOption, displayPath, openStore } from "../../dataDir.ts";
-import { dollars, duration, endedCleanly, minute, paintStatus, plural, secretFiles, showResolved, showStat, showValue, thousands } from "../../format.ts";
+import { agentEnd, dollars, duration, endedCleanly, minute, paintStatus, plural, secretFiles, showResolved, showStat, showValue, thousands } from "../../format.ts";
 import { print, printError, printJson } from "../../output.ts";
 
 const GAP = "   ";
@@ -308,7 +308,9 @@ export function renderContainerRun(record: ContainerRunRecord, paint: Paint = pl
     record;
   const turnsRan = execution.turns === undefined ? [] : [["Turns", `${execution.turns.length} of ${record.turns?.length ?? "?"} ran`] as [string, string]];
   const names = Object.keys(result).toSorted();
-  const exit = execution.failedToStart !== undefined
+  const exit = execution.abandoned !== undefined
+    ? paint.yellow(agentEnd(execution, harnessResult))
+    : execution.failedToStart !== undefined
     ? paint.red(`failed to start: ${execution.failedToStart}`)
     : execution.timedOut ? paint.red(`timed out after ${execution.timeoutSeconds}s`) : (execution.exitCode === 0 ? paint.green : paint.red)(String(execution.exitCode));
   return [

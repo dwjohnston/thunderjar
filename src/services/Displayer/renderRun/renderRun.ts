@@ -85,11 +85,13 @@ const IMAGE_STATUS: Record<ImageBuildStatus, (paint: Paint) => string> = {
   pushing: (paint) => paint.yellow("pushing"),
   ready: (paint) => paint.green("ready"),
   failed: (paint) => paint.red("failed"),
+  skipped: (paint) => paint.dim("skipped"),
 };
 
 /** Where a run is, in words: `running 0:12`, `completed 0:31  $0.061  uploaded`, `crashed (exit 2) 0:03`. */
 function showProgress(progress: RunProgress | undefined, now: number, paint: Paint): string {
   if (progress === undefined || progress.status === "queued") return paint.dim("queued");
+  if (progress.status === "abandoned") return paint.yellow(progress.record?.execution.abandoned === "beforeStart" ? "abandoned before it started" : "abandoned");
   const { status, startedAt, finishedAt, record } = progress;
   const took = startedAt === undefined ? undefined : duration((finishedAt ?? now) - startedAt);
   if (status === "running") return `${paint.yellow("running")}${took === undefined ? "" : ` ${paint.dim(took)}`}`;
@@ -117,11 +119,12 @@ function showProgress(progress: RunProgress | undefined, now: number, paint: Pai
 
 /** How the runs ended, counted: `4 runs: 3 completed, 1 crashed`. */
 function summary(manifest: Manifest, runs: RunState<Manifest>["runs"], paint: Paint): string {
-  const counts = { completed: 0, crashed: 0, "timed out": 0, "not run": 0 };
+  const counts = { completed: 0, crashed: 0, "timed out": 0, abandoned: 0, "not run": 0 };
   for (const { runId } of manifest.runs) {
     const status = runs[runId]?.status;
     if (status === "crashed") counts.crashed++;
     else if (status === "timedOut") counts["timed out"]++;
+    else if (status === "abandoned") counts.abandoned++;
     else if (status === "committed" || status === "uploading" || status === "uploaded") counts.completed++;
     else counts["not run"]++;
   }
@@ -212,6 +215,11 @@ export function renderRun(state: RunState<Manifest>, now: number, { paint = plai
     });
   }
   if (state.uploadBacklog > 0) lines.push("", `Upload backlog: ${state.uploadBacklog}`);
+  if (state.stopping === "windDown" && state.execution?.finishedAt === undefined) {
+    lines.push("", paint.yellow(`Stopping: ${plural(state.uploadBacklog, "upload")} left. Ctrl+C again to force quit.`));
+  } else if (state.stopping === "forceQuit" && state.execution?.finishedAt === undefined) {
+    lines.push("", paint.yellow("Force quitting."));
+  }
 
   const over = state.execution?.finishedAt !== undefined;
   if (over) {

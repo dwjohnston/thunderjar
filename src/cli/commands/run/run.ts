@@ -28,7 +28,7 @@ import { describeFailure } from "./runFailure.ts";
 /** The services `runNext` uses, picked from those src/cli/index.ts built. */
 function dependencies(services: Services): Dependencies {
   const { io, runSettings, runDataStore, runDataStoreLocation, ...rest } = services;
-  return { ...rest, settings: runSettings, runStore: runDataStore, runStoreLocation: runDataStoreLocation, stdout: io.stdout, stderr: io.stderr, onStop: io.onStop };
+  return { ...rest, settings: runSettings, runStore: runDataStore, runStoreLocation: runDataStoreLocation, stdout: io.stdout, stderr: io.stderr };
 }
 
 type Options = Overrides & { dryRun?: boolean; buildOnly?: boolean; concurrency?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean };

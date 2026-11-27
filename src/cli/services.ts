@@ -6,6 +6,7 @@ import type { Displayer } from "../services/Displayer/Displayer.ts";
 import type { DockerService } from "../services/Docker/Docker.ts";
 import type { Env } from "../services/Env/Env.ts";
 import type { Fs } from "../services/Fs/Fs.ts";
+import type { Interrupts } from "../services/Interrupts/Interrupts.ts";
 import type { Io } from "../services/Io/Io.ts";
 import type { Random } from "../services/Random/Random.ts";
 import type { RunDataStore } from "../services/RunDataStore/RunDataStore.ts";
@@ -34,6 +35,8 @@ export type Services = {
   /** The run state `run` writes to and `displayer` shows. */
   state: ApplicationStateService<Manifest>;
   displayer: Displayer;
+  /** Ctrl+C as two abort signals. Only a command that winds down listens: see Interrupts.listen. */
+  interrupts: Interrupts;
   /** Concurrency, upload and warm-up settings for `run`, read from the environment variables. */
   runSettings: RunSettings;
 };

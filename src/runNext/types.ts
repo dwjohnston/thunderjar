@@ -21,7 +21,8 @@ import type { Displayer, OutputFormat } from "../services/Displayer/Displayer.ts
 import type { DockerService } from "../services/Docker/Docker.ts";
 import type { Env } from "../services/Env/Env.ts";
 import type { Fs } from "../services/Fs/Fs.ts";
-import type { Io, Output } from "../services/Io/Io.ts";
+import type { Interrupts } from "../services/Interrupts/Interrupts.ts";
+import type { Output } from "../services/Io/Io.ts";
 import type { Random } from "../services/Random/Random.ts";
 import type { ContainerRunRecord, RunDataStore } from "../services/RunDataStore/RunDataStore.ts";
 
@@ -97,10 +98,8 @@ export type Dependencies = {
   displayer: Displayer;
   stdout: Output;
   stderr: Output;
-  /** Ctrl-C, or the process being asked to stop. */
-  onStop: Io["onStop"];
-  /** Aborted once the command is asked to stop: nothing new starts after. Set by level 1. */
-  signal?: AbortSignal;
+  /** The 1st Ctrl+C winds down, the 2nd, or SIGTERM, force quits. Level 1 listens while it runs. */
+  interrupts: Interrupts;
 };
 
 /** One parameter of a permutation, in layer order. */
@@ -169,8 +168,11 @@ export type Manifest = {
   runs: PlannedRun[];
 };
 
-/** `crashed`: its container never started, its agent exited non-zero, or Docker failed under it. */
-export type RunOutcome = "completed" | "crashed" | "timedOut";
+/**
+ * `crashed`: its container never started, its agent exited non-zero, or Docker failed under it.
+ * `abandoned`: the 1st Ctrl+C came before it was committed, or before it started.
+ */
+export type RunOutcome = "completed" | "crashed" | "timedOut" | "abandoned";
 
 /** What `runPermutation` returns. It never throws: a failure is an outcome. */
 export type RunRecord = {

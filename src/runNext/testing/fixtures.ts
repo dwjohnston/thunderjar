@@ -18,6 +18,7 @@ import { FakeClock } from "../../services/Clock/FakeClock.ts";
 import { FakeDisplayer } from "../../services/Displayer/FakeDisplayer.ts";
 import { FakeDockerService } from "../../services/Docker/FakeDockerService.ts";
 import { FakeFs } from "../../services/Fs/FakeFs.ts";
+import { FakeInterrupts } from "../../services/Interrupts/FakeInterrupts.ts";
 import { FakeIo } from "../../services/Io/FakeIo.ts";
 import { FakeRandom } from "../../services/Random/FakeRandom.ts";
 import { FakeRunDataStore } from "../../services/RunDataStore/FakeRunDataStore.ts";
@@ -94,6 +95,7 @@ export type Fakes = Dependencies & {
   hostDocker: FakeDockerService;
   runtimeDocker: FakeDockerService;
   runStore: FakeRunDataStore;
+  interrupts: FakeInterrupts;
   io: FakeIo;
 };
 
@@ -116,7 +118,7 @@ export function fakes(settings: Partial<RunSettings> = {}): Fakes {
     displayer: new FakeDisplayer(),
     stdout: io.stdout,
     stderr: io.stderr,
-    onStop: (handler) => io.onStop(handler),
+    interrupts: new FakeInterrupts(),
     io,
   };
 }

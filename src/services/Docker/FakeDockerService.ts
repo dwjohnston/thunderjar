@@ -11,6 +11,7 @@
 
 // A DockerService that runs nothing: it keeps the images it's told it has, and a list of what it
 // was asked to do, and each container run does what a test scripts for it.
+import { DockerPushError } from "../../docker/docker.ts";
 import type { Clock } from "../Clock/Clock.ts";
 import type { ContainerStop, DockerService, ExecResult, RunContainerOptions, ShellSession } from "./Docker.ts";
 
@@ -21,6 +22,9 @@ export type FakeRunContext = { image: string; name: string; script: string; opti
 export type FakeRun = { stop?: ContainerStop; files?: Record<string, string> };
 
 export type FakeRunScript = (context: FakeRunContext) => FakeRun | Promise<FakeRun>;
+
+/** What a scripted push does before it finishes: e.g. wait, so a test can cancel it. */
+export type FakePushScript = (reference: string) => void | Promise<void>;
 
 type Method = keyof Omit<DockerService, "command">;
 
@@ -34,6 +38,9 @@ export class FakeDockerService implements DockerService {
   /** The images in this daemon, as `<repository>:<tag>`. */
   readonly images = new Set<string>();
   private readonly scripts: [string, FakeRunScript][] = [];
+  private pushScript: FakePushScript | undefined;
+  /** By name, how to stop each container whose run hasn't returned yet. */
+  private readonly running = new Map<string, () => void>();
   private readonly failures = new Map<Method, unknown[]>();
   private readonly files = new Map<string, Record<string, string>>();
 
@@ -49,6 +56,12 @@ export class FakeDockerService implements DockerService {
   /** Runs `script` for each container whose name ends in `suffix`. Without one, a run exits 0 at once, leaving its RUN_PATH. */
   onRun(suffix: string, script: FakeRunScript): this {
     this.scripts.push([suffix, script]);
+    return this;
+  }
+
+  /** Runs `script` in each push before it finishes. A push whose signal aborts first throws, as cancelled. */
+  onPush(script: FakePushScript): this {
+    this.pushScript = script;
     return this;
   }
 
@@ -78,8 +91,20 @@ export class FakeDockerService implements DockerService {
     this.called("checkLogin", host);
   }
 
-  async push(image: string, reference: string): Promise<void> {
+  async push(image: string, reference: string, signal?: AbortSignal): Promise<void> {
     this.called("push", image, reference);
+    const cancelled = () => new DockerPushError("cancelled", reference);
+    if (signal?.aborted) throw cancelled();
+    if (this.pushScript !== undefined) {
+      const aborted = Promise.withResolvers<never>();
+      const abort = () => aborted.reject(cancelled());
+      signal?.addEventListener("abort", abort);
+      try {
+        await Promise.race([this.pushScript(reference), aborted.promise]);
+      } finally {
+        signal?.removeEventListener("abort", abort);
+      }
+    }
     this.images.add(reference);
     this.registry.add(reference);
   }
@@ -98,9 +123,18 @@ export class FakeDockerService implements DockerService {
     this.called("run", image, name);
     const scripted = this.scripts.find(([suffix]) => name.endsWith(suffix))?.[1];
     const startedAt = this.clock.now();
-    const { stop = { outcome: "exited" }, files } = scripted ? await scripted({ image, name, script, options, clock: this.clock }) : {};
-    this.files.set(name, files ?? { [RUN_PATH]: JSON.stringify({ startedAt: startedAt + 1e12, finishedAt: this.clock.now() + 1e12, exitCode: 0 }) });
-    return stop;
+    // Removed while it runs, it stops at once, leaving nothing, as `docker rm --force` does.
+    const removed = Promise.withResolvers<"removed">();
+    this.running.set(name, () => removed.resolve("removed"));
+    try {
+      const ran = await Promise.race([scripted ? scripted({ image, name, script, options, clock: this.clock }) : {}, removed.promise]);
+      if (ran === "removed") return { outcome: "exited" };
+      const { stop = { outcome: "exited" }, files } = ran;
+      this.files.set(name, files ?? { [RUN_PATH]: JSON.stringify({ startedAt: startedAt + 1e12, finishedAt: this.clock.now() + 1e12, exitCode: 0 }) });
+      return stop;
+    } finally {
+      this.running.delete(name);
+    }
   }
 
   async commit(name: string, image: string): Promise<void> {
@@ -111,12 +145,16 @@ export class FakeDockerService implements DockerService {
   async removeContainer(name: string): Promise<void> {
     this.called("removeContainer", name);
     this.files.delete(name);
+    this.running.get(name)?.();
   }
 
   async removeContainersNamed(prefix: string): Promise<string[]> {
     this.called("removeContainersNamed", prefix);
-    const names = [...this.files.keys()].filter((name) => name.startsWith(prefix));
-    for (const name of names) this.files.delete(name);
+    const names = [...new Set([...this.files.keys(), ...this.running.keys()])].filter((name) => name.startsWith(prefix));
+    for (const name of names) {
+      this.files.delete(name);
+      this.running.get(name)?.();
+    }
     return names;
   }
 
