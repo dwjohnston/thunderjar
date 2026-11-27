@@ -182,6 +182,17 @@ export default declareConfig({
     });
   });
 
+  test("a runtime with a runner is a config error that says runner mode was removed", async () => {
+    await using copy = await copyScenarioProject("0211");
+    const path = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
+    const config = await Bun.file(path).text();
+    await Bun.write(path, config.replace('"cloud"]', '"cloud"], runner: {}'));
+
+    const loading = loadProjectConfig(`${copy.dir}/.thunderjar`);
+    await expect(loading).rejects.toBeInstanceOf(ConfigError);
+    await expect(loading).rejects.toThrow("runner mode was removed");
+  });
+
   test("a runtime's hooks given by their old names load by their new ones, with a deprecation for each", async () => {
     await using copy = await copyScenarioProject("0211");
     const path = `${copy.dir}/.thunderjar/thunderjar.config.ts`;
@@ -227,23 +238,16 @@ describe("runtimeProblem", () => {
     expect(runtimeProblem({ command: ["docker"], concurrency: 4 }, STORE)).toBeUndefined();
   });
 
-  test("a runner is an object of env names, a registry login's variables, and run options", () => {
-    expect(runtimeProblem({ command: ["docker"], runner: {} }, STORE)).toBeUndefined();
-    expect(
-      runtimeProblem({ command: ["docker"], runner: { env: ["EXTRA"], registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" }, runOptions: ["-v", "/a:/b"] } }, STORE),
-    ).toBeUndefined();
-    expect(runtimeProblem({ command: ["docker"], runner: true }, STORE)).toBe("runner must be an object, e.g. {}, got true");
-    expect(runtimeProblem({ command: ["docker"], runner: { env: ["NOT A NAME"] } }, STORE)).toBe('runner.env must be a list of environment variable names, got ["NOT A NAME"]');
-    expect(runtimeProblem({ command: ["docker"], runner: { registryLogin: { usernameEnv: "GHCR_USER" } } }, STORE)).toBe(
-      'runner.registryLogin must be { usernameEnv, passwordEnv }, each an environment variable name, got {"usernameEnv":"GHCR_USER"}',
-    );
-    expect(runtimeProblem({ command: ["docker"], runner: { runOptions: [""] } }, STORE)).toBe('runner.runOptions must be a list of non-empty strings, got [""]');
+  test("a runner was removed, so is a problem whatever it is", () => {
+    for (const runner of [{}, { registryLogin: { usernameEnv: "GHCR_USER", passwordEnv: "GHCR_TOKEN" } }, true]) {
+      expect(runtimeProblem({ command: ["docker"], runner }, STORE)).toBe(
+        "runner can't be given: runner mode was removed. Remove it, and `run` runs each Docker command on the runtime itself",
+      );
+    }
   });
 
-  test.each([["beforeExecution"], ["afterExecution"], ["beforeRun"], ["afterRun"]])("%s can't be given with a runner", (hook) => {
-    expect(runtimeProblem({ command: ["docker"], runner: {}, [hook]: ["./up.sh"] }, STORE)).toBe(
-      `${hook} can't be given with a runner: its execution carries on after \`run\` ends, so start and stop the runtime yourself`,
-    );
+  test("its hooks are fine", () => {
+    expect(runtimeProblem({ command: ["docker"], beforeExecution: ["./up.sh"], afterExecution: ["./down.sh"] }, STORE)).toBeUndefined();
   });
 
   test.each([[0], [-1], [1.5], ["4"], [null]])("concurrency %p is not a number of containers", (concurrency) => {

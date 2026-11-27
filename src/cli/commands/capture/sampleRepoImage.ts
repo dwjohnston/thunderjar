@@ -10,7 +10,7 @@
 
 // The sample repo image, for the capture Docker tests: a codebase that has never had Thunderjar, and
 // each harness's CLI, from scenario 0601's Dockerfile. The tests assume it exists. Its tag is a hash
-// of what it's built from, as the runner image's is (src/execution/runnerImage.ts), so a test can
+// of what it's built from, so a test can
 // tell a stale image from a current one: a changed Dockerfile, project file or harness version
 // means a new tag. Thunderjar isn't in the image, so changes to src/ never make it stale.
 //

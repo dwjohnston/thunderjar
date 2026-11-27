@@ -9,11 +9,11 @@
  * Humans: add your notes here
  */
 
-// `run`: the command line of src/runNext/, and, with a runner in the config, of runOnRunner.deprecated.ts.
+// `run`: the command line of src/runNext/.
 import { Command, InvalidArgumentError, Option } from "commander";
-import { FOLDER, findThunderjarRoot } from "../../../config/loader.ts";
+import { FOLDER } from "../../../config/loader.ts";
 import type { Overrides } from "../../../config/overrides.ts";
-import { isConcurrency, loadProjectConfig } from "../../../config/projectConfig.ts";
+import { isConcurrency } from "../../../config/projectConfig.ts";
 import { runCommand } from "../../../runNext/runCommand/runCommand.ts";
 import type { Dependencies, RunOptions } from "../../../runNext/types.ts";
 import { reportingConfigErrors } from "../../configErrors.ts";
@@ -24,17 +24,11 @@ import { printError } from "../../output.ts";
 import { overridesOf, withOverrideOptions } from "../../overrides.ts";
 import type { Services } from "../../services.ts";
 import { describeFailure } from "./runFailure.ts";
-import { runOnRunner } from "./runOnRunner.deprecated.ts";
 
 /** The services `runNext` uses, picked from those src/cli/index.ts built. */
 function dependencies(services: Services): Dependencies {
   const { io, runSettings, runDataStore, runDataStoreLocation, ...rest } = services;
   return { ...rest, settings: runSettings, runStore: runDataStore, runStoreLocation: runDataStoreLocation, stdout: io.stdout, stderr: io.stderr, onStop: io.onStop };
-}
-
-/** Whether the project in `cwd` runs its executions in a runner on its runtime. Throws a ConfigError. */
-async function usesRunner(cwd: string): Promise<boolean> {
-  return (await loadProjectConfig(await findThunderjarRoot(cwd))).runtime?.runner !== undefined;
 }
 
 type Options = Overrides & { dryRun?: boolean; buildOnly?: boolean; concurrency?: number; imagePrefix: string; dataDir?: string; json?: boolean; timings?: boolean };
@@ -62,11 +56,6 @@ export function createRunCommand(services: Services): Command {
       reportingConfigErrors(async (name: string, options: Options) => {
         const overrides = overridesOf(options);
         const { cwd } = services.env;
-        // Runner mode is still on the old path: see runOnRunner.deprecated.ts.
-        if (!options.dryRun && !options.buildOnly && (await usesRunner(cwd))) {
-          await runOnRunner(cwd, name, options.imagePrefix, options.dataDir, options.concurrency, overrides, options.json, options.timings);
-          return;
-        }
         const given: RunOptions = {
           ...overrides,
           dryRun: options.dryRun,
