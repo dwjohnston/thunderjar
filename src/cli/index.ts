@@ -22,7 +22,7 @@ if (command === "capture" && isHook(hook)) {
       import("../services/Fs/Fs.ts"),
       import("../services/ApplicationState/ApplicationState.ts"),
       import("../services/Displayer/Displayer.ts"),
-      import("./commands/run/renderRun.ts"),
+      import("../services/Displayer/renderRun/renderRun.ts"),
       import("./colour.ts"),
     ]);
   /**

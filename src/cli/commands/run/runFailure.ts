@@ -15,7 +15,7 @@ import { ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { RuntimeHookError } from "../../../execution/runtimeHooks.ts";
 import { RunDataStoreError } from "../../../store/runDataStore.ts";
 import { pushFailure } from "../../format.ts";
-import { storeFailure } from "./runDisplay.ts";
+import { storeFailure } from "./runDisplay.deprecated.ts";
 
 /**
  * What to tell the user about `error`, or undefined if it isn't one `run` knows: then it's a bug, and
