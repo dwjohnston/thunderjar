@@ -65,9 +65,6 @@ export type RunContainerOptions = {
   startMarker?: string;
 };
 
-/** Whether a container is running, and the code it exited with if not. */
-export type ContainerState = { running: boolean; exitCode: number };
-
 export type ExecResult = { stdout: string; stderr: string; exitCode: number };
 
 /** A shell session in a running container. */
@@ -99,10 +96,9 @@ export interface Docker {
   /** Removes the tag `image` from the local daemon, whatever the runtime. */
   removeLocalImage(image: string): Promise<LocalRemoval>;
 
-  // Registry: `checkLogin`, `login` and `inRegistry` use the local `docker` CLI, whatever the runtime.
+  // Registry: `checkLogin` and `inRegistry` use the local `docker` CLI, whatever the runtime.
 
   checkLogin(host: string): Promise<void>;
-  login(host: string, username: string, password: string): Promise<void>;
   /** `pushImage`: tags `image` as `reference`, and pushes it. */
   push(image: string, reference: string): Promise<void>;
   /** `pullImage`. */
@@ -118,10 +114,6 @@ export interface Docker {
   /** `docker rm --force`s the container `name`. */
   removeContainer(name: string): Promise<void>;
   removeContainersNamed(prefix: string): Promise<string[]>;
-  startDetached(image: string, name: string, runOptions: string[]): Promise<void>;
-  /** `stopContainer`. */
-  stop(name: string, graceSeconds: number): Promise<void>;
-  containerState(name: string): Promise<ContainerState | undefined>;
 
   // The steps of `run`, so a fake can stand in for them under the real `runContainer`.
 
@@ -134,10 +126,6 @@ export interface Docker {
 
   /** `readContainerFile`. */
   readFile(name: string, path: string): Promise<string | undefined>;
-  /** `writeContainerFile`. */
-  writeFile(name: string, path: string, text: string): Promise<void>;
-  followLogs(name: string, onLine: (line: string) => void, signal?: AbortSignal): Promise<number>;
-  stderrTail(name: string, lines?: number): Promise<string>;
 
   // Interactive
 

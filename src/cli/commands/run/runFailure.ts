@@ -15,7 +15,11 @@ import { ImageStoreLoginError } from "../../../execution/imageStore.ts";
 import { RuntimeHookError } from "../../../execution/runtimeHooks.ts";
 import { RunDataStoreError } from "../../../store/runDataStore.ts";
 import { pushFailure } from "../../format.ts";
-import { storeFailure } from "./runDisplay.deprecated.ts";
+import { displayPath } from "../../dataDir.ts";
+
+/** What to say when the run data store can't be used, and what that meant for the execution. */
+export const storeFailure = (cwd: string, { path, message }: RunDataStoreError, consequence: string) =>
+  `Can't use the run data store, ${displayPath(cwd, path)}, ${consequence}: ${message}\nCheck it can be reached from here, or pass --data-dir to record in a local SQLite file instead.`;
 
 /**
  * What to tell the user about `error`, or undefined if it isn't one `run` knows: then it's a bug, and

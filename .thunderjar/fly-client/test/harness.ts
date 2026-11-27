@@ -151,7 +151,14 @@ export async function fixture(): Promise<Fixture> {
           }
         }
       }
-      await $`rm -rf ${dir}`;
+      // The watcher may still be writing into `dir` as it exits, so `rm -rf` can find a file it
+      // hasn't removed yet, and fail with "Directory not empty": then it tries again.
+      for (let attempt = 1; ; attempt++) {
+        const removed = await $`rm -rf ${dir}`.nothrow().quiet();
+        if (removed.exitCode === 0) return;
+        if (attempt === 10) throw new Error(`Couldn't remove ${dir}: ${removed.stderr.toString().trim()}`);
+        await Bun.sleep(50);
+      }
     },
   };
 }
