@@ -9,7 +9,7 @@ flowchart TD
   env["process.env"] --> main
   tjconfig["Thunderjar config"] --> main
   main["main<br/>(composition root)"] -->|"builds"| deps["Dependencies<br/>env, clock, random, fs, logger,<br/>hostDocker, runtimeDocker,<br/>interrupts"]
-  main -->|"SIGINT"| intr["Interrupts<br/>windDown, forceQuit"]
+  term(["Terminal"]) -->|"SIGINT"| intr["Interrupts<br/>windDown, forceQuit"]
   intr -.-> sched
   intr -.-> perm
   intr -.-> uq
@@ -285,14 +285,14 @@ stateDiagram-v2
   Running --> Stopping: 1st Ctrl+C, remove containers
   Running --> Done: all runs finish
   Stopping --> Done: measurements and uploads finish
-  Stopping --> Abandoned: 2nd Ctrl+C, kill measurements and pushes
+  Stopping --> ForceQuit: 2nd Ctrl+C, kill measurements and pushes
   Done --> [*]
-  Abandoned --> [*]
+  ForceQuit --> [*]
 ```
 
 ### Interrupts service
 
-Signals are non-deterministic, so they're injected.
+Signals are non-deterministic, so they're injected. See [interrupts.md](./interrupts.md).
 
 **Suggested**: it isn't specific to `run`. It turns Ctrl+C into two general signals, and any long-running command reacts to them in its own way.
 
@@ -300,7 +300,8 @@ Signals are non-deterministic, so they're injected.
 - `forceQuit`: stop everything now.
 - e.g. remeasuring: `windDown` lets the measurements in progress finish and save, and `forceQuit` kills them.
 
-- `main` is the only place that listens for SIGINT.
+- `main` builds it, and the real Interrupts registers its own SIGINT handler.
+- `runCommand` calls `dispose()` in its `finally`, which removes the handler.
 - Each Ctrl+C aborts the next signal.
   - e.g.
     ```ts
